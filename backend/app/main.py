@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
@@ -15,15 +16,27 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="MiRutaSalud API")
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# Configurar CORS
+# En producción, permitir todos los orígenes (Railway puede usar diferentes dominios)
+is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+if is_production:
+    # En producción, permitir todos los orígenes (sin credentials para compatibilidad)
+    allow_origins = ["*"]
+    allow_credentials = False
+else:
+    # En desarrollo, solo localhost
+    allow_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+    allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -317,3 +330,27 @@ def delete_document(
 
 # Servir archivos subidos
 app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
+
+# Servir archivos estáticos del frontend
+static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    
+    # Ruta catch-all para el SPA del frontend
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # Si es una ruta de API, no servir el SPA
+        if full_path.startswith(("api/", "auth/", "appointments", "medications", "documents", "me", "uploaded_docs")):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Intentar servir el archivo solicitado
+        file_path = os.path.join(static_dir, full_path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # Si no existe, servir index.html (para rutas del SPA)
+        index_path = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        
+        raise HTTPException(status_code=404, detail="Not found")
