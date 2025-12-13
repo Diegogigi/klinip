@@ -24,10 +24,10 @@ fi
 echo "Iniciando backend..."
 cd backend
 python -m pip install --upgrade pip --quiet
-pip install -r requirements.txt --quiet
+python -m pip install -r requirements.txt --quiet
 
 # Usar el puerto proporcionado por Railway o 8000 por defecto
 PORT=${PORT:-8000}
 echo "Iniciando servidor en puerto $PORT"
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
