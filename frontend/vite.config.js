@@ -5,5 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173
+  },
+  base: '/', // Usar rutas relativas para producción
+  build: {
+    outDir: 'dist',
+    assetsDir: 'assets'
   }
 })
