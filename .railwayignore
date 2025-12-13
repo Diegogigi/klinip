@@ -1,0 +1,5 @@
+# No usar archivos de configuración antiguos
+Procfile
+start.sh
+railway.json
+
