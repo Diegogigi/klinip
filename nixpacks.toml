@@ -1,12 +1,12 @@
 [phases.setup]
-nixPkgs = ["nodejs-18_x", "python311", "python311Packages.pip", "python311Packages.setuptools", "curl"]
+nixPkgs = ["nodejs-18_x", "python311"]
 
 [phases.install]
 cmds = [
   "cd frontend && npm install",
-  "cd backend && curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && python get-pip.py && rm get-pip.py",
-  "cd backend && python -m pip install --upgrade pip setuptools wheel",
-  "cd backend && python -m pip install -r requirements.txt"
+  "cd backend && python -m venv venv",
+  "cd backend && venv/bin/pip install --upgrade pip setuptools wheel",
+  "cd backend && venv/bin/pip install -r requirements.txt"
 ]
 
 [phases.build]
@@ -17,5 +17,5 @@ cmds = [
 ]
 
 [start]
-cmd = "cd backend && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+cmd = "cd backend && venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
 
