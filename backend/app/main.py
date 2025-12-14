@@ -89,12 +89,27 @@ def debug_users(db: Session = Depends(auth.get_db)):
 @app.get("/debug/headers")
 def debug_headers(request: Request):
     """Endpoint de debug para ver headers recibidos"""
+    auth_header = request.headers.get("Authorization", "NO ENCONTRADO")
     return {
-        "authorization": request.headers.get("Authorization", "NO ENCONTRADO"),
+        "authorization": auth_header,
+        "authorization_parts": auth_header.split(" ") if auth_header != "NO ENCONTRADO" else None,
         "all_headers": dict(request.headers),
         "method": request.method,
         "url": str(request.url)
     }
+
+# Middleware para loggear todos los requests
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Middleware para loggear requests y headers"""
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        print(f"DEBUG middleware: Authorization header recibido: {auth_header[:30]}...")
+    else:
+        print(f"DEBUG middleware: NO hay Authorization header en request a {request.url.path}")
+    
+    response = await call_next(request)
+    return response
 
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
