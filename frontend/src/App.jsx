@@ -75,11 +75,9 @@ function Sidebar({ user, onLogout }) {
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/appointments", label: "Citas", icon: icons.doc },
-    { to: "/calendar", label: "Calendario", icon: icons.calendar },
-    { to: "/medications", label: "Medicamentos", icon: icons.doc },
-    { to: "/documents", label: "Documentos", icon: icons.heart },
-    { to: "/timeline", label: "Mi historia", icon: icons.timeline },
+    { to: "/appointments", label: "Citas", icon: icons.calendar },
+    { to: "/medications", label: "Meds", icon: icons.heart },
+    { to: "/documents", label: "Docs", icon: icons.doc },
     { to: "/settings", label: "Perfil", icon: icons.user },
   ];
 
@@ -107,7 +105,7 @@ function Sidebar({ user, onLogout }) {
             className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
           >
             <span className="sidebar-icon">{link.icon}</span>
-            {expanded && <span className="sidebar-label">{link.label}</span>}
+            <span className="sidebar-label">{link.label}</span>
           </Link>
         ))}
       </nav>
