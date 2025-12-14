@@ -12,9 +12,25 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+    console.log("Request interceptor: Token agregado al header", token.substring(0, 20) + "...");
+  } else {
+    console.warn("Request interceptor: No hay token en localStorage");
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      console.error("401 Unauthorized - Token inválido o expirado");
+      console.error("Response data:", error.response?.data);
+      // Limpiar token inválido
+      localStorage.removeItem("token");
+    }
+    return Promise.reject(error);
+  }
+);
 
 export async function register({ name, email, password }) {
   const res = await api.post("/auth/register", { name, email, password });

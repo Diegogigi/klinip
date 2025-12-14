@@ -16,15 +16,40 @@ export default function Login({ onAuthenticated }) {
     setLoading(true);
     try {
       const res = await login({ email, password });
+      console.log("Login response:", res);
+      
       if (res?.access_token) {
         localStorage.setItem("token", res.access_token);
+        console.log("Token guardado:", res.access_token.substring(0, 20) + "...");
+        
+        // Esperar un momento para asegurar que el token se guardó
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Verificar que el token se guardó
+        const savedToken = localStorage.getItem("token");
+        if (!savedToken) {
+          throw new Error("No se pudo guardar el token");
+        }
+        
+        // Intentar obtener el usuario
+        try {
+          const me = await getMe();
+          console.log("Usuario obtenido:", me);
+          onAuthenticated(me);
+          navigate("/");
+        } catch (meError) {
+          console.error("Error al obtener usuario:", meError);
+          // Si falla getMe pero tenemos token, intentar de nuevo
+          const me = await getMe();
+          onAuthenticated(me);
+          navigate("/");
+        }
+      } else {
+        throw new Error("No se recibió token de acceso");
       }
-      const me = await getMe();
-      onAuthenticated(me);
-      navigate("/");
     } catch (err) {
-      console.error(err);
-      setError("Correo o contraseña incorrectos.");
+      console.error("Error completo:", err);
+      setError(err?.response?.data?.detail || err?.message || "Correo o contraseña incorrectos.");
     } finally {
       setLoading(false);
     }

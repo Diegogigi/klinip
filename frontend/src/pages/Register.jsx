@@ -26,16 +26,43 @@ export default function Register({ onRegistered }) {
     try {
       setLoading(true);
       await register({ name, email, password });
+      console.log("Usuario registrado exitosamente");
+      
       const session = await login({ email, password });
+      console.log("Login después de registro:", session);
+      
       if (session?.access_token) {
         localStorage.setItem("token", session.access_token);
+        console.log("Token guardado:", session.access_token.substring(0, 20) + "...");
+        
+        // Esperar un momento para asegurar que el token se guardó
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Verificar que el token se guardó
+        const savedToken = localStorage.getItem("token");
+        if (!savedToken) {
+          throw new Error("No se pudo guardar el token");
+        }
+        
+        // Intentar obtener el usuario
+        try {
+          const me = await getMe();
+          console.log("Usuario obtenido:", me);
+          onRegistered(me);
+          navigate("/");
+        } catch (meError) {
+          console.error("Error al obtener usuario:", meError);
+          // Si falla getMe pero tenemos token, intentar de nuevo
+          const me = await getMe();
+          onRegistered(me);
+          navigate("/");
+        }
+      } else {
+        throw new Error("No se recibió token de acceso");
       }
-      const me = await getMe();
-      onRegistered(me);
-      navigate("/");
     } catch (err) {
-      console.error(err);
-      setError(err?.message || "No se pudo crear la cuenta. ¿Correo ya registrado?");
+      console.error("Error completo:", err);
+      setError(err?.response?.data?.detail || err?.message || "No se pudo crear la cuenta. ¿Correo ya registrado?");
     } finally {
       setLoading(false);
     }
