@@ -42,21 +42,48 @@ app.add_middleware(
 )
 
 
+# Health check
+@app.get("/health")
+def health_check(db: Session = Depends(auth.get_db)):
+    try:
+        # Verificar conexión a la base de datos
+        db.execute("SELECT 1")
+        db_status = "ok"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+    
+    return {
+        "status": "ok",
+        "database": db_status,
+        "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "..."
+    }
+
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
 def register(user_in: schemas.UserCreate, db: Session = Depends(auth.get_db)):
-    existing = auth.get_user_by_email(db, user_in.email)
-    if existing:
-        raise HTTPException(status_code=400, detail="El correo ya está registrado")
-    user = models.User(
-        email=user_in.email,
-        password_hash=auth.get_password_hash(user_in.password),
-        name=user_in.name,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
+    try:
+        existing = auth.get_user_by_email(db, user_in.email)
+        if existing:
+            raise HTTPException(status_code=400, detail="El correo ya está registrado")
+        
+        user = models.User(
+            email=user_in.email,
+            password_hash=auth.get_password_hash(user_in.password),
+            name=user_in.name,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating user: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al crear usuario: {str(e)}"
+        )
 
 
 @app.post("/auth/login", response_model=schemas.Token)
