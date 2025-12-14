@@ -49,13 +49,39 @@ def health_check(db: Session = Depends(auth.get_db)):
         # Verificar conexión a la base de datos
         db.execute("SELECT 1")
         db_status = "ok"
+        
+        # Contar usuarios
+        from . import models
+        user_count = db.query(models.User).count()
     except Exception as e:
         db_status = f"error: {str(e)}"
+        user_count = 0
     
     return {
         "status": "ok",
         "database": db_status,
+        "user_count": user_count,
         "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "..."
+    }
+
+# Debug endpoint (solo para desarrollo)
+@app.get("/debug/users")
+def debug_users(db: Session = Depends(auth.get_db)):
+    """Endpoint de debug para ver usuarios (solo en desarrollo)"""
+    from . import models
+    users = db.query(models.User).all()
+    return {
+        "count": len(users),
+        "users": [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "has_password_hash": bool(u.password_hash),
+                "password_hash_length": len(u.password_hash) if u.password_hash else 0
+            }
+            for u in users
+        ]
     }
 
 # Auth endpoints
@@ -91,9 +117,12 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(auth.get_db),
 ):
+    print(f"DEBUG: Intento de login con email: {form_data.username}")
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        print(f"DEBUG: Autenticación fallida para: {form_data.username}")
         raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
+    print(f"DEBUG: Autenticación exitosa para usuario ID: {user.id}")
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
         data={"sub": user.id}, expires_delta=access_token_expires

@@ -49,8 +49,13 @@ def get_user_by_email(db: Session, email: str) -> Optional[models.User]:
 def authenticate_user(db: Session, email: str, password: str) -> Optional[models.User]:
     user = get_user_by_email(db, email)
     if not user:
+        print(f"DEBUG: Usuario no encontrado para email: {email}")
         return None
-    if not verify_password(password, user.password_hash):
+    print(f"DEBUG: Usuario encontrado: {user.email}, verificando contraseña...")
+    is_valid = verify_password(password, user.password_hash)
+    print(f"DEBUG: Contraseña válida: {is_valid}")
+    if not is_valid:
+        print(f"DEBUG: Contraseña incorrecta para usuario: {user.email}")
         return None
     return user
 
