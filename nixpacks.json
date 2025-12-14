@@ -1,0 +1,27 @@
+{
+  "phases": {
+    "setup": {
+      "nixPkgs": ["nodejs-18_x", "python311"]
+    },
+    "install": {
+      "cmds": [
+        "cd frontend && npm ci",
+        "cd frontend && chmod +x node_modules/.bin/* || true",
+        "cd backend && python -m venv venv",
+        "cd backend && venv/bin/pip install --upgrade pip setuptools wheel",
+        "cd backend && venv/bin/pip install -r requirements.txt"
+      ]
+    },
+    "build": {
+      "cmds": [
+        "cd frontend && npm run build",
+        "mkdir -p backend/static",
+        "cp -r frontend/dist/* backend/static/"
+      ]
+    }
+  },
+  "start": {
+    "cmd": "cd backend && venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+  }
+}
+
