@@ -17,7 +17,7 @@ class UserOut(BaseModel):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Token(BaseModel):
@@ -53,7 +53,7 @@ class AppointmentOut(AppointmentBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class DocumentBase(BaseModel):
@@ -70,7 +70,7 @@ class DocumentOut(DocumentBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class MedicationBase(BaseModel):
@@ -103,4 +103,4 @@ class MedicationOut(MedicationBase):
     created_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
