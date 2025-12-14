@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -38,7 +38,8 @@ app.add_middleware(
     allow_origins=allow_origins,
     allow_credentials=allow_credentials,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*", "Authorization", "Content-Type"],
+    expose_headers=["*"],
 )
 
 
@@ -82,6 +83,17 @@ def debug_users(db: Session = Depends(auth.get_db)):
             }
             for u in users
         ]
+    }
+
+# Debug endpoint para ver headers
+@app.get("/debug/headers")
+def debug_headers(request: Request):
+    """Endpoint de debug para ver headers recibidos"""
+    return {
+        "authorization": request.headers.get("Authorization", "NO ENCONTRADO"),
+        "all_headers": dict(request.headers),
+        "method": request.method,
+        "url": str(request.url)
     }
 
 # Auth endpoints
