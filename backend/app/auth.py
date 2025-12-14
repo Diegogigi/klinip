@@ -55,20 +55,29 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[models
     return user
 
 
-async def get_current_user(db: Session = Depends(get_db)) -> models.User:
-    """Modo temporal sin autenticacion: siempre retorna/crea un usuario invitado.
-    Si mas adelante se reactiva auth, revertir a la validacion de token."""
-    guest_email = "invitado@mirutasalud.local"
-    user = db.query(models.User).filter(models.User.email == guest_email).first()
-    if user:
-        return user
-
-    guest_user = models.User(
-        email=guest_email,
-        password_hash=get_password_hash("guest"),
-        name="Invitado",
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Obtiene el usuario actual a partir del token JWT."""
+    from fastapi import HTTPException, status
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No se pudo validar las credenciales",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-    db.add(guest_user)
-    db.commit()
-    db.refresh(guest_user)
-    return guest_user
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: int = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except jwt.JWTError:
+        raise credentials_exception
+    
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise credentials_exception
+    
+    return user

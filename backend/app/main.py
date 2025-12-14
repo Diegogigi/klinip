@@ -102,13 +102,13 @@ def login(
 
 
 @app.get("/me", response_model=schemas.UserOut)
-def read_me(current_user: models.User = Depends(auth.get_current_user)):
+async def read_me(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 
 # Appointments
 @app.get("/appointments", response_model=List[schemas.AppointmentOut])
-def list_appointments(
+async def list_appointments(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -121,7 +121,7 @@ def list_appointments(
 
 
 @app.post("/appointments", response_model=schemas.AppointmentOut)
-def create_appointment(
+async def create_appointment(
     appt_in: schemas.AppointmentCreate,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -143,7 +143,7 @@ def create_appointment(
 
 
 @app.put("/appointments/{appointment_id}", response_model=schemas.AppointmentOut)
-def update_appointment(
+async def update_appointment(
     appointment_id: int,
     appt_in: schemas.AppointmentUpdate,
     db: Session = Depends(auth.get_db),
@@ -169,7 +169,7 @@ def update_appointment(
 
 
 @app.delete("/appointments/{appointment_id}")
-def delete_appointment(
+async def delete_appointment(
     appointment_id: int,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -190,7 +190,7 @@ def delete_appointment(
 
 # Medications
 @app.get("/medications", response_model=List[schemas.MedicationOut])
-def list_medications(
+async def list_medications(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -203,7 +203,7 @@ def list_medications(
 
 
 @app.post("/medications", response_model=schemas.MedicationOut)
-def create_medication(
+async def create_medication(
     med_in: schemas.MedicationCreate,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -225,7 +225,7 @@ def create_medication(
 
 
 @app.put("/medications/{medication_id}", response_model=schemas.MedicationOut)
-def update_medication(
+async def update_medication(
     medication_id: int,
     med_in: schemas.MedicationUpdate,
     db: Session = Depends(auth.get_db),
@@ -251,7 +251,7 @@ def update_medication(
 
 
 @app.delete("/medications/{medication_id}")
-def delete_medication(
+async def delete_medication(
     medication_id: int,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -277,7 +277,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @app.get("/documents", response_model=List[schemas.DocumentOut])
-def list_documents(
+async def list_documents(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -330,7 +330,7 @@ async def upload_document(
 
 
 @app.delete("/documents/{document_id}")
-def delete_document(
+async def delete_document(
     document_id: int,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
