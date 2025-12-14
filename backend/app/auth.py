@@ -73,16 +73,37 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    print(f"DEBUG get_current_user: Token recibido: {token[:20]}..." if token else "DEBUG: No token recibido")
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
+        print(f"DEBUG get_current_user: Payload decodificado: {payload}")
+        user_id = payload.get("sub")
+        print(f"DEBUG get_current_user: User ID del token: {user_id}, tipo: {type(user_id)}")
+        
         if user_id is None:
+            print("DEBUG get_current_user: user_id es None en payload")
             raise credentials_exception
-    except jwt.JWTError:
+        
+        # Asegurar que user_id sea int
+        if isinstance(user_id, str):
+            user_id = int(user_id)
+            
+    except jwt.ExpiredSignatureError:
+        print("DEBUG get_current_user: Token expirado")
+        raise credentials_exception
+    except jwt.JWTError as e:
+        print(f"DEBUG get_current_user: Error JWT: {str(e)}")
+        raise credentials_exception
+    except Exception as e:
+        print(f"DEBUG get_current_user: Error inesperado: {str(e)}")
         raise credentials_exception
     
     user = db.query(models.User).filter(models.User.id == user_id).first()
+    print(f"DEBUG get_current_user: Usuario encontrado: {user.email if user else 'None'}")
+    
     if user is None:
+        print(f"DEBUG get_current_user: Usuario con ID {user_id} no existe en BD")
         raise credentials_exception
     
     return user
