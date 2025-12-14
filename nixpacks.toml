@@ -4,8 +4,7 @@ nixPkgs = ["nodejs-18_x", "python311"]
 
 [phases.install]
 cmds = [
-  "cd frontend && npm ci",
-  "cd frontend && chmod +x node_modules/.bin/* || true",
+  "cd frontend && npm ci --prefer-offline",
   "cd backend && python -m venv venv",
   "cd backend && venv/bin/pip install --upgrade pip setuptools wheel",
   "cd backend && venv/bin/pip install -r requirements.txt"
