@@ -11,6 +11,7 @@ Después de hacer login, aparece el error "Token inválido o expirado" inmediata
 Visita estos endpoints en tu aplicación desplegada:
 
 1. **Health Check**: `https://tu-backend.up.railway.app/health`
+
    - Busca el campo `"secret_key"` en la respuesta
    - Si dice `"NO CONFIGURADO"`, necesitas configurar `SECRET_KEY`
 
@@ -51,10 +52,12 @@ Después de agregar la variable:
 ### Paso 5: Verificar que funciona
 
 1. **Verifica el health check nuevamente**:
+
    - `https://tu-backend.up.railway.app/health`
    - Ahora debe mostrar `"secret_key": "configurado"`
 
 2. **Limpia el localStorage del navegador**:
+
    - Abre las herramientas de desarrollador (F12)
    - Ve a la consola
    - Ejecuta: `localStorage.clear()`
@@ -75,10 +78,12 @@ En Railway, ve a los logs del backend y busca:
 ### Problemas comunes
 
 1. **SECRET_KEY no configurado**:
+
    - Síntoma: Token se genera pero falla al validar
    - Solución: Configurar `SECRET_KEY` en Railway
 
 2. **SECRET_KEY diferente entre generación y validación**:
+
    - Síntoma: Tokens generados antes de configurar SECRET_KEY no funcionan
    - Solución: Los usuarios deben hacer login nuevamente después de configurar SECRET_KEY
 
@@ -107,4 +112,3 @@ En Railway, ve a los logs del backend y busca:
 
 - Ver `SOLUCION_ERROR_401.md` para más detalles sobre el error 401
 - Ver `VARIABLES_ENTORNO.md` para documentación completa de variables
-

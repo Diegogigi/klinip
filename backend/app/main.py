@@ -445,10 +445,12 @@ if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     
     # Ruta catch-all para el SPA del frontend
+    # IMPORTANTE: Esta ruta debe estar al final para no interceptar rutas de API
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        # Si es una ruta de API, no servir el SPA
-        if full_path.startswith(("api/", "auth/", "appointments", "medications", "documents", "me", "uploaded_docs")):
+        # Si es una ruta de API, no servir el SPA (dejar que FastAPI maneje el 404)
+        api_routes = ("api/", "auth/", "appointments", "medications", "documents", "me", "uploaded_docs", "health", "debug")
+        if full_path.startswith(api_routes) or full_path in ("health", "debug"):
             raise HTTPException(status_code=404, detail="Not found")
         
         # Intentar servir el archivo solicitado
