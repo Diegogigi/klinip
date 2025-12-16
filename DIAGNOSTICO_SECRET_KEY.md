@@ -10,12 +10,12 @@ Después de hacer login, aparece el error "Token inválido o expirado" inmediata
 
 Visita estos endpoints en tu aplicación desplegada:
 
-1. **Health Check**: `https://tu-backend.up.railway.app/health`
+1. **Health Check**: `https://klinip-production.up.railway.app/health`
 
    - Busca el campo `"secret_key"` en la respuesta
    - Si dice `"NO CONFIGURADO"`, necesitas configurar `SECRET_KEY`
 
-2. **Debug Config**: `https://tu-backend.up.railway.app/debug/config`
+2. **Debug Config**: `https://klinip-production.up.railway.app/debug/config`
    - Verifica `"secret_key_configured": false` o `true`
    - Si es `false`, el problema está confirmado
 
@@ -53,7 +53,7 @@ Después de agregar la variable:
 
 1. **Verifica el health check nuevamente**:
 
-   - `https://tu-backend.up.railway.app/health`
+   - `https://klinip-production.up.railway.app/health`
    - Ahora debe mostrar `"secret_key": "configurado"`
 
 2. **Limpia el localStorage del navegador**:
