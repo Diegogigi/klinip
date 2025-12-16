@@ -42,16 +42,30 @@ export default function Medications() {
     e.preventDefault();
     setLoading(true);
     try {
-      await saveMedication({
-        ...form,
-        end_date: form.end_date || null,
-      });
+      // Preparar datos: convertir strings vacíos a null y document_id a número o null
+      const payload = {
+        name: form.name,
+        dose: form.dose || "",
+        frequency: form.frequency || "",
+        duration: form.duration || "",
+        end_date: form.end_date ? new Date(form.end_date).toISOString() : null,
+        notes: form.notes || "",
+        document_id: form.document_id ? parseInt(form.document_id) : null,
+      };
+      
+      // Si es edición, incluir el id
+      if (form.id) {
+        payload.id = form.id;
+      }
+      
+      await saveMedication(payload);
       await load();
       resetForm();
       setShowForm(false);
     } catch (err) {
-      console.error(err);
-      alert("No se pudo guardar el medicamento");
+      console.error("Error al guardar medicamento:", err);
+      console.error("Detalles del error:", err.response?.data);
+      alert("No se pudo guardar el medicamento: " + (err.response?.data?.detail || err.message));
     } finally {
       setLoading(false);
     }

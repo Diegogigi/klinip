@@ -310,20 +310,25 @@ async def create_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    med = models.Medication(
-        user_id=current_user.id,
-        name=med_in.name,
-        dose=med_in.dose,
-        frequency=med_in.frequency,
-        duration=med_in.duration,
-        end_date=med_in.end_date,
-        notes=med_in.notes,
-        document_id=med_in.document_id,
-    )
-    db.add(med)
-    db.commit()
-    db.refresh(med)
-    return med
+    try:
+        med = models.Medication(
+            user_id=current_user.id,
+            name=med_in.name,
+            dose=med_in.dose or "",
+            frequency=med_in.frequency or "",
+            duration=med_in.duration or "",
+            end_date=med_in.end_date,
+            notes=med_in.notes or "",
+            document_id=med_in.document_id,
+        )
+        db.add(med)
+        db.commit()
+        db.refresh(med)
+        return med
+    except Exception as e:
+        db.rollback()
+        print(f"Error al crear medicamento: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al crear medicamento: {str(e)}")
 
 
 @app.put("/medications/{medication_id}", response_model=schemas.MedicationOut)
