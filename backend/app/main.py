@@ -195,8 +195,9 @@ def login(
         raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
     print(f"DEBUG: Autenticación exitosa para usuario ID: {user.id}")
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # JWT requiere que 'sub' sea una cadena, no un entero
     access_token = auth.create_access_token(
-        data={"sub": user.id}, expires_delta=access_token_expires
+        data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
