@@ -93,6 +93,24 @@ export async function deleteDocument(id) {
   return res.data;
 }
 
+export async function getDocumentFile(documentId) {
+  const token = localStorage.getItem("token");
+  const API_URL = import.meta.env.VITE_API_URL || 
+    (import.meta.env.PROD ? "" : "http://localhost:8000");
+  
+  const response = await api.get(`/documents/${documentId}/file`, {
+    responseType: "blob",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  
+  // Crear una URL temporal para el blob
+  const blob = new Blob([response.data], { type: response.headers["content-type"] });
+  const url = window.URL.createObjectURL(blob);
+  return url;
+}
+
 // Medications
 export async function getMedications() {
   const res = await api.get("/medications");

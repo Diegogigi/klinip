@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { getDocuments, uploadDocument, deleteDocument } from "../api";
+import { getDocumentFile } from "../services/httpApi";
 
 const docLabels = {
   receta: "Receta",
@@ -73,6 +74,28 @@ export default function Documents() {
     } catch (err) {
       console.error(err);
       alert("No se pudo eliminar");
+    }
+  };
+
+  const handleView = async (doc) => {
+    try {
+      // Si tiene data_url (modo demo), usar eso
+      if (doc.data_url) {
+        window.open(doc.data_url, "_blank");
+        return;
+      }
+      
+      // En producción, obtener el archivo con autenticación
+      const url = await getDocumentFile(doc.id);
+      window.open(url, "_blank");
+      
+      // Limpiar la URL temporal después de un tiempo
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 1000);
+    } catch (err) {
+      console.error("Error al abrir documento:", err);
+      alert("No se pudo abrir el documento. " + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -261,19 +284,16 @@ export default function Documents() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
-                        <a
-                          href={d.data_url || `/documents/${d.id}/file`}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          onClick={() => handleView(d)}
                           className="secondary-btn"
                           style={{
                             padding: "0.25rem 0.5rem",
                             fontSize: "0.75rem",
-                            textDecoration: "none",
                           }}
                         >
                           Ver
-                        </a>
+                        </button>
                         <button
                           className="secondary-btn"
                           style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
