@@ -262,7 +262,7 @@ export default function Documents() {
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
                         <a
-                          href={d.data_url || "#"}
+                          href={d.data_url || `/documents/${d.id}/file`}
                           target="_blank"
                           rel="noreferrer"
                           className="secondary-btn"

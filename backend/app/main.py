@@ -328,7 +328,9 @@ async def create_medication(
     except Exception as e:
         db.rollback()
         print(f"Error al crear medicamento: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error al crear medicamento: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error al crear medicamento: {str(e)}"
+        )
 
 
 @app.put("/medications/{medication_id}", response_model=schemas.MedicationOut)
@@ -462,8 +464,45 @@ async def delete_document(
     return {"ok": True}
 
 
-# Servir archivos subidos
-app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
+# Endpoint protegido para servir documentos
+@app.get("/documents/{document_id}/file")
+async def get_document_file(
+    document_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Sirve un archivo de documento solo si el usuario tiene acceso"""
+    import mimetypes
+    
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            models.Document.user_id == current_user.id,
+        )
+        .first()
+    )
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    # Detectar el tipo MIME del archivo
+    mime_type, _ = mimetypes.guess_type(doc.file_path)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+    
+    return FileResponse(
+        doc.file_path,
+        media_type=mime_type,
+        filename=os.path.basename(doc.file_path),
+    )
+
+
+# Servir archivos subidos (mantener para compatibilidad, pero usar endpoint protegido)
+# app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
 
 # Servir archivos estáticos del frontend
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
