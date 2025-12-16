@@ -58,11 +58,36 @@ def health_check(db: Session = Depends(auth.get_db)):
         db_status = f"error: {str(e)}"
         user_count = 0
     
+    # Verificar SECRET_KEY (sin exponerlo)
+    secret_key_status = "configurado" if auth.SECRET_KEY != "supersecretkey_change_me_in_production" else "NO CONFIGURADO (usando valor por defecto)"
+    is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    
     return {
         "status": "ok",
         "database": db_status,
         "user_count": user_count,
-        "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "..."
+        "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "...",
+        "secret_key": secret_key_status,
+        "environment": "production" if is_production else "development"
+    }
+
+# Debug endpoint para verificar configuración
+@app.get("/debug/config")
+def debug_config():
+    """Endpoint de debug para verificar configuración (sin exponer secretos)"""
+    secret_key_configured = auth.SECRET_KEY != "supersecretkey_change_me_in_production"
+    secret_key_length = len(auth.SECRET_KEY)
+    is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    
+    return {
+        "secret_key_configured": secret_key_configured,
+        "secret_key_length": secret_key_length,
+        "secret_key_preview": auth.SECRET_KEY[:10] + "..." if secret_key_configured else "NO CONFIGURADO",
+        "algorithm": auth.ALGORITHM,
+        "token_expire_minutes": auth.ACCESS_TOKEN_EXPIRE_MINUTES,
+        "environment": "production" if is_production else "development",
+        "database_url_configured": bool(os.getenv("DATABASE_URL")),
+        "railway_environment": bool(is_production)
     }
 
 # Debug endpoint (solo para desarrollo)
