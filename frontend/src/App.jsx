@@ -70,6 +70,15 @@ function Sidebar({ user, onLogout }) {
   const location = useLocation();
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
   const [expanded, setExpanded] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   if (isAuthRoute) return null;
 
@@ -83,9 +92,9 @@ function Sidebar({ user, onLogout }) {
 
   return (
     <aside
-      className={`sidebar ${expanded ? "expanded" : ""}`}
-      onMouseEnter={() => setExpanded(true)}
-      onMouseLeave={() => setExpanded(false)}
+      className={`sidebar ${expanded && !isMobile ? "expanded" : ""}`}
+      onMouseEnter={() => !isMobile && setExpanded(true)}
+      onMouseLeave={() => !isMobile && setExpanded(false)}
     >
       <div className="sidebar-brand">
         <div className="brand-avatar">K</div>
