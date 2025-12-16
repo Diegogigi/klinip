@@ -9,10 +9,18 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .database import SessionLocal
+import os
 
-SECRET_KEY = "supersecretkey_change_me"
+# Obtener SECRET_KEY de variables de entorno, con fallback para desarrollo
+SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))  # 24 horas por defecto
+
+# Validar que SECRET_KEY no sea el valor por defecto en producción
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+    if SECRET_KEY == "supersecretkey_change_me_in_production":
+        print("⚠️ ADVERTENCIA: SECRET_KEY no está configurado. La autenticación puede fallar.")
+        print("⚠️ Por favor, configura la variable de entorno SECRET_KEY en Railway.")
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -69,7 +77,7 @@ async def get_current_user(
     
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No se pudo validar las credenciales",
+        detail="Token inválido o expirado. Por favor, inicia sesión nuevamente.",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
@@ -91,9 +99,16 @@ async def get_current_user(
             
     except jwt.ExpiredSignatureError:
         print("DEBUG get_current_user: Token expirado")
-        raise credentials_exception
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado. Por favor, inicia sesión nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     except jwt.JWTError as e:
         print(f"DEBUG get_current_user: Error JWT: {str(e)}")
+        # Si el error es por clave inválida, dar un mensaje más específico
+        if "Invalid" in str(e) or "signature" in str(e).lower():
+            print("⚠️ ERROR: El token no pudo ser validado. Verifica que SECRET_KEY esté configurado correctamente.")
         raise credentials_exception
     except Exception as e:
         print(f"DEBUG get_current_user: Error inesperado: {str(e)}")

@@ -39,10 +39,9 @@ export default function Login({ onAuthenticated }) {
           navigate("/");
         } catch (meError) {
           console.error("Error al obtener usuario:", meError);
-          // Si falla getMe pero tenemos token, intentar de nuevo
-          const me = await getMe();
-          onAuthenticated(me);
-          navigate("/");
+          // Si falla getMe, el token puede ser inválido
+          localStorage.removeItem("token");
+          throw new Error(meError?.response?.data?.detail || meError?.message || "Error al verificar la sesión. Por favor, intenta de nuevo.");
         }
       } else {
         throw new Error("No se recibió token de acceso");
