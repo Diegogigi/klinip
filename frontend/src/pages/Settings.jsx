@@ -1,7 +1,8 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { DEMO_MODE } from "../api";
 
-export default function Settings({ user }) {
+export default function Settings({ user, onLogout }) {
   const profile = user || {};
   const plan = DEMO_MODE ? "Demo local" : "Backend activo";
 
@@ -65,6 +66,30 @@ export default function Settings({ user }) {
             Borrar datos locales
           </button>
         </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">Sesión</h3>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Cierra tu sesión para salir de forma segura de tu cuenta.
+        </p>
+        <button 
+          className="primary-btn" 
+          type="button" 
+          onClick={() => {
+            if (window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+              onLogout?.();
+            }
+          }}
+          style={{ width: "100%" }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "20px", height: "20px" }}>
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Cerrar sesión
+        </button>
       </div>
     </>
   );

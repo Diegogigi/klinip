@@ -279,7 +279,7 @@ export default function App() {
             path="/settings"
             element={
               <ProtectedRoute user={user}>
-                <Settings user={user} />
+                <Settings user={user} onLogout={handleLogout} />
                   </ProtectedRoute>
                 }
               />
