@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -410,29 +410,11 @@ async def upload_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    import uuid
-    import re
-    
-    # Normalizar el nombre del archivo: eliminar caracteres problemáticos y usar UUID para evitar colisiones
+    # Leer el contenido del archivo
+    file_content = await file.read()
     original_filename = file.filename or "document"
-    # Obtener la extensión del archivo
-    file_ext = os.path.splitext(original_filename)[1] or ".bin"
-    # Crear un nombre único y seguro
-    safe_filename = f"{current_user.id}_{uuid.uuid4().hex[:8]}{file_ext}"
-    filepath = os.path.join(UPLOAD_DIR, safe_filename)
     
-    # Asegurar que la ruta sea absoluta
-    filepath = os.path.abspath(filepath)
-    
-    print(f"DEBUG upload_document: Guardando archivo como: {filepath}")
-    print(f"DEBUG upload_document: Nombre original: {original_filename}")
-
-    with open(filepath, "wb") as buffer:
-        content = await file.read()
-        buffer.write(content)
-    
-    print(f"DEBUG upload_document: Archivo guardado exitosamente en: {filepath}")
-    print(f"DEBUG upload_document: Archivo existe: {os.path.exists(filepath)}")
+    print(f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaño: {len(file_content)} bytes")
 
     parsed_date = None
     if date:
@@ -441,11 +423,14 @@ async def upload_document(
         except ValueError:
             parsed_date = None
 
+    # Guardar el archivo directamente en la base de datos como BLOB
     doc = models.Document(
         user_id=current_user.id,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
-        file_path=filepath,  # Guardar ruta absoluta
+        file_data=file_content,  # Guardar datos del archivo en la BD
+        filename=original_filename,  # Guardar nombre original
+        file_path=None,  # Ya no usamos file_path para archivos nuevos
         date=parsed_date,
         center=center or "",
         notes=notes or "",
@@ -453,7 +438,7 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
-    print(f"DEBUG upload_document: Documento guardado en BD con file_path: {doc.file_path}")
+    print(f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}")
     return doc
 
 
@@ -512,54 +497,63 @@ async def get_document_file(
         )
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    print(f"DEBUG get_document_file: Documento encontrado, file_path: {doc.file_path}")
-    
-    # Intentar con ruta absoluta si es relativa
-    file_path_to_check = doc.file_path
-    if not os.path.isabs(file_path_to_check):
-        file_path_to_check = os.path.abspath(file_path_to_check)
-        print(f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}")
-    
-    # También intentar con la ruta relativa original
-    if not os.path.exists(file_path_to_check):
-        # Intentar con la ruta relativa desde el directorio de trabajo
-        relative_path = doc.file_path
-        if not relative_path.startswith(UPLOAD_DIR):
-            relative_path = os.path.join(UPLOAD_DIR, os.path.basename(doc.file_path))
-        relative_path = os.path.abspath(relative_path)
-        print(f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}")
-        if os.path.exists(relative_path):
-            file_path_to_check = relative_path
-            print(f"DEBUG get_document_file: Archivo encontrado en ruta alternativa")
-    
-    print(f"DEBUG get_document_file: Archivo existe: {os.path.exists(file_path_to_check)}")
-    print(f"DEBUG get_document_file: Ruta final a verificar: {file_path_to_check}")
-
-    if not os.path.exists(file_path_to_check):
-        # Listar archivos en el directorio para debug
-        if os.path.exists(UPLOAD_DIR):
-            files_in_dir = os.listdir(UPLOAD_DIR)
-            print(f"DEBUG get_document_file: Archivos en {UPLOAD_DIR}: {files_in_dir[:10]}")
-        print(
-            f"DEBUG get_document_file: El archivo no existe en la ruta: {file_path_to_check}"
+    # Prioridad 1: Si el archivo está en la BD (file_data)
+    if doc.file_data:
+        print(f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaño: {len(doc.file_data)} bytes")
+        filename = doc.filename or f"document_{doc.id}"
+        
+        # Detectar el tipo MIME del archivo
+        mime_type, _ = mimetypes.guess_type(filename)
+        if not mime_type:
+            mime_type = "application/octet-stream"
+        
+        print(f"DEBUG get_document_file: Tipo MIME: {mime_type}, filename: {filename}")
+        return Response(
+            content=doc.file_data,
+            media_type=mime_type,
+            headers={"Content-Disposition": f'inline; filename="{filename}"'}
         )
-        raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
-    # Usar la ruta que existe
-    doc.file_path = file_path_to_check
+    # Prioridad 2: Si el archivo está en el sistema de archivos (compatibilidad con documentos antiguos)
+    if doc.file_path:
+        print(f"DEBUG get_document_file: Intentando servir desde file_path: {doc.file_path}")
+        
+        # Intentar con ruta absoluta si es relativa
+        file_path_to_check = doc.file_path
+        if not os.path.isabs(file_path_to_check):
+            file_path_to_check = os.path.abspath(file_path_to_check)
+            print(f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}")
 
-    # Detectar el tipo MIME del archivo
-    mime_type, _ = mimetypes.guess_type(doc.file_path)
-    if not mime_type:
-        mime_type = "application/octet-stream"
+        # También intentar con la ruta relativa original
+        if not os.path.exists(file_path_to_check):
+            # Intentar con la ruta relativa desde el directorio de trabajo
+            relative_path = doc.file_path
+            if not relative_path.startswith(UPLOAD_DIR):
+                relative_path = os.path.join(UPLOAD_DIR, os.path.basename(doc.file_path))
+            relative_path = os.path.abspath(relative_path)
+            print(f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}")
+            if os.path.exists(relative_path):
+                file_path_to_check = relative_path
+                print(f"DEBUG get_document_file: Archivo encontrado en ruta alternativa")
 
-    print(f"DEBUG get_document_file: Sirviendo archivo con tipo MIME: {mime_type}")
-    print(f"DEBUG get_document_file: Ruta final del archivo: {file_path_to_check}")
-    return FileResponse(
-        file_path_to_check,
-        media_type=mime_type,
-        filename=os.path.basename(file_path_to_check),
-    )
+        if os.path.exists(file_path_to_check):
+            # Detectar el tipo MIME del archivo
+            mime_type, _ = mimetypes.guess_type(file_path_to_check)
+            if not mime_type:
+                mime_type = "application/octet-stream"
+            
+            print(f"DEBUG get_document_file: Sirviendo archivo desde sistema de archivos")
+            return FileResponse(
+                file_path_to_check,
+                media_type=mime_type,
+                filename=os.path.basename(file_path_to_check),
+            )
+        else:
+            print(f"DEBUG get_document_file: Archivo no existe en file_path: {file_path_to_check}")
+
+    # Si no hay archivo ni en BD ni en sistema de archivos
+    print(f"DEBUG get_document_file: No se encontró archivo para el documento {document_id}")
+    raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 
 # Servir archivos subidos (mantener para compatibilidad, pero usar endpoint protegido)

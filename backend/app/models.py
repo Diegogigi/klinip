@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Enum, Text, ForeignKey, JSON, LargeBinary
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -64,7 +64,9 @@ class Document(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
     doc_type = Column(Enum(DocumentType), nullable=False)
-    file_path = Column(String, nullable=False)
+    file_path = Column(String, nullable=True)  # Mantener para compatibilidad con documentos antiguos
+    file_data = Column(LargeBinary, nullable=True)  # Datos del archivo en la BD
+    filename = Column(String, nullable=True)  # Nombre original del archivo
     date = Column(DateTime, default=datetime.utcnow)
     center = Column(String, default="")
     notes = Column(Text, nullable=True)
