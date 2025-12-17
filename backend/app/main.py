@@ -410,11 +410,29 @@ async def upload_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    filename = f"{current_user.id}_{file.filename}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
+    import uuid
+    import re
+    
+    # Normalizar el nombre del archivo: eliminar caracteres problemáticos y usar UUID para evitar colisiones
+    original_filename = file.filename or "document"
+    # Obtener la extensión del archivo
+    file_ext = os.path.splitext(original_filename)[1] or ".bin"
+    # Crear un nombre único y seguro
+    safe_filename = f"{current_user.id}_{uuid.uuid4().hex[:8]}{file_ext}"
+    filepath = os.path.join(UPLOAD_DIR, safe_filename)
+    
+    # Asegurar que la ruta sea absoluta
+    filepath = os.path.abspath(filepath)
+    
+    print(f"DEBUG upload_document: Guardando archivo como: {filepath}")
+    print(f"DEBUG upload_document: Nombre original: {original_filename}")
 
     with open(filepath, "wb") as buffer:
-        buffer.write(await file.read())
+        content = await file.read()
+        buffer.write(content)
+    
+    print(f"DEBUG upload_document: Archivo guardado exitosamente en: {filepath}")
+    print(f"DEBUG upload_document: Archivo existe: {os.path.exists(filepath)}")
 
     parsed_date = None
     if date:
@@ -427,7 +445,7 @@ async def upload_document(
         user_id=current_user.id,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
-        file_path=filepath,
+        file_path=filepath,  # Guardar ruta absoluta
         date=parsed_date,
         center=center or "",
         notes=notes or "",
@@ -435,6 +453,7 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
+    print(f"DEBUG upload_document: Documento guardado en BD con file_path: {doc.file_path}")
     return doc
 
 
@@ -474,7 +493,9 @@ async def get_document_file(
     """Sirve un archivo de documento solo si el usuario tiene acceso"""
     import mimetypes
 
-    print(f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}")
+    print(
+        f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}"
+    )
 
     doc = (
         db.query(models.Document)
@@ -486,15 +507,46 @@ async def get_document_file(
     )
 
     if not doc:
-        print(f"DEBUG get_document_file: Documento {document_id} no encontrado para usuario {current_user.id}")
+        print(
+            f"DEBUG get_document_file: Documento {document_id} no encontrado para usuario {current_user.id}"
+        )
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
     print(f"DEBUG get_document_file: Documento encontrado, file_path: {doc.file_path}")
-    print(f"DEBUG get_document_file: Archivo existe: {os.path.exists(doc.file_path)}")
+    
+    # Intentar con ruta absoluta si es relativa
+    file_path_to_check = doc.file_path
+    if not os.path.isabs(file_path_to_check):
+        file_path_to_check = os.path.abspath(file_path_to_check)
+        print(f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}")
+    
+    # También intentar con la ruta relativa original
+    if not os.path.exists(file_path_to_check):
+        # Intentar con la ruta relativa desde el directorio de trabajo
+        relative_path = doc.file_path
+        if not relative_path.startswith(UPLOAD_DIR):
+            relative_path = os.path.join(UPLOAD_DIR, os.path.basename(doc.file_path))
+        relative_path = os.path.abspath(relative_path)
+        print(f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}")
+        if os.path.exists(relative_path):
+            file_path_to_check = relative_path
+            print(f"DEBUG get_document_file: Archivo encontrado en ruta alternativa")
+    
+    print(f"DEBUG get_document_file: Archivo existe: {os.path.exists(file_path_to_check)}")
+    print(f"DEBUG get_document_file: Ruta final a verificar: {file_path_to_check}")
 
-    if not os.path.exists(doc.file_path):
-        print(f"DEBUG get_document_file: El archivo no existe en la ruta: {doc.file_path}")
+    if not os.path.exists(file_path_to_check):
+        # Listar archivos en el directorio para debug
+        if os.path.exists(UPLOAD_DIR):
+            files_in_dir = os.listdir(UPLOAD_DIR)
+            print(f"DEBUG get_document_file: Archivos en {UPLOAD_DIR}: {files_in_dir[:10]}")
+        print(
+            f"DEBUG get_document_file: El archivo no existe en la ruta: {file_path_to_check}"
+        )
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    # Usar la ruta que existe
+    doc.file_path = file_path_to_check
 
     # Detectar el tipo MIME del archivo
     mime_type, _ = mimetypes.guess_type(doc.file_path)
@@ -502,10 +554,11 @@ async def get_document_file(
         mime_type = "application/octet-stream"
 
     print(f"DEBUG get_document_file: Sirviendo archivo con tipo MIME: {mime_type}")
+    print(f"DEBUG get_document_file: Ruta final del archivo: {file_path_to_check}")
     return FileResponse(
-        doc.file_path,
+        file_path_to_check,
         media_type=mime_type,
-        filename=os.path.basename(doc.file_path),
+        filename=os.path.basename(file_path_to_check),
     )
 
 
@@ -526,7 +579,7 @@ if os.path.exists(static_dir):
         # Estas deben ser manejadas por el endpoint específico /documents/{id}/file
         if "/file" in full_path:
             raise HTTPException(status_code=404, detail="Not found")
-        
+
         # Rutas de API que deben ser excluidas del SPA
         api_routes = (
             "api/",
@@ -541,7 +594,7 @@ if os.path.exists(static_dir):
         # Solo interceptar si empieza con estas rutas
         if full_path.startswith(api_routes) or full_path in ("health", "debug"):
             raise HTTPException(status_code=404, detail="Not found")
-        
+
         # Para "documents", solo interceptar si es exactamente "documents" o "documents/" sin más segmentos
         # Las rutas como "/documents/{id}/file" ya fueron manejadas arriba
         if full_path == "documents" or full_path == "documents/":
