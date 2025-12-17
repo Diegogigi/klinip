@@ -473,7 +473,9 @@ async def get_document_file(
 ):
     """Sirve un archivo de documento solo si el usuario tiene acceso"""
     import mimetypes
-    
+
+    print(f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}")
+
     doc = (
         db.query(models.Document)
         .filter(
@@ -482,18 +484,24 @@ async def get_document_file(
         )
         .first()
     )
-    
+
     if not doc:
+        print(f"DEBUG get_document_file: Documento {document_id} no encontrado para usuario {current_user.id}")
         raise HTTPException(status_code=404, detail="Documento no encontrado")
-    
+
+    print(f"DEBUG get_document_file: Documento encontrado, file_path: {doc.file_path}")
+    print(f"DEBUG get_document_file: Archivo existe: {os.path.exists(doc.file_path)}")
+
     if not os.path.exists(doc.file_path):
+        print(f"DEBUG get_document_file: El archivo no existe en la ruta: {doc.file_path}")
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
-    
+
     # Detectar el tipo MIME del archivo
     mime_type, _ = mimetypes.guess_type(doc.file_path)
     if not mime_type:
         mime_type = "application/octet-stream"
-    
+
+    print(f"DEBUG get_document_file: Sirviendo archivo con tipo MIME: {mime_type}")
     return FileResponse(
         doc.file_path,
         media_type=mime_type,
@@ -514,18 +522,29 @@ if os.path.exists(static_dir):
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         # Si es una ruta de API, no servir el SPA (dejar que FastAPI maneje el 404)
+        # IMPORTANTE: NO interceptar rutas que terminan en /file (para documentos)
+        # Estas deben ser manejadas por el endpoint específico /documents/{id}/file
+        if "/file" in full_path:
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Rutas de API que deben ser excluidas del SPA
         api_routes = (
             "api/",
             "auth/",
             "appointments",
             "medications",
-            "documents",
             "me",
             "uploaded_docs",
             "health",
             "debug",
         )
+        # Solo interceptar si empieza con estas rutas
         if full_path.startswith(api_routes) or full_path in ("health", "debug"):
+            raise HTTPException(status_code=404, detail="Not found")
+        
+        # Para "documents", solo interceptar si es exactamente "documents" o "documents/" sin más segmentos
+        # Las rutas como "/documents/{id}/file" ya fueron manejadas arriba
+        if full_path == "documents" or full_path == "documents/":
             raise HTTPException(status_code=404, detail="Not found")
 
         # Intentar servir el archivo solicitado
