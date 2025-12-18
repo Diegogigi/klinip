@@ -308,15 +308,15 @@ a {
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, #0ea5e9, #6366f1);
-  color: #f8fafc;
+  background: linear-gradient(135deg, #0ea5e9, #14b8a6);
+  color: #0b1224;
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 14px;
   font-size: 0.95rem;
   cursor: pointer;
   font-weight: 700;
-  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 10px 30px rgba(20, 184, 166, 0.35);
   transition: all 0.3s ease;
   display: inline-flex;
   align-items: center;
@@ -326,7 +326,7 @@ a {
 
 .primary-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 14px 40px rgba(99, 102, 241, 0.45);
+  box-shadow: 0 14px 40px rgba(20, 184, 166, 0.45);
 }
 
 .primary-btn:active:not(:disabled) {
@@ -1026,12 +1026,12 @@ a {
 }
 
 .hero-card {
-  background: linear-gradient(135deg, #0ea5e9, #6366f1);
-  color: #f8fafc;
-  border-radius: 18px;
+  background: #0b1224;
+  color: #e2e8f0;
+  border-radius: 16px;
   padding: 1.5rem;
-  box-shadow: 0 16px 32px rgba(99, 102, 241, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.25);
+  border: 1px solid rgba(148, 163, 184, 0.2);
   position: relative;
   z-index: 1;
 }
