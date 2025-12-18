@@ -9,7 +9,7 @@ import Medications from "./pages/Medications";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
-import { DEMO_MODE, getMe, logout as apiLogout } from "./api";
+import { getMe, logout as apiLogout } from "./api";
 
 const icons = {
   home: (
@@ -208,25 +208,25 @@ export default function App() {
           <main className="main-content">
             <Routes>
               <Route
-                path="/login"
-                element={
-                  user ? (
-                    <Navigate to="/" replace />
-                  ) : (
-                    <Login onAuthenticated={setUser} demoMode={DEMO_MODE} />
-                  )
-                }
-              />
-              <Route
-                path="/register"
-                element={
-                  user ? (
-                    <Navigate to="/" replace />
-                  ) : (
-                    <Register onRegistered={setUser} demoMode={DEMO_MODE} />
-                  )
-                }
-              />
+              path="/login"
+              element={
+                user ? (
+                  <Navigate to="/" replace />
+                ) : (
+                  <Login onAuthenticated={setUser} />
+                )
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                user ? (
+                  <Navigate to="/" replace />
+                ) : (
+                  <Register onRegistered={setUser} />
+                )
+              }
+            />
               <Route
                 path="/"
                 element={
@@ -342,7 +342,7 @@ function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, 
             type="button"
             onClick={() => setData({ ...data, recordatorios: "push" })}
           >
-            📱 Push (demo)
+            📱 Push (si el navegador lo permite)
           </button>
           <button
             className={`pill-button ${data.recordatorios === "correo" ? "active" : ""}`}

@@ -1,10 +1,8 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
-import { DEMO_MODE } from "../api";
 
 export default function Settings({ user, onLogout }) {
   const profile = user || {};
-  const plan = DEMO_MODE ? "Demo local" : "Backend activo";
+  const plan = "Backend activo";
 
   const handleClearLocal = () => {
     if (!window.confirm("¿Borrar los datos locales de Klinip en este navegador?")) return;
@@ -45,12 +43,6 @@ export default function Settings({ user, onLogout }) {
           </div>
         </div>
 
-        {DEMO_MODE && (
-          <p className="tiny-note" style={{ marginTop: "0.75rem" }}>
-            Demo local: tus datos viven en este navegador. Limpia el almacenamiento si quieres empezar
-            de cero.
-          </p>
-        )}
       </div>
 
       <div className="card">

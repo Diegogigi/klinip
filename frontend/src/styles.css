@@ -966,27 +966,6 @@ a {
   color: #764ba2;
 }
 
-.auth-demo-note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 1.5rem;
-  padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  text-align: center;
-}
-
-.auth-demo-note svg {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-}
-
 .hero {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 24px;

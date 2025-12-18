@@ -1,5 +1,3 @@
-import { DEMO_MODE } from "../api";
-
 const dayMs = 24 * 60 * 60 * 1000;
 let timers = [];
 
@@ -27,9 +25,9 @@ export function scheduleReminderNotifications(reminders) {
   if (!reminders?.length) return;
 
   const offsets = [
-    { days: 7, label: "7 días antes" },
-    { days: 3, label: "3 días antes" },
-    { days: 1, label: "1 día antes" },
+    { days: 7, label: "7 d?as antes" },
+    { days: 3, label: "3 d?as antes" },
+    { days: 1, label: "1 d?a antes" },
   ];
 
   reminders.forEach((rem) => {
@@ -41,18 +39,17 @@ export function scheduleReminderNotifications(reminders) {
       if (delay <= 0) {
         showNotification(
           `Recordatorio (${label})`,
-          `${rem.center || "Centro"} · ${rem.type || "actividad"} · ${new Date(rem.date_time).toLocaleString()}`
+          `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${new Date(rem.date_time).toLocaleString()}`
         );
         return;
       }
-      const cappedDelay = DEMO_MODE ? Math.min(delay, 15000) : delay;
       timers.push(
         setTimeout(() => {
           showNotification(
             `Recordatorio (${label})`,
-            `${rem.center || "Centro"} · ${rem.type || "actividad"} · ${new Date(rem.date_time).toLocaleString()}`
+            `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${new Date(rem.date_time).toLocaleString()}`
           );
-        }, cappedDelay)
+        }, delay)
       );
     });
   });
@@ -61,20 +58,23 @@ export function scheduleReminderNotifications(reminders) {
 export function sendEmailReminder(reminder) {
   const subject = encodeURIComponent(`Recordatorio Klinip: ${reminder.center || "Actividad de salud"}`);
   const body = encodeURIComponent(
-    `Hola, esto es un recordatorio de Klinip.\n\n` +
-      `Actividad: ${reminder.type || "actividad"}\n` +
-      `Centro: ${reminder.center || "No definido"}\n` +
+    `Hola, esto es un recordatorio de Klinip.
+
+` +
+      `Actividad: ${reminder.type || "actividad"}
+` +
+      `Centro: ${reminder.center || "No definido"}
+` +
       `Fecha y hora: ${
         reminder.date_time ? new Date(reminder.date_time).toLocaleString() : "Por agendar"
-      }\n` +
-      `Notas: ${reminder.notes || "Sin notas"}\n\n` +
-      `Generado desde el demo.`
+      }
+` +
+      `Notas: ${reminder.notes || "Sin notas"}
+
+` +
+      `Mensaje generado desde Klinip.`
   );
 
-  if (DEMO_MODE) {
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  } else {
-    // Lugar para integrar un backend real de correo.
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  }
+  // Lugar para integrar un backend real de correo.
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
 }

@@ -210,11 +210,10 @@ export default function Dashboard({ user }) {
     <>
       <div className="hero">
         <div>
-          <p className="pill">Demo local</p>
+          <p className="pill">Railway</p>
           <h1>Bienvenido a Klinip, {user?.name || "invitado"}</h1>
           <p className="hero-subtitle">
             Tu ruta de salud, ordenada: horas médicas, exámenes y documentos en un solo lugar.
-            En modo demo los datos viven solo en este navegador.
           </p>
           <div className="hero-actions">
             <a className="primary-btn" href="/appointments">Registrar cita</a>
@@ -284,7 +283,7 @@ export default function Dashboard({ user }) {
           <div>
             <h2 className="card-title">Recordatorios y alertas</h2>
             <p className="muted">
-              Alertas visuales del demo. Push activas si el navegador lo permite. Correo vía mailto.
+              Alertas locales en el navegador. Push activas si el navegador lo permite. Correo vía mailto.
             </p>
           </div>
           <div className="traffic">

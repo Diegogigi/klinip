@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { login, getMe, DEMO_MODE } from "../api";
+import { login, getMe } from "../api";
 
 export default function Login({ onAuthenticated }) {
   const [email, setEmail] = useState("");
@@ -172,16 +172,6 @@ export default function Login({ onAuthenticated }) {
           </p>
         </div>
 
-        {DEMO_MODE && (
-          <div className="auth-demo-note">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-            <span>Modo demo: Tus datos se guardan solo en este navegador</span>
-          </div>
-        )}
       </div>
     </div>
   );

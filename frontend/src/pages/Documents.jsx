@@ -79,13 +79,7 @@ export default function Documents() {
 
   const handleView = async (doc) => {
     try {
-      // Si tiene data_url (modo demo), usar eso
-      if (doc.data_url) {
-        window.open(doc.data_url, "_blank");
-        return;
-      }
-      
-      // En producción, obtener el archivo con autenticación
+      // Obtener el archivo con autenticación
       const url = await getDocumentFile(doc.id);
       window.open(url, "_blank");
       
@@ -114,8 +108,7 @@ export default function Documents() {
       <div className="card">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDFs de recetas, órdenes, resultados e informes. Para el demo, los
-          archivos se convierten a dataURL y viven en este navegador (tamaño limitado).
+          Guarda fotos o PDFs de recetas, ordenes, resultados e informes. Los archivos se almacenan de forma segura en el backend.
         </p>
       </div>
 
@@ -203,7 +196,7 @@ export default function Documents() {
                   accept="image/*,application/pdf"
                   onChange={(e) => setFile(e.target.files[0] || null)}
                 />
-                <span className="tiny-note">Advertencia: archivos muy pesados pueden no caber en el demo.</span>
+                <span className="tiny-note">Ten en cuenta el tama?o soportado por tu navegador y conexi?n.</span>
               </div>
 
               <div className="floating-actions">
