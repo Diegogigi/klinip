@@ -208,19 +208,18 @@ export default function Dashboard({ user }) {
 
   return (
     <>
+      
       <div className="hero">
         <div>
-          <p className="pill">Railway</p>
-          <h1>Bienvenido a Klinip, {user?.name || "invitado"}</h1>
-          <p className="hero-subtitle">
-            Tu ruta de salud, ordenada: horas médicas, exámenes y documentos en un solo lugar.
-          </p>
+          <h1>Hola {user?.name || "invitado"}, este es tu resumen</h1>
+          <p className="hero-subtitle">Citas, recordatorios y documentos en un solo lugar.</p>
           <div className="hero-actions">
             <a className="primary-btn" href="/appointments">Registrar cita</a>
             <a className="secondary-btn" href="/documents">Guardar documento</a>
           </div>
         </div>
         <div className="hero-card">
+
           <p className="hero-card-title">Radar rápido</p>
           <p className="hero-card-subtitle">{alert.label}</p>
           <div className="traffic">
@@ -252,8 +251,7 @@ export default function Dashboard({ user }) {
         </div>
         {upcoming.length === 0 ? (
           <p className="muted">
-            Aún no registras citas o exámenes con fecha. Agrega la siguiente atención para que
-            podamos recordártela.
+            Aún no registras fechas. Agrega tu próxima atención para verla aquí.
           </p>
         ) : (
           <ul className="timeline">
@@ -283,7 +281,7 @@ export default function Dashboard({ user }) {
           <div>
             <h2 className="card-title">Recordatorios y alertas</h2>
             <p className="muted">
-              Alertas locales en el navegador. Push activas si el navegador lo permite. Correo vía mailto.
+              Alertas del navegador. Activa push si tu navegador lo permite.
             </p>
           </div>
           <div className="traffic">

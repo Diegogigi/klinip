@@ -165,7 +165,7 @@ export default function Appointments() {
       <div className="card">
         <h2 className="card-title">Citas, exámenes y trámites</h2>
         <p className="muted">
-          Registra todo lo que tienes que hacer en salud. Tus datos quedan en el backend de Klinip.
+          Organiza tus citas, examenes y tramites. Todo queda guardado.
         </p>
       </div>
 

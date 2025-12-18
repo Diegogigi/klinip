@@ -79,14 +79,22 @@ export default function Documents() {
 
   const handleView = async (doc) => {
     try {
-      // Obtener el archivo con autenticación
+      // Obtener el archivo con autenticaci?n
       const url = await getDocumentFile(doc.id);
-      window.open(url, "_blank");
-      
-      // Limpiar la URL temporal después de un tiempo
+
+      // Abrir en la misma pesta?a para evitar bloqueos en m?vil
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_self";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      // Liberar la URL temporal
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
-      }, 1000);
+      }, 2000);
     } catch (err) {
       console.error("Error al abrir documento:", err);
       alert("No se pudo abrir el documento. " + (err.response?.data?.detail || err.message));
@@ -108,7 +116,7 @@ export default function Documents() {
       <div className="card">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDFs de recetas, ordenes, resultados e informes. Los archivos se almacenan de forma segura en el backend.
+          Guarda fotos o PDFs de recetas, ordenes, resultados e informes. Se almacenan seguros en el backend.
         </p>
       </div>
 
