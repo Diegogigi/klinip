@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, inspect
 from typing import List
 import os
 from datetime import timedelta, datetime
@@ -14,6 +14,53 @@ from . import models, schemas, auth
 
 # Crear las tablas
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_document_schema():
+    """
+    Garantiza que la tabla documents tenga las columnas nuevas usadas por la app
+    (file_data y filename). Es una migracion ligera para entornos sin Alembic.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("documents")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        if "file_data" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_data BYTEA"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN file_data BLOB")
+            added_columns.append("file_data")
+
+        if "filename" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS filename VARCHAR"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN filename VARCHAR")
+            added_columns.append("filename")
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                f"DEBUG ensure_document_schema: columnas agregadas a documents: {', '.join(added_columns)}"
+            )
+        else:
+            print("DEBUG ensure_document_schema: tabla documents ya esta al dia")
+    except Exception as exc:
+        # No detener la app si la verificacion falla; solo dejar el log.
+        print(f"WARNING ensure_document_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_document_schema()
 
 app = FastAPI(title="MiRutaSalud API")
 
@@ -413,8 +460,10 @@ async def upload_document(
     # Leer el contenido del archivo
     file_content = await file.read()
     original_filename = file.filename or "document"
-    
-    print(f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaño: {len(file_content)} bytes")
+
+    print(
+        f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaño: {len(file_content)} bytes"
+    )
 
     parsed_date = None
     if date:
@@ -424,13 +473,14 @@ async def upload_document(
             parsed_date = None
 
     # Guardar el archivo directamente en la base de datos como BLOB
+    file_path_placeholder = ""  # Compatibilidad con esquemas antiguos donde file_path es NOT NULL
     doc = models.Document(
         user_id=current_user.id,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
         file_data=file_content,  # Guardar datos del archivo en la BD
         filename=original_filename,  # Guardar nombre original
-        file_path=None,  # Ya no usamos file_path para archivos nuevos
+        file_path=file_path_placeholder,  # Ya no usamos file_path para archivos nuevos
         date=parsed_date,
         center=center or "",
         notes=notes or "",
@@ -438,7 +488,9 @@ async def upload_document(
     db.add(doc)
     db.commit()
     db.refresh(doc)
-    print(f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}")
+    print(
+        f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}"
+    )
     return doc
 
 
@@ -460,7 +512,7 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
     # Borrar archivo físico
-    if os.path.exists(doc.file_path):
+    if doc.file_path and os.path.exists(doc.file_path):
         os.remove(doc.file_path)
 
     db.delete(doc)
@@ -499,60 +551,78 @@ async def get_document_file(
 
     # Prioridad 1: Si el archivo está en la BD (file_data)
     if doc.file_data:
-        print(f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaño: {len(doc.file_data)} bytes")
+        print(
+            f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaño: {len(doc.file_data)} bytes"
+        )
         filename = doc.filename or f"document_{doc.id}"
-        
+
         # Detectar el tipo MIME del archivo
         mime_type, _ = mimetypes.guess_type(filename)
         if not mime_type:
             mime_type = "application/octet-stream"
-        
+
         print(f"DEBUG get_document_file: Tipo MIME: {mime_type}, filename: {filename}")
         return Response(
             content=doc.file_data,
             media_type=mime_type,
-            headers={"Content-Disposition": f'inline; filename="{filename}"'}
+            headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
-    
+
     # Prioridad 2: Si el archivo está en el sistema de archivos (compatibilidad con documentos antiguos)
     if doc.file_path:
-        print(f"DEBUG get_document_file: Intentando servir desde file_path: {doc.file_path}")
-        
+        print(
+            f"DEBUG get_document_file: Intentando servir desde file_path: {doc.file_path}"
+        )
+
         # Intentar con ruta absoluta si es relativa
         file_path_to_check = doc.file_path
         if not os.path.isabs(file_path_to_check):
             file_path_to_check = os.path.abspath(file_path_to_check)
-            print(f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}")
+            print(
+                f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}"
+            )
 
         # También intentar con la ruta relativa original
         if not os.path.exists(file_path_to_check):
             # Intentar con la ruta relativa desde el directorio de trabajo
             relative_path = doc.file_path
             if not relative_path.startswith(UPLOAD_DIR):
-                relative_path = os.path.join(UPLOAD_DIR, os.path.basename(doc.file_path))
+                relative_path = os.path.join(
+                    UPLOAD_DIR, os.path.basename(doc.file_path)
+                )
             relative_path = os.path.abspath(relative_path)
-            print(f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}")
+            print(
+                f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}"
+            )
             if os.path.exists(relative_path):
                 file_path_to_check = relative_path
-                print(f"DEBUG get_document_file: Archivo encontrado en ruta alternativa")
+                print(
+                    f"DEBUG get_document_file: Archivo encontrado en ruta alternativa"
+                )
 
         if os.path.exists(file_path_to_check):
             # Detectar el tipo MIME del archivo
             mime_type, _ = mimetypes.guess_type(file_path_to_check)
             if not mime_type:
                 mime_type = "application/octet-stream"
-            
-            print(f"DEBUG get_document_file: Sirviendo archivo desde sistema de archivos")
+
+            print(
+                f"DEBUG get_document_file: Sirviendo archivo desde sistema de archivos"
+            )
             return FileResponse(
                 file_path_to_check,
                 media_type=mime_type,
                 filename=os.path.basename(file_path_to_check),
             )
         else:
-            print(f"DEBUG get_document_file: Archivo no existe en file_path: {file_path_to_check}")
+            print(
+                f"DEBUG get_document_file: Archivo no existe en file_path: {file_path_to_check}"
+            )
 
     # Si no hay archivo ni en BD ni en sistema de archivos
-    print(f"DEBUG get_document_file: No se encontró archivo para el documento {document_id}")
+    print(
+        f"DEBUG get_document_file: No se encontró archivo para el documento {document_id}"
+    )
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 
