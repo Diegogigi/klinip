@@ -85,6 +85,8 @@ function Sidebar({ user, onLogout }) {
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
     { to: "/appointments", label: "Citas", icon: icons.calendar },
+    { to: "/calendar", label: "Calendario", icon: icons.calendar },
+    { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart },
     { to: "/documents", label: "Docs", icon: icons.doc },
     { to: "/settings", label: "Perfil", icon: icons.user },
