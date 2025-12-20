@@ -134,15 +134,6 @@ function Sidebar({ user, onLogout }) {
 
 function Topbar({ user }) {
   const location = useLocation();
-  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
-
-  useEffect(() => {
-    const handler = () => setIsDesktop(window.innerWidth >= 1024);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-
-  if (!isDesktop) return null;
 
   const titles = {
     "/": "Resumen",
