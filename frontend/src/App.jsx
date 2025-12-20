@@ -156,16 +156,32 @@ function Topbar({ user }) {
   const title = titles[location.pathname] || "Klinip";
   const subtitle = location.pathname === "/" ? "Panel general" : "Tu ruta de salud";
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
+  const today = new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 
   return (
     <header className="topbar">
       <div>
         <p className="topbar-label">{subtitle}</p>
-        <h2 className="topbar-title">{title}</h2>
+        <div className="topbar-row">
+          <h2 className="topbar-title">{title}</h2>
+          <span className="topbar-chip">{today}</span>
+        </div>
       </div>
-      <div className="topbar-user">
-        <span className="topbar-avatar">{initials}</span>
-        <span className="topbar-name">{user?.name || "Invitado"}</span>
+      <div className="topbar-actions">
+        <Link className="topbar-quick" to="/calendar">
+          Calendario
+        </Link>
+        <Link className="topbar-quick" to="/timeline">
+          Historia
+        </Link>
+        <div className="topbar-user">
+          <span className="topbar-avatar">{initials}</span>
+          <span className="topbar-name">{user?.name || "Invitado"}</span>
+        </div>
       </div>
     </header>
   );

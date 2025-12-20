@@ -1268,6 +1268,12 @@ a {
   margin-bottom: 1rem;
 }
 
+.topbar-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .topbar-label {
   margin: 0;
   color: #64748b;
@@ -1280,6 +1286,38 @@ a {
   margin: 0.1rem 0 0;
   font-size: 1.35rem;
   color: #0f172a;
+}
+
+.topbar-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topbar-quick {
+  padding: 0.45rem 0.8rem;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #4338ca;
+  font-weight: 700;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  text-decoration: none;
+}
+
+.topbar-quick:hover {
+  background: rgba(99, 102, 241, 0.18);
 }
 
 .topbar-user {
