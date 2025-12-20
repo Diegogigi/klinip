@@ -135,6 +135,9 @@ function Sidebar({ user, onLogout }) {
 function Topbar({ user }) {
   const location = useLocation();
 
+  const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
+  if (isAuthRoute) return null;
+
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",

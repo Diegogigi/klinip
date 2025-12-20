@@ -44,13 +44,13 @@ a {
 
 .sidebar {
   width: 78px;
-  background: #f8fbff;
-  color: #334155;
+  background: #fff;
+  color: #0f172a;
   padding: 1.1rem 0.6rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 8px 0 30px rgba(15, 23, 42, 0.12);
+  box-shadow: 8px 0 30px rgba(15, 23, 42, 0.06);
   transition: width 0.25s ease;
   position: sticky;
   top: 0;
@@ -1261,10 +1261,10 @@ a {
   justify-content: space-between;
   align-items: center;
   padding: 0.9rem 1.25rem;
-  border-radius: 18px;
-  background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.18);
+  border-radius: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 24px rgba(148, 163, 184, 0.12);
   margin-bottom: 1rem;
   position: sticky;
   top: 0;
