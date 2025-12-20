@@ -1,5 +1,6 @@
 const dayMs = 24 * 60 * 60 * 1000;
-let timers = [];
+let appointmentTimers = [];
+let medicationTimers = [];
 
 export async function requestNotificationPermission() {
   if (!("Notification" in window)) return false;
@@ -16,12 +17,15 @@ function showNotification(title, body) {
 }
 
 export function clearScheduledNotifications() {
-  timers.forEach(clearTimeout);
-  timers = [];
+  appointmentTimers.forEach(clearTimeout);
+  medicationTimers.forEach(clearTimeout);
+  appointmentTimers = [];
+  medicationTimers = [];
 }
 
 export function scheduleReminderNotifications(reminders) {
-  clearScheduledNotifications();
+  appointmentTimers.forEach(clearTimeout);
+  appointmentTimers = [];
   if (!reminders?.length) return;
 
   const offsets = [
@@ -43,7 +47,7 @@ export function scheduleReminderNotifications(reminders) {
         );
         return;
       }
-      timers.push(
+      appointmentTimers.push(
         setTimeout(() => {
           showNotification(
             `Recordatorio (${label})`,
@@ -52,6 +56,50 @@ export function scheduleReminderNotifications(reminders) {
         }, delay)
       );
     });
+  });
+}
+
+function deriveDoseHours(frequencyText = "") {
+  const text = frequencyText.toLowerCase();
+  if (text.includes("6")) return [6, 12, 18, 22];
+  if (text.includes("8")) return [7, 15, 22];
+  if (text.includes("12")) return [9, 21];
+  return [9];
+}
+
+export function scheduleMedicationNotifications(medications) {
+  medicationTimers.forEach(clearTimeout);
+  medicationTimers = [];
+  if (!medications?.length) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizon = new Date(today.getTime() + 30 * dayMs);
+
+  medications.forEach((med) => {
+    if (!med?.end_date) return;
+    const end = new Date(med.end_date);
+    if (Number.isNaN(end.getTime())) return;
+    const lastDay = end < horizon ? end : horizon;
+    const hours = deriveDoseHours(med.frequency);
+    for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
+      hours.forEach((hour) => {
+        const trigger = new Date(day);
+        trigger.setHours(hour, 0, 0, 0);
+        const delay = trigger.getTime() - Date.now();
+        if (delay <= 0) return;
+        medicationTimers.push(
+          setTimeout(() => {
+            showNotification(
+              `Medicaci?n: ${med.name || "Tratamiento"}`,
+              `${med.dose ? med.dose + " - " : ""}${med.frequency || "Tomar seg?n indicaci?n"}. ${
+                med.notes || ""
+              }`
+            );
+          }, delay)
+        );
+      });
+    }
   });
 }
 

@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { deleteMedication, getMedications, saveMedication } from "../api";
+import {
+  requestNotificationPermission,
+  scheduleMedicationNotifications,
+} from "../services/notifications";
 
 export default function Medications() {
   const [meds, setMeds] = useState([]);
@@ -19,10 +23,13 @@ export default function Medications() {
   const load = async () => {
     const data = await getMedications();
     setMeds(data || []);
+    scheduleMedicationNotifications(data || []);
   };
 
   useEffect(() => {
     load();
+    requestNotificationPermission();
+    return () => scheduleMedicationNotifications([]);
   }, []);
 
   const resetForm = () => {
@@ -57,7 +64,7 @@ export default function Medications() {
       if (form.id) {
         payload.id = form.id;
       }
-      
+
       await saveMedication(payload);
       await load();
       resetForm();

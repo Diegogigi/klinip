@@ -1,10 +1,12 @@
+
 import React, { useEffect, useMemo, useState } from "react";
-import { getAppointments } from "../api";
+import { getAppointments, getMedications } from "../api";
 
 const typeColors = {
   cita: "event-green",
   examen: "event-blue",
   tramite: "event-yellow",
+  medication: "event-purple",
 };
 
 function startOfMonth(date) {
@@ -31,15 +33,20 @@ function getMonthDays(viewDate) {
 
 export default function Calendar() {
   const [appointments, setAppointments] = useState([]);
+  const [medications, setMedications] = useState([]);
   const [viewDate, setViewDate] = useState(new Date());
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
-    Promise.resolve(getAppointments())
-      .then((res) => setAppointments(res || []))
+    Promise.all([getAppointments(), getMedications()])
+      .then(([apptRes, medRes]) => {
+        setAppointments(apptRes || []);
+        setMedications(medRes || []);
+      })
       .catch((err) => {
         console.error("No se pudieron cargar las actividades", err);
         setAppointments([]);
+        setMedications([]);
       });
   }, []);
 
@@ -58,16 +65,42 @@ export default function Calendar() {
 
   const eventsByDay = useMemo(() => {
     const map = {};
+    const pushEvent = (key, ev) => {
+      if (!map[key]) map[key] = [];
+      map[key].push(ev);
+    };
+
     (appointments || []).forEach((a) => {
       if (!a?.date_time) return;
       const d = new Date(a.date_time);
       if (Number.isNaN(d.getTime())) return;
       const key = d.toISOString().slice(0, 10);
-      if (!map[key]) map[key] = [];
-      map[key].push(a);
+      pushEvent(key, a);
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const horizon = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+    (medications || []).forEach((m) => {
+      if (!m?.end_date) return;
+      const end = new Date(m.end_date);
+      if (Number.isNaN(end.getTime())) return;
+      const lastDay = end < horizon ? end : horizon;
+      for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
+        const key = day.toISOString().slice(0, 10);
+        pushEvent(key, {
+          id: "med-" + (m.id || m.name || "item") + "-" + key,
+          type: "medication",
+          name: m.name,
+          dose: m.dose,
+          frequency: m.frequency,
+          notes: m.notes,
+          end_date: m.end_date,
+        });
+      }
     });
     return map;
-  }, [appointments]);
+  }, [appointments, medications]);
 
   const selectedEvents = useMemo(() => {
     if (!selected) return [];
@@ -86,7 +119,7 @@ export default function Calendar() {
               type="button"
               onClick={() => setViewDate(addMonths(normalizedViewDate, -1))}
             >
-              ← Mes anterior
+              Mes anterior
             </button>
             <div className="month-display">{monthLabel}</div>
             <button
@@ -94,17 +127,18 @@ export default function Calendar() {
               type="button"
               onClick={() => setViewDate(addMonths(normalizedViewDate, 1))}
             >
-              Mes siguiente →
+              Mes siguiente
             </button>
           </div>
         </div>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Vista mensual para citas, exámenes y trámites. Pulsa un día para ver actividades o agrega desde Citas.
+          Vista mensual para citas, examenes, tramites y medicacion. Pulsa un dia para ver actividades o agrega desde Citas.
         </p>
         <div className="legend">
           <span className="legend-dot event-green" /> Citas
-          <span className="legend-dot event-blue" /> Exámenes
-          <span className="legend-dot event-yellow" /> Trámites
+          <span className="legend-dot event-blue" /> Examenes
+          <span className="legend-dot event-yellow" /> Tramites
+          <span className="legend-dot event-purple" /> Medicacion
         </div>
         <div className="calendar">
           {["L", "M", "X", "J", "V", "S", "D"].map((d) => (
@@ -113,17 +147,21 @@ export default function Calendar() {
             </div>
           ))}
           {days.map((day, idx) => {
-            const key = day ? day.toISOString().slice(0, 10) : `empty-${idx}`;
+            const key = day ? day.toISOString().slice(0, 10) : "empty-" + idx;
             const events = day ? eventsByDay[key] || [] : [];
             const isWeekend = day ? day.getDay() === 0 || day.getDay() === 6 : false;
             const todayKey = new Date().toISOString().slice(0, 10);
             const isToday = day ? key === todayKey : false;
+            const cellClass = [
+              "calendar-cell",
+              day ? "" : "empty",
+              isWeekend ? "calendar-weekend" : "",
+              isToday ? "calendar-today" : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
             return (
-              <div
-                key={key}
-                className={`calendar-cell ${day ? "" : "empty"} ${isWeekend ? "calendar-weekend" : ""} ${isToday ? "calendar-today" : ""}`}
-                onClick={() => day && setSelected(day)}
-              >
+              <div key={key} className={cellClass} onClick={() => day && setSelected(day)}>
                 {day && (
                   <>
                     <div className="calendar-date">
@@ -131,7 +169,10 @@ export default function Calendar() {
                     </div>
                     <div className="calendar-events">
                       {events.slice(0, 3).map((ev) => (
-                        <span key={ev.id} className={`event-dot ${typeColors[ev.type] || "event-green"}`} />
+                        <span
+                          key={ev.id}
+                          className={"event-dot " + (typeColors[ev.type] || "event-green")}
+                        />
                       ))}
                       {events.length > 3 && <span className="event-more">+{events.length - 3}</span>}
                     </div>
@@ -161,16 +202,27 @@ export default function Calendar() {
                 {selectedEvents.map((ev) => (
                   <li key={ev.id} className="timeline-item">
                     <div className="timeline-main">
-                      <span className={`chip ${ev.type}`}>{ev.type}</span>
-                      <span className={`chip-status-${ev.status}`}>{ev.status}</span>
+                      <span className={"chip " + ev.type}>
+                        {ev.type === "medication" ? "Medicacion" : ev.type}
+                      </span>
+                      {ev.status && <span className={"chip-status-" + ev.status}>{ev.status}</span>}
                     </div>
                     <p className="timeline-title">
-                      {ev.specialty || "Sin especialidad"} · {ev.center || "Centro no definido"}
+                      {ev.type === "medication"
+                        ? ev.name || "Medicamento"
+                        : `${ev.specialty || "Sin especialidad"} - ${ev.center || "Centro no definido"}`}
                     </p>
                     <p className="timeline-meta">
-                      {ev.date_time ? new Date(ev.date_time).toLocaleString() : "Por agendar"}
+                      {ev.type === "medication"
+                        ? `${ev.dose || ""} ${ev.frequency || "Segun indicacion"}`.trim()
+                        : ev.date_time
+                        ? new Date(ev.date_time).toLocaleString()
+                        : "Por agendar"}
                     </p>
                     {ev.notes && <p className="timeline-notes">Notas: {ev.notes}</p>}
+                    {ev.type === "medication" && ev.end_date && (
+                      <p className="timeline-meta">Hasta {new Date(ev.end_date).toLocaleDateString()}</p>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -394,6 +394,11 @@ a {
   color: #92400e;
   border-color: #fcd34d;
 }
+.chip.medication {
+  background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+  color: #6b21a8;
+  border-color: #c4b5fd;
+}
 
 .chip-status-pendiente {
   background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
@@ -1477,6 +1482,9 @@ a {
 }
 .event-yellow {
   background: #f59e0b;
+}
+.event-purple {
+  background: #a855f7;
 }
 .event-more {
   font-size: 0.75rem;
