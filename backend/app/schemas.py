@@ -104,3 +104,17 @@ class MedicationOut(MedicationBase):
 
     class Config:
         from_attributes = True
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    keys: dict | None = None
+
+
+class PushSubscriptionOut(BaseModel):
+    id: int
+    endpoint: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

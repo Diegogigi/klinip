@@ -130,3 +130,19 @@ export async function deleteMedication(id) {
   const res = await api.delete(`/medications/${id}`);
   return res.data;
 }
+
+// Push subscriptions
+export async function subscribePush(payload) {
+  const res = await api.post("/push/subscribe", payload);
+  return res.data;
+}
+
+export async function unsubscribePush(payload) {
+  const res = await api.delete("/push/unsubscribe", { data: payload });
+  return res.data;
+}
+
+export async function sendTestPush() {
+  const res = await api.post("/push/test");
+  return res.data;
+}

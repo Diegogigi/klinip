@@ -9,3 +9,4 @@ email-validator
 # Fix incompatibilidad con passlib y bcrypt >=4.1 (falta __about__)
 bcrypt==4.0.1
 psycopg2-binary
+pywebpush

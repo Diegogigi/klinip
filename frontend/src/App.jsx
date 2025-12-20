@@ -10,6 +10,7 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
 import { getMe, logout as apiLogout } from "./api";
+import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
 const icons = {
   home: (
@@ -225,7 +226,17 @@ export default function App() {
     localStorage.removeItem("token");
     apiLogout?.();
     setUser(null);
+    removePushSubscription();
   };
+
+  useEffect(() => {
+    if (!user) return;
+    registerServiceWorker().then(() => {
+      ensurePushSubscription().catch((err) =>
+        console.error("No se pudo suscribir a push", err)
+      );
+    });
+  }, [user]);
 
   const completeOnboarding = () => {
     localStorage.setItem("klinip_onboarding_seen", "1");

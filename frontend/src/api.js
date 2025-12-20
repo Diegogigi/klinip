@@ -20,3 +20,7 @@ export const deleteDocument = api.deleteDocument;
 export const getMedications = api.getMedications;
 export const saveMedication = api.saveMedication;
 export const deleteMedication = api.deleteMedication;
+
+export const subscribePush = api.subscribePush;
+export const unsubscribePush = api.unsubscribePush;
+export const sendTestPush = api.sendTestPush;

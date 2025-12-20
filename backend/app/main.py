@@ -8,9 +8,16 @@ from sqlalchemy import text, inspect
 from typing import List
 import os
 from datetime import timedelta, datetime
+import json
 
 from .database import Base, engine
 from . import models, schemas, auth
+
+try:
+    from pywebpush import webpush, WebPushException
+except Exception:
+    webpush = None
+    WebPushException = Exception
 
 # Crear las tablas
 Base.metadata.create_all(bind=engine)
@@ -61,6 +68,30 @@ def ensure_document_schema():
 
 
 ensure_document_schema()
+
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
+VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@klinip.app")
+
+
+def send_web_push(subscription: models.PushSubscription, payload: dict):
+    if not (webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY):
+        print("DEBUG push: faltan claves VAPID o pywebpush")
+        return False
+    try:
+        webpush(
+            subscription_info={
+                "endpoint": subscription.endpoint,
+                "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
+            },
+            data=json.dumps(payload),
+            vapid_private_key=VAPID_PRIVATE_KEY,
+            vapid_claims={"sub": VAPID_EMAIL},
+        )
+        return True
+    except WebPushException as exc:
+        print(f"WARNING push: fallo al enviar push: {exc}")
+        return False
 
 app = FastAPI(title="MiRutaSalud API")
 
@@ -425,6 +456,89 @@ async def delete_medication(
     db.delete(med)
     db.commit()
     return {"ok": True}
+
+
+# Push subscriptions
+@app.post("/push/subscribe", response_model=schemas.PushSubscriptionOut)
+async def subscribe_push(
+    sub_in: schemas.PushSubscriptionIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    keys = sub_in.keys or {}
+    p256dh = keys.get("p256dh")
+    auth_key = keys.get("auth")
+    if not (sub_in.endpoint and p256dh and auth_key):
+        raise HTTPException(status_code=400, detail="SuscripciЧn incompleta")
+
+    existing = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.endpoint == sub_in.endpoint)
+        .first()
+    )
+    if existing:
+        existing.user_id = current_user.id
+        existing.p256dh = p256dh
+        existing.auth = auth_key
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    sub = models.PushSubscription(
+        user_id=current_user.id,
+        endpoint=sub_in.endpoint,
+        p256dh=p256dh,
+        auth=auth_key,
+    )
+    db.add(sub)
+    db.commit()
+    db.refresh(sub)
+    return sub
+
+
+@app.delete("/push/unsubscribe")
+async def unsubscribe_push(
+    sub_in: schemas.PushSubscriptionIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    existing = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.endpoint == sub_in.endpoint)
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        db.commit()
+    return {"ok": True}
+
+
+@app.post("/push/test")
+async def test_push(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+        raise HTTPException(
+            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+        )
+    sub = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .first()
+    )
+    if not sub:
+        raise HTTPException(status_code=404, detail="No hay suscripciЧn push para el usuario")
+    ok = send_web_push(
+        sub,
+        {
+            "title": "Klinip",
+            "body": "NotificaciЧn push de prueba",
+            "url": "/",
+        },
+    )
+    return {"sent": ok}
 
 
 # Documents
