@@ -226,7 +226,6 @@ export default function Dashboard({ user }) {
           </p>
         </div>
       </div>
-      </div>
 
       <div className="kpi-grid">
         {kpis.map((k) => (
