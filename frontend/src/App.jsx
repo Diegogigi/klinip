@@ -163,12 +163,6 @@ function Topbar({ user }) {
         </div>
       </div>
       <div className="topbar-actions">
-        <Link className="topbar-quick" to="/calendar">
-          Calendario
-        </Link>
-        <Link className="topbar-quick" to="/timeline">
-          Historia
-        </Link>
         <div className="topbar-user">
           <span className="topbar-avatar">{initials}</span>
           <span className="topbar-name">{user?.name || "Invitado"}</span>
