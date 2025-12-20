@@ -9,6 +9,7 @@ import Medications from "./pages/Medications";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
+import Landing from "./pages/Landing";
 import { getMe, logout as apiLogout } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
@@ -69,7 +70,10 @@ const icons = {
 
 function Sidebar({ user, onLogout }) {
   const location = useLocation();
-  const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
+  const isAuthRoute =
+    location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    (!user && location.pathname === "/");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -137,7 +141,7 @@ function Topbar({ user }) {
   const location = useLocation();
 
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
-  if (isAuthRoute) return null;
+  if (isAuthRoute || (!user && location.pathname === "/")) return null;
 
   const titles = {
     "/": "Resumen",
@@ -287,9 +291,13 @@ export default function App() {
               <Route
                 path="/"
                 element={
-                  <ProtectedRoute user={user}>
-                    <Dashboard user={user} />
-                  </ProtectedRoute>
+                  user ? (
+                    <ProtectedRoute user={user}>
+                      <Dashboard user={user} />
+                    </ProtectedRoute>
+                  ) : (
+                    <Landing />
+                  )
                 }
               />
           <Route

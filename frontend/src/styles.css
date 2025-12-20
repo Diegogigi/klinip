@@ -1356,6 +1356,79 @@ a {
   }
 }
 
+.landing {
+  max-width: 1100px;
+  margin: 2rem auto;
+  padding: 0 1.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.landing-hero {
+  background: linear-gradient(135deg, #1d4ed8 0%, #22c55e 100%);
+  color: #fff;
+  border-radius: 18px;
+  padding: 2rem;
+  box-shadow: 0 18px 35px rgba(37, 99, 235, 0.2);
+}
+
+.landing-badge {
+  display: inline-flex;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.landing-hero h1 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 2rem;
+}
+
+.landing-hero p {
+  margin: 0;
+  max-width: 560px;
+  font-size: 1rem;
+}
+
+.landing-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.landing-meta {
+  margin-top: 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.landing-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.landing-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.1rem;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+}
+
+.landing-card h3 {
+  margin: 0 0 0.35rem;
+  color: #0f172a;
+}
+
+.landing-card p {
+  margin: 0;
+  color: #475569;
+}
+
 .summary-bar {
   display: flex;
   align-items: center;
