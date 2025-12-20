@@ -208,22 +208,18 @@ export default function Dashboard({ user }) {
 
   return (
     <>
-      
-      <div className="hero">
+      <div className="summary-bar">
         <div>
-          <h1>Hola {user?.name || "invitado"}, este es tu resumen</h1>
-          <p className="hero-subtitle">Citas, recordatorios y documentos en un solo lugar.</p>
+          <p className="summary-eyebrow">Resumen</p>
+          <h1 className="summary-title">Hola {user?.name || "invitado"}</h1>
+          <p className="summary-subtitle">Citas, recordatorios y documentos en un solo lugar.</p>
         </div>
-        <div className="hero-card">
-          <p className="hero-card-title">Radar de la semana</p>
-          <p className="hero-card-subtitle">Vision rapida de tu carga proxima.</p>
-          <div className="traffic" style={{ marginTop: "0.75rem" }}>
-            <span className={`dot ${alert.dot}`} />
-            <span style={{ color: alert.color, fontWeight: 700 }}>{alert.label}</span>
+        <div className="summary-status">
+          <span className={`dot ${alert.dot}`} />
+          <div>
+            <p className="summary-label">Radar</p>
+            <p className="summary-value">{alert.label}</p>
           </div>
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
-            Consulta detalles en Calendario o Historia.
-          </p>
         </div>
       </div>
 
