@@ -132,6 +132,45 @@ function Sidebar({ user, onLogout }) {
   );
 }
 
+function Topbar({ user }) {
+  const location = useLocation();
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);
+
+  useEffect(() => {
+    const handler = () => setIsDesktop(window.innerWidth >= 1024);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  if (!isDesktop) return null;
+
+  const titles = {
+    "/": "Resumen",
+    "/appointments": "Citas",
+    "/documents": "Documentos",
+    "/medications": "Medicamentos",
+    "/calendar": "Calendario",
+    "/timeline": "Historia",
+    "/settings": "Perfil",
+  };
+  const title = titles[location.pathname] || "Klinip";
+  const subtitle = location.pathname === "/" ? "Panel general" : "Tu ruta de salud";
+  const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
+
+  return (
+    <header className="topbar">
+      <div>
+        <p className="topbar-label">{subtitle}</p>
+        <h2 className="topbar-title">{title}</h2>
+      </div>
+      <div className="topbar-user">
+        <span className="topbar-avatar">{initials}</span>
+        <span className="topbar-name">{user?.name || "Invitado"}</span>
+      </div>
+    </header>
+  );
+}
+
 function ProtectedRoute({ user, children }) {
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -207,6 +246,7 @@ export default function App() {
       <div className="layout">
         <Sidebar user={user} onLogout={handleLogout} />
         <div className="main-area">
+          <Topbar user={user} />
           <main className="main-content">
             <Routes>
               <Route
