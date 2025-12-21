@@ -1,5 +1,5 @@
-const CACHE_NAME = "klinip-cache-v1";
-const ASSETS = ["/", "/manifest.webmanifest"];
+const CACHE_NAME = "klinip-cache-v2";
+const ASSETS = ["/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -18,6 +18,12 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
