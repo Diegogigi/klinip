@@ -110,10 +110,10 @@ export default function Calendar() {
 
   return (
     <>
-      <div className="card">
+      <div className="card calendar-card">
         <div className="card-header" style={{ alignItems: "center" }}>
           <h2 className="card-title">Calendario de salud</h2>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <div className="calendar-controls">
             <button
               className="pill-button"
               type="button"
