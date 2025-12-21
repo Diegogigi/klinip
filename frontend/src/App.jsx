@@ -76,6 +76,7 @@ function Sidebar({ user, theme, onToggleTheme }) {
     (!user && location.pathname === "/");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -96,6 +97,12 @@ function Sidebar({ user, theme, onToggleTheme }) {
     { to: "/documents", label: "Docs", icon: icons.doc },
     { to: "/settings", label: "Perfil", icon: icons.user },
   ];
+  const mobilePrimaryLinks = [links[0], links[1], links[2], links[4]];
+  const mobileOverflowLinks = [links[3], links[5], links[6]];
+
+  useEffect(() => {
+    setShowMobileMenu(false);
+  }, [location.pathname, isMobile]);
 
   return (
     <aside
@@ -114,16 +121,60 @@ function Sidebar({ user, theme, onToggleTheme }) {
       </div>
 
       <nav className="sidebar-nav">
-        {links.map((link) => (
-          <Link
-            key={link.to}
-            to={link.to}
-            className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
-          >
-            <span className="sidebar-icon">{link.icon}</span>
-            <span className="sidebar-label">{link.label}</span>
-          </Link>
-        ))}
+        {isMobile ? (
+          <>
+            {mobilePrimaryLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
+                onClick={() => setShowMobileMenu(false)}
+              >
+                <span className="sidebar-icon">{link.icon}</span>
+                <span className="sidebar-label">{link.label}</span>
+              </Link>
+            ))}
+            <button
+              type="button"
+              className={`sidebar-link sidebar-more ${showMobileMenu ? "active" : ""}`}
+              aria-expanded={showMobileMenu}
+              aria-controls="sidebar-more-menu"
+              onClick={() => setShowMobileMenu((prev) => !prev)}
+            >
+              <span className="sidebar-icon">{icons.extras}</span>
+              <span className="sidebar-label">Otros</span>
+            </button>
+            <div
+              id="sidebar-more-menu"
+              className={`sidebar-more-menu ${showMobileMenu ? "open" : ""}`}
+            >
+              {mobileOverflowLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`sidebar-menu-link ${
+                    location.pathname === link.to ? "active" : ""
+                  }`}
+                  onClick={() => setShowMobileMenu(false)}
+                >
+                  <span className="sidebar-icon">{link.icon}</span>
+                  <span className="sidebar-label">{link.label}</span>
+                </Link>
+              ))}
+            </div>
+          </>
+        ) : (
+          links.map((link) => (
+            <Link
+              key={link.to}
+              to={link.to}
+              className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
+            >
+              <span className="sidebar-icon">{link.icon}</span>
+              <span className="sidebar-label">{link.label}</span>
+            </Link>
+          ))
+        )}
       </nav>
 
       <div className="sidebar-footer">
