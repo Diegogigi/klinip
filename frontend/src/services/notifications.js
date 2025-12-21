@@ -1,3 +1,5 @@
+import { parseDate, toLocaleDateTimeOrEmpty } from "../utils/dates";
+
 const dayMs = 24 * 60 * 60 * 1000;
 let appointmentTimers = [];
 let medicationTimers = [];
@@ -36,14 +38,16 @@ export function scheduleReminderNotifications(reminders) {
 
   reminders.forEach((rem) => {
     if (!rem.date_time) return;
-    const when = new Date(rem.date_time).getTime();
+    const whenDate = parseDate(rem.date_time);
+    if (!whenDate) return;
+    const when = whenDate.getTime();
     offsets.forEach(({ days, label }) => {
       const triggerAt = when - days * dayMs;
       const delay = triggerAt - Date.now();
       if (delay <= 0) {
         showNotification(
           `Recordatorio (${label})`,
-          `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${new Date(rem.date_time).toLocaleString()}`
+          `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${toLocaleDateTimeOrEmpty(rem.date_time)}`
         );
         return;
       }
@@ -51,7 +55,7 @@ export function scheduleReminderNotifications(reminders) {
         setTimeout(() => {
           showNotification(
             `Recordatorio (${label})`,
-            `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${new Date(rem.date_time).toLocaleString()}`
+            `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${toLocaleDateTimeOrEmpty(rem.date_time)}`
           );
         }, delay)
       );
@@ -78,8 +82,8 @@ export function scheduleMedicationNotifications(medications) {
 
   medications.forEach((med) => {
     if (!med?.end_date) return;
-    const end = new Date(med.end_date);
-    if (Number.isNaN(end.getTime())) return;
+    const end = parseDate(med.end_date);
+    if (!end) return;
     const lastDay = end < horizon ? end : horizon;
     const hours = deriveDoseHours(med.frequency);
     for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
@@ -114,7 +118,7 @@ export function sendEmailReminder(reminder) {
       `Centro: ${reminder.center || "No definido"}
 ` +
       `Fecha y hora: ${
-        reminder.date_time ? new Date(reminder.date_time).toLocaleString() : "Por agendar"
+        reminder.date_time ? toLocaleDateTimeOrEmpty(reminder.date_time) : "Por agendar"
       }
 ` +
       `Notas: ${reminder.notes || "Sin notas"}

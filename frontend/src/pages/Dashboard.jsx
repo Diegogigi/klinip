@@ -6,6 +6,12 @@ import {
   sendEmailReminder,
   clearScheduledNotifications,
 } from "../services/notifications";
+import {
+  parseDate,
+  toIsoOrNull,
+  toLocaleDateOrEmpty,
+  toLocaleDateTimeOrEmpty,
+} from "../utils/dates";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -43,10 +49,16 @@ export default function Dashboard({ user }) {
   }, []);
 
   const upcoming = useMemo(() => {
-    const withDate = appointments.filter((a) => a.date_time);
+    const withDate = appointments.filter((a) => parseDate(a.date_time));
     return withDate
       .filter((a) => a.status !== "realizada")
-      .sort((a, b) => new Date(a.date_time) - new Date(b.date_time))
+      .sort((a, b) => {
+        const aDate = parseDate(a.date_time);
+        const bDate = parseDate(b.date_time);
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate - bDate;
+      })
       .slice(0, 5);
   }, [appointments]);
 
@@ -62,7 +74,8 @@ export default function Dashboard({ user }) {
 
   const alert = useMemo(() => {
     if (!upcoming.length) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
-    const first = new Date(upcoming[0].date_time);
+    const first = parseDate(upcoming[0].date_time);
+    if (!first) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
     const now = new Date();
     const diffDays = (first - now) / (1000 * 60 * 60 * 24);
     if (diffDays <= 2) return { label: "Atención: actividad muy próxima", color: "#b91c1c", dot: "red" };
@@ -73,9 +86,10 @@ export default function Dashboard({ user }) {
   const reminders = useMemo(() => {
     const now = new Date();
     return (appointments || [])
-      .filter((a) => a.date_time)
+      .filter((a) => parseDate(a.date_time))
       .map((a) => {
-        const when = new Date(a.date_time);
+        const when = parseDate(a.date_time);
+        if (!when) return null;
         const diff = (when - now) / (1000 * 60 * 60 * 24);
         let severity = "green";
         let label = "En orden";
@@ -96,7 +110,7 @@ export default function Dashboard({ user }) {
           label,
         };
       })
-      .filter((r) => r.diff >= 0)
+      .filter((r) => r && r.diff >= 0)
       .sort((a, b) => a.diff - b.diff)
       .slice(0, 8);
   }, [appointments]);
@@ -114,7 +128,7 @@ export default function Dashboard({ user }) {
       a.type,
       a.specialty || "",
       a.center || "",
-      a.date_time ? new Date(a.date_time).toISOString() : "",
+      a.date_time ? toIsoOrNull(a.date_time) || "" : "",
       a.status,
       (a.notes || "").replace(/"/g, '""'),
     ]);
@@ -152,7 +166,7 @@ export default function Dashboard({ user }) {
                 .map(
                   (a) =>
                     `<tr><td>${a.type}</td><td>${a.specialty || ""}</td><td>${a.center || ""}</td><td>${
-                      a.date_time ? new Date(a.date_time).toLocaleString() : ""
+                      a.date_time ? toLocaleDateTimeOrEmpty(a.date_time) : ""
                     }</td><td>${a.status}</td></tr>`
                 )
                 .join("")}
@@ -166,7 +180,7 @@ export default function Dashboard({ user }) {
                 .map(
                   (d) =>
                     `<tr><td>${d.doc_type}</td><td>${d.center || ""}</td><td>${
-                      d.date ? new Date(d.date).toLocaleDateString() : ""
+                      d.date ? toLocaleDateOrEmpty(d.date) : ""
                     }</td></tr>`
                 )
                 .join("")}
@@ -261,7 +275,9 @@ export default function Dashboard({ user }) {
                   {a.specialty || "Sin especialidad"} · {a.center || "Centro no definido"}
                 </p>
                 <p className="timeline-meta">
-                  {a.date_time ? new Date(a.date_time).toLocaleString() : "Por agendar"}
+                  {a.date_time
+                    ? toLocaleDateTimeOrEmpty(a.date_time) || "Por agendar"
+                    : "Por agendar"}
                 </p>
                 {a.notes && <p className="timeline-notes">Notas: {a.notes}</p>}
               </li>
@@ -299,7 +315,9 @@ export default function Dashboard({ user }) {
                     {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
                   </div>
                   <div className="reminder-meta">
-                    {r.date_time ? new Date(r.date_time).toLocaleString() : "Por agendar"}
+                    {r.date_time
+                      ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
+                      : "Por agendar"}
                     {r.notes ? ` · ${r.notes}` : ""}
                   </div>
                 </div>

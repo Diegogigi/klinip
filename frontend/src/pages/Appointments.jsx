@@ -5,6 +5,11 @@ import {
   updateAppointment,
   deleteAppointment,
 } from "../api";
+import {
+  parseDate,
+  toIsoOrNull,
+  toLocaleDateTimeOrEmpty,
+} from "../utils/dates";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -39,9 +44,11 @@ export default function Appointments() {
     const data = await getAppointments();
     setAppointments(
       data.sort((a, b) => {
-        if (!a.date_time) return 1;
-        if (!b.date_time) return -1;
-        return new Date(a.date_time) - new Date(b.date_time);
+        const aDate = parseDate(a.date_time);
+        const bDate = parseDate(b.date_time);
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate - bDate;
       })
     );
   }
@@ -70,7 +77,7 @@ export default function Appointments() {
         type: form.type,
         specialty: form.specialty,
         center: form.center,
-        date_time: form.date_time ? new Date(form.date_time).toISOString() : null,
+        date_time: toIsoOrNull(form.date_time),
         status: form.status,
         notes: form.notes,
       };
@@ -91,6 +98,7 @@ export default function Appointments() {
   };
 
   const handleEdit = (appt) => {
+    const parsedDate = parseDate(appt.date_time);
     setShowForm(true);
     setForm({
       id: appt.id,
@@ -98,7 +106,9 @@ export default function Appointments() {
       specialty: appt.specialty || "",
       center: appt.center || "",
       date_time: appt.date_time
-        ? new Date(appt.date_time).toISOString().slice(0, 16)
+        ? parsedDate
+          ? parsedDate.toISOString().slice(0, 16)
+          : ""
         : "",
       status: appt.status,
       notes: appt.notes || "",
@@ -324,7 +334,7 @@ export default function Appointments() {
                     <td>{a.center}</td>
                     <td>
                       {a.date_time
-                        ? new Date(a.date_time).toLocaleString()
+                        ? toLocaleDateTimeOrEmpty(a.date_time) || "Por agendar"
                         : "Por agendar"}
                     </td>
                     <td>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getDocuments, uploadDocument, deleteDocument } from "../api";
 import { getDocumentFile } from "../services/httpApi";
+import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 
 const docLabels = {
   receta: "Receta",
@@ -44,7 +45,7 @@ export default function Documents() {
     try {
       await uploadDocument({
         doc_type: form.doc_type,
-        date: form.date ? new Date(form.date).toISOString() : null,
+        date: toIsoOrNull(form.date),
         center: form.center,
         notes: form.notes,
         file,
@@ -276,8 +277,8 @@ export default function Documents() {
                     </td>
                     <td>
                       {d.date
-                        ? new Date(d.date).toLocaleDateString()
-                        : new Date(d.created_at).toLocaleDateString()}
+                        ? toLocaleDateOrEmpty(d.date)
+                        : toLocaleDateOrEmpty(d.created_at)}
                     </td>
                     <td>{d.center}</td>
                     <td style={{ maxWidth: "240px" }}>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getAppointments, getDocuments } from "../api";
+import { parseDate, toLocaleDateOrEmpty } from "../utils/dates";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -53,8 +54,14 @@ export default function Timeline() {
     }));
 
     return [...apptItems, ...docItems]
-      .filter((i) => i.date)
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+      .filter((i) => parseDate(i.date))
+      .sort((a, b) => {
+        const aDate = parseDate(a.date);
+        const bDate = parseDate(b.date);
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return aDate - bDate;
+      });
   }, [appointments, documents]);
 
   return (
@@ -86,7 +93,7 @@ export default function Timeline() {
                   {item.detail}
                 </p>
                 <p className="timeline-meta">
-                  {item.date ? new Date(item.date).toLocaleDateString() : ""}
+                  {item.date ? toLocaleDateOrEmpty(item.date) : ""}
                 </p>
                 {item.notes && <p className="timeline-notes">Notas: {item.notes}</p>}
               </li>

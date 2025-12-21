@@ -4,6 +4,7 @@ import {
   requestNotificationPermission,
   scheduleMedicationNotifications,
 } from "../services/notifications";
+import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 
 export default function Medications() {
   const [meds, setMeds] = useState([]);
@@ -55,7 +56,7 @@ export default function Medications() {
         dose: form.dose || "",
         frequency: form.frequency || "",
         duration: form.duration || "",
-        end_date: form.end_date ? new Date(form.end_date).toISOString() : null,
+        end_date: toIsoOrNull(form.end_date),
         notes: form.notes || "",
         document_id: form.document_id ? parseInt(form.document_id) : null,
       };
@@ -241,7 +242,7 @@ export default function Medications() {
                     <td>{m.dose}</td>
                     <td>{m.frequency}</td>
                     <td>{m.duration}</td>
-                    <td>{m.end_date ? new Date(m.end_date).toLocaleDateString() : "—"}</td>
+                    <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
                         <button

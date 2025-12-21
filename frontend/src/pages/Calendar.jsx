@@ -1,6 +1,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { getAppointments, getMedications } from "../api";
+import {
+  parseDate,
+  toLocaleDateOrEmpty,
+  toLocaleDateTimeOrEmpty,
+} from "../utils/dates";
 
 const typeColors = {
   cita: "event-green",
@@ -72,8 +77,8 @@ export default function Calendar() {
 
     (appointments || []).forEach((a) => {
       if (!a?.date_time) return;
-      const d = new Date(a.date_time);
-      if (Number.isNaN(d.getTime())) return;
+      const d = parseDate(a.date_time);
+      if (!d) return;
       const key = d.toISOString().slice(0, 10);
       pushEvent(key, a);
     });
@@ -83,8 +88,8 @@ export default function Calendar() {
     const horizon = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
     (medications || []).forEach((m) => {
       if (!m?.end_date) return;
-      const end = new Date(m.end_date);
-      if (Number.isNaN(end.getTime())) return;
+      const end = parseDate(m.end_date);
+      if (!end) return;
       const lastDay = end < horizon ? end : horizon;
       for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
         const key = day.toISOString().slice(0, 10);
@@ -216,12 +221,14 @@ export default function Calendar() {
                       {ev.type === "medication"
                         ? `${ev.dose || ""} ${ev.frequency || "Segun indicacion"}`.trim()
                         : ev.date_time
-                        ? new Date(ev.date_time).toLocaleString()
+                        ? toLocaleDateTimeOrEmpty(ev.date_time) || "Por agendar"
                         : "Por agendar"}
                     </p>
                     {ev.notes && <p className="timeline-notes">Notas: {ev.notes}</p>}
                     {ev.type === "medication" && ev.end_date && (
-                      <p className="timeline-meta">Hasta {new Date(ev.end_date).toLocaleDateString()}</p>
+                      <p className="timeline-meta">
+                        Hasta {toLocaleDateOrEmpty(ev.end_date)}
+                      </p>
                     )}
                   </li>
                 ))}
