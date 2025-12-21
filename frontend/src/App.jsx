@@ -68,7 +68,7 @@ const icons = {
   ),
 };
 
-function Sidebar({ user, onLogout }) {
+function Sidebar({ user, theme, onToggleTheme }) {
   const location = useLocation();
   const isAuthRoute =
     location.pathname === "/login" ||
@@ -127,10 +127,19 @@ function Sidebar({ user, onLogout }) {
       </nav>
 
       <div className="sidebar-footer">
-        {expanded && <div className="sidebar-user">{user?.name || "Invitado"}</div>}
-        <button className="nav-button ghost" onClick={onLogout}>
-          <span className="sidebar-icon">{icons.user}</span>
-          {expanded && "Cerrar sesión"}
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={onToggleTheme}
+          role="switch"
+          aria-checked={theme === "dark"}
+        >
+          <span className="theme-toggle-label">
+            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+          </span>
+          <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
+            <span className="theme-switch-thumb" />
+          </span>
         </button>
       </div>
     </aside>
@@ -189,6 +198,15 @@ function ProtectedRoute({ user, children }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [theme, setTheme] = useState(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark" || savedTheme === "light") {
+      return savedTheme;
+    }
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  });
   const [booting, setBooting] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
@@ -198,6 +216,11 @@ export default function App() {
     recordatorios: "visual",
     preferencia: "calendario",
   });
+
+  useEffect(() => {
+    document.body.classList.toggle("theme-dark", theme === "dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -225,6 +248,10 @@ export default function App() {
       setShowOnboarding(true);
     }
   }, [user]);
+
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -263,7 +290,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <div className="layout">
-        <Sidebar user={user} onLogout={handleLogout} />
+        <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="main-area">
           <Topbar user={user} />
           <main className="main-content">
