@@ -315,6 +315,100 @@ body.theme-dark .alert-pill {
   border-color: rgba(226, 232, 240, 0.15);
 }
 
+body.theme-dark .timeline-item {
+  background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+  border-color: #1e293b;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+}
+
+body.theme-dark .timeline-item:hover {
+  box-shadow: 0 16px 35px rgba(2, 6, 23, 0.45);
+}
+
+body.theme-dark .timeline.vertical::before {
+  background: linear-gradient(180deg, #38bdf8, #22c55e);
+}
+
+body.theme-dark .timeline.vertical .timeline-item::before {
+  background: #0b1224;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.2);
+}
+
+body.theme-dark .chip {
+  background: #0b1224;
+  border-color: #1e293b;
+  color: #e2e8f0;
+}
+
+body.theme-dark .chip.cita {
+  background: rgba(37, 99, 235, 0.2);
+  border-color: #2563eb;
+  color: #bfdbfe;
+}
+
+body.theme-dark .chip.examen {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: #38bdf8;
+  color: #bae6fd;
+}
+
+body.theme-dark .chip.tramite {
+  background: rgba(245, 158, 11, 0.2);
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+body.theme-dark .chip.medication {
+  background: rgba(168, 85, 247, 0.2);
+  border-color: #a855f7;
+  color: #ddd6fe;
+}
+
+body.theme-dark .chip-status-pendiente {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+body.theme-dark .chip-status-agendada {
+  background: rgba(14, 165, 233, 0.2);
+  border-color: #38bdf8;
+  color: #bae6fd;
+}
+
+body.theme-dark .chip-status-realizada {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #4ade80;
+  color: #bbf7d0;
+}
+
+body.theme-dark .badge {
+  background: #0b1224;
+  border-color: #1e293b;
+  color: #e2e8f0;
+}
+
+body.theme-dark .kpi {
+  background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+  border: 1px solid #1e293b;
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.35);
+}
+
+body.theme-dark .kpi-label {
+  color: #94a3b8;
+}
+
+body.theme-dark .kpi-value {
+  color: #e2e8f0;
+}
+
+body.theme-dark .topbar-chip {
+  background: #0b1224;
+  border-color: #1e293b;
+  color: #e2e8f0;
+}
+
 a {
   color: inherit;
 }
