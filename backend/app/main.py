@@ -877,6 +877,10 @@ if os.path.exists(static_dir):
         # Si no existe, servir index.html (para rutas del SPA)
         index_path = os.path.join(static_dir, "index.html")
         if os.path.exists(index_path):
-            return FileResponse(index_path, media_type="text/html")
+            return FileResponse(
+                index_path,
+                media_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
 
         raise HTTPException(status_code=404, detail="Not found")
