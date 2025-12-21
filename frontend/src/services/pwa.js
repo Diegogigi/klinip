@@ -17,6 +17,31 @@ export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
   try {
     const reg = await navigator.serviceWorker.register("/service-worker.js");
+    reg.update().catch(() => null);
+
+    let hasRefreshed = false;
+    const refreshOnUpdate = () => {
+      if (hasRefreshed) return;
+      hasRefreshed = true;
+      window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", refreshOnUpdate);
+
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    }
+
+    reg.addEventListener("updatefound", () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener("statechange", () => {
+        if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+          newWorker.postMessage({ type: "SKIP_WAITING" });
+        }
+      });
+    });
+
     return reg;
   } catch (err) {
     console.error("No se pudo registrar service worker", err);
