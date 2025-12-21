@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function Settings({ user, onLogout }) {
+export default function Settings({ user, onLogout, theme, onToggleTheme }) {
   const profile = user || {};
   const plan = "Backend activo";
 
@@ -43,6 +43,28 @@ export default function Settings({ user, onLogout }) {
           </div>
         </div>
 
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">Apariencia</h3>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Personaliza el modo de color de Klinip.
+        </p>
+        <button
+          className="theme-toggle"
+          type="button"
+          onClick={onToggleTheme}
+          role="switch"
+          aria-checked={theme === "dark"}
+          style={{ maxWidth: "260px" }}
+        >
+          <span className="theme-toggle-label">
+            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+          </span>
+          <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
+            <span className="theme-switch-thumb" />
+          </span>
+        </button>
       </div>
 
       <div className="card">

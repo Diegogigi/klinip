@@ -367,11 +367,16 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
+              <Route
             path="/settings"
             element={
               <ProtectedRoute user={user}>
-                <Settings user={user} onLogout={handleLogout} />
+                <Settings
+                  user={user}
+                  onLogout={handleLogout}
+                  theme={theme}
+                  onToggleTheme={handleToggleTheme}
+                />
                   </ProtectedRoute>
                 }
               />
