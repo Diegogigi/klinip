@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect
 from typing import List
 import os
+import mimetypes
 from datetime import timedelta, datetime
 import json
 
@@ -92,6 +93,7 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
     except WebPushException as exc:
         print(f"WARNING push: fallo al enviar push: {exc}")
         return False
+
 
 app = FastAPI(title="MiRutaSalud API")
 
@@ -529,7 +531,9 @@ async def test_push(
         .first()
     )
     if not sub:
-        raise HTTPException(status_code=404, detail="No hay suscripciЧn push para el usuario")
+        raise HTTPException(
+            status_code=404, detail="No hay suscripciЧn push para el usuario"
+        )
     ok = send_web_push(
         sub,
         {
@@ -587,7 +591,9 @@ async def upload_document(
             parsed_date = None
 
     # Guardar el archivo directamente en la base de datos como BLOB
-    file_path_placeholder = ""  # Compatibilidad con esquemas antiguos donde file_path es NOT NULL
+    file_path_placeholder = (
+        ""  # Compatibilidad con esquemas antiguos donde file_path es NOT NULL
+    )
     doc = models.Document(
         user_id=current_user.id,
         appointment_id=appointment_id,
@@ -642,8 +648,6 @@ async def get_document_file(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Sirve un archivo de documento solo si el usuario tiene acceso"""
-    import mimetypes
-
     print(
         f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}"
     )
@@ -751,7 +755,11 @@ if os.path.exists(static_dir):
     # Ruta catch-all para el SPA del frontend
     # IMPORTANTE: Esta ruta debe estar al final para no interceptar rutas de API
     @app.get("/{full_path:path}")
-    async def serve_spa(full_path: str):
+    async def serve_spa(full_path: str, request: Request):
+        # Bloquear rutas de codigo fuente o assets sin archivo real.
+        if full_path == "src" or full_path.startswith("src/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
         # Si es una ruta de API, no servir el SPA (dejar que FastAPI maneje el 404)
         # IMPORTANTE: NO interceptar rutas que terminan en /file (para documentos)
         # Estas deben ser manejadas por el endpoint específico /documents/{id}/file
@@ -778,14 +786,97 @@ if os.path.exists(static_dir):
         if full_path == "documents" or full_path == "documents/":
             raise HTTPException(status_code=404, detail="Not found")
 
+        # Si parece un archivo (tiene extension) y no existe, devolver 404.
+        file_path = os.path.join(static_dir, full_path)
+        _, ext = os.path.splitext(full_path)
+        if ext and (not os.path.exists(file_path) or not os.path.isfile(file_path)):
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Evitar que directorios de assets devuelvan el index.html.
+        if (full_path == "assets" or full_path.startswith("assets/")) and not os.path.isfile(
+            file_path
+        ):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Extensiones de archivos estáticos que deben servirse con su tipo MIME correcto
+        static_extensions = {
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".ts",
+            ".tsx",  # JavaScript
+            ".css",  # CSS
+            ".json",  # JSON
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".webp",
+            ".ico",  # Imágenes
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".eot",  # Fuentes
+            ".mp4",
+            ".webm",
+            ".ogg",  # Video
+            ".mp3",
+            ".wav",  # Audio
+            ".pdf",  # PDF
+            ".wasm",  # WebAssembly
+        }
+
+        # Verificar si es un archivo estático por su extensión
+        is_static_file = any(
+            full_path.lower().endswith(ext) for ext in static_extensions
+        )
+
         # Intentar servir el archivo solicitado
         file_path = os.path.join(static_dir, full_path)
+
+        # Si es un archivo estático y existe, servirlo con el tipo MIME correcto
+        if is_static_file and os.path.exists(file_path) and os.path.isfile(file_path):
+            # Detectar el tipo MIME
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type:
+                # Tipos MIME por defecto para extensiones comunes
+                if file_path.endswith((".js", ".jsx", ".mjs")):
+                    mime_type = "application/javascript"
+                elif file_path.endswith(".json"):
+                    mime_type = "application/json"
+                elif file_path.endswith(".wasm"):
+                    mime_type = "application/wasm"
+                else:
+                    mime_type = "application/octet-stream"
+
+            # Usar FileResponse que maneja correctamente la lectura del archivo
+            return FileResponse(
+                file_path,
+                media_type=mime_type,
+                headers={
+                    "Cache-Control": (
+                        "public, max-age=31536000"
+                        if mime_type.startswith(
+                            ("image/", "font/", "application/javascript", "text/css")
+                        )
+                        else "no-cache"
+                    )
+                },
+            )
+
+        # Si es un archivo estático pero no existe, devolver 404 (no index.html)
+        if is_static_file:
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Para rutas que no son archivos estáticos, verificar si existe el archivo
         if os.path.exists(file_path) and os.path.isfile(file_path):
-            return FileResponse(file_path)
+            mime_type, _ = mimetypes.guess_type(file_path)
+            return FileResponse(file_path, media_type=mime_type or "text/html")
 
         # Si no existe, servir index.html (para rutas del SPA)
         index_path = os.path.join(static_dir, "index.html")
         if os.path.exists(index_path):
-            return FileResponse(index_path)
+            return FileResponse(index_path, media_type="text/html")
 
         raise HTTPException(status_code=404, detail="Not found")

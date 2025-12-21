@@ -18,3 +18,5 @@ COMMENT ON COLUMN documents.file_data IS 'Datos del archivo almacenados en la ba
 COMMENT ON COLUMN documents.filename IS 'Nombre original del archivo';
 COMMENT ON COLUMN documents.file_path IS 'Ruta del archivo en sistema de archivos (legacy, nullable para compatibilidad)';
 
+
+
