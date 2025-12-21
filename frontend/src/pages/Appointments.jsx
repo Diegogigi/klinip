@@ -32,7 +32,6 @@ export default function Appointments() {
     date_time: "",
     status: "pendiente",
     notes: "",
-    checklist: [],
   });
   const [loading, setLoading] = useState(false);
 
@@ -74,7 +73,6 @@ export default function Appointments() {
         date_time: form.date_time ? new Date(form.date_time).toISOString() : null,
         status: form.status,
         notes: form.notes,
-        checklist: form.checklist || [],
       };
       if (form.id) {
         await updateAppointment(form.id, payload);
@@ -104,7 +102,6 @@ export default function Appointments() {
         : "",
       status: appt.status,
       notes: appt.notes || "",
-      checklist: appt.checklist || [],
     });
   };
 
@@ -129,36 +126,6 @@ export default function Appointments() {
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
   });
-
-  const toggleChecklistItem = (idx) => {
-    const items = form.checklist || [];
-    const updated = items.map((item, i) =>
-      i === idx ? { ...item, done: !item.done } : item
-    );
-    setForm({ ...form, checklist: updated });
-  };
-
- const addChecklistItem = () => {
-    const items = form.checklist || [];
-    setForm({
-      ...form,
-      checklist: [...items, { text: "Nuevo trámite", done: false }],
-    });
-  };
-
-  const updateChecklistText = (idx, text) => {
-    const items = form.checklist || [];
-    const updated = items.map((item, i) => (i === idx ? { ...item, text } : item));
-    setForm({ ...form, checklist: updated });
-  };
-
-  const checklistTemplate = [
-    "Pedir hora SOME",
-    "Retirar medicamentos",
-    "Llevar documentos",
-    "Llevar exámenes",
-    "Ayuno previo",
-  ];
 
   return (
     <>
@@ -271,47 +238,6 @@ export default function Appointments() {
               placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
             />
           </div>
-
-          <div className="input-group">
-            <label className="input-label">Checklist de trámites</label>
-            <div className="checklist">
-              {(form.checklist || []).map((item, idx) => (
-                <label key={idx} className="checklist-item">
-                  <input
-                    type="checkbox"
-                    checked={!!item.done}
-                    onChange={() => toggleChecklistItem(idx)}
-                  />
-                  <input
-                    className="checklist-text"
-                    value={item.text}
-                    onChange={(e) => updateChecklistText(idx, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button type="button" className="secondary-btn" onClick={addChecklistItem}>
-                + Ítem
-              </button>
-              {checklistTemplate.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() =>
-                    setForm({
-                      ...form,
-                      checklist: [...(form.checklist || []), { text: t, done: false }],
-                    })
-                  }
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
               <div className="floating-actions">
                 <button className="primary-btn" type="submit" disabled={loading}>
                   {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
