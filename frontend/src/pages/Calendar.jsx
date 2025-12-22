@@ -1,5 +1,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getAppointments, getMedications } from "../api";
 import {
   parseDate,
@@ -235,9 +236,9 @@ export default function Calendar() {
               </ul>
             )}
             <div className="floating-actions">
-              <a className="primary-btn" href="/appointments">
+              <Link className="primary-btn" to="/appointments">
                 Agregar actividad desde el calendario
-              </a>
+              </Link>
             </div>
           </div>
         </div>
