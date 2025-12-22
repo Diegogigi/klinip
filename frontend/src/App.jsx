@@ -86,8 +86,6 @@ function Sidebar({ user, theme, onToggleTheme }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  if (isAuthRoute) return null;
-
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
     { to: "/appointments", label: "Citas", icon: icons.calendar },
@@ -103,6 +101,8 @@ function Sidebar({ user, theme, onToggleTheme }) {
   useEffect(() => {
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
+
+  if (isAuthRoute) return null;
 
   return (
     <aside
