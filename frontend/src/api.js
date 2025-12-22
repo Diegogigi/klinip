@@ -24,3 +24,4 @@ export const deleteMedication = api.deleteMedication;
 export const subscribePush = api.subscribePush;
 export const unsubscribePush = api.unsubscribePush;
 export const sendTestPush = api.sendTestPush;
+export const getLandingStats = api.getLandingStats;

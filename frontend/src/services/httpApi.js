@@ -146,3 +146,9 @@ export async function sendTestPush() {
   const res = await api.post("/push/test");
   return res.data;
 }
+
+// Public stats
+export async function getLandingStats() {
+  const res = await api.get("/public/stats");
+  return res.data;
+}

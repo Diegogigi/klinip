@@ -160,6 +160,46 @@ def health_check(db: Session = Depends(auth.get_db)):
     }
 
 
+def _read_int_env(name: str, fallback: int) -> int:
+    raw = os.getenv(name)
+    if not raw:
+        return fallback
+    try:
+        return int(raw.replace(",", "").replace("+", "").strip())
+    except ValueError:
+        return fallback
+
+
+def _resolve_stat(env_key: str, db_value: int, fallback: int) -> int:
+    if os.getenv(env_key):
+        return _read_int_env(env_key, fallback)
+    if db_value:
+        return db_value
+    return fallback
+
+
+# Public stats for landing page
+@app.get("/public/stats")
+def public_stats(db: Session = Depends(auth.get_db)):
+    from . import models
+
+    user_count = db.query(models.User).count()
+    appointment_count = db.query(models.Appointment).count()
+    medication_count = db.query(models.Medication).count()
+
+    users = _resolve_stat("PUBLIC_STATS_USERS", user_count, 1200)
+    appointments = _resolve_stat("PUBLIC_STATS_APPOINTMENTS", appointment_count, 15000)
+    reminders = _resolve_stat("PUBLIC_STATS_REMINDERS", medication_count, 50000)
+    satisfaction = _resolve_stat("PUBLIC_STATS_SATISFACTION", 0, 98)
+
+    return {
+        "users": users,
+        "appointments": appointments,
+        "reminders": reminders,
+        "satisfaction": satisfaction,
+    }
+
+
 # Debug endpoint para verificar configuración
 @app.get("/debug/config")
 def debug_config():

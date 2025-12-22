@@ -1,12 +1,24 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getLandingStats } from "../api";
 
-const stats = [
+const legacyStats = [
   { value: "1,200+", label: "Usuarios registrados" },
   { value: "15,000+", label: "Citas gestionadas" },
   { value: "50,000+", label: "Recordatorios enviados" },
   { value: "98%", label: "Satisfacción" },
 ];
+
+const fallbackStats = {
+  users: 1200,
+  appointments: 15000,
+  reminders: 50000,
+  satisfaction: 98,
+};
+
+const formatCount = (value) =>
+  `${new Intl.NumberFormat("en-US").format(value)}+`;
+const formatPercent = (value) => `${value}%`;
 
 const features = [
   {
@@ -32,6 +44,33 @@ const features = [
 ];
 
 export default function Landing() {
+  const [stats, setStats] = useState(fallbackStats);
+
+  useEffect(() => {
+    let mounted = true;
+    getLandingStats()
+      .then((data) => {
+        if (!mounted || !data) return;
+        setStats({
+          users: data.users ?? fallbackStats.users,
+          appointments: data.appointments ?? fallbackStats.appointments,
+          reminders: data.reminders ?? fallbackStats.reminders,
+          satisfaction: data.satisfaction ?? fallbackStats.satisfaction,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const statItems = [
+    { value: formatCount(stats.users), label: "Usuarios registrados" },
+    { value: formatCount(stats.appointments), label: "Citas gestionadas" },
+    { value: formatCount(stats.reminders), label: "Recordatorios enviados" },
+    { value: formatPercent(stats.satisfaction), label: "SatisfacciÇün" },
+  ];
+
   return (
     <div className="landing">
       <header className="landing-nav">
@@ -65,12 +104,9 @@ export default function Landing() {
             <Link className="primary-btn" to="/register">
               Comenzar gratis
             </Link>
-            <Link className="secondary-btn" to="/login">
-              Ver demo
-            </Link>
           </div>
           <div className="landing-stats">
-            {stats.map((s) => (
+            {statItems.map((s) => (
               <div key={s.label} className="landing-stat">
                 <span className="landing-stat-value">{s.value}</span>
                 <span className="landing-stat-label">{s.label}</span>
