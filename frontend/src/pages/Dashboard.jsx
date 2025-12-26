@@ -532,13 +532,12 @@ export default function Dashboard({ user }) {
               <form onSubmit={handleDocSubmit}>
                 <div className="input-group">
                   <label className="input-label">Archivo (foto o PDF)</label>
-                  <input
-                    className="input-field"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    capture="environment"
-                    onChange={(e) => setDocFile(e.target.files[0] || null)}
-                  />
+                <input
+                  className="input-field"
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setDocFile(e.target.files[0] || null)}
+                />
                   <span className="tiny-note">
                     Puedes tomar una foto o subir un PDF. Límite recomendado: 4 MB.
                   </span>
