@@ -36,37 +36,64 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("push", (event) => {
+  console.log("📥 Push notification received", event);
+
   const data = event.data ? event.data.json() : {};
-  const title = data.title || "Klinip";
+  const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
+  const icon = data.icon || "/icons/icon-192.png";
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "/icons/icon-192.png",
+      icon,
       badge: "/icons/icon-192.png",
-      data: { url },
+      vibrate: [200, 100, 200],
+      requireInteraction: true,
+      actions: [
+        { action: "open", title: "Ver detalles", icon: "/icons/icon-192.png" },
+        { action: "close", title: "Cerrar" }
+      ],
+      data: {
+        url,
+        timestamp: Date.now(),
+        ...data
+      },
     })
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
+  console.log("🔔 Notification clicked", event.action);
+
   event.notification.close();
+
+  if (event.action === "close") {
+    return;
+  }
+
   const targetUrl = event.notification.data?.url || "/";
+
   event.waitUntil(
     clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clientList) => {
+        // Si hay una ventana abierta, enfócarla y navegar
         for (const client of clientList) {
           if ("focus" in client) {
             client.navigate(targetUrl);
             return client.focus();
           }
         }
+        // Si no hay ventana abierta, abrir una nueva
         if (clients.openWindow) {
           return clients.openWindow(targetUrl);
         }
       })
   );
+});
+
+self.addEventListener("notificationclose", (event) => {
+  console.log("🔕 Notification closed", event);
 });

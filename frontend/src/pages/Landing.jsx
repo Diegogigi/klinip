@@ -2,13 +2,6 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLandingStats } from "../api";
 
-const legacyStats = [
-  { value: "1,200+", label: "Usuarios registrados" },
-  { value: "15,000+", label: "Citas gestionadas" },
-  { value: "50,000+", label: "Recordatorios enviados" },
-  { value: "98%", label: "Satisfacción" },
-];
-
 const fallbackStats = {
   users: 1200,
   appointments: 15000,
@@ -68,7 +61,7 @@ export default function Landing() {
     { value: formatCount(stats.users), label: "Usuarios registrados" },
     { value: formatCount(stats.appointments), label: "Citas gestionadas" },
     { value: formatCount(stats.reminders), label: "Recordatorios enviados" },
-    { value: formatPercent(stats.satisfaction), label: "SatisfacciÇün" },
+    { value: formatPercent(stats.satisfaction), label: "Satisfacción" },
   ];
 
   return (
@@ -79,10 +72,10 @@ export default function Landing() {
           <span>Klinip</span>
         </div>
         <div className="landing-nav-actions">
-          <Link to="/login" className="ghost-link">
+          <Link to="/login" className="landing-btn-ghost">
             Iniciar sesión
           </Link>
-          <Link to="/register" className="primary-btn">
+          <Link to="/register" className="landing-btn-primary">
             Crear cuenta
           </Link>
         </div>
@@ -90,19 +83,32 @@ export default function Landing() {
 
       <div className="landing-hero">
         <div className="landing-hero-copy">
-          <div className="landing-badge">Asistente clínico inteligente</div>
+          <div className="landing-badge">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+            Asistente clínico inteligente
+          </div>
           <h1>
-            Gestión médica con apoyo de IA
+            Tu salud organizada
             <br />
-            para familias y profesionales.
+            <span className="landing-hero-gradient">en un solo lugar</span>
           </h1>
-          <p>
-            Agenda, recordatorios push, calendario unificado, documentos seguros y medicamentos en un solo lugar. Klinip te
-            acompaña para que nada se pase por alto.
+          <p className="landing-hero-description">
+            Klinip es tu compañero digital de salud. Organiza tus <strong>citas médicas</strong>, 
+            gestiona tu <strong>medicación</strong>, almacena <strong>documentos</strong> importantes 
+            y mantén un <strong>historial completo</strong> de tu salud. Todo sincronizado, 
+            seguro y siempre disponible.
           </p>
           <div className="landing-actions">
-            <Link className="primary-btn" to="/register">
-              Comenzar gratis
+            <Link className="landing-btn-cta" to="/register">
+              <span>Comenzar gratis</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
+            <Link className="landing-btn-secondary" to="/login">
+              Ya tengo cuenta
             </Link>
           </div>
           <div className="landing-stats">
@@ -153,8 +159,8 @@ export default function Landing() {
 
       <section className="landing-section">
         <div className="landing-section-header">
-          <h2>Todo lo que necesitas en una sola plataforma</h2>
-          <p>Funciones clave de Klinip para tu ruta de salud.</p>
+          <h2>Todo lo que necesitas para cuidar tu salud</h2>
+          <p>Funciones diseñadas para simplificar la gestión de tu salud y la de tu familia.</p>
         </div>
         <div className="landing-cards">
           {features.map((f) => (
@@ -166,6 +172,36 @@ export default function Landing() {
           ))}
         </div>
       </section>
+
+      <section className="landing-cta-section">
+        <div className="landing-cta-content">
+          <h2>Comienza a organizar tu salud hoy</h2>
+          <p>Únete a miles de personas que ya confían en Klinip para gestionar su salud.</p>
+          <div className="landing-cta-actions">
+            <Link to="/register" className="landing-btn-cta">
+              <span>Crear cuenta gratis</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <div className="landing-footer-content">
+          <div className="landing-footer-brand">
+            <div className="landing-logo">
+              <span className="landing-logo-mark">K</span>
+              <span>Klinip</span>
+            </div>
+            <p>Tu ruta de salud, simplificada</p>
+          </div>
+          <div className="landing-footer-copy">
+            © 2024 Klinip. Todos los derechos reservados.
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

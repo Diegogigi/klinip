@@ -12,10 +12,44 @@ export async function requestNotificationPermission() {
   return perm === "granted";
 }
 
-function showNotification(title, body) {
+// Función mejorada para mostrar notificaciones usando Service Worker
+async function showNotification(title, body, data = {}) {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-  new Notification(title, { body, icon: "/favicon.ico" });
+
+  // Intentar usar el service worker para notificaciones persistentes
+  if ("serviceWorker" in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, {
+        body,
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
+        vibrate: [200, 100, 200],
+        requireInteraction: true,
+        actions: [
+          { action: "open", title: "Ver detalles" },
+          { action: "close", title: "Cerrar" }
+        ],
+        data: {
+          url: "/",
+          timestamp: Date.now(),
+          ...data
+        }
+      });
+      console.log(`✅ Notificación enviada: ${title}`);
+      return;
+    } catch (err) {
+      console.warn("No se pudo usar service worker para notificación:", err);
+    }
+  }
+
+  // Fallback a notificación simple
+  new Notification(title, {
+    body,
+    icon: "/icons/icon-192.png",
+    data
+  });
 }
 
 export function clearScheduledNotifications() {
@@ -31,9 +65,9 @@ export function scheduleReminderNotifications(reminders) {
   if (!reminders?.length) return;
 
   const offsets = [
-    { days: 7, label: "7 d?as antes" },
-    { days: 3, label: "3 d?as antes" },
-    { days: 1, label: "1 d?a antes" },
+    { days: 7, label: "7 días antes", icon: "🟢", priority: "low" },
+    { days: 3, label: "3 días antes", icon: "🟡", priority: "normal" },
+    { days: 1, label: "1 día antes", icon: "🔴", priority: "high" },
   ];
 
   reminders.forEach((rem) => {
@@ -41,26 +75,39 @@ export function scheduleReminderNotifications(reminders) {
     const whenDate = parseDate(rem.date_time);
     if (!whenDate) return;
     const when = whenDate.getTime();
-    offsets.forEach(({ days, label }) => {
+
+    offsets.forEach(({ days, label, icon, priority }) => {
       const triggerAt = when - days * dayMs;
       const delay = triggerAt - Date.now();
+
+      const notificationData = {
+        appointmentId: rem.id,
+        type: rem.type,
+        center: rem.center,
+        date_time: rem.date_time,
+        priority,
+        days
+      };
+
+      const title = `${icon} Recordatorio: ${label}`;
+      const body = `${rem.type || "Cita"} en ${rem.center || "Centro médico"}\n📅 ${toLocaleDateTimeOrEmpty(rem.date_time)}${rem.notes ? `\n📝 ${rem.notes}` : ""}`;
+
       if (delay <= 0) {
-        showNotification(
-          `Recordatorio (${label})`,
-          `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${toLocaleDateTimeOrEmpty(rem.date_time)}`
-        );
+        // Si ya pasó el momento, mostrar inmediatamente
+        showNotification(title, body, notificationData);
         return;
       }
+
+      // Programar notificación
       appointmentTimers.push(
         setTimeout(() => {
-          showNotification(
-            `Recordatorio (${label})`,
-            `${rem.center || "Centro"} ? ${rem.type || "actividad"} ? ${toLocaleDateTimeOrEmpty(rem.date_time)}`
-          );
+          showNotification(title, body, notificationData);
         }, delay)
       );
     });
   });
+
+  console.log(`📱 ${appointmentTimers.length} notificaciones programadas para ${reminders.length} citas`);
 }
 
 function deriveDoseHours(frequencyText = "") {
@@ -86,25 +133,34 @@ export function scheduleMedicationNotifications(medications) {
     if (!end) return;
     const lastDay = end < horizon ? end : horizon;
     const hours = deriveDoseHours(med.frequency);
+
     for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
       hours.forEach((hour) => {
         const trigger = new Date(day);
         trigger.setHours(hour, 0, 0, 0);
         const delay = trigger.getTime() - Date.now();
         if (delay <= 0) return;
+
+        const notificationData = {
+          medicationId: med.id,
+          name: med.name,
+          dose: med.dose,
+          type: "medication"
+        };
+
+        const title = `💊 Medicación: ${med.name || "Tratamiento"}`;
+        const body = `${med.dose ? `Dosis: ${med.dose}\n` : ""}${med.frequency ? `Frecuencia: ${med.frequency}\n` : ""}${med.notes ? `Notas: ${med.notes}` : "Tomar según indicación médica"}`;
+
         medicationTimers.push(
           setTimeout(() => {
-            showNotification(
-              `Medicaci?n: ${med.name || "Tratamiento"}`,
-              `${med.dose ? med.dose + " - " : ""}${med.frequency || "Tomar seg?n indicaci?n"}. ${
-                med.notes || ""
-              }`
-            );
+            showNotification(title, body, notificationData);
           }, delay)
         );
       });
     }
   });
+
+  console.log(`💊 ${medicationTimers.length} recordatorios de medicación programados para ${medications.length} medicamentos`);
 }
 
 export function sendEmailReminder(reminder) {
@@ -113,18 +169,17 @@ export function sendEmailReminder(reminder) {
     `Hola, esto es un recordatorio de Klinip.
 
 ` +
-      `Actividad: ${reminder.type || "actividad"}
+    `Actividad: ${reminder.type || "actividad"}
 ` +
-      `Centro: ${reminder.center || "No definido"}
+    `Centro: ${reminder.center || "No definido"}
 ` +
-      `Fecha y hora: ${
-        reminder.date_time ? toLocaleDateTimeOrEmpty(reminder.date_time) : "Por agendar"
-      }
+    `Fecha y hora: ${reminder.date_time ? toLocaleDateTimeOrEmpty(reminder.date_time) : "Por agendar"
+    }
 ` +
-      `Notas: ${reminder.notes || "Sin notas"}
+    `Notas: ${reminder.notes || "Sin notas"}
 
 ` +
-      `Mensaje generado desde Klinip.`
+    `Mensaje generado desde Klinip.`
   );
 
   // Lugar para integrar un backend real de correo.

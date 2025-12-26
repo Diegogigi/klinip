@@ -636,11 +636,21 @@ export default function Dashboard({ user }) {
         </div>
       )}
 
-      <div className="card">
+      <div className="card upcoming-card">
         <div className="card-header">
-          <div>
-            <h2 className="card-title">Lo próximo</h2>
-            <p className="muted">Máximo 5 actividades con fecha en tu agenda.</p>
+          <div className="card-header-with-icon">
+            <div className="card-icon upcoming-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            <div>
+              <h2 className="card-title">Lo próximo</h2>
+              <p className="muted">Máximo 5 actividades con fecha en tu agenda.</p>
+            </div>
           </div>
           <div className="traffic">
             <span className={`dot ${alert.dot}`} />
@@ -676,59 +686,145 @@ export default function Dashboard({ user }) {
         )}
       </div>
 
-      <div className="card">
+      <div className="card alerts-card">
         <div className="card-header">
-          <div>
-            <h2 className="card-title">Recordatorios y alertas</h2>
-            <p className="muted">
-              Alertas del navegador. Activa push si tu navegador lo permite.
-            </p>
+          <div className="card-header-with-icon">
+            <div className="card-icon alerts-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+            </div>
+            <div>
+              <h2 className="card-title">Recordatorios y alertas</h2>
+              <p className="muted">
+                Sistema de alertas automáticas según días de anticipación
+              </p>
+            </div>
           </div>
-          <div className="traffic">
-            <span className="dot red" /> <span className="dot yellow" /> <span className="dot green" />
+          <div className="alert-legend">
+            <div className="alert-legend-item">
+              <span className="dot red" /> <span>1 día</span>
+            </div>
+            <div className="alert-legend-item">
+              <span className="dot yellow" /> <span>3 días</span>
+            </div>
+            <div className="alert-legend-item">
+              <span className="dot green" /> <span>7+ días</span>
+            </div>
+            <button
+              className="test-notification-btn"
+              type="button"
+              onClick={async () => {
+                try {
+                  if ("serviceWorker" in navigator) {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.showNotification("🔔 Prueba de notificación", {
+                      body: "Si ves esto, las notificaciones funcionan correctamente en tu PWA",
+                      icon: "/icons/icon-192.png",
+                      badge: "/icons/icon-192.png",
+                      vibrate: [200, 100, 200],
+                      requireInteraction: false,
+                      data: { url: "/" }
+                    });
+                    alert("✅ Notificación de prueba enviada");
+                  } else {
+                    alert("⚠️ Service Worker no disponible");
+                  }
+                } catch (err) {
+                  console.error(err);
+                  alert("❌ Error al enviar notificación: " + err.message);
+                }
+              }}
+              title="Probar notificaciones"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              Probar
+            </button>
           </div>
         </div>
         {reminders.length === 0 ? (
-          <p className="muted">Sin recordatorios pendientes.</p>
+          <div className="alert-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+            <p>Sin recordatorios pendientes</p>
+          </div>
         ) : (
-          <ul className="reminder-list">
-            {reminders.map((r) => (
-              <li key={r.id} className="reminder-item">
-                <div className={`alert-pill ${r.severity}`}>
-                  {r.severity === "red" && "🔴"}
-                  {r.severity === "yellow" && "🟡"}
-                  {r.severity === "green" && "🟢"}
-                  <span>{r.label}</span>
-                </div>
-                <div className="reminder-body">
-                  <div className="reminder-title">
-                    {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
+          <>
+            <ul className="reminder-list">
+              {reminders.map((r) => (
+                <li key={r.id} className={`reminder-item severity-${r.severity}`}>
+                  <div className={`alert-indicator ${r.severity}`}>
+                    {r.severity === "red" && (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4M12 16h.01" stroke="white" strokeWidth="2"/>
+                      </svg>
+                    )}
+                    {r.severity === "yellow" && (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 22h20L12 2z"/>
+                        <path d="M12 10v4M12 18h.01" stroke="white" strokeWidth="2"/>
+                      </svg>
+                    )}
+                    {r.severity === "green" && (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2" fill="none"/>
+                      </svg>
+                    )}
                   </div>
-                  <div className="reminder-meta">
-                    {r.date_time
-                      ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
-                      : "Por agendar"}
-                    {r.notes ? ` · ${r.notes}` : ""}
+                  <div className="reminder-content">
+                    <div className={`alert-badge ${r.severity}`}>
+                      {r.label}
+                    </div>
+                    <div className="reminder-title">
+                      {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
+                    </div>
+                    <div className="reminder-meta">
+                      {r.date_time
+                        ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
+                        : "Por agendar"}
+                      {r.notes ? ` · ${r.notes}` : ""}
+                    </div>
                   </div>
-                </div>
-                <div className="reminder-actions">
-                  <button
-                    className="secondary-btn ghost"
-                    type="button"
-                    onClick={() => sendEmailReminder(r)}
-                  >
-                    Correo
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+                  <div className="reminder-actions">
+                    <button
+                      className="action-btn"
+                      type="button"
+                      onClick={() => sendEmailReminder(r)}
+                      title="Enviar recordatorio por correo"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                        <polyline points="22,6 12,13 2,6"/>
+                      </svg>
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="alert-info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              <p>
+                <strong>Tipos de aviso:</strong> Las alertas se activan automáticamente 
+                <strong> 1 día</strong> (urgente), <strong>3 días</strong> (próximo) y 
+                <strong> 7 días</strong> (planificado) antes de cada cita. 
+                En PWA móvil se envían notificaciones push.
+              </p>
+            </div>
+          </>
         )}
-          <p className="tiny-note" style={{ marginTop: "0.75rem" }}>
-            Tipos de aviso: 1 día, 3 días y 7 días antes. Para el backend real se podrán activar
-            correos o WhatsApp; en móvil PWA se usarán notificaciones push.
-          </p>
-        </div>
+      </div>
 
       <div className="card">
         <div className="card-header" style={{ alignItems: "center" }}>
