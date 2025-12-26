@@ -198,6 +198,7 @@ def _clean_center_line(line: str) -> str:
     cleaned = re.sub(r"\b\d{7,}\b", "", cleaned)
     cleaned = re.sub(r"\b(ingreso|recepcion|impresion)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\b(sucursal|centro|hospital|clinica|laboratorio)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b[A-Z]\b$", "", cleaned, flags=re.IGNORECASE)
     return _safe_text(cleaned)
 
 

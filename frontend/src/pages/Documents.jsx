@@ -90,14 +90,17 @@ export default function Documents() {
       // Obtener el archivo con autenticaci?n
       const url = await getDocumentFile(doc.id);
 
-      // Abrir en la misma pesta?a para evitar bloqueos en m?vil
-      const link = document.createElement("a");
-      link.href = url;
-      link.target = "_self";
-      link.rel = "noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
+      // Abrir en nueva pesta?a para no romper el estado de la PWA
+      const newWindow = window.open(url, "_blank", "noopener");
+      if (!newWindow) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
 
       // Liberar la URL temporal
       setTimeout(() => {
