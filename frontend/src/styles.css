@@ -1143,50 +1143,133 @@ a {
     gap: 0.5rem;
   }
 
-  .test-notification-btn {
-    width: 100%;
-    justify-content: center;
-  }
-
   .card-header-with-icon {
-    flex-direction: column;
-    align-items: flex-start;
+    flex-direction: row;
+    align-items: center;
   }
 
   .card-icon {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
   }
 
   .card-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 
   .reminder-item {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 0.85rem;
+    padding: 1rem;
+    gap: 0.75rem;
   }
 
   .reminder-content {
-    margin-top: 0.5rem;
+    margin-top: 0;
   }
 
   .reminder-actions {
-    margin-left: 0;
-    margin-top: 0.5rem;
-    width: 100%;
+    margin-left: auto;
   }
 
   .action-btn {
-    width: 100%;
+    width: 40px;
     height: 40px;
   }
 
   .alert-info {
+    flex-direction: row;
+    padding: 0.85rem;
+  }
+
+  .alert-info svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .alert-info p {
+    font-size: 0.8rem;
+  }
+
+  /* Mejoras para Summary Bar en móvil */
+  .summary-bar {
     flex-direction: column;
     align-items: flex-start;
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+
+  .summary-title {
+    font-size: 1.5rem;
+  }
+
+  .summary-subtitle {
+    font-size: 0.9rem;
+  }
+
+  .summary-status {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* KPI Grid mejorado */
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .kpi {
+    padding: 1rem;
+  }
+
+  .kpi-value {
+    font-size: 2rem;
+  }
+
+  /* Card Header mejorado */
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .card-title {
+    font-size: 1.15rem;
+  }
+
+  .traffic {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Timeline mejorado */
+  .timeline-item {
+    padding: 0.85rem;
+  }
+
+  .timeline-title {
+    font-size: 0.95rem;
+  }
+
+  .timeline-meta {
+    font-size: 0.85rem;
+  }
+
+  /* Alert Badge mejorado */
+  .alert-badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  /* Upcoming y Alerts Cards */
+  .upcoming-card,
+  .alerts-card {
+    border-left-width: 3px;
+  }
+
+  /* Card responsivas */
+  .card {
+    padding: 1rem;
+    border-radius: 14px;
   }
 }
 
@@ -1336,20 +1419,14 @@ a {
   width: 56px;
   height: 56px;
   border-radius: 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(145deg, #1d4ed8, #22d3ee);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 800;
   font-size: 1.5rem;
-  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
-  overflow: hidden;
-}
-
-.auth-logo-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  letter-spacing: -0.02em;
+  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.4);
 }
 
 .auth-logo-text {
@@ -1957,11 +2034,13 @@ a {
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #2563eb, #22c55e);
+  background: linear-gradient(145deg, #1d4ed8, #22d3ee);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 800;
+  letter-spacing: -0.02em;
+  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3);
 }
 
 .landing-nav-actions {
@@ -2530,6 +2609,182 @@ a {
   .landing-cta-content p {
     font-size: 1rem;
   }
+
+  /* Dashboard mejorado para móviles pequeños */
+  .summary-bar {
+    padding: 0.85rem;
+    border-radius: 14px;
+  }
+
+  .summary-title {
+    font-size: 1.35rem;
+    line-height: 1.3;
+  }
+
+  .summary-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .summary-eyebrow {
+    font-size: 0.7rem;
+  }
+
+  .card {
+    padding: 0.85rem;
+    border-radius: 12px;
+  }
+
+  .card-title {
+    font-size: 1.05rem;
+  }
+
+  .card-header {
+    gap: 0.65rem;
+  }
+
+  .card-header-with-icon {
+    gap: 0.65rem;
+  }
+
+  .card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .card-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .muted {
+    font-size: 0.85rem;
+  }
+
+  /* KPI mejorado */
+  .kpi {
+    padding: 0.85rem;
+  }
+
+  .kpi-label {
+    font-size: 0.85rem;
+  }
+
+  .kpi-value {
+    font-size: 1.75rem;
+  }
+
+  /* Timeline mejorado */
+  .timeline-item {
+    padding: 0.75rem;
+  }
+
+  .timeline-title {
+    font-size: 0.9rem;
+  }
+
+  .timeline-meta {
+    font-size: 0.8rem;
+  }
+
+  .chip {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Alertas mejoradas */
+  .reminder-item {
+    padding: 0.85rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .alert-indicator {
+    width: 32px;
+    height: 32px;
+  }
+
+  .alert-indicator svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .alert-badge {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.45rem;
+  }
+
+  .reminder-title {
+    font-size: 0.9rem;
+  }
+
+  .reminder-meta {
+    font-size: 0.8rem;
+  }
+
+  .reminder-actions {
+    margin-left: 0;
+    margin-top: 0.5rem;
+    width: 100%;
+  }
+
+  .action-btn {
+    width: 100%;
+    height: 42px;
+  }
+
+  .alert-info {
+    padding: 0.75rem;
+  }
+
+  .alert-info svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .alert-info p {
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
+  .alert-legend {
+    gap: 0.5rem;
+  }
+
+  .alert-legend-item {
+    font-size: 0.8rem;
+  }
+
+  /* Traffic/Status indicators */
+  .traffic {
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+  }
+
+  .summary-status {
+    padding: 0.5rem 0.7rem;
+  }
+
+  .summary-label {
+    font-size: 0.75rem;
+  }
+
+  .summary-value {
+    font-size: 0.85rem;
+  }
+
+  /* Botones mejorados */
+  .primary-btn,
+  .secondary-btn {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+  }
+
+  /* Floating form mejorado */
+  .floating-form-card {
+    max-width: calc(100vw - 2rem);
+    margin: 1rem;
+  }
 }
 
 .summary-bar {
@@ -2782,49 +3037,6 @@ body.theme-dark .alerts-icon {
   font-size: 0.85rem;
   color: var(--muted);
   font-weight: 600;
-}
-
-/* Botón de prueba de notificaciones */
-.test-notification-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 10px;
-  border: 2px solid #f59e0b;
-  background: linear-gradient(135deg, #fef3c7, #fde68a);
-  color: #92400e;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.test-notification-btn svg {
-  width: 16px;
-  height: 16px;
-}
-
-.test-notification-btn:hover {
-  background: linear-gradient(135deg, #fde68a, #fbbf24);
-  border-color: #d97706;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-.test-notification-btn:active {
-  transform: translateY(0);
-}
-
-body.theme-dark .test-notification-btn {
-  background: linear-gradient(135deg, #78350f, #92400e);
-  border-color: #b45309;
-  color: #fcd34d;
-}
-
-body.theme-dark .test-notification-btn:hover {
-  background: linear-gradient(135deg, #92400e, #a16207);
-  border-color: #d97706;
 }
 
 /* Estado vacío de alertas */

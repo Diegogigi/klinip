@@ -68,7 +68,7 @@ export default function Landing() {
     <div className="landing">
       <header className="landing-nav">
         <div className="landing-logo">
-          <span className="landing-logo-mark">K</span>
+          <div className="landing-logo-mark">K</div>
           <span>Klinip</span>
         </div>
         <div className="landing-nav-actions">
@@ -192,7 +192,7 @@ export default function Landing() {
         <div className="landing-footer-content">
           <div className="landing-footer-brand">
             <div className="landing-logo">
-              <span className="landing-logo-mark">K</span>
+              <div className="landing-logo-mark">K</div>
               <span>Klinip</span>
             </div>
             <p>Tu ruta de salud, simplificada</p>

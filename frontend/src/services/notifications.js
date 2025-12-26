@@ -23,8 +23,8 @@ async function showNotification(title, body, data = {}) {
       const registration = await navigator.serviceWorker.ready;
       await registration.showNotification(title, {
         body,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
+        icon: "/icons/k_logo.png",
+        badge: "/icons/k_logo.png",
         vibrate: [200, 100, 200],
         requireInteraction: true,
         actions: [
@@ -47,7 +47,7 @@ async function showNotification(title, body, data = {}) {
   // Fallback a notificación simple
   new Notification(title, {
     body,
-    icon: "/icons/icon-192.png",
+    icon: "/icons/k_logo.png",
     data
   });
 }

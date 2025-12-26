@@ -80,9 +80,7 @@ export default function Register({ onRegistered }) {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon">
-                <img src="/icons/icon-192.png" alt="Klinip" />
-              </div>
+              <div className="auth-logo-icon">K</div>
               <h1 className="auth-logo-text">Klinip</h1>
             </div>
             <h2 className="auth-welcome">¡Crea tu cuenta!</h2>

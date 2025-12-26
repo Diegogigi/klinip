@@ -42,17 +42,17 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
-  const icon = data.icon || "/icons/icon-192.png";
+  const icon = data.icon || "/icons/k_logo.png";
 
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
       icon,
-      badge: "/icons/icon-192.png",
+      badge: "/icons/k_logo.png",
       vibrate: [200, 100, 200],
       requireInteraction: true,
       actions: [
-        { action: "open", title: "Ver detalles", icon: "/icons/icon-192.png" },
+        { action: "open", title: "Ver detalles", icon: "/icons/k_logo.png" },
         { action: "close", title: "Cerrar" }
       ],
       data: {

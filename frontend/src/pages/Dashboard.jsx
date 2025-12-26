@@ -712,38 +712,6 @@ export default function Dashboard({ user }) {
             <div className="alert-legend-item">
               <span className="dot green" /> <span>7+ días</span>
             </div>
-            <button
-              className="test-notification-btn"
-              type="button"
-              onClick={async () => {
-                try {
-                  if ("serviceWorker" in navigator) {
-                    const registration = await navigator.serviceWorker.ready;
-                    await registration.showNotification("🔔 Prueba de notificación", {
-                      body: "Si ves esto, las notificaciones funcionan correctamente en tu PWA",
-                      icon: "/icons/icon-192.png",
-                      badge: "/icons/icon-192.png",
-                      vibrate: [200, 100, 200],
-                      requireInteraction: false,
-                      data: { url: "/" }
-                    });
-                    alert("✅ Notificación de prueba enviada");
-                  } else {
-                    alert("⚠️ Service Worker no disponible");
-                  }
-                } catch (err) {
-                  console.error(err);
-                  alert("❌ Error al enviar notificación: " + err.message);
-                }
-              }}
-              title="Probar notificaciones"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              Probar
-            </button>
           </div>
         </div>
         {reminders.length === 0 ? (
