@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -10,8 +10,11 @@ import os
 import mimetypes
 from datetime import timedelta, datetime
 import json
+import io
+import re
+import unicodedata
 
-from .database import Base, engine
+from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
 
 try:
@@ -19,6 +22,18 @@ try:
 except Exception:
     webpush = None
     WebPushException = Exception
+
+try:
+    import pytesseract
+    from PIL import Image
+except Exception:
+    pytesseract = None
+    Image = None
+
+try:
+    from pdf2image import convert_from_bytes
+except Exception:
+    convert_from_bytes = None
 
 # Crear las tablas
 Base.metadata.create_all(bind=engine)
@@ -53,6 +68,33 @@ def ensure_document_schema():
             else:
                 statements.append("ALTER TABLE documents ADD COLUMN filename VARCHAR")
             added_columns.append("filename")
+
+        if "ocr_text" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_text TEXT"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN ocr_text TEXT")
+            added_columns.append("ocr_text")
+
+        if "ocr_status" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_status VARCHAR"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN ocr_status VARCHAR")
+            added_columns.append("ocr_status")
+
+        if "ocr_lang" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_lang VARCHAR"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN ocr_lang VARCHAR")
+            added_columns.append("ocr_lang")
 
         if statements:
             with engine.begin() as conn:
@@ -96,6 +138,575 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
 
 
 app = FastAPI(title="MiRutaSalud API")
+
+OCR_MAX_BYTES = 4 * 1024 * 1024
+OCR_MAX_PAGES = 3
+OCR_LANG_DEFAULT = "spa"
+
+
+def _safe_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip()
+
+
+def _normalize_text(value: str) -> str:
+    if not value:
+        return ""
+    lowered = value.lower()
+    cleaned = "".join(
+        ch
+        for ch in unicodedata.normalize("NFD", lowered)
+        if unicodedata.category(ch) != "Mn"
+    )
+    cleaned = re.sub(r"[^a-z0-9\s]", " ", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def _guess_doc_type(text: str) -> str | None:
+    lowered = _normalize_text(text)
+    if "receta" in lowered or "prescripcion" in lowered:
+        return "receta"
+    if "resultado" in lowered or "laboratorio" in lowered:
+        return "resultado"
+    if "valor referencia" in lowered or "parametro" in lowered or "area" in lowered:
+        return "resultado"
+    if "tipo de atencion" in lowered:
+        return "orden"
+    if "orden" in lowered or "ordenes" in lowered:
+        return "orden"
+    if "informe" in lowered or "reporte" in lowered:
+        return "informe"
+    return None
+
+
+def _clean_center_line(line: str) -> str:
+    if not line:
+        return ""
+    cleaned = re.sub(r"^[^a-zA-Z0-9]+", "", line).strip()
+    cleaned = re.sub(r"^[\-\u2013\u2014\s]+", "", cleaned)
+    cleaned = re.sub(r"\bcentro\s+de\s+salud\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\(\s*cesfam\s*\)", " CESFAM ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bpesfam\b", "CESFAM", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bcesfam\)?", "CESFAM", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace(")", "")
+    if ":" in cleaned:
+        parts = cleaned.split(":", 1)
+        if len(parts) == 2 and parts[1].strip():
+            cleaned = parts[1].strip()
+    cleaned = re.sub(r"\b\d{1,2}:\d{2}\b", "", cleaned)
+    cleaned = re.sub(r"\b\d{1,2}\/\d{1,2}\/\d{2,4}\b", "", cleaned)
+    cleaned = re.sub(r"\b\d{1,3}(?:\.\d{3}){2}-\d\b", "", cleaned)
+    cleaned = re.sub(r"\b\d{7,}\b", "", cleaned)
+    cleaned = re.sub(r"\b(ingreso|recepcion|impresion)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(sucursal|centro|hospital|clinica|laboratorio)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
+    return _safe_text(cleaned)
+
+
+def _guess_center(text: str) -> str | None:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    center_inline = re.compile(
+        r"(centro de salud|cesfam)\s*[:\-]?\s*(.+)",
+        re.IGNORECASE,
+    )
+    primary_keywords = ("sucursal", "cesfam", "consultorio")
+    secondary_keywords = (
+        "centro",
+        "hospital",
+        "clinica",
+        "sanatorio",
+        "instituto",
+        "policlinico",
+        "unidad",
+        "laboratorio",
+    )
+    for line in lines:
+        inline_match = center_inline.search(line)
+        if inline_match:
+            cleaned = _clean_center_line(inline_match.group(2))
+            if cleaned:
+                return cleaned[:120]
+    for line in lines:
+        lower = _normalize_text(line)
+        if any(k in lower for k in primary_keywords):
+            cleaned = _clean_center_line(line)
+            if cleaned:
+                return cleaned[:120]
+    for line in lines:
+        lower = _normalize_text(line)
+        if any(k in lower for k in secondary_keywords):
+            cleaned = _clean_center_line(line)
+            if cleaned:
+                return cleaned[:120]
+    for line in lines[:6]:
+        lower = _normalize_text(line)
+        if len(lower) >= 12 and any(word.isalpha() for word in lower.split()):
+            cleaned = _clean_center_line(line)
+            if cleaned:
+                return cleaned[:120]
+    return None
+
+
+def _guess_date(text: str) -> datetime | None:
+    if not text:
+        return None
+    patterns = [
+        r"(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})",
+        r"(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        parts = match.groups()
+        try:
+            if len(parts[0]) == 4:
+                year = int(parts[0])
+                month = int(parts[1])
+                day = int(parts[2])
+            else:
+                day = int(parts[0])
+                month = int(parts[1])
+                year = int(parts[2])
+                if year < 100:
+                    year += 2000
+            return datetime(year, month, day)
+        except Exception:
+            continue
+    return None
+
+
+def _guess_notes(text: str) -> str | None:
+    if not text:
+        return None
+    lab_results = _extract_lab_results(text)
+    if lab_results:
+        return "\n".join(lab_results)[:400]
+    order_notes = _extract_order_notes(text)
+    if order_notes:
+        return "\n".join(order_notes)[:400]
+    keywords = (
+        "radiografia",
+        "rayos",
+        "examen",
+        "resultado",
+        "diagnostico",
+        "indicacion",
+        "consulta",
+        "control",
+        "laboratorio",
+        "medicamento",
+    )
+    value_pattern = re.compile(
+        r"([a-zA-Z][a-zA-Z\s]{2,})\s+(\d+(?:[.,]\d+)?)\s*(mg\/dl|mmol\/l|%|g\/l|mg\/l)",
+        re.IGNORECASE,
+    )
+    ignore_fragments = (
+        "unidad laboratorio",
+        "muestra",
+        "corporacion municipal",
+        "laboratorio clinico",
+    )
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for line in lines:
+        normalized = _normalize_text(line)
+        if value_pattern.search(line):
+            return _safe_text(line)[:160]
+        if any(fragment in normalized for fragment in ignore_fragments):
+            continue
+        if any(k in normalized for k in keywords):
+            return _safe_text(line)[:160]
+    return None
+
+
+def _extract_lab_results(text: str) -> list[str]:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    if not lines:
+        return []
+    results = []
+    sample = ""
+    sample_pattern = re.compile(r"muestra\s*[:\-]\s*(.+)", re.IGNORECASE)
+    result_pattern = re.compile(
+        r"^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,})\s+[*\-]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z/%]+)\s*\[?\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*\]?",
+        re.IGNORECASE,
+    )
+    for line in lines:
+        sample_match = sample_pattern.search(line)
+        if sample_match and not sample:
+            sample = _safe_text(sample_match.group(1))
+        match = result_pattern.search(line)
+        if not match:
+            continue
+        name = _safe_text(match.group(1).title())
+        value = match.group(2)
+        unit = match.group(3)
+        ref_low = match.group(4)
+        ref_high = match.group(5)
+        results.append(f"{name} {value} {unit} (ref {ref_low}-{ref_high})")
+    if sample:
+        results.insert(0, f"Muestra: {sample}")
+    return results
+
+
+def _extract_order_notes(text: str) -> list[str]:
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    if not lines:
+        return []
+    tipo = ""
+    diagnostico = ""
+    diagnostico_keywords = (
+        "caries",
+        "interprox",
+        "evaluar",
+        "control",
+        "rx",
+        "radiografia",
+        "dental",
+        "examen",
+        "consulta",
+    )
+    for idx, line in enumerate(lines):
+        normalized = _normalize_text(line)
+        if "tipo de atencion" in normalized:
+            value = ""
+            if ":" in line:
+                _, tail = line.split(":", 1)
+                value = tail.strip()
+            if not value and line.endswith(":") and idx + 1 < len(lines):
+                value = lines[idx + 1].strip()
+            tipo = _safe_text(value)
+        if "diagnostico clinico" in normalized:
+            value = ""
+            if ":" in line:
+                _, tail = line.split(":", 1)
+                value = tail.strip()
+            if not value and line.endswith(":") and idx + 1 < len(lines):
+                value = lines[idx + 1].strip()
+            diagnostico = _safe_text(value)
+        if not diagnostico and "se desea saber" in normalized:
+            value = ""
+            if ":" in line:
+                _, tail = line.split(":", 1)
+                value = tail.strip()
+            if not value and line.endswith(":") and idx + 1 < len(lines):
+                value = lines[idx + 1].strip()
+            diagnostico = _safe_text(value)
+    tipo = re.sub(r"[|]+", "", tipo).strip()
+    diagnostico = re.sub(r"[|]+", "", diagnostico).strip()
+    if diagnostico:
+        diag_norm = _normalize_text(diagnostico)
+        if not any(k in diag_norm for k in diagnostico_keywords):
+            diagnostico = ""
+    parts = [p for p in [tipo, diagnostico] if p]
+    if parts:
+        return [" - ".join(parts)]
+    return []
+
+
+def _extract_order_schedule(text: str) -> dict | None:
+    if not text:
+        return None
+    normalized = _normalize_text(text)
+    raw_lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    normalized_lines = [_normalize_text(ln) for ln in raw_lines]
+    month_map = {
+        "enero": 1,
+        "febrero": 2,
+        "marzo": 3,
+        "abril": 4,
+        "mayo": 5,
+        "junio": 6,
+        "julio": 7,
+        "agosto": 8,
+        "septiembre": 9,
+        "setiembre": 9,
+        "octubre": 10,
+        "noviembre": 11,
+        "diciembre": 12,
+    }
+    date_pattern = re.compile(r"(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})")
+    time_pattern = re.compile(r"\b(\d{1,2})[:.](\d{2})\b")
+    date_match = date_pattern.search(normalized)
+    time_match = None
+    for raw_line, norm_line in zip(raw_lines, normalized_lines):
+        if any(k in norm_line for k in ("hora", "hrs", "horario")):
+            time_match = time_pattern.search(raw_line)
+            if time_match:
+                break
+    if not time_match:
+        time_match = time_pattern.search(text)
+    if not date_match:
+        return None
+    day = int(date_match.group(1))
+    month_name = date_match.group(2)
+    month = month_map.get(month_name)
+    year = int(date_match.group(3))
+    if not month:
+        return None
+    hour = 0
+    minute = 0
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2))
+    try:
+        date_time = datetime(year, month, day, hour, minute)
+    except Exception:
+        return None
+
+    specialty = ""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for idx, line in enumerate(lines):
+        if "tipo de atencion" in _normalize_text(line):
+            value = ""
+            if ":" in line:
+                _, tail = line.split(":", 1)
+                value = tail.strip()
+            if not value and line.endswith(":") and idx + 1 < len(lines):
+                value = lines[idx + 1].strip()
+            specialty = _safe_text(value)
+            break
+
+    return {"date_time": date_time, "specialty": specialty}
+
+
+def _extract_medication_from_text(text: str) -> dict | None:
+    if not text:
+        return None
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    candidates = [ln for ln in lines if "cada" in ln.lower() or "hora" in ln.lower()]
+    candidates = candidates or lines
+
+    dose_pattern = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mg|ml|cc|g|mcg|ug)", re.IGNORECASE)
+    freq_pattern = re.compile(r"cada\s+(\d+)\s+horas?", re.IGNORECASE)
+    per_day_pattern = re.compile(r"(\d+)\s+veces\s+al\s+dia", re.IGNORECASE)
+    duration_pattern = re.compile(r"por\s+(\d+)\s+d[ií]as?", re.IGNORECASE)
+    weeks_pattern = re.compile(r"por\s+(\d+)\s+semanas?", re.IGNORECASE)
+    route_pattern = re.compile(
+        r"(oral|sublingual|topica|t[oó]pica|intramuscular|intravenosa|subcutanea|inhalatoria)",
+        re.IGNORECASE,
+    )
+
+    ignore_tokens = {
+        "jarabe",
+        "comprimido",
+        "comprimidos",
+        "capsula",
+        "capsulas",
+        "tableta",
+        "tabletas",
+        "suspension",
+        "gotas",
+        "oral",
+        "topica",
+        "topico",
+        "intramuscular",
+        "intravenosa",
+        "subcutanea",
+        "inhalatoria",
+        "cada",
+        "horas",
+        "hora",
+        "por",
+        "dias",
+        "semanas",
+    }
+
+    for line in candidates:
+        normalized = _normalize_text(line)
+        dose_match = dose_pattern.search(line)
+        freq_match = freq_pattern.search(line) or per_day_pattern.search(line)
+        duration_match = duration_pattern.search(line) or weeks_pattern.search(line)
+        route_match = route_pattern.search(line)
+
+        parts = [p.strip() for p in re.split(r"[\/\-\|]", line) if p.strip()]
+        name = None
+        for part in parts:
+            tokens = [t for t in re.split(r"\s+", _normalize_text(part)) if t]
+            if not tokens:
+                continue
+            if any(t in ignore_tokens for t in tokens):
+                continue
+            if any(ch.isalpha() for ch in part):
+                name = _safe_text(part)
+                break
+
+        if name or dose_match or freq_match:
+            dose = ""
+            if dose_match:
+                dose = f"{dose_match.group(1)} {dose_match.group(2)}"
+            frequency = ""
+            if freq_match:
+                frequency = f"cada {freq_match.group(1)} horas"
+            elif per_day_pattern.search(line):
+                frequency = per_day_pattern.search(line).group(0).lower()
+            duration_days = None
+            if duration_match:
+                duration_days = int(duration_match.group(1))
+            elif weeks_pattern.search(line):
+                duration_days = int(weeks_pattern.search(line).group(1)) * 7
+            route = route_match.group(1).lower() if route_match else ""
+
+            return {
+                "name": name or "",
+                "dose": dose,
+                "frequency": frequency,
+                "duration_days": duration_days,
+                "route": route,
+                "raw": _safe_text(line),
+            }
+    return None
+
+
+def _extract_ocr_text(data: bytes, filename: str) -> str:
+    if not pytesseract or not Image:
+        raise RuntimeError("tesseract_not_available")
+    lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
+    poppler_path = os.getenv("POPPLER_PATH") or None
+    images = []
+    if filename.lower().endswith(".pdf"):
+        if not convert_from_bytes:
+            raise RuntimeError("pdf_support_missing")
+        images = convert_from_bytes(
+            data,
+            first_page=1,
+            last_page=OCR_MAX_PAGES,
+            poppler_path=poppler_path,
+        )
+    else:
+        images = [Image.open(io.BytesIO(data))]
+
+    texts = []
+    for img in images:
+        try:
+            text = pytesseract.image_to_string(img, lang=lang)
+        except Exception:
+            # Fallback to English if the language pack is missing.
+            text = pytesseract.image_to_string(img, lang="eng")
+        texts.append(text)
+    return "\n".join(texts)
+
+
+def _run_document_ocr(document_id: int):
+    db = SessionLocal()
+    try:
+        doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+        if not doc:
+            return
+        doc.ocr_status = "processing"
+        db.commit()
+        if not doc.file_data:
+            doc.ocr_status = "error_no_file"
+            db.commit()
+            return
+        if len(doc.file_data) > OCR_MAX_BYTES:
+            doc.ocr_status = "skipped_size"
+            db.commit()
+            return
+        filename = doc.filename or "document"
+        try:
+            text = _extract_ocr_text(doc.file_data, filename)
+        except Exception as exc:
+            doc.ocr_status = f"error_{str(exc)[:50]}"
+            db.commit()
+            return
+
+        doc.ocr_text = text
+        doc.ocr_status = "done"
+        doc.ocr_lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
+
+        if not doc.center:
+            guess_center = _guess_center(text)
+            if guess_center:
+                doc.center = guess_center
+        if not doc.date:
+            guess_date = _guess_date(text)
+            if guess_date:
+                doc.date = guess_date
+        if doc.doc_type == models.DocumentType.otro:
+            guess_type = _guess_doc_type(text)
+            if guess_type:
+                doc.doc_type = models.DocumentType(guess_type)
+        if not doc.notes:
+            guess_notes = _guess_notes(text)
+            if guess_notes:
+                doc.notes = guess_notes
+
+        if doc.doc_type == models.DocumentType.receta:
+            existing_med = (
+                db.query(models.Medication)
+                .filter(models.Medication.document_id == doc.id)
+                .first()
+            )
+            if not existing_med:
+                med = _extract_medication_from_text(text)
+                if med and (med.get("name") or med.get("dose") or med.get("frequency")):
+                    start_date = doc.date or datetime.utcnow()
+                    end_date = None
+                    duration_days = med.get("duration_days")
+                    if duration_days:
+                        end_date = start_date + timedelta(days=duration_days)
+                    duration_label = (
+                        f"{duration_days} dias" if duration_days else ""
+                    )
+                    med_notes_parts = [med.get("raw"), med.get("route")]
+                    med_notes = " ".join([p for p in med_notes_parts if p]).strip()
+
+                    medication = models.Medication(
+                        user_id=doc.user_id,
+                        name=med.get("name") or "Medicamento",
+                        dose=med.get("dose") or "",
+                        frequency=med.get("frequency") or "",
+                        duration=duration_label,
+                        end_date=end_date,
+                        notes=med_notes,
+                        document_id=doc.id,
+                    )
+                    db.add(medication)
+
+                    if med_notes:
+                        if not doc.notes:
+                            doc.notes = med_notes
+                        elif med_notes not in doc.notes:
+                            doc.notes = f"{doc.notes}\n{med_notes}"
+
+        if doc.doc_type == models.DocumentType.orden:
+            if not doc.appointment_id:
+                schedule = _extract_order_schedule(text) or {}
+                date_time = schedule.get("date_time")
+                specialty = schedule.get("specialty") or doc.notes or "Examen"
+                status = (
+                    models.AppointmentStatus.agendada
+                    if date_time
+                    else models.AppointmentStatus.pendiente
+                )
+                appointment = models.Appointment(
+                    user_id=doc.user_id,
+                    type=models.AppointmentType.examen,
+                    specialty=specialty,
+                    center=doc.center or "",
+                    date_time=date_time,
+                    status=status,
+                    notes=doc.notes or "",
+                )
+                db.add(appointment)
+                db.flush()
+                doc.appointment_id = appointment.id
+                if date_time:
+                    date_label = date_time.strftime("%d/%m/%Y %H:%M")
+                    if doc.notes:
+                        if date_label not in doc.notes:
+                            doc.notes = f"{doc.notes}\nFecha: {date_label}"
+                    else:
+                        doc.notes = f"Fecha: {date_label}"
+                else:
+                    missing_msg = "Falta fecha u hora, agregar manualmente en Citas."
+                    if doc.notes:
+                        if missing_msg not in doc.notes:
+                            doc.notes = f"{doc.notes}\n{missing_msg}"
+                    else:
+                        doc.notes = missing_msg
+
+        db.commit()
+    finally:
+        db.close()
 
 # Configurar CORS
 # En producción, permitir todos los orígenes (Railway puede usar diferentes dominios)
@@ -606,6 +1217,7 @@ async def list_documents(
 
 @app.post("/documents", response_model=schemas.DocumentOut)
 async def upload_document(
+    background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
     appointment_id: int | None = Form(None),
     date: str | None = Form(None),
@@ -644,6 +1256,8 @@ async def upload_document(
         date=parsed_date,
         center=center or "",
         notes=notes or "",
+        ocr_status="pending",
+        ocr_lang=OCR_LANG_DEFAULT,
     )
     db.add(doc)
     db.commit()
@@ -651,6 +1265,8 @@ async def upload_document(
     print(
         f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}"
     )
+    if background_tasks is not None:
+        background_tasks.add_task(_run_document_ocr, doc.id)
     return doc
 
 
@@ -678,6 +1294,31 @@ async def delete_document(
     db.delete(doc)
     db.commit()
     return {"ok": True}
+
+
+@app.put("/documents/{document_id}", response_model=schemas.DocumentOut)
+async def update_document(
+    document_id: int,
+    doc_in: schemas.DocumentUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            models.Document.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    for field, value in doc_in.dict(exclude_unset=True).items():
+        setattr(doc, field, value)
+    db.commit()
+    db.refresh(doc)
+    return doc
 
 
 # Endpoint protegido para servir documentos

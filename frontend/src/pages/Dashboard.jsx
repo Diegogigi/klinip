@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getAppointments, getDocuments } from "../api";
+import {
+  getAppointments,
+  getDocuments,
+  getMedications,
+  uploadDocument,
+  updateDocument,
+} from "../api";
 import {
   requestNotificationPermission,
   scheduleReminderNotifications,
+  scheduleMedicationNotifications,
   sendEmailReminder,
   clearScheduledNotifications,
 } from "../services/notifications";
@@ -28,20 +35,168 @@ const statusLabels = {
 export default function Dashboard({ user }) {
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [medications, setMedications] = useState([]);
   const [notificationsReady, setNotificationsReady] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showDocForm, setShowDocForm] = useState(false);
+  const [docForm, setDocForm] = useState({
+    doc_type: "otro",
+    date: "",
+    center: "",
+    notes: "",
+  });
+  const [docFile, setDocFile] = useState(null);
+  const [docUploading, setDocUploading] = useState(false);
+  const [docAutoFill, setDocAutoFill] = useState(true);
+  const [ocrDocId, setOcrDocId] = useState(null);
+  const [ocrStatus, setOcrStatus] = useState("");
+  const [ocrResult, setOcrResult] = useState(null);
+  const [ocrEdit, setOcrEdit] = useState(null);
+  const [ocrSaving, setOcrSaving] = useState(false);
 
   useEffect(() => {
     async function load() {
-      const [apptData, docData] = await Promise.all([
+      const [apptData, docData, medData] = await Promise.all([
         getAppointments(),
         getDocuments(),
+        getMedications(),
       ]);
       setAppointments(apptData || []);
       setDocuments(docData || []);
+      setMedications(medData || []);
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (!ocrDocId) return;
+    let attempts = 0;
+    let stopped = false;
+
+    const poll = async () => {
+      if (stopped) return;
+      attempts += 1;
+      try {
+        const docData = await getDocuments();
+        const current = (docData || []).find((d) => d.id === ocrDocId);
+        if (current) {
+          setOcrStatus(current.ocr_status || "pending");
+          if (
+            current.ocr_status === "done" ||
+            (current.ocr_status || "").startsWith("error") ||
+            current.ocr_status === "skipped_size"
+          ) {
+            setOcrResult(current);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("No se pudo actualizar OCR", err);
+      }
+      if (attempts >= 15) return;
+      setTimeout(poll, 2000);
+    };
+
+    poll();
+    return () => {
+      stopped = true;
+    };
+  }, [ocrDocId]);
+
+  useEffect(() => {
+    if (!ocrResult) return;
+    const parsedDate = parseDate(ocrResult.date);
+    setOcrEdit({
+      doc_type: ocrResult.doc_type || "otro",
+      date: parsedDate ? parsedDate.toISOString().slice(0, 10) : "",
+      center: ocrResult.center || "",
+      notes: ocrResult.notes || "",
+    });
+  }, [ocrResult]);
+
+  const handleOcrSave = async () => {
+    if (!ocrDocId || !ocrEdit) return;
+    setOcrSaving(true);
+    try {
+      await updateDocument(ocrDocId, {
+        doc_type: ocrEdit.doc_type,
+        date: toIsoOrNull(ocrEdit.date),
+        center: ocrEdit.center,
+        notes: ocrEdit.notes,
+      });
+      const docData = await getDocuments();
+      setDocuments(docData || []);
+      window.alert("Documento actualizado.");
+      resetDocForm();
+      setShowDocForm(false);
+    } catch (err) {
+      console.error(err);
+      window.alert("No se pudo actualizar el documento.");
+    } finally {
+      setOcrSaving(false);
+    }
+  };
+
+  const resetDocForm = () => {
+    setDocForm({
+      doc_type: "otro",
+      date: "",
+      center: "",
+      notes: "",
+    });
+    setDocFile(null);
+    setDocAutoFill(true);
+    setOcrDocId(null);
+    setOcrStatus("");
+    setOcrResult(null);
+    setOcrEdit(null);
+    setOcrSaving(false);
+  };
+
+  const handleDocSubmit = async (e) => {
+    e.preventDefault();
+    if (!docFile) {
+      window.alert("Debes seleccionar una foto o PDF.");
+      return;
+    }
+    setDocUploading(true);
+    try {
+      const payload = docAutoFill
+        ? {
+            doc_type: "otro",
+            date: "",
+            center: "",
+            notes: "",
+            file: docFile,
+          }
+        : {
+            doc_type: docForm.doc_type,
+            date: toIsoOrNull(docForm.date),
+            center: docForm.center,
+            notes: docForm.notes,
+            file: docFile,
+          };
+      const uploaded = await uploadDocument({
+        ...payload,
+      });
+      if (uploaded?.id) {
+        setOcrDocId(uploaded.id);
+        setOcrStatus(uploaded.ocr_status || "pending");
+      }
+      const docData = await getDocuments();
+      setDocuments(docData || []);
+      if (!docAutoFill) {
+        resetDocForm();
+        setShowDocForm(false);
+      }
+      window.alert("Documento subido. La IA está analizando el contenido.");
+    } catch (err) {
+      console.error(err);
+      window.alert("No se pudo subir el documento.");
+    } finally {
+      setDocUploading(false);
+    }
+  };
 
   useEffect(() => {
     requestNotificationPermission().then(setNotificationsReady);
@@ -118,7 +273,8 @@ export default function Dashboard({ user }) {
   useEffect(() => {
     if (!notificationsReady) return;
     scheduleReminderNotifications(reminders);
-  }, [notificationsReady, reminders]);
+    scheduleMedicationNotifications(medications);
+  }, [notificationsReady, reminders, medications]);
 
   const exportCsv = () => {
     if (!appointments?.length) return;
@@ -208,13 +364,13 @@ export default function Dashboard({ user }) {
       const link = `${window.location.origin}/#share=${encoded}`;
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
-        alert("Link de compartición copiado al portapapeles.");
+        window.alert("Link de compartición copiado al portapapeles.");
       } else {
         prompt("Copia este link", link);
       }
     } catch (err) {
       console.error("No se pudo generar link", err);
-      alert("No se pudo generar el link.");
+      window.alert("No se pudo generar el link.");
     } finally {
       setExporting(false);
     }
@@ -245,6 +401,241 @@ export default function Dashboard({ user }) {
           </div>
         ))}
       </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Subir documento o foto</h2>
+            <p className="muted">
+              Sube una foto o PDF y la IA intentará completar la información.
+            </p>
+          </div>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={() => setShowDocForm(true)}
+          >
+            Subir archivo
+          </button>
+        </div>
+      </div>
+
+      {showDocForm && (
+        <div className="floating-form-backdrop" onClick={() => setShowDocForm(false)}>
+          <div className="floating-form-card" onClick={(e) => e.stopPropagation()}>
+            <div className="card-header" style={{ marginBottom: "0.75rem" }}>
+              <h3 className="card-title" style={{ marginBottom: 0 }}>
+                Nuevo documento
+              </h3>
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  resetDocForm();
+                  setShowDocForm(false);
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+            {ocrDocId ? (
+              <div>
+                <p className="muted" style={{ marginBottom: "0.5rem" }}>
+                  Estado OCR: {ocrStatus || "pendiente"}
+                </p>
+                {ocrResult && ocrEdit ? (
+                  <>
+                    {!ocrEdit.date ? (
+                      <p className="muted" style={{ marginBottom: "0.75rem" }}>
+                        Falta fecha u hora. Puedes agregarla manualmente en Citas.
+                      </p>
+                    ) : null}
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Tipo</label>
+                        <select
+                          className="select-field"
+                          value={ocrEdit.doc_type}
+                          onChange={(e) =>
+                            setOcrEdit({ ...ocrEdit, doc_type: e.target.value })
+                          }
+                        >
+                          <option value="receta">Receta</option>
+                          <option value="orden">Orden</option>
+                          <option value="resultado">Resultado</option>
+                          <option value="informe">Informe</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Fecha</label>
+                        <input
+                          className="input-field"
+                          type="date"
+                          value={ocrEdit.date}
+                          onChange={(e) =>
+                            setOcrEdit({ ...ocrEdit, date: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Centro de salud</label>
+                        <input
+                          className="input-field"
+                          value={ocrEdit.center}
+                          onChange={(e) =>
+                            setOcrEdit({ ...ocrEdit, center: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">Notas</label>
+                      <textarea
+                        className="textarea-field"
+                        value={ocrEdit.notes}
+                        onChange={(e) =>
+                          setOcrEdit({ ...ocrEdit, notes: e.target.value })
+                        }
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="muted">Analizando el documento...</p>
+                )}
+                <div className="floating-actions">
+                  {ocrResult ? (
+                    <button
+                      className="primary-btn"
+                      type="button"
+                      onClick={handleOcrSave}
+                      disabled={ocrSaving}
+                    >
+                      {ocrSaving ? "Guardando..." : "Guardar ajustes"}
+                    </button>
+                  ) : null}
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() => {
+                      resetDocForm();
+                      setShowDocForm(false);
+                    }}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleDocSubmit}>
+                <div className="input-group">
+                  <label className="input-label">Archivo (foto o PDF)</label>
+                  <input
+                    className="input-field"
+                    type="file"
+                    accept="image/*,application/pdf"
+                    capture="environment"
+                    onChange={(e) => setDocFile(e.target.files[0] || null)}
+                  />
+                  <span className="tiny-note">
+                    Puedes tomar una foto o subir un PDF. Límite recomendado: 4 MB.
+                  </span>
+                </div>
+
+                <div className="input-group">
+                  <label className="input-label">Autocompletar con IA</label>
+                  <select
+                    className="select-field"
+                    value={docAutoFill ? "yes" : "no"}
+                    onChange={(e) => setDocAutoFill(e.target.value === "yes")}
+                  >
+                    <option value="yes">Sí, completar automáticamente</option>
+                    <option value="no">No, editar manualmente</option>
+                  </select>
+                </div>
+
+                {!docAutoFill && (
+                  <>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Tipo de documento</label>
+                        <select
+                          className="select-field"
+                          value={docForm.doc_type}
+                          onChange={(e) =>
+                            setDocForm({ ...docForm, doc_type: e.target.value })
+                          }
+                        >
+                          <option value="receta">Receta</option>
+                          <option value="orden">Orden</option>
+                          <option value="resultado">Resultado</option>
+                          <option value="informe">Informe</option>
+                          <option value="otro">Otro</option>
+                        </select>
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Fecha del documento</label>
+                        <input
+                          className="input-field"
+                          type="date"
+                          value={docForm.date}
+                          onChange={(e) =>
+                            setDocForm({ ...docForm, date: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Centro de salud</label>
+                        <input
+                          className="input-field"
+                          value={docForm.center}
+                          onChange={(e) =>
+                            setDocForm({ ...docForm, center: e.target.value })
+                          }
+                          placeholder="CESFAM, hospital, laboratorio..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="input-group">
+                      <label className="input-label">Notas</label>
+                      <textarea
+                        className="textarea-field"
+                        value={docForm.notes}
+                        onChange={(e) =>
+                          setDocForm({ ...docForm, notes: e.target.value })
+                        }
+                        placeholder="Ej: Receta vence en 3 meses, control con médico X."
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="floating-actions">
+                  <button className="primary-btn" type="submit" disabled={docUploading}>
+                    {docUploading ? "Subiendo..." : "Subir documento"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      resetDocForm();
+                      setShowDocForm(false);
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header">

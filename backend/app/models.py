@@ -86,6 +86,9 @@ class Document(Base):
     date = Column(DateTime, default=datetime.utcnow)
     center = Column(String, default="")
     notes = Column(Text, nullable=True)
+    ocr_text = Column(Text, nullable=True)
+    ocr_status = Column(String, default="pending")
+    ocr_lang = Column(String, default="spa")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="documents")

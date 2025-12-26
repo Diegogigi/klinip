@@ -67,10 +67,21 @@ class DocumentBase(BaseModel):
 class DocumentOut(DocumentBase):
     id: int
     file_path: str
+    filename: Optional[str] = None
+    ocr_status: Optional[str] = None
+    ocr_lang: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class DocumentUpdate(BaseModel):
+    doc_type: Optional[DocumentType] = None
+    appointment_id: Optional[int] = None
+    date: Optional[datetime] = None
+    center: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class MedicationBase(BaseModel):

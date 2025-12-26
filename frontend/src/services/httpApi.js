@@ -81,7 +81,14 @@ export async function getDocuments() {
   return res.data;
 }
 
-export async function uploadDocument(formData) {
+export async function uploadDocument(payload) {
+  const formData = payload instanceof FormData ? payload : new FormData();
+  if (!(payload instanceof FormData)) {
+    Object.entries(payload || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      formData.append(key, value);
+    });
+  }
   const res = await api.post("/documents", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
@@ -90,6 +97,11 @@ export async function uploadDocument(formData) {
 
 export async function deleteDocument(id) {
   const res = await api.delete(`/documents/${id}`);
+  return res.data;
+}
+
+export async function updateDocument(id, payload) {
+  const res = await api.put(`/documents/${id}`, payload);
   return res.data;
 }
 

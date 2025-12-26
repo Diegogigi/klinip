@@ -11,6 +11,13 @@ const docLabels = {
   otro: "Otro",
 };
 
+const ocrLabels = {
+  pending: "OCR pendiente",
+  processing: "OCR en proceso",
+  done: "OCR listo",
+  skipped_size: "OCR omitido",
+};
+
 export default function Documents() {
   const [docs, setDocs] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -261,6 +268,7 @@ export default function Documents() {
               <thead>
                 <tr>
                   <th>Tipo</th>
+                  <th>OCR</th>
                   <th>Fecha</th>
                   <th>Centro</th>
                   <th>Notas</th>
@@ -273,6 +281,12 @@ export default function Documents() {
                     <td>
                       <span className="badge">
                         {docLabels[d.doc_type] || d.doc_type}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge">
+                        {ocrLabels[d.ocr_status] ||
+                          (d.ocr_status ? "OCR con error" : "sin OCR")}
                       </span>
                     </td>
                     <td>

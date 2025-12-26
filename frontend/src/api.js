@@ -16,6 +16,7 @@ export const deleteAppointment = api.deleteAppointment;
 export const getDocuments = api.getDocuments;
 export const uploadDocument = api.uploadDocument;
 export const deleteDocument = api.deleteDocument;
+export const updateDocument = api.updateDocument;
 
 export const getMedications = api.getMedications;
 export const saveMedication = api.saveMedication;
