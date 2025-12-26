@@ -25,7 +25,7 @@ except Exception:
 
 try:
     import pytesseract
-    from PIL import Image
+    from PIL import Image, ImageOps, ImageFilter
 except Exception:
     pytesseract = None
     Image = None
@@ -573,13 +573,29 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
     else:
         images = [Image.open(io.BytesIO(data))]
 
+    def _preprocess_image(img: Image.Image) -> Image.Image:
+        img = ImageOps.exif_transpose(img)
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        if img.mode != "L":
+            img = img.convert("L")
+        img = ImageOps.autocontrast(img)
+        width, height = img.size
+        min_width = 1400
+        if width < min_width:
+            scale = min_width / float(width)
+            img = img.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
+        img = img.filter(ImageFilter.SHARPEN)
+        return img
+
     texts = []
     for img in images:
+        img = _preprocess_image(img)
         try:
-            text = pytesseract.image_to_string(img, lang=lang)
+            text = pytesseract.image_to_string(img, lang=lang, config="--oem 3 --psm 6")
         except Exception:
             # Fallback to English if the language pack is missing.
-            text = pytesseract.image_to_string(img, lang="eng")
+            text = pytesseract.image_to_string(img, lang="eng", config="--oem 3 --psm 6")
         texts.append(text)
     return "\n".join(texts)
 
@@ -1462,10 +1478,11 @@ if os.path.exists(static_dir):
         if full_path.startswith(api_routes) or full_path in ("health", "debug"):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Para "documents", solo interceptar si es exactamente "documents" o "documents/" sin más segmentos
-        # Las rutas como "/documents/{id}/file" ya fueron manejadas arriba
+        # Para "documents", servir SPA cuando sea navegación HTML; mantener API para llamadas JSON.
         if full_path == "documents" or full_path == "documents/":
-            raise HTTPException(status_code=404, detail="Not found")
+            accept = request.headers.get("accept", "")
+            if "text/html" not in accept:
+                raise HTTPException(status_code=404, detail="Not found")
 
         # Si parece un archivo (tiene extension) y no existe, devolver 404.
         file_path = os.path.join(static_dir, full_path)
