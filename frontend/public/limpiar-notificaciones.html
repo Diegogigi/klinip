@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klinip - Limpiar Notificaciones</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .status {
+            background: #f0f4ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            min-height: 120px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 15px;
+        }
+        
+        .status-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 12px;
+            font-size: 20px;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            margin-bottom: 15px;
+        }
+        
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-success {
+            background: #10b981;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .warning {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .warning-title {
+            color: #92400e;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .warning-text {
+            color: #78350f;
+            font-size: 14px;
+        }
+        
+        .info {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .info-title {
+            color: #1e40af;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .info-text {
+            color: #1e3a8a;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 48px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">🏥</div>
+        <h1>Limpieza de Notificaciones</h1>
+        <p class="subtitle">Herramienta para solucionar notificaciones duplicadas</p>
+        
+        <div class="warning">
+            <div class="warning-title">⚠️ Importante</div>
+            <div class="warning-text">
+                Esta herramienta eliminará todas las notificaciones programadas y reiniciará 
+                el sistema de notificaciones. Tendrás que iniciar sesión nuevamente.
+            </div>
+        </div>
+        
+        <div class="status" id="status">
+            <div class="status-item">
+                <span class="status-icon">⏳</span>
+                <span>Esperando acción...</span>
+            </div>
+        </div>
+        
+        <button class="btn" id="cleanBtn" onclick="cleanEverything()">
+            🧹 Limpiar Todo y Reiniciar
+        </button>
+        
+        <button class="btn" id="reloadBtn" onclick="goHome()" style="display: none;">
+            🏠 Ir a Klinip
+        </button>
+        
+        <div class="info">
+            <div class="info-title">📋 Qué hace esta herramienta:</div>
+            <div class="info-text">
+                1. Desregistra todos los Service Workers<br>
+                2. Limpia el caché de la aplicación<br>
+                3. Elimina notificaciones programadas<br>
+                4. Limpia la base de datos de notificaciones<br>
+                5. Te redirige a la aplicación limpia
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const statusEl = document.getElementById('status');
+        const cleanBtn = document.getElementById('cleanBtn');
+        const reloadBtn = document.getElementById('reloadBtn');
+        
+        function addStatus(icon, message, isError = false) {
+            const item = document.createElement('div');
+            item.className = 'status-item';
+            item.style.color = isError ? '#dc2626' : '#059669';
+            item.innerHTML = `
+                <span class="status-icon">${icon}</span>
+                <span>${message}</span>
+            `;
+            statusEl.appendChild(item);
+            statusEl.scrollTop = statusEl.scrollHeight;
+        }
+        
+        async function cleanEverything() {
+            cleanBtn.disabled = true;
+            cleanBtn.textContent = '🔄 Limpiando...';
+            statusEl.innerHTML = '';
+            
+            try {
+                // 1. Desregistrar service workers
+                addStatus('🔧', 'Desregistrando Service Workers...');
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let registration of registrations) {
+                    await registration.unregister();
+                }
+                addStatus('✅', `${registrations.length} Service Worker(s) desregistrados`);
+                
+                // 2. Limpiar localStorage
+                addStatus('🧹', 'Limpiando localStorage...');
+                const keys = ['klinip_scheduled_notifications', 'klinip_notification_settings'];
+                keys.forEach(key => localStorage.removeItem(key));
+                addStatus('✅', 'localStorage limpiado');
+                
+                // 3. Limpiar cache
+                addStatus('🗑️', 'Limpiando caché...');
+                const cacheNames = await caches.keys();
+                for (let name of cacheNames) {
+                    await caches.delete(name);
+                }
+                addStatus('✅', `${cacheNames.length} caché(s) eliminados`);
+                
+                // 4. Limpiar IndexedDB
+                addStatus('💾', 'Limpiando IndexedDB...');
+                try {
+                    await new Promise((resolve, reject) => {
+                        const request = indexedDB.deleteDatabase('klinip-notifications-db');
+                        request.onsuccess = () => resolve();
+                        request.onerror = () => reject();
+                        request.onblocked = () => {
+                            addStatus('⚠️', 'Base de datos bloqueada, cerrando pestañas...', true);
+                            setTimeout(resolve, 1000);
+                        };
+                    });
+                    addStatus('✅', 'IndexedDB limpiado');
+                } catch (err) {
+                    addStatus('⚠️', 'No se pudo limpiar IndexedDB completamente', true);
+                }
+                
+                // 5. Limpiar suscripciones push
+                addStatus('📱', 'Limpiando suscripciones push...');
+                if ('PushManager' in window) {
+                    try {
+                        const reg = await navigator.serviceWorker.ready;
+                        const subscription = await reg.pushManager.getSubscription();
+                        if (subscription) {
+                            await subscription.unsubscribe();
+                            addStatus('✅', 'Suscripción push cancelada');
+                        }
+                    } catch (err) {
+                        addStatus('⚠️', 'No hay suscripción push activa', false);
+                    }
+                }
+                
+                // Éxito
+                addStatus('🎉', '¡Limpieza completada con éxito!');
+                addStatus('👉', 'Haz clic en "Ir a Klinip" para continuar');
+                
+                cleanBtn.style.display = 'none';
+                reloadBtn.style.display = 'block';
+                
+            } catch (error) {
+                addStatus('❌', 'Error durante la limpieza: ' + error.message, true);
+                cleanBtn.disabled = false;
+                cleanBtn.textContent = '🔄 Reintentar';
+            }
+        }
+        
+        function goHome() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>
+

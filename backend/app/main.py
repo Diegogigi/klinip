@@ -1,4 +1,13 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
+from fastapi import (
+    FastAPI,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form,
+    Request,
+    BackgroundTasks,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -196,13 +205,73 @@ def _clean_center_line(line: str) -> str:
     cleaned = re.sub(r"\b\d{1,2}\/\d{1,2}\/\d{2,4}\b", "", cleaned)
     cleaned = re.sub(r"\b\d{1,3}(?:\.\d{3}){2}-\d\b", "", cleaned)
     cleaned = re.sub(r"\b\d{7,}\b", "", cleaned)
-    cleaned = re.sub(r"\b(ingreso|recepcion|impresion)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"\b(sucursal|centro|hospital|clinica|laboratorio)\b\s*:?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(
+        r"\b(ingreso|recepcion|impresion)\b\s*:?", "", cleaned, flags=re.IGNORECASE
+    )
+    cleaned = re.sub(
+        r"\b(sucursal|centro|hospital|clinica|laboratorio)\b\s*:?",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"\b[A-Z]\b$", "", cleaned, flags=re.IGNORECASE)
     return _safe_text(cleaned)
 
 
+def _extract_center_from_electronic_prescription(text: str) -> str | None:
+    """
+    Extrae el centro médico de recetas electrónicas chilenas
+    """
+    if not text:
+        return None
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # Buscar líneas con "Dirección:" en recetas electrónicas
+    for idx, line in enumerate(lines[:20]):
+        normalized = _normalize_text(line)
+        if "direccion" in normalized and ":" in line:
+            # La dirección suele seguir después de los dos puntos
+            if idx + 1 < len(lines):
+                # La siguiente línea suele contener la dirección completa
+                address_line = lines[idx + 1].strip()
+                # Limpiar la dirección
+                # Formato típico: "Pasaje El Boldo #654, Pudahuel, Santiago, Metropolitana de Santiago"
+                # Queremos extraer "Pudahuel, Santiago" o similar
+                parts = address_line.split(",")
+                if len(parts) >= 2:
+                    # Tomar la comuna y región
+                    return _safe_text(
+                        f"{parts[-3].strip()}, {parts[-2].strip()}"
+                        if len(parts) >= 3
+                        else f"{parts[0].strip()}, {parts[1].strip()}"
+                    )
+
+    # Si no encuentra dirección, buscar por profesión/institución
+    for line in lines[:10]:
+        normalized = _normalize_text(line)
+        if "profesion" in normalized or "medico" in normalized:
+            # Buscar si menciona alguna institución
+            if (
+                "hospital" in normalized
+                or "clinica" in normalized
+                or "cesfam" in normalized
+            ):
+                return _clean_center_line(line)
+
+    return None
+
+
 def _guess_center(text: str) -> str | None:
+    """
+    Detecta el centro de salud del documento
+    """
+    # Primero verificar si es receta electrónica
+    if _is_electronic_prescription(text):
+        center = _extract_center_from_electronic_prescription(text)
+        if center:
+            return center
+
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     center_inline = re.compile(
         r"(centro de salud|cesfam)\s*[:\-]?\s*(.+)",
@@ -237,18 +306,50 @@ def _guess_center(text: str) -> str | None:
             cleaned = _clean_center_line(line)
             if cleaned:
                 return cleaned[:120]
-    for line in lines[:6]:
-        lower = _normalize_text(line)
-        if len(lower) >= 12 and any(word.isalpha() for word in lower.split()):
-            cleaned = _clean_center_line(line)
-            if cleaned:
-                return cleaned[:120]
+    # NO buscar en las primeras líneas para recetas electrónicas
+    # porque puede capturar direcciones
     return None
 
 
 def _guess_date(text: str) -> datetime | None:
     if not text:
         return None
+
+    # Patrón específico para recetas electrónicas chilenas
+    # Formato: "Fecha de emisión: 2 de septiembre, 2025"
+    month_names = {
+        "enero": 1,
+        "febrero": 2,
+        "marzo": 3,
+        "abril": 4,
+        "mayo": 5,
+        "junio": 6,
+        "julio": 7,
+        "agosto": 8,
+        "septiembre": 9,
+        "octubre": 10,
+        "noviembre": 11,
+        "diciembre": 12,
+    }
+
+    date_text_pattern = re.compile(
+        r"(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)[,\s]+(\d{4})",
+        re.IGNORECASE,
+    )
+
+    match = date_text_pattern.search(text)
+    if match:
+        try:
+            day = int(match.group(1))
+            month_name = match.group(2).lower()
+            year = int(match.group(3))
+            month = month_names.get(month_name)
+            if month:
+                return datetime(year, month, day)
+        except Exception:
+            pass
+
+    # Patrones numéricos tradicionales
     patterns = [
         r"(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})",
         r"(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})",
@@ -278,6 +379,21 @@ def _guess_date(text: str) -> datetime | None:
 def _guess_notes(text: str) -> str | None:
     if not text:
         return None
+
+    # Si es receta electrónica, no intentar extraer notas genéricas
+    # Los medicamentos se extraerán por separado
+    if _is_electronic_prescription(text):
+        # Buscar "Forma prescriptor" que tiene indicaciones especiales
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        for i, line in enumerate(lines):
+            if "forma prescriptor" in _normalize_text(line):
+                # Las siguientes líneas pueden tener indicaciones importantes
+                if i + 1 < len(lines):
+                    special_instructions = lines[i + 1].strip()
+                    if special_instructions and len(special_instructions) > 10:
+                        return f"Indicaciones especiales: {_safe_text(special_instructions)[:200]}"
+        return None  # No extraer notas genéricas para recetas electrónicas
+
     lab_results = _extract_lab_results(text)
     if lab_results:
         return "\n".join(lab_results)[:400]
@@ -290,12 +406,12 @@ def _guess_notes(text: str) -> str | None:
         "examen",
         "resultado",
         "diagnostico",
-        "indicacion",
         "consulta",
         "control",
         "laboratorio",
         "medicamento",
     )
+    # Excluir "indicacion" de keywords para evitar capturar texto genérico
     value_pattern = re.compile(
         r"([a-zA-Z][a-zA-Z\s]{2,})\s+(\d+(?:[.,]\d+)?)\s*(mg\/dl|mmol\/l|%|g\/l|mg\/l)",
         re.IGNORECASE,
@@ -305,6 +421,12 @@ def _guess_notes(text: str) -> str | None:
         "muestra",
         "corporacion municipal",
         "laboratorio clinico",
+        "indicacion de administracion",  # Ignorar este texto genérico de recetas
+        "via de administracion",
+        "metodo de administracion",
+        "administrar",
+        "frecuencia",
+        "periodo de tratamiento",
     )
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     for line in lines:
@@ -468,6 +590,293 @@ def _extract_order_schedule(text: str) -> dict | None:
     return {"date_time": date_time, "specialty": specialty}
 
 
+def _is_electronic_prescription(text: str) -> bool:
+    """
+    Detecta si el documento es una receta electrónica chilena
+    """
+    if not text:
+        return False
+    normalized = _normalize_text(text)
+
+    # Indicadores de receta electrónica
+    indicators = [
+        "receta electronica",
+        "rp prescripcion",
+        "maria constanza arratia",  # Sistema modelo
+        "ministerio de salud",
+        "minsal",
+        "fecha de emision",
+        "administrar",
+        "periodo de tratamiento",
+    ]
+
+    # Si tiene código de barras o RUT con formato chileno
+    has_barcode = bool(re.search(r"(\d{13}|\*[A-Z0-9]+\*)", text))
+    has_rut = bool(re.search(r"\d{1,2}\.\d{3}\.\d{3}[-]\d{1}[kK0-9]", text))
+
+    matches = sum(1 for indicator in indicators if indicator in normalized)
+
+    return matches >= 2 or (has_rut and has_barcode)
+
+
+def _extract_doctor_name(text: str) -> str | None:
+    """
+    Extrae el nombre del profesional de la receta electrónica
+    """
+    if not text:
+        return None
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # Buscar nombre del profesional en las primeras 10 líneas
+    for idx, line in enumerate(lines[:10]):
+        normalized = _normalize_text(line)
+
+        # Buscar después de "profesional", "medico", "doctor", "dra", "dr"
+        if any(
+            keyword in normalized
+            for keyword in ["profesional", "medico", "doctor", "dra", "dr"]
+        ):
+            # El nombre suele estar en la misma línea o en las siguientes
+            # Patrón: capturar nombre propio (2-4 palabras capitalizadas)
+            name_pattern = re.compile(
+                r"(?:dr\.?|dra\.?|doctor|doctora|profesional)?[\s:]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){1,3})",
+                re.IGNORECASE,
+            )
+            match = name_pattern.search(line)
+            if match:
+                name = match.group(1).strip()
+                # Evitar capturar palabras comunes
+                if len(name) > 5 and "administracion" not in name.lower():
+                    return _safe_text(name)
+
+            # Si no se encontró en la misma línea, buscar en las siguientes 2 líneas
+            for next_idx in range(idx + 1, min(idx + 3, len(lines))):
+                next_line = lines[next_idx]
+                # Buscar línea con nombre propio
+                if re.search(r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ]", next_line):
+                    return _safe_text(next_line)
+
+    return None
+
+
+def _extract_rut(text: str) -> dict:
+    """
+    Extrae RUTs de médico y paciente de formato chileno
+    """
+    ruts = {"patient_rut": None, "doctor_rut": None, "doctor_registry": None}
+
+    if not text:
+        return ruts
+
+    lines = text.splitlines()
+
+    # Patrón RUT chileno: XX.XXX.XXX-X o XXXXXXXX-X
+    rut_pattern = re.compile(r"(\d{1,2}\.?\d{3}\.?\d{3}[-]\d{1}[kK0-9])")
+
+    # Patrón para registro profesional
+    registry_pattern = re.compile(
+        r"(?:registro|rut|run)[\s:]+[\w\d\.\-/]+[\s:]+(\d[\d\.\-/]+\d)", re.IGNORECASE
+    )
+
+    for idx, line in enumerate(lines[:15]):  # Buscar en primeras 15 líneas
+        normalized = _normalize_text(line)
+
+        # Buscar RUT del médico (usualmente al inicio)
+        if idx < 5:
+            rut_matches = rut_pattern.findall(line)
+            if rut_matches and not ruts["doctor_rut"]:
+                ruts["doctor_rut"] = rut_matches[0]
+
+            # Buscar registro profesional
+            if "registro" in normalized or "ris" in normalized:
+                reg_match = re.search(r"(\d{6,8})", line)
+                if reg_match:
+                    ruts["doctor_registry"] = reg_match.group(1)
+
+        # Buscar RUT del paciente (después de "paciente" o "rut")
+        if "paciente" in normalized or ("rut" in normalized and idx > 3):
+            rut_matches = rut_pattern.findall(line)
+            if rut_matches:
+                # El RUT del paciente suele ser diferente al del médico
+                for rut in rut_matches:
+                    if rut != ruts["doctor_rut"]:
+                        ruts["patient_rut"] = rut
+                        break
+
+    return ruts
+
+
+def _extract_electronic_prescription_meds(text: str) -> list[dict]:
+    """
+    Extrae medicamentos de recetas electrónicas chilenas con formato específico
+    Las recetas electrónicas chilenas tienen el formato:
+
+    nombre_medicamento dosis forma
+
+    Administrar:
+    Dosis
+    X comprimido
+    Vía de Administración
+    oral
+    Frecuencia
+    Administrar cada X horas
+    Periodo de Tratamiento
+    Durante X días
+    """
+    if not text:
+        return []
+
+    medications = []
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+    # Patrón para detectar línea de medicamento principal
+    # Formato: "nombre dosis unidad forma"
+    med_name_pattern = re.compile(
+        r"^([a-záéíóúñ\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ug|ui|%)\s+(comprimido|capsula|tableta|jarabe|suspension|solucion|gotas|crema|gel|pomada|iny)",
+        re.IGNORECASE,
+    )
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Detectar inicio de medicamento
+        med_match = med_name_pattern.search(line)
+
+        if med_match:
+            name = _safe_text(med_match.group(1))
+            dose_value = med_match.group(2)
+            dose_unit = med_match.group(3)
+            form = med_match.group(4).lower()
+
+            dose = f"{dose_value} {dose_unit}"
+
+            # Buscar "Administrar:" en las siguientes líneas
+            admin_amount = "1"
+            via = ""
+            method = ""
+            frequency = ""
+            duration_days = None
+
+            # Buscar en las siguientes 30 líneas o hasta encontrar otro medicamento
+            j = i + 1
+            while j < min(i + 30, len(lines)):
+                current_line = lines[j]
+                next_line = lines[j + 1] if j + 1 < len(lines) else ""
+                normalized = _normalize_text(current_line)
+
+                # Si encontramos otro medicamento, detenernos
+                if med_name_pattern.search(current_line) and j > i + 2:
+                    break
+
+                # Buscar cantidad a administrar (línea después de "Dosis")
+                if normalized == "dosis" and next_line:
+                    # La siguiente línea tiene la cantidad
+                    dose_match = re.search(
+                        r"(\d+)\s*(comprimido|capsula|tableta|ml|g)",
+                        next_line,
+                        re.IGNORECASE,
+                    )
+                    if dose_match:
+                        admin_amount = dose_match.group(1)
+
+                # Buscar vía de administración (línea después de "Vía de Administración" o "Vía")
+                if "via" in normalized and "administracion" in normalized:
+                    # La siguiente línea tiene la vía
+                    if next_line:
+                        via_normalized = _normalize_text(next_line)
+                        if via_normalized in [
+                            "oral",
+                            "topica",
+                            "intramuscular",
+                            "intravenosa",
+                            "sublingual",
+                            "cutanea",
+                            "oftalmica",
+                        ]:
+                            via = next_line.lower()
+
+                # Buscar método (línea después de "Método de Administración")
+                if "metodo" in normalized and "administracion" in normalized:
+                    if next_line:
+                        method_normalized = _normalize_text(next_line)
+                        if method_normalized in [
+                            "tragar",
+                            "masticar",
+                            "disolver",
+                            "aplicar",
+                            "inyectar",
+                        ]:
+                            method = next_line.lower()
+
+                # Buscar frecuencia
+                if "frecuencia" in normalized:
+                    # La siguiente línea o la misma pueden tener la frecuencia
+                    freq_text = current_line + " " + next_line
+                    freq_match = re.search(
+                        r"cada\s+(\d+)\s+horas?", freq_text, re.IGNORECASE
+                    )
+                    if freq_match:
+                        hours = freq_match.group(1)
+                        frequency = f"cada {hours} horas"
+
+                # Buscar periodo de tratamiento
+                if "periodo" in normalized or "durante" in normalized:
+                    period_text = current_line + " " + next_line
+                    period_match = re.search(
+                        r"(\d+)\s+d[ií]as?", period_text, re.IGNORECASE
+                    )
+                    if period_match:
+                        duration_days = int(period_match.group(1))
+
+                j += 1
+
+            # Construir frecuencia completa
+            full_frequency = f"{admin_amount} {form}"
+            if via:
+                full_frequency += f", vía {via}"
+            if method:
+                full_frequency += f", {method}"
+            if frequency:
+                full_frequency += f", {frequency}"
+            elif not frequency and via:
+                # Si no hay frecuencia específica, al menos mencionar que es diario
+                full_frequency += f", según indicación"
+
+            # Construir información detallada de administración para las notas
+            admin_details = []
+            admin_details.append(f"Dosis: {admin_amount} {form}")
+            if via:
+                admin_details.append(f"Vía: {via}")
+            if method:
+                admin_details.append(f"Método: {method}")
+            if frequency:
+                admin_details.append(f"Frecuencia: {frequency}")
+            if duration_days:
+                admin_details.append(f"Duración: {duration_days} días")
+
+            raw_info = f"{name} {dose}\n" + " | ".join(admin_details)
+
+            medications.append(
+                {
+                    "name": name,
+                    "dose": dose,
+                    "frequency": full_frequency,
+                    "duration_days": duration_days,
+                    "route": via,
+                    "form": form,
+                    "raw": raw_info,
+                }
+            )
+
+            i = j  # Saltar a donde terminamos de buscar
+        else:
+            i += 1
+
+    return medications
+
+
 def _extract_medication_from_text(text: str) -> dict | None:
     if not text:
         return None
@@ -596,7 +1005,9 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
             text = pytesseract.image_to_string(img, lang=lang, config="--oem 3 --psm 6")
         except Exception:
             # Fallback to English if the language pack is missing.
-            text = pytesseract.image_to_string(img, lang="eng", config="--oem 3 --psm 6")
+            text = pytesseract.image_to_string(
+                img, lang="eng", config="--oem 3 --psm 6"
+            )
         texts.append(text)
     return "\n".join(texts)
 
@@ -604,7 +1015,9 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
 def _run_document_ocr(document_id: int):
     db = SessionLocal()
     try:
-        doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+        doc = (
+            db.query(models.Document).filter(models.Document.id == document_id).first()
+        )
         if not doc:
             return
         doc.ocr_status = "processing"
@@ -647,24 +1060,88 @@ def _run_document_ocr(document_id: int):
                 doc.notes = guess_notes
 
         if doc.doc_type == models.DocumentType.receta:
-            existing_med = (
+            # Detectar si es receta electrónica chilena
+            is_electronic = _is_electronic_prescription(text)
+
+            if is_electronic:
+                # Extraer RUTs y nombre del profesional
+                ruts = _extract_rut(text)
+                doctor_name = _extract_doctor_name(text)
+
+                # Si no hay centro de salud, usar el nombre del profesional
+                if not doc.center and doctor_name:
+                    center_parts = [doctor_name]
+                    if ruts["doctor_rut"]:
+                        center_parts.append(f"RUT: {ruts['doctor_rut']}")
+                    doc.center = " | ".join(center_parts)
+
+                # Construir información para las notas
+                if ruts["patient_rut"] or ruts["doctor_rut"]:
+                    rut_info_parts = []
+
+                    if ruts["patient_rut"]:
+                        rut_info_parts.append(f"Paciente RUT: {ruts['patient_rut']}")
+
+                    if doctor_name:
+                        rut_info_parts.append(f"Profesional: {doctor_name}")
+
+                    if ruts["doctor_rut"]:
+                        rut_info_parts.append(f"Profesional RUT: {ruts['doctor_rut']}")
+
+                    if ruts["doctor_registry"]:
+                        rut_info_parts.append(f"Registro: {ruts['doctor_registry']}")
+
+                    rut_info = " | ".join(rut_info_parts)
+
+                    if not doc.notes:
+                        doc.notes = f"📋 Receta Electrónica MINSAL\n{rut_info}"
+                    elif "Receta Electronica" not in doc.notes:
+                        doc.notes = (
+                            f"📋 Receta Electrónica MINSAL\n{rut_info}\n\n{doc.notes}"
+                        )
+
+            # Verificar si ya existen medicamentos
+            existing_meds = (
                 db.query(models.Medication)
                 .filter(models.Medication.document_id == doc.id)
-                .first()
+                .all()
             )
-            if not existing_med:
-                med = _extract_medication_from_text(text)
-                if med and (med.get("name") or med.get("dose") or med.get("frequency")):
-                    start_date = doc.date or datetime.utcnow()
+
+            if not existing_meds:
+                medications_to_add = []
+
+                # Intentar primero con extractor de recetas electrónicas
+                if is_electronic:
+                    medications_to_add = _extract_electronic_prescription_meds(text)
+
+                # Si no se encontraron medicamentos o no es receta electrónica, usar método general
+                if not medications_to_add:
+                    med = _extract_medication_from_text(text)
+                    if med and (
+                        med.get("name") or med.get("dose") or med.get("frequency")
+                    ):
+                        medications_to_add = [med]
+
+                # Agregar medicamentos encontrados
+                for med in medications_to_add:
+                    start_date = doc.date or datetime.now()
                     end_date = None
                     duration_days = med.get("duration_days")
                     if duration_days:
                         end_date = start_date + timedelta(days=duration_days)
-                    duration_label = (
-                        f"{duration_days} dias" if duration_days else ""
-                    )
-                    med_notes_parts = [med.get("raw"), med.get("route")]
-                    med_notes = " ".join([p for p in med_notes_parts if p]).strip()
+                    duration_label = f"{duration_days} dias" if duration_days else ""
+
+                    # Para recetas electrónicas, usar el campo "raw" que tiene todos los detalles estructurados
+                    # Para otras recetas, construir las notas con la info disponible
+                    if is_electronic and med.get("raw"):
+                        med_notes = med.get("raw")
+                    else:
+                        med_notes_parts = [
+                            med.get("raw"),
+                            med.get("route"),
+                            med.get("form"),
+                        ]
+                        med_notes = " ".join([p for p in med_notes_parts if p]).strip()
 
                     medication = models.Medication(
                         user_id=doc.user_id,
@@ -678,11 +1155,19 @@ def _run_document_ocr(document_id: int):
                     )
                     db.add(medication)
 
-                    if med_notes:
-                        if not doc.notes:
-                            doc.notes = med_notes
-                        elif med_notes not in doc.notes:
-                            doc.notes = f"{doc.notes}\n{med_notes}"
+                    # Agregar info detallada del medicamento a las notas del documento
+                    # Para recetas electrónicas, usar el formato estructurado completo
+                    if is_electronic and med.get("raw"):
+                        med_summary = f"💊 {med.get('raw')}"
+                    else:
+                        med_summary = f"💊 {med.get('name', 'Medicamento')}: {med.get('dose', '')} - {med.get('frequency', '')}"
+
+                    if doc.notes:
+                        # Evitar duplicados verificando si el nombre del medicamento ya está
+                        if med.get("name") not in doc.notes:
+                            doc.notes = f"{doc.notes}\n\n{med_summary}"
+                    else:
+                        doc.notes = med_summary
 
         if doc.doc_type == models.DocumentType.orden:
             if not doc.appointment_id:
@@ -724,6 +1209,7 @@ def _run_document_ocr(document_id: int):
         db.commit()
     finally:
         db.close()
+
 
 # Configurar CORS
 # En producción, permitir todos los orígenes (Railway puede usar diferentes dominios)
@@ -1141,19 +1627,13 @@ async def subscribe_push(
     if not (sub_in.endpoint and p256dh and auth_key):
         raise HTTPException(status_code=400, detail="SuscripciЧn incompleta")
 
-    existing = (
-        db.query(models.PushSubscription)
-        .filter(models.PushSubscription.endpoint == sub_in.endpoint)
-        .first()
-    )
-    if existing:
-        existing.user_id = current_user.id
-        existing.p256dh = p256dh
-        existing.auth = auth_key
-        db.commit()
-        db.refresh(existing)
-        return existing
+    # Eliminar todas las suscripciones antiguas del usuario para evitar duplicados
+    db.query(models.PushSubscription).filter(
+        models.PushSubscription.user_id == current_user.id
+    ).delete()
+    db.commit()
 
+    # Crear nueva suscripción única para el usuario
     sub = models.PushSubscription(
         user_id=current_user.id,
         endpoint=sub_in.endpoint,
@@ -1164,6 +1644,36 @@ async def subscribe_push(
     db.commit()
     db.refresh(sub)
     return sub
+
+
+@app.post("/push/cleanup-duplicates")
+async def cleanup_duplicate_subscriptions(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Elimina suscripciones duplicadas, manteniendo solo la más reciente
+    """
+    all_subs = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .all()
+    )
+
+    if len(all_subs) <= 1:
+        return {"message": "No hay suscripciones duplicadas", "removed": 0}
+
+    # Mantener solo la más reciente (primera en la lista)
+    to_remove = all_subs[1:]
+    for sub in to_remove:
+        db.delete(sub)
+
+    db.commit()
+    return {
+        "message": f"Se eliminaron {len(to_remove)} suscripciones duplicadas",
+        "removed": len(to_remove),
+    }
 
 
 @app.delete("/push/unsubscribe")
@@ -1211,6 +1721,183 @@ async def test_push(
         },
     )
     return {"sent": ok}
+
+
+@app.post("/push/send-reminders")
+async def send_appointment_reminders(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Enviar recordatorios push para citas próximas
+    """
+    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+        raise HTTPException(
+            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+        )
+
+    # Obtener citas del usuario con fecha
+    appointments = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.user_id == current_user.id,
+            models.Appointment.date_time.isnot(None),
+            models.Appointment.status != models.AppointmentStatus.realizada,
+        )
+        .all()
+    )
+
+    if not appointments:
+        return {"sent": 0, "message": "No hay citas programadas"}
+
+    # Obtener la suscripción push más reciente del usuario (solo una para evitar duplicados)
+    subscription = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .first()
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=404, detail="No hay suscripciones push para el usuario"
+        )
+
+    sent_count = 0
+    now = datetime.now()
+
+    for appt in appointments:
+        if not appt.date_time:
+            continue
+
+        # Calcular días hasta la cita
+        time_until = appt.date_time - now
+        days_until = time_until.days
+        hours_until = time_until.total_seconds() / 3600
+
+        # Determinar si enviar recordatorio
+        should_send = False
+        message = ""
+        priority = "normal"
+        icon = "🟡"
+
+        if 0 < hours_until <= 2:
+            should_send = True
+            message = "Tu cita es en menos de 2 horas"
+            priority = "urgent"
+            icon = "🔴"
+        elif 0 < days_until <= 1:
+            should_send = True
+            message = "Tu cita es mañana"
+            priority = "high"
+            icon = "🟠"
+        elif days_until == 3:
+            should_send = True
+            message = "Tu cita es en 3 días"
+            priority = "normal"
+            icon = "🟡"
+        elif days_until == 7:
+            should_send = True
+            message = "Tu cita es en una semana"
+            priority = "low"
+            icon = "🟢"
+
+        if should_send:
+            title = f"{icon} Recordatorio: {appt.specialty or appt.type}"
+            body = f"{message}\n📅 {appt.date_time.strftime('%d/%m/%Y %H:%M')}\n📍 {appt.center or 'Centro médico'}"
+
+            ok = send_web_push(
+                subscription,
+                {
+                    "title": title,
+                    "body": body,
+                    "url": "/appointments",
+                    "priority": priority,
+                    "sound": "appointment",
+                    "appointmentId": appt.id,
+                },
+            )
+            if ok:
+                sent_count += 1
+
+    return {
+        "sent": sent_count,
+        "appointments_checked": len(appointments),
+        "message": f"Se enviaron {sent_count} recordatorios",
+    }
+
+
+@app.post("/push/send-medication-reminders")
+async def send_medication_reminders(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Enviar recordatorios push para medicación del día
+    """
+    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+        raise HTTPException(
+            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+        )
+
+    # Obtener medicamentos activos del usuario
+    today = datetime.now()
+    medications = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.user_id == current_user.id,
+            models.Medication.end_date.isnot(None),
+            models.Medication.end_date >= today,
+        )
+        .all()
+    )
+
+    if not medications:
+        return {"sent": 0, "message": "No hay medicamentos activos"}
+
+    # Obtener la suscripción push más reciente del usuario (solo una para evitar duplicados)
+    subscription = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .first()
+    )
+
+    if not subscription:
+        raise HTTPException(
+            status_code=404, detail="No hay suscripciones push para el usuario"
+        )
+
+    sent_count = 0
+
+    for med in medications:
+        title = f"💊 Recordatorio: {med.name}"
+        body = f"Es hora de tomar tu medicamento"
+        if med.dose:
+            body += f"\nDosis: {med.dose}"
+        if med.frequency:
+            body += f"\nFrecuencia: {med.frequency}"
+
+        ok = send_web_push(
+            subscription,
+            {
+                "title": title,
+                "body": body,
+                "url": "/medications",
+                "priority": "high",
+                "sound": "medication",
+                "medicationId": med.id,
+            },
+        )
+        if ok:
+            sent_count += 1
+
+    return {
+        "sent": sent_count,
+        "medications_checked": len(medications),
+        "message": f"Se enviaron {sent_count} recordatorios",
+    }
 
 
 # Documents
@@ -1492,9 +2179,9 @@ if os.path.exists(static_dir):
             raise HTTPException(status_code=404, detail="File not found")
 
         # Evitar que directorios de assets devuelvan el index.html.
-        if (full_path == "assets" or full_path.startswith("assets/")) and not os.path.isfile(
-            file_path
-        ):
+        if (
+            full_path == "assets" or full_path.startswith("assets/")
+        ) and not os.path.isfile(file_path):
             raise HTTPException(status_code=404, detail="Not found")
 
         # Extensiones de archivos estáticos que deben servirse con su tipo MIME correcto

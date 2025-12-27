@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_serializer
 from .models import AppointmentType, AppointmentStatus, DocumentType
 
 
@@ -15,6 +15,13 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
     class Config:
         from_attributes = True
@@ -52,6 +59,13 @@ class AppointmentOut(AppointmentBase):
     user_id: Optional[int]
     created_at: datetime
 
+    @field_serializer('date_time', 'created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
     class Config:
         from_attributes = True
 
@@ -71,6 +85,13 @@ class DocumentOut(DocumentBase):
     ocr_status: Optional[str] = None
     ocr_lang: Optional[str] = None
     created_at: datetime
+
+    @field_serializer('date', 'created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
     class Config:
         from_attributes = True
@@ -113,6 +134,13 @@ class MedicationOut(MedicationBase):
     user_id: int
     created_at: datetime
 
+    @field_serializer('end_date', 'created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
     class Config:
         from_attributes = True
 
@@ -126,6 +154,13 @@ class PushSubscriptionOut(BaseModel):
     id: int
     endpoint: str
     created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
     class Config:
         from_attributes = True

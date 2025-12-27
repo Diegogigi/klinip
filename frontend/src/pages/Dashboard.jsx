@@ -271,9 +271,12 @@ export default function Dashboard({ user }) {
   }, [appointments]);
 
   useEffect(() => {
-    if (!notificationsReady) return;
-    scheduleReminderNotifications(reminders);
-    scheduleMedicationNotifications(medications);
+    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
+    // Para evitar duplicados, solo confiamos en el sistema de push notifications
+    // Si quieres reactivar notificaciones locales, descomenta las siguientes líneas:
+    // if (!notificationsReady) return;
+    // scheduleReminderNotifications(reminders);
+    // scheduleMedicationNotifications(medications);
   }, [notificationsReady, reminders, medications]);
 
   const exportCsv = () => {

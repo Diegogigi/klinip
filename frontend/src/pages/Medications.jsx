@@ -24,13 +24,15 @@ export default function Medications() {
   const load = async () => {
     const data = await getMedications();
     setMeds(data || []);
-    scheduleMedicationNotifications(data || []);
+    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
+    // scheduleMedicationNotifications(data || []);
   };
 
   useEffect(() => {
     load();
     requestNotificationPermission();
-    return () => scheduleMedicationNotifications([]);
+    // DESACTIVADO: No programar notificaciones locales para evitar duplicados
+    // return () => scheduleMedicationNotifications([]);
   }, []);
 
   const resetForm = () => {

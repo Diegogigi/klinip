@@ -43,7 +43,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
@@ -65,7 +65,7 @@ class Appointment(Base):
     status = Column(Enum(AppointmentStatus), default=AppointmentStatus.pendiente)
     notes = Column(Text, nullable=True)
     checklist = Column(JSON, default=list)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="appointments")
     documents = relationship("Document", back_populates="appointment")
@@ -83,13 +83,13 @@ class Document(Base):
     )  # Mantener para compatibilidad con documentos antiguos
     file_data = Column(LargeBinary, nullable=True)  # Datos del archivo en la BD
     filename = Column(String, nullable=True)  # Nombre original del archivo
-    date = Column(DateTime, default=datetime.utcnow)
+    date = Column(DateTime, default=datetime.now)
     center = Column(String, default="")
     notes = Column(Text, nullable=True)
     ocr_text = Column(Text, nullable=True)
     ocr_status = Column(String, default="pending")
     ocr_lang = Column(String, default="spa")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="documents")
     appointment = relationship("Appointment", back_populates="documents")
@@ -107,7 +107,7 @@ class Medication(Base):
     end_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")
     document = relationship("Document")
@@ -121,6 +121,6 @@ class PushSubscription(Base):
     endpoint = Column(String, unique=True, nullable=False)
     p256dh = Column(String, nullable=False)
     auth = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")

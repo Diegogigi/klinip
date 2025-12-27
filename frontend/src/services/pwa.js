@@ -58,13 +58,24 @@ export async function ensurePushSubscription() {
   const permission = await Notification.requestPermission();
   if (permission !== "granted") return false;
   const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) {
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
-    });
+  
+  // Cancelar cualquier suscripción anterior para evitar duplicados
+  let existingSub = await reg.pushManager.getSubscription();
+  if (existingSub) {
+    try {
+      await existingSub.unsubscribe();
+      console.log("Suscripción anterior cancelada para evitar duplicados");
+    } catch (err) {
+      console.warn("No se pudo cancelar suscripción anterior:", err);
+    }
   }
+  
+  // Crear nueva suscripción
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
+  });
+  
   await subscribePush({
     endpoint: sub.endpoint,
     keys: sub.toJSON().keys,
