@@ -71,14 +71,28 @@ export default function NotificationSettings({ onClose }) {
 
   const handleEnablePush = async () => {
     try {
+      console.log("🔄 Iniciando habilitación de push...");
       const success = await ensurePushSubscription();
       setPushEnabled(success);
       if (success) {
-        alert("✅ Notificaciones push habilitadas correctamente");
+        alert("✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.");
       }
     } catch (err) {
-      console.error("Error habilitando push:", err);
-      alert("❌ Error al habilitar notificaciones push");
+      console.error("❌ Error habilitando push:", err);
+      
+      // Mostrar mensaje de error específico
+      let errorMessage = "❌ Error al habilitar notificaciones push:\n\n";
+      
+      if (err.message) {
+        errorMessage += err.message;
+      } else {
+        errorMessage += "Error desconocido. Verifica:\n";
+        errorMessage += "• Estar en HTTPS (no HTTP)\n";
+        errorMessage += "• Tener permisos de notificaciones\n";
+        errorMessage += "• Conexión a internet\n";
+      }
+      
+      alert(errorMessage);
     }
   };
 

@@ -267,3 +267,4 @@ Para reportar problemas con el reconocimiento de recetas electrónicas:
 
 **Desarrollado para Klinip - Sistema de Gestión de Salud Personal** 🏥
 
+

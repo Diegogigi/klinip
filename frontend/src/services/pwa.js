@@ -50,37 +50,73 @@ export async function registerServiceWorker() {
 }
 
 export async function ensurePushSubscription() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-  if (!PUBLIC_VAPID_KEY) {
-    console.warn("VITE_VAPID_PUBLIC_KEY no configurada; no se suscribe a push");
-    return false;
-  }
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return false;
-  const reg = await navigator.serviceWorker.ready;
-  
-  // Cancelar cualquier suscripción anterior para evitar duplicados
-  let existingSub = await reg.pushManager.getSubscription();
-  if (existingSub) {
-    try {
-      await existingSub.unsubscribe();
-      console.log("Suscripción anterior cancelada para evitar duplicados");
-    } catch (err) {
-      console.warn("No se pudo cancelar suscripción anterior:", err);
+  try {
+    // 1. Verificar compatibilidad del navegador
+    if (!("serviceWorker" in navigator)) {
+      throw new Error("Tu navegador no soporta Service Workers");
     }
+    
+    if (!("PushManager" in window)) {
+      throw new Error("Tu navegador no soporta notificaciones push");
+    }
+    
+    // 2. Verificar HTTPS (requerido en móviles)
+    if (location.protocol !== "https:" && location.hostname !== "localhost") {
+      throw new Error("Las notificaciones push requieren HTTPS. Por favor accede usando https://");
+    }
+    
+    // 3. Verificar clave VAPID
+    if (!PUBLIC_VAPID_KEY || PUBLIC_VAPID_KEY.trim() === "") {
+      throw new Error("Error de configuración: Falta la clave VAPID. Contacta al administrador.");
+    }
+    
+    // 4. Solicitar permiso de notificaciones
+    console.log("Solicitando permiso de notificaciones...");
+    const permission = await Notification.requestPermission();
+    console.log("Permiso obtenido:", permission);
+    
+    if (permission !== "granted") {
+      throw new Error("Debes permitir las notificaciones en tu navegador");
+    }
+    
+    // 5. Esperar a que el service worker esté listo
+    console.log("Esperando service worker...");
+    const reg = await navigator.serviceWorker.ready;
+    console.log("Service worker listo");
+    
+    // 6. Cancelar cualquier suscripción anterior para evitar duplicados
+    let existingSub = await reg.pushManager.getSubscription();
+    if (existingSub) {
+      try {
+        console.log("Cancelando suscripción anterior...");
+        await existingSub.unsubscribe();
+        console.log("Suscripción anterior cancelada");
+      } catch (err) {
+        console.warn("No se pudo cancelar suscripción anterior:", err);
+      }
+    }
+    
+    // 7. Crear nueva suscripción
+    console.log("Creando nueva suscripción push...");
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
+    });
+    console.log("Suscripción creada:", sub.endpoint);
+    
+    // 8. Enviar suscripción al servidor
+    console.log("Enviando suscripción al servidor...");
+    await subscribePush({
+      endpoint: sub.endpoint,
+      keys: sub.toJSON().keys,
+    });
+    console.log("✅ Suscripción registrada en el servidor");
+    
+    return true;
+  } catch (error) {
+    console.error("❌ Error en ensurePushSubscription:", error);
+    throw error; // Re-lanzar el error para que el componente lo maneje
   }
-  
-  // Crear nueva suscripción
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
-  });
-  
-  await subscribePush({
-    endpoint: sub.endpoint,
-    keys: sub.toJSON().keys,
-  });
-  return true;
 }
 
 export async function removePushSubscription() {
