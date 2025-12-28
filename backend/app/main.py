@@ -1693,6 +1693,27 @@ async def unsubscribe_push(
     return {"ok": True}
 
 
+@app.get("/push/status")
+async def get_push_status(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Verificar si el usuario tiene una suscripción push activa
+    """
+    subscription = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == current_user.id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .first()
+    )
+    return {
+        "enabled": subscription is not None,
+        "subscription_id": subscription.id if subscription else None,
+        "created_at": subscription.created_at if subscription else None,
+    }
+
+
 @app.post("/push/test")
 async def test_push(
     db: Session = Depends(auth.get_db),

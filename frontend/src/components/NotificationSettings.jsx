@@ -7,7 +7,7 @@ import {
   scheduleMedicationNotifications
 } from "../services/notificationManager";
 import { ensurePushSubscription, removePushSubscription } from "../services/pwa";
-import { getAppointments, getMedications } from "../services/httpApi";
+import { getAppointments, getMedications, getPushStatus } from "../services/httpApi";
 import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose }) {
@@ -32,11 +32,24 @@ export default function NotificationSettings({ onClose }) {
     loadNotificationStatus();
     loadSettings();
     updateStats();
+    loadPushStatus();
   }, []);
 
   const loadNotificationStatus = () => {
     if ("Notification" in window) {
       setNotificationsEnabled(Notification.permission === "granted");
+    }
+  };
+
+  const loadPushStatus = async () => {
+    try {
+      const status = await getPushStatus();
+      setPushEnabled(status.enabled);
+      console.log("📊 Estado de push cargado:", status);
+    } catch (err) {
+      console.error("Error cargando estado de push:", err);
+      // Si hay error (ej: no autenticado), asumimos push deshabilitado
+      setPushEnabled(false);
     }
   };
 
@@ -73,8 +86,9 @@ export default function NotificationSettings({ onClose }) {
     try {
       console.log("🔄 Iniciando habilitación de push...");
       const success = await ensurePushSubscription();
-      setPushEnabled(success);
       if (success) {
+        // Verificar el estado desde el servidor para confirmar
+        await loadPushStatus();
         alert("✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.");
       }
     } catch (err) {
@@ -93,6 +107,7 @@ export default function NotificationSettings({ onClose }) {
       }
       
       alert(errorMessage);
+      setPushEnabled(false);
     }
   };
 
@@ -101,6 +116,8 @@ export default function NotificationSettings({ onClose }) {
       await removePushSubscription();
       setPushEnabled(false);
       alert("🔕 Notificaciones push deshabilitadas");
+      // Verificar el estado desde el servidor para confirmar
+      await loadPushStatus();
     } catch (err) {
       console.error("Error deshabilitando push:", err);
     }

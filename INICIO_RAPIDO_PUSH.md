@@ -143,3 +143,4 @@ El servidor enviará automáticamente:
 - Recordatorios de citas (7 días, 3 días, 1 día, 2 horas, 30 minutos antes)
 - Recordatorios de medicamentos (según los horarios configurados)
 
+

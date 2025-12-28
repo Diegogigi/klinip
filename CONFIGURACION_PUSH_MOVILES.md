@@ -268,3 +268,4 @@ Para que las notificaciones push funcionen en móvil necesitas:
 Una vez configurado todo correctamente, el botón funcionará y verás el mensaje:
 
 > ✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.
+
