@@ -111,9 +111,22 @@ async function checkAndShowPendingNotifications() {
     const notifications = await store.getAll();
     
     const now = Date.now();
+    // Mostrar notificaciones que:
+    // 1. Su tiempo de activación ya pasó (triggerAt <= now)
+    // 2. No son muy antiguas (> now - 60000, o sea, menos de 1 minuto de antigüedad)
     const toShow = notifications.filter(n => n.triggerAt <= now && n.triggerAt > now - 60000);
     
+    console.log(`🔍 Verificando notificaciones: ${notifications.length} totales, ${toShow.length} listas para mostrar`);
+    
     for (const notification of toShow) {
+      // Verificar deduplicación antes de mostrar
+      if (!shouldShowNotification(notification.tag)) {
+        console.log(`⏸️ Notificación local duplicada ignorada: ${notification.tag}`);
+        continue;
+      }
+
+      console.log(`📢 Mostrando notificación: ${notification.title}`);
+      
       await self.registration.showNotification(notification.title, {
         body: notification.body,
         icon: notification.icon || "/icons/k_logo.png",
@@ -132,9 +145,10 @@ async function checkAndShowPendingNotifications() {
       const deleteTx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
       const deleteStore = deleteTx.objectStore(NOTIFICATIONS_STORE);
       await deleteStore.delete(notification.id);
+      console.log(`🗑️ Notificación eliminada de la cola: ${notification.id}`);
     }
   } catch (err) {
-    console.error("Error verificando notificaciones:", err);
+    console.error("❌ Error verificando notificaciones:", err);
   }
 }
 
@@ -156,12 +170,14 @@ function openNotificationsDB() {
   });
 }
 
-// Verificar notificaciones periódicamente
-// DESACTIVADO: Verificación periódica puede causar notificaciones duplicadas
-// Solo confiar en push notifications desde el servidor
-// setInterval(() => {
-//   checkAndShowPendingNotifications();
-// }, 60000); // Cada minuto
+// Verificar notificaciones programadas periódicamente
+console.log("⏰ Iniciando verificación periódica de notificaciones programadas");
+setInterval(() => {
+  checkAndShowPendingNotifications();
+}, 60000); // Cada minuto
+
+// También verificar al iniciar
+checkAndShowPendingNotifications();
 
 // Sistema de deduplicación global para evitar notificaciones repetidas
 const recentlyShownNotifications = new Map(); // tag -> timestamp

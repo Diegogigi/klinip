@@ -159,6 +159,10 @@ export default function NotificationSettings({ onClose }) {
         // Verificar el estado desde el servidor para confirmar
         await loadPushStatus();
         
+        // Programar notificaciones locales
+        console.log("📅 Programando notificaciones locales...");
+        await rescheduleNotifications();
+        
         console.log("✅ NOTIFICACIONES PUSH HABILITADAS");
         console.log("═".repeat(50));
         alert("✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.");
@@ -211,26 +215,41 @@ export default function NotificationSettings({ onClose }) {
 
   const rescheduleNotifications = async () => {
     try {
+      console.log("🔄 Reprogramando notificaciones...");
       clearScheduledNotifications();
 
-      // NOTA: Las notificaciones ahora se envían automáticamente desde el servidor
-      // vía push notifications. No es necesario programarlas localmente.
-      // El servidor enviará recordatorios basándose en las citas y medicamentos.
-      
-      // Si quieres usar notificaciones locales además de push, descomenta:
-      // if (settings.appointmentReminders) {
-      //   const appointments = await getAppointments();
-      //   const offsets = buildCustomOffsets();
-      //   scheduleReminderNotifications(appointments, offsets);
-      // }
-      //
-      // if (settings.medicationReminders) {
-      //   const medications = await getMedications();
-      //   scheduleMedicationNotifications(medications);
-      // }
+      let programadas = 0;
+
+      // Programar recordatorios de citas
+      if (settings.appointmentReminders) {
+        console.log("📅 Cargando citas...");
+        const appointments = await getAppointments();
+        const offsets = buildCustomOffsets();
+        console.log(`   └─ ${appointments.length} citas encontradas`);
+        console.log(`   └─ ${offsets.length} momentos de recordatorio`);
+        scheduleReminderNotifications(appointments, offsets);
+        programadas += appointments.length * offsets.length;
+      }
+
+      // Programar recordatorios de medicamentos
+      if (settings.medicationReminders) {
+        console.log("💊 Cargando medicamentos...");
+        const medications = await getMedications();
+        console.log(`   └─ ${medications.length} medicamentos encontrados`);
+        scheduleMedicationNotifications(medications);
+        programadas += medications.length;
+      }
 
       updateStats();
-      alert("✅ Configuración guardada. Las notificaciones push se enviarán automáticamente desde el servidor.");
+      
+      console.log(`✅ ${programadas} notificaciones programadas`);
+      
+      // No mostrar alert si se llamó desde handleEnablePush
+      if (pushEnabled) {
+        console.log("💡 Notificaciones locales programadas + Push del servidor activo");
+      } else {
+        alert(`✅ ${programadas} notificaciones programadas.`);
+      }
     } catch (err) {
       console.error("Error reprogramando notificaciones:", err);
       alert("❌ Error al reprogramar notificaciones");
