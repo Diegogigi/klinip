@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from "react";
 import NotificationSettings from "../components/NotificationSettings";
-import { updateMe } from "../api";
+import { updateMe, getAppointments, getDocuments } from "../api";
+import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
 
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
   const profile = user || {};
   const plan = "Backend activo";
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -35,6 +37,120 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     } catch (err) {
       setTimezoneStatus("No se pudo actualizar la zona horaria");
       console.error("Error actualizando zona horaria:", err);
+    }
+  };
+
+  const loadExportData = async () => {
+    const [appointments, documents] = await Promise.all([getAppointments(), getDocuments()]);
+    return {
+      appointments: appointments || [],
+      documents: documents || [],
+    };
+  };
+
+  const exportCsv = async () => {
+    const { appointments } = await loadExportData();
+    if (!appointments.length) {
+      window.alert("No hay citas para exportar.");
+      return;
+    }
+    const header = ["id", "tipo", "especialidad", "centro", "fecha", "estado", "notas"];
+    const rows = appointments.map((a) => [
+      a.id,
+      a.type,
+      a.specialty || "",
+      a.center || "",
+      a.date_time ? toIsoOrNull(a.date_time) || "" : "",
+      a.status,
+      (a.notes || "").replace(/\"/g, '\"\"'),
+    ]);
+    const csv = [header.join(","), ...rows.map((r) => r.map((x) => `"${x}"`).join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "citas.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportPdf = async () => {
+    const { appointments, documents } = await loadExportData();
+    const html = `
+      <html>
+        <head>
+          <title>Klinip - Resumen</title>
+          <style>
+            body { font-family: Poppins, Arial, sans-serif; padding: 16px; }
+            h1 { font-size: 20px; margin: 0 0 12px; }
+            h2 { font-size: 16px; margin: 12px 0 6px; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th, td { border: 1px solid #e5e7eb; padding: 6px; text-align: left; }
+            th { background: #f8fafc; }
+          </style>
+        </head>
+        <body>
+          <h1>Klinip - Resumen</h1>
+          <h2>Citas</h2>
+          <table>
+            <thead><tr><th>Tipo</th><th>Especialidad</th><th>Centro</th><th>Fecha</th><th>Estado</th></tr></thead>
+            <tbody>
+              ${appointments
+                .map(
+                  (a) =>
+                    `<tr><td>${a.type}</td><td>${a.specialty || ""}</td><td>${a.center || ""}</td><td>${
+                      a.date_time ? toLocaleDateTimeOrEmpty(a.date_time) : ""
+                    }</td><td>${a.status}</td></tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+          <h2>Documentos</h2>
+          <table>
+            <thead><tr><th>Tipo</th><th>Centro</th><th>Fecha</th></tr></thead>
+            <tbody>
+              ${documents
+                .map(
+                  (d) =>
+                    `<tr><td>${d.doc_type}</td><td>${d.center || ""}</td><td>${
+                      d.date ? toLocaleDateOrEmpty(d.date) : ""
+                    }</td></tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        </body>
+      </html>
+    `;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
+  const shareLink = async () => {
+    try {
+      setExporting(true);
+      const { appointments, documents } = await loadExportData();
+      const payload = {
+        appointments,
+        documents,
+      };
+      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+      const link = `${window.location.origin}/#share=${encoded}`;
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+        window.alert("Link de comparticiИn copiado al portapapeles.");
+      } else {
+        prompt("Copia este link", link);
+      }
+    } catch (err) {
+      console.error("No se pudo generar link", err);
+      window.alert("No se pudo generar el link.");
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -106,6 +222,26 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         </div>
         {timezoneStatus && <p className="muted">{timezoneStatus}</p>}
 
+      </div>
+
+      <div className="card">
+        <div className="card-header" style={{ alignItems: "center" }}>
+          <div>
+            <h2 className="card-title">Exportar y compartir</h2>
+            <p className="muted">Lleva tus citas y documentos a PDF/CSV o comparte un link temporal.</p>
+          </div>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button className="secondary-btn" type="button" onClick={exportCsv}>
+              CSV citas
+            </button>
+            <button className="secondary-btn" type="button" onClick={exportPdf}>
+              PDF resumen
+            </button>
+            <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
+              {exporting ? "Generando..." : "Compartir link"}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="card">

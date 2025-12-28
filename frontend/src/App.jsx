@@ -335,7 +335,11 @@ export default function App() {
 
   const persistNotifications = (items) => {
     setNotifications(items);
-    localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(items));
+    try {
+      localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(items));
+    } catch (err) {
+      console.warn("No se pudo guardar notificaciones localmente:", err);
+    }
   };
 
   const addNotification = (notification) => {
@@ -344,14 +348,22 @@ export default function App() {
       const exists = prev.some((item) => item.id === notification.id);
       if (exists) return prev;
       const next = [notification, ...prev].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-      localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn("No se pudo guardar notificaciones localmente:", err);
+      }
       return next;
     });
   };
 
   const handleClearNotifications = () => {
     setNotifications([]);
-    localStorage.removeItem(NOTIFICATION_STORAGE_KEY);
+    try {
+      localStorage.removeItem(NOTIFICATION_STORAGE_KEY);
+    } catch (err) {
+      console.warn("No se pudo limpiar notificaciones localmente:", err);
+    }
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((reg) => {
         reg.active?.postMessage({ type: "CLEAR_RECEIVED_NOTIFICATIONS" });
@@ -480,29 +492,25 @@ export default function App() {
       <div className="layout">
         <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="main-area">
-          <Topbar user={user} notifications={notifications} onClearNotifications={handleClearNotifications} />
+          <Topbar
+            user={user}
+            notifications={notifications}
+            onClearNotifications={handleClearNotifications}
+          />
           <main className="main-content">
             <Routes>
               <Route
-              path="/login"
-              element={
-                user ? (
-                  <Navigate to="/" replace />
-                ) : (
-                  <Login onAuthenticated={setUser} />
-                )
-              }
-            />
-            <Route
-              path="/register"
-              element={
-                user ? (
-                  <Navigate to="/" replace />
-                ) : (
-                  <Register onRegistered={setUser} />
-                )
-              }
-            />
+                path="/login"
+                element={
+                  user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
+                }
+              />
+              <Route
+                path="/register"
+                element={
+                  user ? <Navigate to="/" replace /> : <Register onRegistered={setUser} />
+                }
+              />
               <Route
                 path="/"
                 element={
@@ -515,57 +523,57 @@ export default function App() {
                   )
                 }
               />
-          <Route
-            path="/appointments"
-            element={
-              <ProtectedRoute user={user}>
-                <Appointments />
+              <Route
+                path="/appointments"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Appointments />
                   </ProtectedRoute>
                 }
               />
-          <Route
-            path="/documents"
-            element={
-              <ProtectedRoute user={user}>
-                <Documents />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/medications"
-            element={
-              <ProtectedRoute user={user}>
-                <Medications />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/calendar"
-            element={
-              <ProtectedRoute user={user}>
-                <Calendar />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/timeline"
-            element={
-              <ProtectedRoute user={user}>
-                <Timeline />
-              </ProtectedRoute>
-            }
-          />
               <Route
-            path="/settings"
-            element={
-              <ProtectedRoute user={user}>
-                <Settings
-                  user={user}
-                  onLogout={handleLogout}
-                  theme={theme}
-                  onToggleTheme={handleToggleTheme}
-                  onUserUpdate={setUser}
-                />
+                path="/documents"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Documents />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/medications"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Medications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/calendar"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Calendar />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/timeline"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Timeline />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Settings
+                      user={user}
+                      onLogout={handleLogout}
+                      theme={theme}
+                      onToggleTheme={handleToggleTheme}
+                      onUserUpdate={setUser}
+                    />
                   </ProtectedRoute>
                 }
               />

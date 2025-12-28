@@ -9,6 +9,7 @@ import {
   parseDate,
   toIsoOrNull,
   toLocaleDateTimeOrEmpty,
+  toLocalInputValue,
 } from "../utils/dates";
 
 const typeLabels = {
@@ -98,18 +99,13 @@ export default function Appointments() {
   };
 
   const handleEdit = (appt) => {
-    const parsedDate = parseDate(appt.date_time);
     setShowForm(true);
     setForm({
       id: appt.id,
       type: appt.type,
       specialty: appt.specialty || "",
       center: appt.center || "",
-      date_time: appt.date_time
-        ? parsedDate
-          ? parsedDate.toISOString().slice(0, 16)
-          : ""
-        : "",
+      date_time: appt.date_time ? toLocalInputValue(appt.date_time) : "",
       status: appt.status,
       notes: appt.notes || "",
     });

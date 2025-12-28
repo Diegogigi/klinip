@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
   getAppointments,
   getDocuments,
@@ -16,14 +16,13 @@ import {
 import {
   parseDate,
   toIsoOrNull,
-  toLocaleDateOrEmpty,
   toLocaleDateTimeOrEmpty,
 } from "../utils/dates";
 
 const typeLabels = {
-  cita: "Cita médica",
+  cita: "Cita mÃ©dica",
   examen: "Examen",
-  tramite: "Trámite",
+  tramite: "TrÃ¡mite",
 };
 
 const statusLabels = {
@@ -37,7 +36,6 @@ export default function Dashboard({ user }) {
   const [documents, setDocuments] = useState([]);
   const [medications, setMedications] = useState([]);
   const [notificationsReady, setNotificationsReady] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [showDocForm, setShowDocForm] = useState(false);
   const [docForm, setDocForm] = useState({
     doc_type: "otro",
@@ -189,7 +187,7 @@ export default function Dashboard({ user }) {
         resetDocForm();
         setShowDocForm(false);
       }
-      window.alert("Documento subido. La IA está analizando el contenido.");
+      window.alert("Documento subido. La IA estÃ¡ analizando el contenido.");
     } catch (err) {
       console.error(err);
       window.alert("No se pudo subir el documento.");
@@ -228,14 +226,14 @@ export default function Dashboard({ user }) {
   }, [appointments, documents]);
 
   const alert = useMemo(() => {
-    if (!upcoming.length) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
+    if (!upcoming.length) return { label: "Sin actividades prÃ³ximas", color: "#6b7280", dot: "gray" };
     const first = parseDate(upcoming[0].date_time);
-    if (!first) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
+    if (!first) return { label: "Sin actividades prÃ³ximas", color: "#6b7280", dot: "gray" };
     const now = new Date();
     const diffDays = (first - now) / (1000 * 60 * 60 * 24);
-    if (diffDays <= 2) return { label: "Atención: actividad muy próxima", color: "#b91c1c", dot: "red" };
-    if (diffDays <= 7) return { label: "Tienes actividades en la próxima semana", color: "#f59e0b", dot: "yellow" };
-    return { label: "Próximas actividades programadas", color: "#16a34a", dot: "green" };
+    if (diffDays <= 2) return { label: "AtenciÃ³n: actividad muy prÃ³xima", color: "#b91c1c", dot: "red" };
+    if (diffDays <= 7) return { label: "Tienes actividades en la prÃ³xima semana", color: "#f59e0b", dot: "yellow" };
+    return { label: "PrÃ³ximas actividades programadas", color: "#16a34a", dot: "green" };
   }, [upcoming]);
 
   const reminders = useMemo(() => {
@@ -250,13 +248,13 @@ export default function Dashboard({ user }) {
         let label = "En orden";
         if (diff <= 1) {
           severity = "red";
-          label = "Hoy / Mañana (1 día)";
+          label = "Hoy / MaÃ±ana (1 dÃ­a)";
         } else if (diff <= 3) {
           severity = "yellow";
-          label = "Próximos 3 días";
+          label = "PrÃ³ximos 3 dÃ­as";
         } else if (diff <= 7) {
           severity = "yellow";
-          label = "Próximos 7 días";
+          label = "PrÃ³ximos 7 dÃ­as";
         }
         return {
           ...a,
@@ -271,115 +269,14 @@ export default function Dashboard({ user }) {
   }, [appointments]);
 
   useEffect(() => {
-    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
+    // DESACTIVADO: Las notificaciones ahora se envÃ­an desde el servidor vÃ­a push
     // Para evitar duplicados, solo confiamos en el sistema de push notifications
-    // Si quieres reactivar notificaciones locales, descomenta las siguientes líneas:
+    // Si quieres reactivar notificaciones locales, descomenta las siguientes lÃ­neas:
     // if (!notificationsReady) return;
     // scheduleReminderNotifications(reminders);
     // scheduleMedicationNotifications(medications);
   }, [notificationsReady, reminders, medications]);
-
-  const exportCsv = () => {
-    if (!appointments?.length) return;
-    const header = ["id", "tipo", "especialidad", "centro", "fecha", "estado", "notas"];
-    const rows = appointments.map((a) => [
-      a.id,
-      a.type,
-      a.specialty || "",
-      a.center || "",
-      a.date_time ? toIsoOrNull(a.date_time) || "" : "",
-      a.status,
-      (a.notes || "").replace(/"/g, '""'),
-    ]);
-    const csv = [header.join(","), ...rows.map((r) => r.map((x) => `"${x}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "citas.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportPdf = () => {
-    const html = `
-      <html>
-        <head>
-          <title>Klinip - Resumen</title>
-          <style>
-            body { font-family: Poppins, Arial, sans-serif; padding: 16px; }
-            h1 { font-size: 20px; margin: 0 0 12px; }
-            h2 { font-size: 16px; margin: 12px 0 6px; }
-            table { width: 100%; border-collapse: collapse; font-size: 12px; }
-            th, td { border: 1px solid #e5e7eb; padding: 6px; text-align: left; }
-            th { background: #f8fafc; }
-          </style>
-        </head>
-        <body>
-          <h1>Klinip - Resumen</h1>
-          <h2>Citas</h2>
-          <table>
-            <thead><tr><th>Tipo</th><th>Especialidad</th><th>Centro</th><th>Fecha</th><th>Estado</th></tr></thead>
-            <tbody>
-              ${appointments
-                .map(
-                  (a) =>
-                    `<tr><td>${a.type}</td><td>${a.specialty || ""}</td><td>${a.center || ""}</td><td>${
-                      a.date_time ? toLocaleDateTimeOrEmpty(a.date_time) : ""
-                    }</td><td>${a.status}</td></tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-          <h2>Documentos</h2>
-          <table>
-            <thead><tr><th>Tipo</th><th>Centro</th><th>Fecha</th></tr></thead>
-            <tbody>
-              ${documents
-                .map(
-                  (d) =>
-                    `<tr><td>${d.doc_type}</td><td>${d.center || ""}</td><td>${
-                      d.date ? toLocaleDateOrEmpty(d.date) : ""
-                    }</td></tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
-        </body>
-      </html>
-    `;
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
-  };
-
-  const shareLink = async () => {
-    try {
-      setExporting(true);
-      const payload = {
-        appointments,
-        documents,
-      };
-      const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
-      const link = `${window.location.origin}/#share=${encoded}`;
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-        window.alert("Link de compartición copiado al portapapeles.");
-      } else {
-        prompt("Copia este link", link);
-      }
-    } catch (err) {
-      console.error("No se pudo generar link", err);
-      window.alert("No se pudo generar el link.");
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  return (
+`n  return (
     <>
       <div className="summary-bar">
         <div>
@@ -403,24 +300,6 @@ export default function Dashboard({ user }) {
             <p className="kpi-value">{k.value}</p>
           </div>
         ))}
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Subir documento o foto</h2>
-            <p className="muted">
-              Sube una foto o PDF y la IA intentará completar la información.
-            </p>
-          </div>
-          <button
-            className="primary-btn"
-            type="button"
-            onClick={() => setShowDocForm(true)}
-          >
-            Subir archivo
-          </button>
-        </div>
       </div>
 
       {showDocForm && (
@@ -542,7 +421,7 @@ export default function Dashboard({ user }) {
                   onChange={(e) => setDocFile(e.target.files[0] || null)}
                 />
                   <span className="tiny-note">
-                    Puedes tomar una foto o subir un PDF. Límite recomendado: 4 MB.
+                    Puedes tomar una foto o subir un PDF. LÃ­mite recomendado: 4 MB.
                   </span>
                 </div>
 
@@ -553,7 +432,7 @@ export default function Dashboard({ user }) {
                     value={docAutoFill ? "yes" : "no"}
                     onChange={(e) => setDocAutoFill(e.target.value === "yes")}
                   >
-                    <option value="yes">Sí, completar automáticamente</option>
+                    <option value="yes">SÃ­, completar automÃ¡ticamente</option>
                     <option value="no">No, editar manualmente</option>
                   </select>
                 </div>
@@ -612,7 +491,7 @@ export default function Dashboard({ user }) {
                         onChange={(e) =>
                           setDocForm({ ...docForm, notes: e.target.value })
                         }
-                        placeholder="Ej: Receta vence en 3 meses, control con médico X."
+                        placeholder="Ej: Receta vence en 3 meses, control con mÃ©dico X."
                       />
                     </div>
                   </>
@@ -651,8 +530,8 @@ export default function Dashboard({ user }) {
               </svg>
             </div>
             <div>
-              <h2 className="card-title">Lo próximo</h2>
-              <p className="muted">Máximo 5 actividades con fecha en tu agenda.</p>
+              <h2 className="card-title">Lo prÃ³ximo</h2>
+              <p className="muted">MÃ¡ximo 5 actividades con fecha en tu agenda.</p>
             </div>
           </div>
           <div className="traffic">
@@ -662,7 +541,7 @@ export default function Dashboard({ user }) {
         </div>
         {upcoming.length === 0 ? (
           <p className="muted">
-            Aún no registras fechas. Agrega tu próxima atención para verla aquí.
+            AÃºn no registras fechas. Agrega tu prÃ³xima atenciÃ³n para verla aquÃ­.
           </p>
         ) : (
           <ul className="timeline">
@@ -675,7 +554,7 @@ export default function Dashboard({ user }) {
                   </span>
                 </div>
                 <p className="timeline-title">
-                  {a.specialty || "Sin especialidad"} · {a.center || "Centro no definido"}
+                  {a.specialty || "Sin especialidad"} Â· {a.center || "Centro no definido"}
                 </p>
                 <p className="timeline-meta">
                   {a.date_time
@@ -701,19 +580,19 @@ export default function Dashboard({ user }) {
             <div>
               <h2 className="card-title">Recordatorios y alertas</h2>
               <p className="muted">
-                Sistema de alertas automáticas según días de anticipación
+                Sistema de alertas automÃ¡ticas segÃºn dÃ­as de anticipaciÃ³n
               </p>
             </div>
           </div>
           <div className="alert-legend">
             <div className="alert-legend-item">
-              <span className="dot red" /> <span>1 día</span>
+              <span className="dot red" /> <span>1 dÃ­a</span>
             </div>
             <div className="alert-legend-item">
-              <span className="dot yellow" /> <span>3 días</span>
+              <span className="dot yellow" /> <span>3 dÃ­as</span>
             </div>
             <div className="alert-legend-item">
-              <span className="dot green" /> <span>7+ días</span>
+              <span className="dot green" /> <span>7+ dÃ­as</span>
             </div>
           </div>
         </div>
@@ -755,13 +634,13 @@ export default function Dashboard({ user }) {
                       {r.label}
                     </div>
                     <div className="reminder-title">
-                      {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
+                      {typeLabels[r.type] || r.type} Â· {r.center || "Centro no definido"}
                     </div>
                     <div className="reminder-meta">
                       {r.date_time
                         ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
                         : "Por agendar"}
-                      {r.notes ? ` · ${r.notes}` : ""}
+                      {r.notes ? ` Â· ${r.notes}` : ""}
                     </div>
                   </div>
                   <div className="reminder-actions">
@@ -787,35 +666,17 @@ export default function Dashboard({ user }) {
                 <line x1="12" y1="8" x2="12.01" y2="8"/>
               </svg>
               <p>
-                <strong>Tipos de aviso:</strong> Las alertas se activan automáticamente 
-                <strong> 1 día</strong> (urgente), <strong>3 días</strong> (próximo) y 
-                <strong> 7 días</strong> (planificado) antes de cada cita. 
-                En PWA móvil se envían notificaciones push.
+                <strong>Tipos de aviso:</strong> Las alertas se activan automÃ¡ticamente 
+                <strong> 1 dÃ­a</strong> (urgente), <strong>3 dÃ­as</strong> (prÃ³ximo) y 
+                <strong> 7 dÃ­as</strong> (planificado) antes de cada cita. 
+                En PWA mÃ³vil se envÃ­an notificaciones push.
               </p>
             </div>
           </>
         )}
       </div>
-
-      <div className="card">
-        <div className="card-header" style={{ alignItems: "center" }}>
-          <div>
-            <h2 className="card-title">Exportar y compartir</h2>
-            <p className="muted">Lleva tus citas y documentos a PDF/CSV o comparte un link temporal.</p>
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="secondary-btn" type="button" onClick={exportCsv}>
-              CSV citas
-            </button>
-            <button className="secondary-btn" type="button" onClick={exportPdf}>
-              PDF resumen
-            </button>
-            <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
-              {exporting ? "Generando..." : "Compartir link"}
-            </button>
-          </div>
-        </div>
-      </div>
     </>
   );
 }
+
+
