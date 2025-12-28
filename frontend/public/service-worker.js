@@ -32,6 +32,10 @@ self.addEventListener("message", (event) => {
     // Guardar notificación para mostrarla después
     scheduleNotification(event.data.notification);
   }
+
+  if (event.data && event.data.type === "CLEAR_SCHEDULED_NOTIFICATIONS") {
+    clearAllScheduledNotifications();
+  }
   
   if (event.data && event.data.type === "CHECK_PENDING_NOTIFICATIONS") {
     checkAndShowPendingNotifications();
@@ -168,6 +172,19 @@ function openNotificationsDB() {
       }
     };
   });
+}
+
+// Limpiar todas las notificaciones programadas
+async function clearAllScheduledNotifications() {
+  try {
+    const db = await openNotificationsDB();
+    const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
+    const store = tx.objectStore(NOTIFICATIONS_STORE);
+    await store.clear();
+    console.log("Notificaciones programadas limpiadas");
+  } catch (err) {
+    console.error("Error limpiando notificaciones:", err);
+  }
 }
 
 // Verificar notificaciones programadas periódicamente

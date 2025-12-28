@@ -14,6 +14,40 @@ const SOUND_URLS = {
 let appointmentTimers = [];
 let medicationTimers = [];
 let audioContext = null;
+const APPOINTMENT_TYPE_LABELS = [
+  { match: "examen", label: "Examen" },
+  { match: "tramite", label: "Tramite" }
+];
+const DEFAULT_APPOINTMENT_LABEL = "Cita medica";
+const MEDICATION_LEAD_MINUTES = 5;
+
+function getAppointmentTypeLabel(reminder) {
+  const raw = `${reminder?.type || ""}`.toLowerCase();
+  const found = APPOINTMENT_TYPE_LABELS.find(item => raw.includes(item.match));
+  return found ? found.label : DEFAULT_APPOINTMENT_LABEL;
+}
+
+function postMessageToServiceWorker(message) {
+  if (!("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.ready
+    .then((registration) => {
+      const target = registration.active || registration.waiting || registration.installing;
+      if (target) {
+        target.postMessage(message);
+      }
+    })
+    .catch((err) => {
+      console.warn("No se pudo enviar mensaje al service worker:", err);
+    });
+}
+
+function scheduleInServiceWorker(notification) {
+  postMessageToServiceWorker({ type: "SCHEDULE_NOTIFICATION", notification });
+}
+
+function clearServiceWorkerSchedule() {
+  postMessageToServiceWorker({ type: "CLEAR_SCHEDULED_NOTIFICATIONS" });
+}
 
 // Rate limiter para evitar muchas notificaciones simultáneas al iniciar sesión
 let recentNotifications = new Map(); // tag -> timestamp
@@ -87,11 +121,19 @@ class NotificationManager {
    * Agregar una notificación programada
    */
   addScheduledNotification(notification) {
-    this.scheduledNotifications.push({
+    const created = {
       id: `${Date.now()}-${Math.random()}`,
       ...notification,
       createdAt: Date.now()
-    });
+    };
+    this.scheduledNotifications.push(created);
+    this.saveScheduledNotifications();
+    scheduleInServiceWorker(created);
+    return created;
+  }
+
+  clearAllScheduledNotifications() {
+    this.scheduledNotifications = [];
     this.saveScheduledNotifications();
   }
 
@@ -236,6 +278,8 @@ export function clearScheduledNotifications() {
   medicationTimers.forEach(clearTimeout);
   appointmentTimers = [];
   medicationTimers = [];
+  notificationManager.clearAllScheduledNotifications();
+  clearServiceWorkerSchedule();
 }
 
 /**
@@ -244,16 +288,19 @@ export function clearScheduledNotifications() {
 export function scheduleReminderNotifications(reminders, customOffsets = null) {
   appointmentTimers.forEach(clearTimeout);
   appointmentTimers = [];
-  
+
   if (!reminders?.length) return;
+
+  const useServiceWorkerSchedule = "serviceWorker" in navigator;
 
   // Offsets personalizables
   const offsets = customOffsets || [
-    { days: 7, label: "7 días antes", icon: "🟢", priority: "low", sound: "appointment" },
-    { days: 3, label: "3 días antes", icon: "🟡", priority: "normal", sound: "appointment" },
-    { days: 1, label: "1 día antes", icon: "🟠", priority: "high", sound: "appointment" },
-    { hours: 2, label: "2 horas antes", icon: "🔴", priority: "urgent", sound: "urgent" },
-    { minutes: 30, label: "30 minutos antes", icon: "🚨", priority: "urgent", sound: "urgent" }
+    { days: 7, label: "7 dias antes", icon: "", priority: "low", sound: "appointment" },
+    { days: 3, label: "3 dias antes", icon: "", priority: "normal", sound: "appointment" },
+    { days: 1, label: "1 dia antes", icon: "", priority: "high", sound: "appointment" },
+    { hours: 2, label: "2 horas antes", icon: "", priority: "urgent", sound: "urgent" },
+    { minutes: 30, label: "30 minutos antes", icon: "", priority: "urgent", sound: "urgent" },
+    { minutes: 5, label: "5 minutos antes", icon: "", priority: "urgent", sound: "urgent" }
   ];
 
   reminders.forEach((rem) => {
@@ -262,18 +309,22 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
     if (!whenDate) return;
     const when = whenDate.getTime();
 
-    offsets.forEach(({ days, hours, minutes, label, icon, priority, sound }) => {
+    const appointmentLabel = getAppointmentTypeLabel(rem);
+
+    offsets.forEach(({ days, hours, minutes, label, priority, sound }) => {
       let triggerAt = when;
-      
+
       if (days) triggerAt -= days * dayMs;
       if (hours) triggerAt -= hours * 60 * 60 * 1000;
       if (minutes) triggerAt -= minutes * 60 * 1000;
-      
+
       const delay = triggerAt - Date.now();
 
       const notificationData = {
         appointmentId: rem.id,
-        type: rem.type,
+        type: "appointment",
+        category: appointmentLabel,
+        appointmentType: rem.type,
         specialty: rem.specialty,
         center: rem.center,
         date_time: rem.date_time,
@@ -283,12 +334,14 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
         minutes
       };
 
-      const title = `${icon} Recordatorio: ${label}`;
-      const body = `${rem.specialty || rem.type || "Cita"} en ${rem.center || "Centro médico"}\n📅 ${toLocaleDateTimeOrEmpty(rem.date_time)}${rem.notes ? `\n📝 ${rem.notes}` : ""}`;
+      const title = `${appointmentLabel} - Recordatorio: ${label}`;
+      const body = `${rem.specialty || rem.type || "Cita"} en ${rem.center || "Centro medico"}
+${toLocaleDateTimeOrEmpty(rem.date_time)}${rem.notes ? `
+${rem.notes}` : ""}`;
 
-      // IMPORTANTE: NO mostrar notificaciones pasadas al iniciar sesión
+      // IMPORTANTE: NO mostrar notificaciones pasadas al iniciar sesion
       // Esto evita que se disparen todas las notificaciones atrasadas a la vez
-      // Solo programar notificaciones futuras (próximos 30 días)
+      // Solo programar notificaciones futuras (proximos 30 dias)
       if (delay > 0 && delay < 30 * dayMs) {
         // Guardar en persistencia
         notificationManager.addScheduledNotification({
@@ -302,22 +355,24 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
         });
 
         // Programar timeout
-        const timer = setTimeout(() => {
-          showNotification(title, body, {
-            sound,
-            url: "/appointments",
-            tag: `appointment-${rem.id}-${label}`,
-            data: notificationData
-          });
-        }, delay);
-        
-        appointmentTimers.push(timer);
+        if (!useServiceWorkerSchedule) {
+          const timer = setTimeout(() => {
+            showNotification(title, body, {
+              sound,
+              url: "/appointments",
+              tag: `appointment-${rem.id}-${label}`,
+              data: notificationData
+            });
+          }, delay);
+
+          appointmentTimers.push(timer);
+        }
       }
     });
   });
 
   notificationManager.cleanOldNotifications();
-  console.log(`📱 ${appointmentTimers.length} notificaciones de citas programadas`);
+  console.log(`Notificaciones de citas programadas: ${appointmentTimers.length}`);
 }
 
 /**
@@ -354,8 +409,11 @@ function deriveDoseHours(frequencyText = "") {
 export function scheduleMedicationNotifications(medications) {
   medicationTimers.forEach(clearTimeout);
   medicationTimers = [];
-  
+
   if (!medications?.length) return;
+
+  const useServiceWorkerSchedule = "serviceWorker" in navigator;
+  const leadOffsets = [MEDICATION_LEAD_MINUTES, 0];
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -363,63 +421,75 @@ export function scheduleMedicationNotifications(medications) {
 
   medications.forEach((med) => {
     if (!med?.end_date) return;
-    
+
     const end = parseDate(med.end_date);
     if (!end) return;
-    
+
     const lastDay = end < horizon ? end : horizon;
     const hours = deriveDoseHours(med.frequency);
 
-    // Programar para cada día
+    // Programar para cada dia
     for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
       hours.forEach((hour) => {
         const trigger = new Date(day);
         trigger.setHours(hour, 0, 0, 0);
-        const delay = trigger.getTime() - Date.now();
-        
-        // Solo programar futuras notificaciones
-        if (delay <= 0) return;
+        const triggerExact = trigger.getTime();
 
-        const notificationData = {
-          medicationId: med.id,
-          name: med.name,
-          dose: med.dose,
-          frequency: med.frequency,
-          type: "medication"
-        };
+        leadOffsets.forEach((offsetMinutes) => {
+          const triggerAt = triggerExact - offsetMinutes * 60 * 1000;
+          const delay = triggerAt - Date.now();
 
-        const title = `💊 Medicación: ${med.name || "Tratamiento"}`;
-        const body = `${med.dose ? `Dosis: ${med.dose}\n` : ""}${med.frequency ? `Frecuencia: ${med.frequency}\n` : ""}${med.notes ? `📝 ${med.notes}` : "Tomar según indicación médica"}`;
+          // Solo programar futuras notificaciones
+          if (delay <= 0) return;
 
-        // Guardar en persistencia
-        notificationManager.addScheduledNotification({
-          triggerAt: trigger.getTime(),
-          title,
-          body,
-          sound: "medication",
-          url: "/medications",
-          tag: `medication-${med.id}-${trigger.getTime()}`,
-          data: notificationData
-        });
+          const notificationData = {
+            medicationId: med.id,
+            name: med.name,
+            dose: med.dose,
+            frequency: med.frequency,
+            leadMinutes: offsetMinutes,
+            type: "medication"
+          };
 
-        // Programar timeout
-        const timer = setTimeout(() => {
-          showNotification(title, body, {
+          const title = `Medicacion: ${med.name || "Tratamiento"}`;
+          const prefix = offsetMinutes === 0 ? "Ahora" : `En ${offsetMinutes} minutos`;
+          const body = `${prefix}
+${med.dose ? `Dosis: ${med.dose}
+` : ""}${med.frequency ? `Frecuencia: ${med.frequency}
+` : ""}${med.notes ? `${med.notes}` : "Tomar segun indicacion medica"}`;
+
+          // Guardar en persistencia
+          notificationManager.addScheduledNotification({
+            triggerAt,
+            title,
+            body,
             sound: "medication",
             url: "/medications",
-            tag: `medication-${med.id}-${trigger.getTime()}`,
-            requireInteraction: true,
+            tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
             data: notificationData
           });
-        }, delay);
-        
-        medicationTimers.push(timer);
+
+          // Programar timeout
+          if (!useServiceWorkerSchedule) {
+            const timer = setTimeout(() => {
+              showNotification(title, body, {
+                sound: "medication",
+                url: "/medications",
+                tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
+                requireInteraction: true,
+                data: notificationData
+              });
+            }, delay);
+
+            medicationTimers.push(timer);
+          }
+        });
       });
     }
   });
 
   notificationManager.cleanOldNotifications();
-  console.log(`💊 ${medicationTimers.length} recordatorios de medicación programados`);
+  console.log(`Recordatorios de medicacion programados: ${medicationTimers.length}`);
 }
 
 /**
@@ -435,6 +505,7 @@ export function createCustomNotification(options) {
     data = {}
   } = options;
 
+  const useServiceWorkerSchedule = "serviceWorker" in navigator;
   const delay = triggerAt - Date.now();
 
   if (delay <= 0) {
@@ -453,20 +524,25 @@ export function createCustomNotification(options) {
   });
 
   // Programar
-  setTimeout(() => {
-    showNotification(title, body, { sound, url, data });
-  }, delay);
+  if (!useServiceWorkerSchedule) {
+    setTimeout(() => {
+      showNotification(title, body, { sound, url, data });
+    }, delay);
+  }
 }
 
 /**
  * Obtener estadísticas de notificaciones
  */
 export function getNotificationStats() {
+  const pending = notificationManager.getPendingNotifications();
+  const appointments = pending.filter(n => n.data?.type === "appointment").length;
+  const medications = pending.filter(n => n.data?.type === "medication").length;
   return {
-    scheduled: notificationManager.getPendingNotifications().length,
-    appointments: appointmentTimers.length,
-    medications: medicationTimers.length,
-    total: appointmentTimers.length + medicationTimers.length
+    scheduled: pending.length,
+    appointments,
+    medications,
+    total: pending.length
   };
 }
 
@@ -492,4 +568,3 @@ Mensaje generado desde Klinip.`
 }
 
 export { notificationManager };
-

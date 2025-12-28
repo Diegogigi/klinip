@@ -72,7 +72,7 @@ export async function ensurePushSubscription() {
     
     // 4. Solicitar permiso de notificaciones
     console.log("Solicitando permiso de notificaciones...");
-    const permission = await Notification.requestPermission();
+  const permission = await Notification.requestPermission();
     console.log("Permiso obtenido:", permission);
     
     if (permission !== "granted") {
@@ -81,7 +81,7 @@ export async function ensurePushSubscription() {
     
     // 5. Esperar a que el service worker esté listo
     console.log("Esperando service worker...");
-    const reg = await navigator.serviceWorker.ready;
+  const reg = await navigator.serviceWorker.ready;
     console.log("Service worker listo");
     
     // 6. Cancelar cualquier suscripción anterior para evitar duplicados
@@ -106,13 +106,13 @@ export async function ensurePushSubscription() {
     
     // 8. Enviar suscripción al servidor
     console.log("Enviando suscripción al servidor...");
-    await subscribePush({
-      endpoint: sub.endpoint,
-      keys: sub.toJSON().keys,
-    });
+  await subscribePush({
+    endpoint: sub.endpoint,
+    keys: sub.toJSON().keys,
+  });
     console.log("✅ Suscripción registrada en el servidor");
     
-    return true;
+  return true;
   } catch (error) {
     console.error("❌ Error en ensurePushSubscription:", error);
     throw error; // Re-lanzar el error para que el componente lo maneje

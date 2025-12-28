@@ -28,7 +28,8 @@ export default function NotificationSettings({ onClose }) {
       days3: true,
       days1: true,
       hours2: true,
-      minutes30: true
+      minutes30: true,
+      minutes5: true
     }
   });
 
@@ -274,6 +275,9 @@ export default function NotificationSettings({ onClose }) {
     if (settings.customOffsets.minutes30) {
       offsets.push({ minutes: 30, label: "30 minutos antes", icon: "🚨", priority: "urgent", sound: "urgent" });
     }
+    if (settings.customOffsets.minutes5) {
+      offsets.push({ minutes: 5, label: "5 minutos antes", icon: "", priority: "urgent", sound: "urgent" });
+    }
 
     return offsets;
   };
@@ -505,6 +509,16 @@ export default function NotificationSettings({ onClose }) {
                     onChange={(e) => handleOffsetChange("minutes30", e.target.checked)}
                   />
                   <span>🚨 30 minutos antes</span>
+                </label>
+              </div>
+              <div className="setting-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={settings.customOffsets.minutes5}
+                    onChange={(e) => handleOffsetChange("minutes5", e.target.checked)}
+                  />
+                  <span>5 minutos antes</span>
                 </label>
               </div>
             </div>

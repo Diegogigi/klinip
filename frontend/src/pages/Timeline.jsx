@@ -336,10 +336,10 @@ export default function Timeline() {
                     <div className="timeline-main" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
                       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                         <span style={{ fontSize: "1.5rem" }}>{getItemIcon(item.kind)}</span>
-                        <span className={`chip ${item.kind === "document" ? "doc" : item.kind}`}>
-                          {item.label}
-                        </span>
-                        {item.status && (
+                  <span className={`chip ${item.kind === "document" ? "doc" : item.kind}`}>
+                    {item.label}
+                  </span>
+                  {item.status && (
                           <span className={`chip-status-${item.status}`}>
                             {statusLabels[item.status] || item.status}
                           </span>
@@ -355,8 +355,8 @@ export default function Timeline() {
                           }}>
                             🔗 {related.appointments.length + related.documents.length + related.medications.length} vinculados
                           </span>
-                        )}
-                      </div>
+                  )}
+                </div>
                       <span className="timeline-meta" style={{ fontSize: "0.875rem", color: "#666", whiteSpace: "nowrap" }}>
                         {item.date ? toLocaleDateOrEmpty(item.date) : ""}
                       </span>
@@ -364,8 +364,8 @@ export default function Timeline() {
 
                     {/* Detalle */}
                     <p className="timeline-title" style={{ fontWeight: "600", marginBottom: "0.5rem", fontSize: "1rem" }}>
-                      {item.detail}
-                    </p>
+                  {item.detail}
+                </p>
 
                     {/* Notas */}
                     {item.notes && (
@@ -466,7 +466,7 @@ export default function Timeline() {
                       </div>
                     )}
                   </div>
-                </li>
+              </li>
               );
             })}
           </ul>
