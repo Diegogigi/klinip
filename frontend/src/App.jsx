@@ -202,8 +202,6 @@ function Topbar({ user, notifications, onClearNotifications }) {
   const navigate = useNavigate();
 
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
-  if (isAuthRoute || (!user && location.pathname === "/")) return null;
-
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",
@@ -226,6 +224,8 @@ function Topbar({ user, notifications, onClearNotifications }) {
   useEffect(() => {
     setNotificationsOpen(false);
   }, [location.pathname]);
+
+  if (isAuthRoute || (!user && location.pathname === "/")) return null;
 
   return (
     <header className="topbar">
