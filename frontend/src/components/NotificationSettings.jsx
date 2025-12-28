@@ -12,7 +12,11 @@ import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
+  // Cargar estado inicial de push desde localStorage
+  const [pushEnabled, setPushEnabled] = useState(() => {
+    const saved = localStorage.getItem("klinip_push_enabled");
+    return saved === "true";
+  });
   const [stats, setStats] = useState({ scheduled: 0, appointments: 0, medications: 0, total: 0 });
   const [settings, setSettings] = useState({
     appointmentReminders: true,
@@ -29,10 +33,21 @@ export default function NotificationSettings({ onClose }) {
   });
 
   useEffect(() => {
+    console.log("═".repeat(50));
+    console.log("🚀 NotificationSettings MONTADO");
+    console.log("═".repeat(50));
     loadNotificationStatus();
     loadSettings();
     updateStats();
     loadPushStatus();
+
+    // Cleanup: detectar cuando el componente se desmonta
+    return () => {
+      console.log("═".repeat(50));
+      console.log("👋 NotificationSettings DESMONTADO (formulario cerrado)");
+      console.log("💾 Estado de push al cerrar:", localStorage.getItem("klinip_push_enabled"));
+      console.log("═".repeat(50));
+    };
   }, []);
 
   const loadNotificationStatus = () => {
@@ -43,6 +58,8 @@ export default function NotificationSettings({ onClose }) {
 
   const loadPushStatus = async () => {
     try {
+      console.log("🔄 Iniciando verificación de estado push...");
+      
       // 1. Verificar si el navegador tiene una suscripción activa
       let browserHasSubscription = false;
       if ("serviceWorker" in navigator && "PushManager" in window) {
@@ -51,6 +68,9 @@ export default function NotificationSettings({ onClose }) {
           const sub = await reg.pushManager.getSubscription();
           browserHasSubscription = sub !== null;
           console.log("🔍 Suscripción en navegador:", browserHasSubscription ? "✅ Activa" : "❌ No encontrada");
+          if (sub) {
+            console.log("   └─ Endpoint:", sub.endpoint.substring(0, 50) + "...");
+          }
         } catch (err) {
           console.warn("No se pudo verificar suscripción del navegador:", err);
         }
@@ -59,24 +79,37 @@ export default function NotificationSettings({ onClose }) {
       // 2. Verificar si el backend tiene la suscripción registrada
       const status = await getPushStatus();
       console.log("📊 Estado en backend:", status.enabled ? "✅ Registrada" : "❌ No registrada");
+      if (status.enabled) {
+        console.log("   └─ Subscription ID:", status.subscription_id);
+      }
 
       // 3. El estado es activo solo si AMBOS están activos
       const isEnabled = browserHasSubscription && status.enabled;
+      
+      // 4. Persistir el estado en localStorage
+      localStorage.setItem("klinip_push_enabled", isEnabled.toString());
+      console.log("💾 Estado guardado en localStorage:", isEnabled);
+      
       setPushEnabled(isEnabled);
       
       console.log("🎯 Estado final de push:", isEnabled ? "✅ ACTIVO" : "❌ INACTIVO");
+      console.log("─".repeat(50));
       
-      // 4. Si hay desincronización, mostrar advertencia
+      // 5. Si hay desincronización, mostrar advertencia y solución
       if (browserHasSubscription !== status.enabled) {
-        console.warn("⚠️ Desincronización detectada entre navegador y backend");
+        console.warn("⚠️ DESINCRONIZACIÓN DETECTADA");
         if (browserHasSubscription && !status.enabled) {
-          console.warn("→ El navegador tiene suscripción pero el backend no");
+          console.warn("→ El navegador tiene suscripción pero el backend NO");
+          console.warn("→ Solución: Habilita las notificaciones push nuevamente");
         } else if (!browserHasSubscription && status.enabled) {
-          console.warn("→ El backend tiene suscripción pero el navegador no");
+          console.warn("→ El backend tiene suscripción pero el navegador NO");
+          console.warn("→ Solución: Deshabilita y vuelve a habilitar las notificaciones");
         }
+        console.warn("─".repeat(50));
       }
     } catch (err) {
-      console.error("Error cargando estado de push:", err);
+      console.error("❌ Error cargando estado de push:", err);
+      localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
     }
   };
@@ -112,15 +145,27 @@ export default function NotificationSettings({ onClose }) {
 
   const handleEnablePush = async () => {
     try {
-      console.log("🔄 Iniciando habilitación de push...");
+      console.log("═".repeat(50));
+      console.log("🔄 HABILITANDO NOTIFICACIONES PUSH");
+      console.log("═".repeat(50));
+      
       const success = await ensurePushSubscription();
       if (success) {
+        console.log("✅ Suscripción creada exitosamente");
+        
+        // Esperar un momento para que el servidor registre la suscripción
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Verificar el estado desde el servidor para confirmar
         await loadPushStatus();
+        
+        console.log("✅ NOTIFICACIONES PUSH HABILITADAS");
+        console.log("═".repeat(50));
         alert("✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.");
       }
     } catch (err) {
       console.error("❌ Error habilitando push:", err);
+      console.error("═".repeat(50));
       
       // Mostrar mensaje de error específico
       let errorMessage = "❌ Error al habilitar notificaciones push:\n\n";
@@ -135,19 +180,32 @@ export default function NotificationSettings({ onClose }) {
       }
       
       alert(errorMessage);
+      localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
     }
   };
 
   const handleDisablePush = async () => {
     try {
+      console.log("═".repeat(50));
+      console.log("🔕 DESHABILITANDO NOTIFICACIONES PUSH");
+      console.log("═".repeat(50));
+      
       await removePushSubscription();
+      
+      localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
+      
+      console.log("✅ Notificaciones deshabilitadas");
+      console.log("═".repeat(50));
+      
       alert("🔕 Notificaciones push deshabilitadas");
+      
       // Verificar el estado desde el servidor para confirmar
       await loadPushStatus();
     } catch (err) {
-      console.error("Error deshabilitando push:", err);
+      console.error("❌ Error deshabilitando push:", err);
+      console.error("═".repeat(50));
     }
   };
 

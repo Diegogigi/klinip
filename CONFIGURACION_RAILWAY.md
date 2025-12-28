@@ -28,12 +28,12 @@ VITE_VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2Wd
 
 ## 🔑 Explicación de las Variables
 
-| Variable | Dónde se usa | Descripción |
-|----------|--------------|-------------|
-| `VAPID_PUBLIC_KEY` | Backend | Clave pública para firmar notificaciones push |
-| `VAPID_PRIVATE_KEY` | Backend | Clave privada (SECRETA) para autenticar con el servidor push |
-| `VAPID_EMAIL` | Backend | Email de contacto para el servicio push |
-| `VITE_VAPID_PUBLIC_KEY` | Frontend | Misma clave pública para que el navegador se suscriba |
+| Variable                | Dónde se usa | Descripción                                                  |
+| ----------------------- | ------------ | ------------------------------------------------------------ |
+| `VAPID_PUBLIC_KEY`      | Backend      | Clave pública para firmar notificaciones push                |
+| `VAPID_PRIVATE_KEY`     | Backend      | Clave privada (SECRETA) para autenticar con el servidor push |
+| `VAPID_EMAIL`           | Backend      | Email de contacto para el servicio push                      |
+| `VITE_VAPID_PUBLIC_KEY` | Frontend     | Misma clave pública para que el navegador se suscriba        |
 
 ---
 
@@ -73,6 +73,7 @@ Si muestra `undefined`, significa que la variable no está configurada correctam
 **Causa**: La variable `VITE_VAPID_PUBLIC_KEY` no está configurada en Railway.
 
 **Solución**:
+
 1. Ve a Railway → Settings → Variables
 2. Agrega `VITE_VAPID_PUBLIC_KEY` con el valor correcto
 3. Reinicia el servicio
@@ -88,6 +89,7 @@ Si muestra `undefined`, significa que la variable no está configurada correctam
 **Causa**: Puede ser que el backend no tenga las claves VAPID configuradas.
 
 **Solución**:
+
 1. Verifica que `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_EMAIL` estén en Railway
 2. Reinicia el servicio
 3. Usa el botón "🧪 Enviar Notificación de Prueba" en la configuración
@@ -186,4 +188,3 @@ Antes de considerar que todo está funcionando:
 ---
 
 **¡Listo!** Con esta configuración, las notificaciones push deberían funcionar perfectamente en Railway. 🚀
-
