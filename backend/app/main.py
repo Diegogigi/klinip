@@ -22,6 +22,9 @@ import json
 import io
 import re
 import unicodedata
+import threading
+import time
+from zoneinfo import ZoneInfo
 
 from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
@@ -121,6 +124,44 @@ def ensure_document_schema():
 
 ensure_document_schema()
 
+
+def ensure_user_schema():
+    """
+    Garantiza que la tabla users tenga columnas nuevas usadas por la app.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("users")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        if "timezone" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR DEFAULT 'America/Santiago'"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN timezone VARCHAR DEFAULT 'America/Santiago'"
+                )
+            added_columns.append("timezone")
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                f"DEBUG ensure_user_schema: columnas agregadas a users: {', '.join(added_columns)}"
+            )
+        else:
+            print("DEBUG ensure_user_schema: tabla users ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_user_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_user_schema()
+
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@klinip.app")
@@ -146,7 +187,277 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         return False
 
 
+
+
+SCHEDULE_WINDOW_SECONDS = 60
+SCHEDULE_INTERVAL_SECONDS = 60
+MEDICATION_LEAD_MINUTES = 5
+DEFAULT_TZ_NAME = "America/Santiago"
+
+
+def _resolve_user_tz(user: models.User | None) -> ZoneInfo:
+    tz_name = getattr(user, "timezone", None) or DEFAULT_TZ_NAME
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        return ZoneInfo(DEFAULT_TZ_NAME)
+
+
+def _to_schedule_tz(value: datetime | None, tz: ZoneInfo) -> datetime | None:
+    if not value:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
+
+
+def _appointment_type_label(appt_type) -> str:
+    if appt_type == models.AppointmentType.examen:
+        return "Examen"
+    if appt_type == models.AppointmentType.tramite:
+        return "Tramite"
+    return "Cita medica"
+
+
+def _appointment_offsets():
+    return [
+        {"label": "7 dias antes", "delta": timedelta(days=7), "priority": "low"},
+        {"label": "3 dias antes", "delta": timedelta(days=3), "priority": "normal"},
+        {"label": "1 dia antes", "delta": timedelta(days=1), "priority": "high"},
+        {"label": "2 horas antes", "delta": timedelta(hours=2), "priority": "urgent"},
+        {"label": "30 minutos antes", "delta": timedelta(minutes=30), "priority": "urgent"},
+        {"label": "5 minutos antes", "delta": timedelta(minutes=5), "priority": "urgent"},
+    ]
+
+
+def _derive_dose_hours(frequency_text: str = ""):
+    text = (frequency_text or "").lower()
+
+    if "4" in text and "hora" in text:
+        return [6, 10, 14, 18, 22, 2]
+    if "6" in text and "hora" in text:
+        return [6, 12, 18, 24]
+    if "8" in text and "hora" in text:
+        return [7, 15, 23]
+    if "12" in text and "hora" in text:
+        return [8, 20]
+    if "3" in text and "vez" in text:
+        return [8, 14, 20]
+    if "2" in text and "vez" in text:
+        return [8, 20]
+    return [9]
+
+
+def _build_med_trigger(day: datetime, hour: int) -> datetime:
+    if hour == 24:
+        return (day + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return day.replace(hour=hour, minute=0, second=0, microsecond=0)
+
+
+def _is_due(now: datetime, trigger_at: datetime) -> bool:
+    return trigger_at <= now <= (trigger_at + timedelta(seconds=SCHEDULE_WINDOW_SECONDS))
+
+
+def _notification_already_sent(db: Session, tag: str) -> bool:
+    return (
+        db.query(models.PushNotificationLog)
+        .filter(models.PushNotificationLog.tag == tag)
+        .first()
+        is not None
+    )
+
+
+def _record_sent(db: Session, user_id: int, tag: str, kind: str, trigger_at: datetime, sent_at: datetime):
+    try:
+        db.add(
+            models.PushNotificationLog(
+                user_id=user_id,
+                tag=tag,
+                kind=kind,
+                trigger_at=trigger_at,
+                sent_at=sent_at,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def _send_scheduled_push_reminders():
+    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+        return
+
+    db = SessionLocal()
+    try:
+        now_global = datetime.now(_resolve_user_tz(None))
+        cutoff = now_global - timedelta(days=90)
+        db.query(models.PushNotificationLog).filter(
+            models.PushNotificationLog.sent_at < cutoff
+        ).delete()
+        db.commit()
+
+        subscriptions = db.query(models.PushSubscription).all()
+
+        for subscription in subscriptions:
+            user_id = subscription.user_id
+            user = subscription.user or db.query(models.User).filter(models.User.id == user_id).first()
+            if not user:
+                continue
+            user_tz = _resolve_user_tz(user)
+            now = datetime.now(user_tz)
+
+            appointments = (
+                db.query(models.Appointment)
+                .filter(
+                    models.Appointment.user_id == user_id,
+                    models.Appointment.date_time.isnot(None),
+                    models.Appointment.status != models.AppointmentStatus.realizada,
+                )
+                .all()
+            )
+
+            for appt in appointments:
+                appt_dt = _to_schedule_tz(appt.date_time, user_tz)
+                if not appt_dt:
+                    continue
+
+                for offset in _appointment_offsets():
+                    trigger_at = appt_dt - offset["delta"]
+                    if not _is_due(now, trigger_at):
+                        continue
+
+                    label = offset["label"]
+                    tag = f"appointment-{appt.id}-{label}"
+                    if _notification_already_sent(db, tag):
+                        continue
+
+                    category = _appointment_type_label(appt.type)
+                    title = f"{category} - Recordatorio: {label}"
+                    when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
+                    center = appt.center or "Centro medico"
+                    body_lines = [
+                        f"{appt.specialty or appt.type} en {center}",
+                        when_text,
+                    ]
+                    if appt.notes:
+                        body_lines.append(appt.notes)
+                    body = "\n".join(body_lines)
+
+                    ok = send_web_push(
+                        subscription,
+                        {
+                            "title": title,
+                            "body": body,
+                            "url": "/appointments",
+                            "priority": offset["priority"],
+                            "sound": "appointment",
+                            "appointmentId": appt.id,
+                            "tag": tag,
+                        },
+                    )
+                    if ok:
+                        _record_sent(db, user_id, tag, "appointment", trigger_at, now)
+
+            medications = (
+                db.query(models.Medication)
+                .filter(
+                    models.Medication.user_id == user_id,
+                    models.Medication.end_date.isnot(None),
+                    models.Medication.end_date >= now,
+                )
+                .all()
+            )
+
+            if not medications:
+                continue
+
+            for med in medications:
+                end_dt = _to_schedule_tz(med.end_date, user_tz)
+                if not end_dt:
+                    continue
+
+                today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                for day_offset in [0, 1]:
+                    day = today + timedelta(days=day_offset)
+                    if day.date() > end_dt.date():
+                        continue
+
+                    for hour in _derive_dose_hours(med.frequency):
+                        trigger_exact = _build_med_trigger(day, hour)
+                        if trigger_exact.date() > end_dt.date():
+                            continue
+
+                        trigger_exact_ms = int(trigger_exact.timestamp() * 1000)
+                        for offset_minutes in [MEDICATION_LEAD_MINUTES, 0]:
+                            trigger_at = trigger_exact - timedelta(minutes=offset_minutes)
+                            if not _is_due(now, trigger_at):
+                                continue
+
+                            tag = (
+                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
+                            )
+                            if _notification_already_sent(db, tag):
+                                continue
+
+                            title = f"Medicacion: {med.name}"
+                            prefix = (
+                                "Ahora" if offset_minutes == 0 else f"En {offset_minutes} minutos"
+                            )
+                            body = prefix
+                            if med.dose:
+                                body += f"
+Dosis: {med.dose}"
+                            if med.frequency:
+                                body += f"
+Frecuencia: {med.frequency}"
+                            if med.notes:
+                                body += f"
+{med.notes}"
+
+                            ok = send_web_push(
+                                subscription,
+                                {
+                                    "title": title,
+                                    "body": body,
+                                    "url": "/medications",
+                                    "priority": "high",
+                                    "sound": "medication",
+                                    "medicationId": med.id,
+                                    "tag": tag,
+                                },
+                            )
+                            if ok:
+                                _record_sent(db, user_id, tag, "medication", trigger_at, now)
+    finally:
+        db.close()
+
+
+_scheduler_started = False
+
+
+def _scheduler_loop():
+    while True:
+        try:
+            _send_scheduled_push_reminders()
+        except Exception as exc:
+            print(f"WARNING scheduler: {exc}")
+        time.sleep(SCHEDULE_INTERVAL_SECONDS)
+
+
+def _start_scheduler():
+    global _scheduler_started
+    if _scheduler_started:
+        return
+    _scheduler_started = True
+    thread = threading.Thread(target=_scheduler_loop, daemon=True)
+    thread.start()
+
 app = FastAPI(title="MiRutaSalud API")
+
+@app.on_event("startup")
+def _startup_event():
+    _start_scheduler()
+
 
 OCR_MAX_BYTES = 4 * 1024 * 1024
 OCR_MAX_PAGES = 3
@@ -1441,6 +1752,28 @@ async def read_me(current_user: models.User = Depends(auth.get_current_user)):
     return current_user
 
 
+@app.put("/me", response_model=schemas.UserOut)
+async def update_me(
+    payload: schemas.UserUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if payload.name is not None:
+        current_user.name = payload.name
+
+    if payload.timezone:
+        try:
+            ZoneInfo(payload.timezone)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Zona horaria invalida")
+        current_user.timezone = payload.timezone
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 # Appointments
 @app.get("/appointments", response_model=List[schemas.AppointmentOut])
 async def list_appointments(
@@ -1786,14 +2119,16 @@ async def send_appointment_reminders(
         )
 
     sent_count = 0
-    now = datetime.now()
+    user_tz = _resolve_user_tz(current_user)
+    now = datetime.now(user_tz)
 
     for appt in appointments:
-        if not appt.date_time:
+        appt_dt = _to_schedule_tz(appt.date_time, user_tz)
+        if not appt_dt:
             continue
 
         # Calcular días hasta la cita
-        time_until = appt.date_time - now
+        time_until = appt_dt - now
         days_until = time_until.days
         hours_until = time_until.total_seconds() / 3600
 
@@ -1826,7 +2161,7 @@ async def send_appointment_reminders(
 
         if should_send:
             title = f"{icon} Recordatorio: {appt.specialty or appt.type}"
-            body = f"{message}\n📅 {appt.date_time.strftime('%d/%m/%Y %H:%M')}\n📍 {appt.center or 'Centro médico'}"
+            body = f"{message}\n📅 {appt_dt.strftime('%d/%m/%Y %H:%M')}\n📍 {appt.center or 'Centro médico'}"
 
             ok = send_web_push(
                 subscription,
@@ -1863,7 +2198,7 @@ async def send_medication_reminders(
         )
 
     # Obtener medicamentos activos del usuario
-    today = datetime.now()
+    today = datetime.now(_resolve_user_tz(current_user))
     medications = (
         db.query(models.Medication)
         .filter(

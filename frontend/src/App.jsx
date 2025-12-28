@@ -427,6 +427,7 @@ export default function App() {
                   onLogout={handleLogout}
                   theme={theme}
                   onToggleTheme={handleToggleTheme}
+                  onUserUpdate={setUser}
                 />
                   </ProtectedRoute>
                 }

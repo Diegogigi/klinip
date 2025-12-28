@@ -44,6 +44,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+    timezone = Column(String, default="America/Santiago")
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
@@ -122,5 +123,18 @@ class PushSubscription(Base):
     p256dh = Column(String, nullable=False)
     auth = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+
+
+class PushNotificationLog(Base):
+    __tablename__ = "push_notification_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    tag = Column(String, unique=True, nullable=False)
+    kind = Column(String, nullable=False)
+    trigger_at = Column(DateTime, nullable=False)
+    sent_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")

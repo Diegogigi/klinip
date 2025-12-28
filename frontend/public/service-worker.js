@@ -36,6 +36,10 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "CLEAR_SCHEDULED_NOTIFICATIONS") {
     clearAllScheduledNotifications();
   }
+
+  if (event.data && event.data.type === "REMOVE_SCHEDULED_NOTIFICATION") {
+    removeScheduledNotification(event.data.id);
+  }
   
   if (event.data && event.data.type === "CHECK_PENDING_NOTIFICATIONS") {
     checkAndShowPendingNotifications();
@@ -172,6 +176,18 @@ function openNotificationsDB() {
       }
     };
   });
+}
+
+// Eliminar una notificación programada por id
+async function removeScheduledNotification(id) {
+  try {
+    const db = await openNotificationsDB();
+    const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
+    const store = tx.objectStore(NOTIFICATIONS_STORE);
+    await store.delete(id);
+  } catch (err) {
+    console.error("Error eliminando notificación:", err);
+  }
 }
 
 // Limpiar todas las notificaciones programadas

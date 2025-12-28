@@ -1,10 +1,43 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import NotificationSettings from "../components/NotificationSettings";
+import { updateMe } from "../api";
 
-export default function Settings({ user, onLogout, theme, onToggleTheme }) {
+export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
   const profile = user || {};
   const plan = "Backend activo";
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+
+  const detectedTimezone = useMemo(() => {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
+  }, []);
+  const [timezone, setTimezone] = useState(profile.timezone || detectedTimezone || "America/Santiago");
+  const [timezoneStatus, setTimezoneStatus] = useState("");
+
+  const timezoneOptions = [
+    "America/Santiago",
+    "America/Lima",
+    "America/Bogota",
+    "America/Mexico_City",
+    "America/Argentina/Buenos_Aires",
+    "America/Sao_Paulo",
+    "America/New_York",
+    "Europe/Madrid",
+    "Europe/London",
+    "UTC",
+  ];
+
+  const handleSaveTimezone = async () => {
+    setTimezoneStatus("");
+    try {
+      const updated = await updateMe({ timezone });
+      onUserUpdate?.(updated);
+      setTimezoneStatus("Zona horaria actualizada");
+    } catch (err) {
+      setTimezoneStatus("No se pudo actualizar la zona horaria");
+      console.error("Error actualizando zona horaria:", err);
+    }
+  };
+
 
   const handleClearLocal = () => {
     if (!window.confirm("¿Borrar los datos locales de Klinip en este navegador?")) return;
@@ -43,7 +76,35 @@ export default function Settings({ user, onLogout, theme, onToggleTheme }) {
             <p className="profile-label">Plan</p>
             <p className="profile-value">{plan}</p>
           </div>
+          <div className="profile-tile">
+            <p className="profile-label">Zona horaria</p>
+            <p className="profile-value">{profile.timezone || detectedTimezone}</p>
+          </div>
         </div>
+
+        <div className="form-row">
+          <div className="input-group">
+            <label className="input-label">Actualizar zona horaria</label>
+            <input
+              className="input-field"
+              list="timezone-options"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              placeholder="America/Santiago"
+            />
+            <datalist id="timezone-options">
+              {timezoneOptions.map((tz) => (
+                <option value={tz} key={tz} />
+              ))}
+            </datalist>
+          </div>
+          <div className="input-group" style={{ alignSelf: "flex-end" }}>
+            <button className="secondary-btn" type="button" onClick={handleSaveTimezone}>
+              Guardar zona horaria
+            </button>
+          </div>
+        </div>
+        {timezoneStatus && <p className="muted">{timezoneStatus}</p>}
 
       </div>
 

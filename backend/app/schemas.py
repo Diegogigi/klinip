@@ -14,6 +14,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     name: str
+    timezone: str | None = None
     created_at: datetime
 
     @field_serializer('created_at')
@@ -26,6 +27,12 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    timezone: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str

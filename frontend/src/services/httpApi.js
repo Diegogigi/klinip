@@ -56,6 +56,11 @@ export async function getMe() {
   return res.data;
 }
 
+export async function updateMe(payload) {
+  const res = await api.put("/me", payload);
+  return res.data;
+}
+
 export async function getAppointments() {
   const res = await api.get("/appointments");
   return res.data;

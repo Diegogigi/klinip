@@ -41,6 +41,10 @@ function postMessageToServiceWorker(message) {
     });
 }
 
+function removeScheduledInServiceWorker(id) {
+  postMessageToServiceWorker({ type: "REMOVE_SCHEDULED_NOTIFICATION", id });
+}
+
 function scheduleInServiceWorker(notification) {
   postMessageToServiceWorker({ type: "SCHEDULE_NOTIFICATION", notification });
 }
@@ -143,6 +147,7 @@ class NotificationManager {
   removeScheduledNotification(id) {
     this.scheduledNotifications = this.scheduledNotifications.filter(n => n.id !== id);
     this.saveScheduledNotifications();
+    removeScheduledInServiceWorker(id);
   }
 
   /**
@@ -291,8 +296,6 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
 
   if (!reminders?.length) return;
 
-  const useServiceWorkerSchedule = "serviceWorker" in navigator;
-
   // Offsets personalizables
   const offsets = customOffsets || [
     { days: 7, label: "7 dias antes", icon: "", priority: "low", sound: "appointment" },
@@ -344,7 +347,7 @@ ${rem.notes}` : ""}`;
       // Solo programar notificaciones futuras (proximos 30 dias)
       if (delay > 0 && delay < 30 * dayMs) {
         // Guardar en persistencia
-        notificationManager.addScheduledNotification({
+        const created = notificationManager.addScheduledNotification({
           triggerAt,
           title,
           body,
@@ -355,18 +358,17 @@ ${rem.notes}` : ""}`;
         });
 
         // Programar timeout
-        if (!useServiceWorkerSchedule) {
-          const timer = setTimeout(() => {
-            showNotification(title, body, {
-              sound,
-              url: "/appointments",
-              tag: `appointment-${rem.id}-${label}`,
-              data: notificationData
-            });
-          }, delay);
+        const timer = setTimeout(() => {
+          notificationManager.removeScheduledNotification(created.id);
+          showNotification(title, body, {
+            sound,
+            url: "/appointments",
+            tag: `appointment-${rem.id}-${label}`,
+            data: notificationData
+          });
+        }, delay);
 
-          appointmentTimers.push(timer);
-        }
+        appointmentTimers.push(timer);
       }
     });
   });
@@ -412,7 +414,6 @@ export function scheduleMedicationNotifications(medications) {
 
   if (!medications?.length) return;
 
-  const useServiceWorkerSchedule = "serviceWorker" in navigator;
   const leadOffsets = [MEDICATION_LEAD_MINUTES, 0];
 
   const today = new Date();
@@ -459,7 +460,7 @@ ${med.dose ? `Dosis: ${med.dose}
 ` : ""}${med.notes ? `${med.notes}` : "Tomar segun indicacion medica"}`;
 
           // Guardar en persistencia
-          notificationManager.addScheduledNotification({
+          const created = notificationManager.addScheduledNotification({
             triggerAt,
             title,
             body,
@@ -470,19 +471,18 @@ ${med.dose ? `Dosis: ${med.dose}
           });
 
           // Programar timeout
-          if (!useServiceWorkerSchedule) {
-            const timer = setTimeout(() => {
-              showNotification(title, body, {
-                sound: "medication",
-                url: "/medications",
-                tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
-                requireInteraction: true,
-                data: notificationData
-              });
-            }, delay);
+          const timer = setTimeout(() => {
+            notificationManager.removeScheduledNotification(created.id);
+            showNotification(title, body, {
+              sound: "medication",
+              url: "/medications",
+              tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
+              requireInteraction: true,
+              data: notificationData
+            });
+          }, delay);
 
-            medicationTimers.push(timer);
-          }
+          medicationTimers.push(timer);
         });
       });
     }
@@ -505,7 +505,6 @@ export function createCustomNotification(options) {
     data = {}
   } = options;
 
-  const useServiceWorkerSchedule = "serviceWorker" in navigator;
   const delay = triggerAt - Date.now();
 
   if (delay <= 0) {
@@ -514,7 +513,7 @@ export function createCustomNotification(options) {
   }
 
   // Guardar en persistencia
-  notificationManager.addScheduledNotification({
+  const created = notificationManager.addScheduledNotification({
     triggerAt,
     title,
     body,
@@ -524,11 +523,10 @@ export function createCustomNotification(options) {
   });
 
   // Programar
-  if (!useServiceWorkerSchedule) {
-    setTimeout(() => {
-      showNotification(title, body, { sound, url, data });
-    }, delay);
-  }
+  setTimeout(() => {
+    notificationManager.removeScheduledNotification(created.id);
+    showNotification(title, body, { sound, url, data });
+  }, delay);
 }
 
 /**
