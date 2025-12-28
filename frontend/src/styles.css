@@ -1952,7 +1952,12 @@ a {
   gap: 0.5rem;
 }
 
+.topbar-notifications {
+  position: relative;
+}
+
 .topbar-quick {
+  position: relative;
   padding: 0.45rem 0.8rem;
   border-radius: 12px;
   background: rgba(99, 102, 241, 0.08);
@@ -1962,8 +1967,103 @@ a {
   text-decoration: none;
 }
 
+.topbar-quick svg {
+  width: 20px;
+  height: 20px;
+}
+
 .topbar-quick:hover {
   background: rgba(99, 102, 241, 0.12);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 6px 12px rgba(239, 68, 68, 0.25);
+}
+
+.notifications-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 320px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.18);
+  padding: 0.75rem;
+  z-index: 20;
+}
+
+.notifications-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.notifications-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.notifications-item {
+  padding: 0.6rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.notifications-item:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.notifications-title {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.notifications-body {
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.notifications-meta {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.notifications-empty {
+  padding: 0.6rem;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+  font-size: 0.85rem;
 }
 
 .topbar-user {

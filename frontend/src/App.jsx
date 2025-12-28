@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -197,8 +197,9 @@ function Sidebar({ user, theme, onToggleTheme }) {
   );
 }
 
-function Topbar({ user }) {
+function Topbar({ user, notifications, onClearNotifications }) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
   if (isAuthRoute || (!user && location.pathname === "/")) return null;
@@ -215,11 +216,16 @@ function Topbar({ user }) {
   const title = titles[location.pathname] || "Klinip";
   const subtitle = location.pathname === "/" ? "Panel general" : "Tu ruta de salud";
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+  }, [location.pathname]);
 
   return (
     <header className="topbar">
@@ -231,6 +237,63 @@ function Topbar({ user }) {
         </div>
       </div>
       <div className="topbar-actions">
+        <div className="topbar-notifications">
+          <button
+            className="topbar-quick"
+            type="button"
+            aria-label="Ver notificaciones"
+            onClick={() => setNotificationsOpen((prev) => !prev)}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {notifications?.length > 0 && (
+              <span className="notification-badge">{notifications.length}</span>
+            )}
+          </button>
+          {notificationsOpen && (
+            <div className="notifications-dropdown">
+              <div className="notifications-header">
+                <span>Notificaciones</span>
+                {notifications?.length > 0 && (
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() => {
+                      onClearNotifications?.();
+                      setNotificationsOpen(false);
+                    }}
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              {notifications?.length ? (
+                <ul className="notifications-list">
+                  {notifications.slice(0, 6).map((item) => (
+                    <li
+                      key={item.id}
+                      className="notifications-item"
+                      onClick={() => {
+                        if (item.url) navigate(item.url);
+                        setNotificationsOpen(false);
+                      }}
+                    >
+                      <div className="notifications-title">{item.title || "Recordatorio"}</div>
+                      <div className="notifications-body">{item.body || ""}</div>
+                      <div className="notifications-meta">
+                        {item.timestamp ? new Date(item.timestamp).toLocaleString() : ""}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div className="notifications-empty">Sin notificaciones recientes</div>
+              )}
+            </div>
+          )}
+        </div>
         <div className="topbar-user">
           <span className="topbar-avatar">{initials}</span>
           <span className="topbar-name">{user?.name || "Invitado"}</span>
@@ -239,6 +302,8 @@ function Topbar({ user }) {
     </header>
   );
 }
+
+const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
 
 function ProtectedRoute({ user, children }) {
   if (!user) {
@@ -249,6 +314,14 @@ function ProtectedRoute({ user, children }) {
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const saved = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark" || savedTheme === "light") {
@@ -259,6 +332,70 @@ export default function App() {
       : "light";
   });
   const [booting, setBooting] = useState(true);
+
+  const persistNotifications = (items) => {
+    setNotifications(items);
+    localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(items));
+  };
+
+  const addNotification = (notification) => {
+    if (!notification) return;
+    setNotifications((prev) => {
+      const exists = prev.some((item) => item.id === notification.id);
+      if (exists) return prev;
+      const next = [notification, ...prev].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const handleClearNotifications = () => {
+    setNotifications([]);
+    localStorage.removeItem(NOTIFICATION_STORAGE_KEY);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.active?.postMessage({ type: "CLEAR_RECEIVED_NOTIFICATIONS" });
+      });
+    }
+    if ("clearAppBadge" in navigator) {
+      navigator.clearAppBadge();
+    }
+  };
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handler = (event) => {
+      const data = event.data || {};
+      if (data.type === "NOTIFICATION_RECORDED") {
+        addNotification(data.notification);
+      }
+      if (data.type === "RECEIVED_NOTIFICATIONS") {
+        const list = Array.isArray(data.notifications) ? data.notifications : [];
+        const sorted = list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        persistNotifications(sorted);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!user || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then((reg) => {
+      reg.active?.postMessage({ type: "GET_RECEIVED_NOTIFICATIONS" });
+    });
+  }, [user]);
+
+  useEffect(() => {
+    const count = notifications.length;
+    if ("setAppBadge" in navigator) {
+      if (count > 0) {
+        navigator.setAppBadge(count);
+      } else if ("clearAppBadge" in navigator) {
+        navigator.clearAppBadge();
+      }
+    }
+  }, [notifications.length]);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -313,8 +450,8 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    // Solo registrar el service worker, NO suscribir automáticamente
-    // La suscripción push debe ser explícita desde Configuración
+    // Solo registrar el service worker, NO suscribir autom├íticamente
+    // La suscripci├│n push debe ser expl├¡cita desde Configuraci├│n
     registerServiceWorker().catch((err) =>
       console.error("No se pudo registrar service worker", err)
     );
@@ -343,7 +480,7 @@ export default function App() {
       <div className="layout">
         <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="main-area">
-          <Topbar user={user} />
+          <Topbar user={user} notifications={notifications} onClearNotifications={handleClearNotifications} />
           <main className="main-content">
             <Routes>
               <Route
@@ -461,7 +598,7 @@ function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, 
   const steps = [
     {
       title: "Define tu objetivo",
-      desc: "¿Qué quieres lograr con Klinip?",
+      desc: "┬┐Qu├® quieres lograr con Klinip?",
       content: (
         <div className="onboarding-fields">
           <label className="input-label">Objetivo principal</label>
@@ -476,7 +613,7 @@ function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, 
     },
     {
       title: "Recordatorios",
-      desc: "Elige cómo quieres tus alertas",
+      desc: "Elige c├│mo quieres tus alertas",
       content: (
         <div className="onboarding-options">
           <button
@@ -484,28 +621,28 @@ function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, 
             type="button"
             onClick={() => setData({ ...data, recordatorios: "visual" })}
           >
-            🔔 Visuales en la app
+            ­ƒöö Visuales en la app
           </button>
           <button
             className={`pill-button ${data.recordatorios === "push" ? "active" : ""}`}
             type="button"
             onClick={() => setData({ ...data, recordatorios: "push" })}
           >
-            📱 Push (si el navegador lo permite)
+            ­ƒô▒ Push (si el navegador lo permite)
           </button>
           <button
             className={`pill-button ${data.recordatorios === "correo" ? "active" : ""}`}
             type="button"
             onClick={() => setData({ ...data, recordatorios: "correo" })}
           >
-            ✉️ Correo (próximamente)
+            Ô£ë´©Å Correo (pr├│ximamente)
           </button>
         </div>
       ),
     },
     {
-      title: "¿Por dónde empiezas?",
-      desc: "Atajo rápido para tu primer paso",
+      title: "┬┐Por d├│nde empiezas?",
+      desc: "Atajo r├ípido para tu primer paso",
       content: (
         <div className="onboarding-actions-grid">
           <button className="primary-btn" type="button" onClick={() => onGo("/appointments")}>
@@ -531,7 +668,7 @@ function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, 
   return (
     <div className="floating-form-backdrop" onClick={onClose}>
       <div className="floating-form-card onboarding-card" onClick={(e) => e.stopPropagation()}>
-        <h2 className="card-title">¡Bienvenido a Klinip{user?.name ? `, ${user.name}` : ""}!</h2>
+        <h2 className="card-title">┬íBienvenido a Klinip{user?.name ? `, ${user.name}` : ""}!</h2>
         <div className="onboarding-stepper">
           {steps.map((_, idx) => (
             <div key={idx} className={`step ${idx === step ? "active" : idx < step ? "done" : ""}`}>

@@ -53,6 +53,10 @@ function clearServiceWorkerSchedule() {
   postMessageToServiceWorker({ type: "CLEAR_SCHEDULED_NOTIFICATIONS" });
 }
 
+function recordNotificationInServiceWorker(notification) {
+  postMessageToServiceWorker({ type: "RECORD_NOTIFICATION", notification });
+}
+
 // Rate limiter para evitar muchas notificaciones simultáneas al iniciar sesión
 let recentNotifications = new Map(); // tag -> timestamp
 const NOTIFICATION_COOLDOWN_MS = 5000; // 5 segundos de cooldown por notificación única
@@ -266,6 +270,15 @@ async function showNotification(title, body, options = {}) {
     icon,
     tag,
     data: { url, ...data }
+  });
+
+  recordNotificationInServiceWorker({
+    title,
+    body,
+    url,
+    tag,
+    timestamp: Date.now(),
+    source: "local"
   });
 
   notification.onclick = () => {
