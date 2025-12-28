@@ -199,7 +199,6 @@ function Sidebar({ user, theme, onToggleTheme }) {
 
 function Topbar({ user, notifications, onClearNotifications }) {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
   const titles = {
@@ -408,50 +407,7 @@ export default function App() {
       }
     }
   }, [notifications.length]);
-  const [showOnboarding, setShowOnboarding] = useState(false);
   const navigate = useNavigate();
-  const [onboardingStep, setOnboardingStep] = useState(0);
-  const [onboardingData, setOnboardingData] = useState({
-    objetivo: "",
-    recordatorios: "visual",
-    preferencia: "calendario",
-  });
-
-  useEffect(() => {
-    document.body.classList.toggle("theme-dark", theme === "dark");
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
-  useEffect(() => {
-    async function bootstrap() {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setBooting(false);
-        return;
-      }
-      try {
-        const me = await getMe();
-        setUser(me);
-      } catch (err) {
-        setUser(null);
-      } finally {
-        setBooting(false);
-      }
-    }
-    bootstrap();
-  }, []);
-
-  useEffect(() => {
-    if (!user) return;
-    const seen = localStorage.getItem("klinip_onboarding_seen");
-    if (!seen) {
-      setShowOnboarding(true);
-    }
-  }, [user]);
-
-  const handleToggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -469,10 +425,6 @@ export default function App() {
     );
   }, [user]);
 
-  const completeOnboarding = () => {
-    localStorage.setItem("klinip_onboarding_seen", "1");
-    setShowOnboarding(false);
-  };
 
   if (booting) {
     return (
@@ -582,133 +534,10 @@ export default function App() {
           </main>
         </div>
       </div>
-      {showOnboarding && (
-        <Onboarding
-          user={user}
-          step={onboardingStep}
-          data={onboardingData}
-          setData={setOnboardingData}
-          onNext={() => setOnboardingStep((s) => Math.min(s + 1, 2))}
-          onPrev={() => setOnboardingStep((s) => Math.max(s - 1, 0))}
-          onSkip={completeOnboarding}
-          onClose={completeOnboarding}
-          onGo={(path) => {
-            completeOnboarding();
-            navigate(path);
-          }}
-        />
-      )}
     </div>
   );
 }
 
-function Onboarding({ onClose, onGo, user, step, data, setData, onNext, onPrev, onSkip }) {
-  const steps = [
-    {
-      title: "Define tu objetivo",
-      desc: "┬┐Qu├® quieres lograr con Klinip?",
-      content: (
-        <div className="onboarding-fields">
-          <label className="input-label">Objetivo principal</label>
-          <input
-            className="input-field"
-            placeholder="Ej: Organizar mis citas de control"
-            value={data.objetivo}
-            onChange={(e) => setData({ ...data, objetivo: e.target.value })}
-          />
-        </div>
-      ),
-    },
-    {
-      title: "Recordatorios",
-      desc: "Elige c├│mo quieres tus alertas",
-      content: (
-        <div className="onboarding-options">
-          <button
-            className={`pill-button ${data.recordatorios === "visual" ? "active" : ""}`}
-            type="button"
-            onClick={() => setData({ ...data, recordatorios: "visual" })}
-          >
-            ­ƒöö Visuales en la app
-          </button>
-          <button
-            className={`pill-button ${data.recordatorios === "push" ? "active" : ""}`}
-            type="button"
-            onClick={() => setData({ ...data, recordatorios: "push" })}
-          >
-            ­ƒô▒ Push (si el navegador lo permite)
-          </button>
-          <button
-            className={`pill-button ${data.recordatorios === "correo" ? "active" : ""}`}
-            type="button"
-            onClick={() => setData({ ...data, recordatorios: "correo" })}
-          >
-            Ô£ë´©Å Correo (pr├│ximamente)
-          </button>
-        </div>
-      ),
-    },
-    {
-      title: "┬┐Por d├│nde empiezas?",
-      desc: "Atajo r├ípido para tu primer paso",
-      content: (
-        <div className="onboarding-actions-grid">
-          <button className="primary-btn" type="button" onClick={() => onGo("/appointments")}>
-            Cargar mi primera cita
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => onGo("/documents")}>
-            Subir documentos
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => onGo("/calendar")}>
-            Ver calendario
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => onGo("/medications")}>
-            Registrar medicamento
-          </button>
-          <button className="secondary-btn" type="button" onClick={() => onGo("/timeline")}>
-            Ver mi historia
-          </button>
-        </div>
-      ),
-    },
-  ];
 
-  return (
-    <div className="floating-form-backdrop" onClick={onClose}>
-      <div className="floating-form-card onboarding-card" onClick={(e) => e.stopPropagation()}>
-        <h2 className="card-title">┬íBienvenido a Klinip{user?.name ? `, ${user.name}` : ""}!</h2>
-        <div className="onboarding-stepper">
-          {steps.map((_, idx) => (
-            <div key={idx} className={`step ${idx === step ? "active" : idx < step ? "done" : ""}`}>
-              <div className="step-index">{idx + 1}</div>
-            </div>
-          ))}
-        </div>
-        <h3 className="onboarding-title">{steps[step].title}</h3>
-        <p className="muted">{steps[step].desc}</p>
-        {steps[step].content}
-        <div className="floating-actions" style={{ justifyContent: "space-between" }}>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            {step > 0 && (
-              <button className="secondary-btn" type="button" onClick={onPrev}>
-                Anterior
-              </button>
-            )}
-            <button className="secondary-btn" type="button" onClick={onSkip}>
-              Omitir
-            </button>
-          </div>
-          {step < steps.length - 1 ? (
-            <button className="primary-btn" type="button" onClick={onNext}>
-              Continuar
-            </button>
-          ) : (
-            <button className="primary-btn" type="button" onClick={onClose}>
-              Empezar
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+
+

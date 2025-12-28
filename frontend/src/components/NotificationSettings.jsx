@@ -12,6 +12,7 @@ import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const pushSupported = "serviceWorker" in navigator && "PushManager" in window;
   // Cargar estado inicial de push desde localStorage
   const [pushEnabled, setPushEnabled] = useState(() => {
     const saved = localStorage.getItem("klinip_push_enabled");
@@ -291,9 +292,17 @@ export default function NotificationSettings({ onClose }) {
   };
 
   const handleTestPush = async () => {
-    if (!pushEnabled) {
-      alert("⚠️ Primero debes habilitar las notificaciones push");
+    if (!pushSupported) {
+      alert("Tu navegador no soporta notificaciones push.");
       return;
+    }
+    if (!pushEnabled) {
+      await loadPushStatus();
+      const stillDisabled = localStorage.getItem("klinip_push_enabled") !== "true";
+      if (stillDisabled) {
+        alert("⚠️ Primero debes habilitar las notificaciones push");
+        return;
+      }
     }
     
     try {
@@ -384,9 +393,12 @@ export default function NotificationSettings({ onClose }) {
             <p className="help-text">
               Las notificaciones push funcionan incluso cuando la aplicación está cerrada
             </p>
+            {!pushSupported && (
+              <p className="help-text">Tu navegador no soporta notificaciones push.</p>
+            )}
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
               {!pushEnabled ? (
-                <button className="primary-btn" onClick={handleEnablePush}>
+                <button className="primary-btn" onClick={handleEnablePush} disabled={!pushSupported}>
                   Habilitar Notificaciones Push
                 </button>
               ) : (
@@ -394,11 +406,11 @@ export default function NotificationSettings({ onClose }) {
                   <button className="danger-btn" onClick={handleDisablePush}>
                     Deshabilitar Notificaciones Push
                   </button>
-                  <button className="secondary-btn" onClick={handleTestPush}>
-                    🧪 Enviar Notificación de Prueba
-                  </button>
                 </>
               )}
+              <button className="secondary-btn" onClick={handleTestPush} disabled={!pushEnabled}>
+                🧪 Enviar Notificación de Prueba
+              </button>
             </div>
           </section>
 
