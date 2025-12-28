@@ -276,7 +276,7 @@ export default function Dashboard({ user }) {
     // scheduleReminderNotifications(reminders);
     // scheduleMedicationNotifications(medications);
   }, [notificationsReady, reminders, medications]);
-`n  return (
+  return (
     <>
       <div className="summary-bar">
         <div>
@@ -678,5 +678,6 @@ export default function Dashboard({ user }) {
     </>
   );
 }
+
 
 
