@@ -403,16 +403,14 @@ def _send_scheduled_push_reminders():
                             prefix = (
                                 "Ahora" if offset_minutes == 0 else f"En {offset_minutes} minutos"
                             )
-                            body = prefix
+                            body_lines = [prefix]
                             if med.dose:
-                                body += f"
-Dosis: {med.dose}"
+                                body_lines.append(f"Dosis: {med.dose}")
                             if med.frequency:
-                                body += f"
-Frecuencia: {med.frequency}"
+                                body_lines.append(f"Frecuencia: {med.frequency}")
                             if med.notes:
-                                body += f"
-{med.notes}"
+                                body_lines.append(med.notes)
+                            body = "\n".join(body_lines)
 
                             ok = send_web_push(
                                 subscription,
@@ -2136,32 +2134,29 @@ async def send_appointment_reminders(
         should_send = False
         message = ""
         priority = "normal"
-        icon = "🟡"
 
         if 0 < hours_until <= 2:
             should_send = True
             message = "Tu cita es en menos de 2 horas"
             priority = "urgent"
-            icon = "🔴"
         elif 0 < days_until <= 1:
             should_send = True
-            message = "Tu cita es mañana"
+            message = "Tu cita es manana"
             priority = "high"
-            icon = "🟠"
         elif days_until == 3:
             should_send = True
-            message = "Tu cita es en 3 días"
+            message = "Tu cita es en 3 dias"
             priority = "normal"
-            icon = "🟡"
         elif days_until == 7:
             should_send = True
             message = "Tu cita es en una semana"
             priority = "low"
-            icon = "🟢"
 
         if should_send:
-            title = f"{icon} Recordatorio: {appt.specialty or appt.type}"
-            body = f"{message}\n📅 {appt_dt.strftime('%d/%m/%Y %H:%M')}\n📍 {appt.center or 'Centro médico'}"
+            title = f"Recordatorio: {appt.specialty or appt.type}"
+            when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
+            center = appt.center or "Centro medico"
+            body = "\n".join([message, when_text, center])
 
             ok = send_web_push(
                 subscription,
