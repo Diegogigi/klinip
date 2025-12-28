@@ -20,9 +20,9 @@ import {
 } from "../utils/dates";
 
 const typeLabels = {
-  cita: "Cita mÃ©dica",
+  cita: "Cita médica",
   examen: "Examen",
-  tramite: "TrÃ¡mite",
+  tramite: "Trámite",
 };
 
 const statusLabels = {
@@ -187,7 +187,7 @@ export default function Dashboard({ user }) {
         resetDocForm();
         setShowDocForm(false);
       }
-      window.alert("Documento subido. La IA estÃ¡ analizando el contenido.");
+      window.alert("Documento subido. La IA está analizando el contenido.");
     } catch (err) {
       console.error(err);
       window.alert("No se pudo subir el documento.");
@@ -226,14 +226,14 @@ export default function Dashboard({ user }) {
   }, [appointments, documents]);
 
   const alert = useMemo(() => {
-    if (!upcoming.length) return { label: "Sin actividades prÃ³ximas", color: "#6b7280", dot: "gray" };
+    if (!upcoming.length) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
     const first = parseDate(upcoming[0].date_time);
-    if (!first) return { label: "Sin actividades prÃ³ximas", color: "#6b7280", dot: "gray" };
+    if (!first) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
     const now = new Date();
     const diffDays = (first - now) / (1000 * 60 * 60 * 24);
-    if (diffDays <= 2) return { label: "AtenciÃ³n: actividad muy prÃ³xima", color: "#b91c1c", dot: "red" };
-    if (diffDays <= 7) return { label: "Tienes actividades en la prÃ³xima semana", color: "#f59e0b", dot: "yellow" };
-    return { label: "PrÃ³ximas actividades programadas", color: "#16a34a", dot: "green" };
+    if (diffDays <= 2) return { label: "Atención: actividad muy próxima", color: "#b91c1c", dot: "red" };
+    if (diffDays <= 7) return { label: "Tienes actividades en la próxima semana", color: "#f59e0b", dot: "yellow" };
+    return { label: "Próximas actividades programadas", color: "#16a34a", dot: "green" };
   }, [upcoming]);
 
   const reminders = useMemo(() => {
@@ -248,13 +248,13 @@ export default function Dashboard({ user }) {
         let label = "En orden";
         if (diff <= 1) {
           severity = "red";
-          label = "Hoy / MaÃ±ana (1 dÃ­a)";
+          label = "Hoy / Mañana (1 día)";
         } else if (diff <= 3) {
           severity = "yellow";
-          label = "PrÃ³ximos 3 dÃ­as";
+          label = "Próximos 3 días";
         } else if (diff <= 7) {
           severity = "yellow";
-          label = "PrÃ³ximos 7 dÃ­as";
+          label = "Próximos 7 días";
         }
         return {
           ...a,
@@ -269,9 +269,9 @@ export default function Dashboard({ user }) {
   }, [appointments]);
 
   useEffect(() => {
-    // DESACTIVADO: Las notificaciones ahora se envÃ­an desde el servidor vÃ­a push
+    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
     // Para evitar duplicados, solo confiamos en el sistema de push notifications
-    // Si quieres reactivar notificaciones locales, descomenta las siguientes lÃ­neas:
+    // Si quieres reactivar notificaciones locales, descomenta las siguientes líneas:
     // if (!notificationsReady) return;
     // scheduleReminderNotifications(reminders);
     // scheduleMedicationNotifications(medications);
@@ -421,7 +421,7 @@ export default function Dashboard({ user }) {
                   onChange={(e) => setDocFile(e.target.files[0] || null)}
                 />
                   <span className="tiny-note">
-                    Puedes tomar una foto o subir un PDF. LÃ­mite recomendado: 4 MB.
+                    Puedes tomar una foto o subir un PDF. Límite recomendado: 4 MB.
                   </span>
                 </div>
 
@@ -432,7 +432,7 @@ export default function Dashboard({ user }) {
                     value={docAutoFill ? "yes" : "no"}
                     onChange={(e) => setDocAutoFill(e.target.value === "yes")}
                   >
-                    <option value="yes">SÃ­, completar automÃ¡ticamente</option>
+                    <option value="yes">Sí, completar automáticamente</option>
                     <option value="no">No, editar manualmente</option>
                   </select>
                 </div>
@@ -491,7 +491,7 @@ export default function Dashboard({ user }) {
                         onChange={(e) =>
                           setDocForm({ ...docForm, notes: e.target.value })
                         }
-                        placeholder="Ej: Receta vence en 3 meses, control con mÃ©dico X."
+                        placeholder="Ej: Receta vence en 3 meses, control con médico X."
                       />
                     </div>
                   </>
@@ -530,8 +530,8 @@ export default function Dashboard({ user }) {
               </svg>
             </div>
             <div>
-              <h2 className="card-title">Lo prÃ³ximo</h2>
-              <p className="muted">MÃ¡ximo 5 actividades con fecha en tu agenda.</p>
+              <h2 className="card-title">Lo próximo</h2>
+              <p className="muted">Máximo 5 actividades con fecha en tu agenda.</p>
             </div>
           </div>
           <div className="traffic">
@@ -541,7 +541,7 @@ export default function Dashboard({ user }) {
         </div>
         {upcoming.length === 0 ? (
           <p className="muted">
-            AÃºn no registras fechas. Agrega tu prÃ³xima atenciÃ³n para verla aquÃ­.
+            Aún no registras fechas. Agrega tu próxima atención para verla aquí.
           </p>
         ) : (
           <ul className="timeline">
@@ -554,7 +554,7 @@ export default function Dashboard({ user }) {
                   </span>
                 </div>
                 <p className="timeline-title">
-                  {a.specialty || "Sin especialidad"} Â· {a.center || "Centro no definido"}
+                  {a.specialty || "Sin especialidad"} · {a.center || "Centro no definido"}
                 </p>
                 <p className="timeline-meta">
                   {a.date_time
@@ -580,19 +580,19 @@ export default function Dashboard({ user }) {
             <div>
               <h2 className="card-title">Recordatorios y alertas</h2>
               <p className="muted">
-                Sistema de alertas automÃ¡ticas segÃºn dÃ­as de anticipaciÃ³n
+                Sistema de alertas automáticas según días de anticipación
               </p>
             </div>
           </div>
           <div className="alert-legend">
             <div className="alert-legend-item">
-              <span className="dot red" /> <span>1 dÃ­a</span>
+              <span className="dot red" /> <span>1 día</span>
             </div>
             <div className="alert-legend-item">
-              <span className="dot yellow" /> <span>3 dÃ­as</span>
+              <span className="dot yellow" /> <span>3 días</span>
             </div>
             <div className="alert-legend-item">
-              <span className="dot green" /> <span>7+ dÃ­as</span>
+              <span className="dot green" /> <span>7+ días</span>
             </div>
           </div>
         </div>
@@ -634,13 +634,13 @@ export default function Dashboard({ user }) {
                       {r.label}
                     </div>
                     <div className="reminder-title">
-                      {typeLabels[r.type] || r.type} Â· {r.center || "Centro no definido"}
+                      {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
                     </div>
                     <div className="reminder-meta">
                       {r.date_time
                         ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
                         : "Por agendar"}
-                      {r.notes ? ` Â· ${r.notes}` : ""}
+                      {r.notes ? ` · ${r.notes}` : ""}
                     </div>
                   </div>
                   <div className="reminder-actions">
@@ -666,10 +666,10 @@ export default function Dashboard({ user }) {
                 <line x1="12" y1="8" x2="12.01" y2="8"/>
               </svg>
               <p>
-                <strong>Tipos de aviso:</strong> Las alertas se activan automÃ¡ticamente 
-                <strong> 1 dÃ­a</strong> (urgente), <strong>3 dÃ­as</strong> (prÃ³ximo) y 
-                <strong> 7 dÃ­as</strong> (planificado) antes de cada cita. 
-                En PWA mÃ³vil se envÃ­an notificaciones push.
+                <strong>Tipos de aviso:</strong> Las alertas se activan automáticamente 
+                <strong> 1 día</strong> (urgente), <strong>3 días</strong> (próximo) y 
+                <strong> 7 días</strong> (planificado) antes de cada cita. 
+                En PWA móvil se envían notificaciones push.
               </p>
             </div>
           </>
@@ -678,6 +678,9 @@ export default function Dashboard({ user }) {
     </>
   );
 }
+
+
+
 
 
 
