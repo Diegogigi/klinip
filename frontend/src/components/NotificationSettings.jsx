@@ -7,7 +7,7 @@ import {
   scheduleMedicationNotifications
 } from "../services/notificationManager";
 import { ensurePushSubscription, removePushSubscription } from "../services/pwa";
-import { getAppointments, getMedications, getPushStatus } from "../services/httpApi";
+import { getAppointments, getMedications, getPushStatus, sendTestPush } from "../services/httpApi";
 import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose }) {
@@ -43,12 +43,40 @@ export default function NotificationSettings({ onClose }) {
 
   const loadPushStatus = async () => {
     try {
+      // 1. Verificar si el navegador tiene una suscripción activa
+      let browserHasSubscription = false;
+      if ("serviceWorker" in navigator && "PushManager" in window) {
+        try {
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.getSubscription();
+          browserHasSubscription = sub !== null;
+          console.log("🔍 Suscripción en navegador:", browserHasSubscription ? "✅ Activa" : "❌ No encontrada");
+        } catch (err) {
+          console.warn("No se pudo verificar suscripción del navegador:", err);
+        }
+      }
+
+      // 2. Verificar si el backend tiene la suscripción registrada
       const status = await getPushStatus();
-      setPushEnabled(status.enabled);
-      console.log("📊 Estado de push cargado:", status);
+      console.log("📊 Estado en backend:", status.enabled ? "✅ Registrada" : "❌ No registrada");
+
+      // 3. El estado es activo solo si AMBOS están activos
+      const isEnabled = browserHasSubscription && status.enabled;
+      setPushEnabled(isEnabled);
+      
+      console.log("🎯 Estado final de push:", isEnabled ? "✅ ACTIVO" : "❌ INACTIVO");
+      
+      // 4. Si hay desincronización, mostrar advertencia
+      if (browserHasSubscription !== status.enabled) {
+        console.warn("⚠️ Desincronización detectada entre navegador y backend");
+        if (browserHasSubscription && !status.enabled) {
+          console.warn("→ El navegador tiene suscripción pero el backend no");
+        } else if (!browserHasSubscription && status.enabled) {
+          console.warn("→ El backend tiene suscripción pero el navegador no");
+        }
+      }
     } catch (err) {
       console.error("Error cargando estado de push:", err);
-      // Si hay error (ej: no autenticado), asumimos push deshabilitado
       setPushEnabled(false);
     }
   };
@@ -181,6 +209,26 @@ export default function NotificationSettings({ onClose }) {
     }
   };
 
+  const handleTestPush = async () => {
+    if (!pushEnabled) {
+      alert("⚠️ Primero debes habilitar las notificaciones push");
+      return;
+    }
+    
+    try {
+      console.log("📤 Enviando notificación de prueba...");
+      const result = await sendTestPush();
+      if (result.sent) {
+        alert("✅ Notificación de prueba enviada. Deberías recibirla en unos segundos.");
+      } else {
+        alert("⚠️ No se pudo enviar la notificación. Revisa la consola para más detalles.");
+      }
+    } catch (err) {
+      console.error("Error enviando notificación de prueba:", err);
+      alert("❌ Error al enviar notificación de prueba:\n" + (err.message || "Error desconocido"));
+    }
+  };
+
   const handleSettingChange = (key, value) => {
     const newSettings = { ...settings, [key]: value };
     saveSettings(newSettings);
@@ -255,15 +303,22 @@ export default function NotificationSettings({ onClose }) {
             <p className="help-text">
               Las notificaciones push funcionan incluso cuando la aplicación está cerrada
             </p>
-            {!pushEnabled ? (
-              <button className="primary-btn" onClick={handleEnablePush}>
-                Habilitar Notificaciones Push
-              </button>
-            ) : (
-              <button className="danger-btn" onClick={handleDisablePush}>
-                Deshabilitar Notificaciones Push
-              </button>
-            )}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              {!pushEnabled ? (
+                <button className="primary-btn" onClick={handleEnablePush}>
+                  Habilitar Notificaciones Push
+                </button>
+              ) : (
+                <>
+                  <button className="danger-btn" onClick={handleDisablePush}>
+                    Deshabilitar Notificaciones Push
+                  </button>
+                  <button className="secondary-btn" onClick={handleTestPush}>
+                    🧪 Enviar Notificación de Prueba
+                  </button>
+                </>
+              )}
+            </div>
           </section>
 
           {/* Preferencias de recordatorios */}

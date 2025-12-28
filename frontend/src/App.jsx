@@ -313,11 +313,11 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    registerServiceWorker().then(() => {
-      ensurePushSubscription().catch((err) =>
-        console.error("No se pudo suscribir a push", err)
-      );
-    });
+    // Solo registrar el service worker, NO suscribir automáticamente
+    // La suscripción push debe ser explícita desde Configuración
+    registerServiceWorker().catch((err) =>
+      console.error("No se pudo registrar service worker", err)
+    );
   }, [user]);
 
   const completeOnboarding = () => {
