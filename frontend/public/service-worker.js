@@ -109,7 +109,7 @@ async function scheduleNotification(notification) {
     const db = await openNotificationsDB();
     const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
     const store = tx.objectStore(NOTIFICATIONS_STORE);
-    await store.add(notification);
+    await requestToPromise(store.add(notification));
   } catch (err) {
     console.error("Error saving scheduled notification:", err);
   }
@@ -123,7 +123,7 @@ async function recordReceivedNotification(notification) {
     const received = tx.objectStore(RECEIVED_STORE);
     const badge = tx.objectStore(BADGE_STORE);
     const id = notification.id || notification.tag || `received-${Date.now()}-${Math.random()}`;
-    await received.put({
+    await requestToPromise(received.put({
       id,
       title: notification.title,
       body: notification.body,
@@ -131,10 +131,10 @@ async function recordReceivedNotification(notification) {
       tag: notification.tag || "",
       timestamp: notification.timestamp || Date.now(),
       source: notification.source || "system"
-    });
-    const current = await badge.get("count");
+    }));
+    const current = await requestToPromise(badge.get("count"));
     const nextCount = (current && current.value ? current.value : 0) + 1;
-    await badge.put({ key: "count", value: nextCount });
+    await requestToPromise(badge.put({ key: "count", value: nextCount }));
     await updateAppBadge(nextCount);
     await broadcastMessage({
       type: "NOTIFICATION_RECORDED",
@@ -158,7 +158,7 @@ async function sendReceivedNotifications() {
     const db = await openNotificationsDB();
     const tx = db.transaction(RECEIVED_STORE, "readonly");
     const store = tx.objectStore(RECEIVED_STORE);
-    const notifications = await store.getAll();
+    const notifications = await requestToPromise(store.getAll());
     await broadcastMessage({ type: "RECEIVED_NOTIFICATIONS", notifications });
   } catch (err) {
     console.error("Error loading notifications:", err);
@@ -169,8 +169,8 @@ async function clearReceivedNotifications() {
   try {
     const db = await openNotificationsDB();
     const tx = db.transaction([RECEIVED_STORE, BADGE_STORE], "readwrite");
-    await tx.objectStore(RECEIVED_STORE).clear();
-    await tx.objectStore(BADGE_STORE).put({ key: "count", value: 0 });
+    await requestToPromise(tx.objectStore(RECEIVED_STORE).clear());
+    await requestToPromise(tx.objectStore(BADGE_STORE).put({ key: "count", value: 0 }));
     await updateAppBadge(0);
     await broadcastMessage({ type: "RECEIVED_NOTIFICATIONS", notifications: [] });
   } catch (err) {
@@ -202,7 +202,7 @@ async function checkAndShowPendingNotifications() {
     const db = await openNotificationsDB();
     const tx = db.transaction(NOTIFICATIONS_STORE, "readonly");
     const store = tx.objectStore(NOTIFICATIONS_STORE);
-    const notifications = await store.getAll();
+    const notifications = await requestToPromise(store.getAll());
 
     const now = Date.now();
     const toShow = notifications.filter(
@@ -240,11 +240,18 @@ async function checkAndShowPendingNotifications() {
 
       const deleteTx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
       const deleteStore = deleteTx.objectStore(NOTIFICATIONS_STORE);
-      await deleteStore.delete(notification.id);
+      await requestToPromise(deleteStore.delete(notification.id));
     }
   } catch (err) {
     console.error("Error checking pending notifications:", err);
   }
+}
+
+function requestToPromise(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 }
 
 function openNotificationsDB() {
@@ -276,7 +283,7 @@ async function clearAllScheduledNotifications() {
     const db = await openNotificationsDB();
     const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
     const store = tx.objectStore(NOTIFICATIONS_STORE);
-    await store.clear();
+    await requestToPromise(store.clear());
   } catch (err) {
     console.error("Error clearing scheduled notifications:", err);
   }
@@ -287,7 +294,7 @@ async function removeScheduledNotification(id) {
     const db = await openNotificationsDB();
     const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
     const store = tx.objectStore(NOTIFICATIONS_STORE);
-    await store.delete(id);
+    await requestToPromise(store.delete(id));
   } catch (err) {
     console.error("Error removing scheduled notification:", err);
   }

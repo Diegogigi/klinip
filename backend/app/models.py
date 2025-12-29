@@ -105,6 +105,7 @@ class Medication(Base):
     dose = Column(String, default="")
     frequency = Column(String, default="")
     duration = Column(String, default="")
+    schedule_time = Column(String, default="")
     end_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)

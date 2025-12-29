@@ -365,6 +365,31 @@ export default function App() {
     }
   };
 
+  const loadNotificationsFromIdb = () =>
+    new Promise((resolve) => {
+      if (!("indexedDB" in window)) return resolve([]);
+      const request = indexedDB.open("KlinipNotifications", 2);
+      request.onerror = () => resolve([]);
+      request.onupgradeneeded = () => resolve([]);
+      request.onsuccess = () => {
+        try {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("klinip-received-notifications")) {
+            db.close();
+            return resolve([]);
+          }
+          const tx = db.transaction("klinip-received-notifications", "readonly");
+          const store = tx.objectStore("klinip-received-notifications");
+          const getAll = store.getAll();
+          getAll.onsuccess = () => resolve(getAll.result || []);
+          getAll.onerror = () => resolve([]);
+          tx.oncomplete = () => db.close();
+        } catch (err) {
+          resolve([]);
+        }
+      };
+    });
+
   const addNotification = (notification) => {
     if (!notification) return;
     setNotifications((prev) => {
@@ -416,9 +441,33 @@ export default function App() {
 
   useEffect(() => {
     if (!user || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.ready.then((reg) => {
-      reg.active?.postMessage({ type: "GET_RECEIVED_NOTIFICATIONS" });
-    });
+    let cancelled = false;
+
+    const syncNotifications = async () => {
+      const reg = await registerServiceWorker().catch(() => null);
+      const target = reg?.active || reg?.waiting || reg?.installing || navigator.serviceWorker.controller;
+      if (target) {
+        target.postMessage({ type: "GET_RECEIVED_NOTIFICATIONS" });
+        return;
+      }
+      const stored = await loadNotificationsFromIdb();
+      if (!cancelled && stored.length) {
+        const sorted = stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        persistNotifications(sorted);
+      }
+    };
+
+    syncNotifications();
+
+    const onControllerChange = () => {
+      navigator.serviceWorker.controller?.postMessage({ type: "GET_RECEIVED_NOTIFICATIONS" });
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
+    return () => {
+      cancelled = true;
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    };
   }, [user]);
 
   useEffect(() => {
@@ -443,14 +492,6 @@ export default function App() {
     removePushSubscription();
   };
 
-  useEffect(() => {
-    if (!user) return;
-    // Solo registrar el service worker, NO suscribir autom├íticamente
-    // La suscripci├│n push debe ser expl├¡cita desde Configuraci├│n
-    registerServiceWorker().catch((err) =>
-      console.error("No se pudo registrar service worker", err)
-    );
-  }, [user]);
 
 
   if (booting) {

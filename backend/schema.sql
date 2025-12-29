@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS medications (
     dose TEXT DEFAULT '',
     frequency TEXT DEFAULT '',
     duration TEXT DEFAULT '',
+    schedule_time TEXT DEFAULT '',
     end_date TIMESTAMPTZ,
     notes TEXT,
     document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,

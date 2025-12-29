@@ -151,6 +151,12 @@ export default function Dashboard({ user }) {
     setOcrSaving(false);
   };
 
+  const handleOpenAiAnalysis = () => {
+    resetDocForm();
+    setDocAutoFill(true);
+    setShowDocForm(true);
+  };
+
   const handleDocSubmit = async (e) => {
     e.preventDefault();
     if (!docFile) {
@@ -302,9 +308,28 @@ export default function Dashboard({ user }) {
         ))}
       </div>
 
+      <div className="ai-cta-row">
+        <button
+          className="ai-analysis-btn"
+          type="button"
+          onClick={handleOpenAiAnalysis}
+        >
+          <span className="ai-analysis-glow" aria-hidden="true" />
+          <span className="ai-analysis-label">Analisis con IA</span>
+          <span className="ai-analysis-sub">Interpretar documentos automaticamente</span>
+        </button>
+        <div className="ai-cta-message">
+          <span className="ai-cta-dot" aria-hidden="true" />
+          <div>
+            <p className="ai-cta-kicker">Asistente IA</p>
+            <p className="ai-cta-note">Klinip cuenta con un asistente de inteligencia artificial pensado para ayudarte a ahorrar tiempo y no olvidar nada importante de tus documentos medicos.</p>
+          </div>
+        </div>
+      </div>
+
       {showDocForm && (
         <div className="floating-form-backdrop" onClick={() => setShowDocForm(false)}>
-          <div className="floating-form-card" onClick={(e) => e.stopPropagation()}>
+          <div className="floating-form-card ai-modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-header" style={{ marginBottom: "0.75rem" }}>
               <h3 className="card-title" style={{ marginBottom: 0 }}>
                 Nuevo documento
@@ -385,7 +410,15 @@ export default function Dashboard({ user }) {
                     </div>
                   </>
                 ) : (
-                  <p className="muted">Analizando el documento...</p>
+                  <div className="ai-analyzing-card">
+                    <div className="ai-analyzing-sphere" aria-hidden="true">
+                      <span className="ai-sphere-glow" />
+                    </div>
+                    <div>
+                      <p className="ai-analyzing-title">Analizando el documento</p>
+                      <p className="ai-analyzing-text">Estamos extrayendo fechas, tipo y centro medico.</p>
+                    </div>
+                  </div>
                 )}
                 <div className="floating-actions">
                   {ocrResult ? (

@@ -15,6 +15,7 @@ export default function Medications() {
     dose: "",
     frequency: "",
     duration: "",
+    schedule_time: "",
     end_date: "",
     notes: "",
     document_id: "",
@@ -42,6 +43,7 @@ export default function Medications() {
       dose: "",
       frequency: "",
       duration: "",
+      schedule_time: "",
       end_date: "",
       notes: "",
       document_id: "",
@@ -58,6 +60,7 @@ export default function Medications() {
         dose: form.dose || "",
         frequency: form.frequency || "",
         duration: form.duration || "",
+        schedule_time: form.schedule_time || "",
         end_date: toIsoOrNull(form.end_date),
         notes: form.notes || "",
         document_id: form.document_id ? parseInt(form.document_id) : null,
@@ -89,6 +92,7 @@ export default function Medications() {
       dose: med.dose,
       frequency: med.frequency,
       duration: med.duration,
+      schedule_time: med.schedule_time || "",
       end_date: med.end_date ? med.end_date.slice(0, 10) : "",
       notes: med.notes || "",
       document_id: med.document_id || "",
@@ -191,6 +195,15 @@ export default function Medications() {
                     onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                   />
                 </div>
+                <div className="input-group">
+                  <label className="input-label">Horario</label>
+                  <input
+                    className="input-field"
+                    type="time"
+                    value={form.schedule_time}
+                    onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
+                  />
+                </div>
               </div>
 
               <div className="input-group">
@@ -233,6 +246,7 @@ export default function Medications() {
                   <th>Dosis</th>
                   <th>Frecuencia</th>
                   <th>Duración</th>
+                  <th>Horario</th>
                   <th>Término</th>
                   <th></th>
                 </tr>
@@ -244,6 +258,7 @@ export default function Medications() {
                     <td>{m.dose}</td>
                     <td>{m.frequency}</td>
                     <td>{m.duration}</td>
+                    <td>{m.schedule_time || "-"}</td>
                     <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>

@@ -162,6 +162,41 @@ def ensure_user_schema():
 
 ensure_user_schema()
 
+def ensure_medication_schema():
+    """
+    Garantiza que la tabla medications tenga columnas nuevas usadas por la app.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("medications")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        if "schedule_time" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE medications ADD COLUMN IF NOT EXISTS schedule_time VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append("ALTER TABLE medications ADD COLUMN schedule_time VARCHAR")
+            added_columns.append("schedule_time")
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                f"DEBUG ensure_medication_schema: columnas agregadas a medications: {', '.join(added_columns)}"
+            )
+        else:
+            print("DEBUG ensure_medication_schema: tabla medications ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_medication_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_medication_schema()
+
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@klinip.app")
@@ -247,11 +282,26 @@ def _derive_dose_hours(frequency_text: str = ""):
         return [8, 20]
     return [9]
 
+def _parse_schedule_time(value: str | None):
+    if not value:
+        return None
+    parts = value.split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError:
+        return None
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return hour, minute
 
-def _build_med_trigger(day: datetime, hour: int) -> datetime:
-    if hour == 24:
+
+def _build_med_trigger(day: datetime, hour: int, minute: int = 0) -> datetime:
+    if hour == 24 and minute == 0:
         return (day + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return day.replace(hour=hour, minute=0, second=0, microsecond=0)
+    return day.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
 
 def _is_due(now: datetime, trigger_at: datetime) -> bool:
@@ -376,14 +426,20 @@ def _send_scheduled_push_reminders():
                 if not end_dt:
                     continue
 
+                schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+                if schedule_slot:
+                    time_slots = [schedule_slot]
+                else:
+                    time_slots = [(hour, 0) for hour in _derive_dose_hours(med.frequency)]
+
                 today = now.replace(hour=0, minute=0, second=0, microsecond=0)
                 for day_offset in [0, 1]:
                     day = today + timedelta(days=day_offset)
                     if day.date() > end_dt.date():
                         continue
 
-                    for hour in _derive_dose_hours(med.frequency):
-                        trigger_exact = _build_med_trigger(day, hour)
+                    for hour, minute in time_slots:
+                        trigger_exact = _build_med_trigger(day, hour, minute)
                         if trigger_exact.date() > end_dt.date():
                             continue
 
@@ -1882,6 +1938,7 @@ async def create_medication(
             dose=med_in.dose or "",
             frequency=med_in.frequency or "",
             duration=med_in.duration or "",
+            schedule_time=med_in.schedule_time or "",
             end_date=med_in.end_date,
             notes=med_in.notes or "",
             document_id=med_in.document_id,

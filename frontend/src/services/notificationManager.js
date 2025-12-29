@@ -418,6 +418,17 @@ function deriveDoseHours(frequencyText = "") {
   return [9];
 }
 
+function parseScheduleTime(value = "") {
+  if (!value || typeof value !== "string") return null;
+  const parts = value.split(":");
+  if (parts.length !== 2) return null;
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
 /**
  * Programar recordatorios de medicación mejorados
  */
@@ -440,13 +451,16 @@ export function scheduleMedicationNotifications(medications) {
     if (!end) return;
 
     const lastDay = end < horizon ? end : horizon;
-    const hours = deriveDoseHours(med.frequency);
+    const scheduleTime = parseScheduleTime(med.schedule_time);
+    const timeSlots = scheduleTime
+      ? [scheduleTime]
+      : deriveDoseHours(med.frequency).map((hour) => ({ hour, minute: 0 }));
 
     // Programar para cada dia
     for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
-      hours.forEach((hour) => {
+      timeSlots.forEach(({ hour, minute }) => {
         const trigger = new Date(day);
-        trigger.setHours(hour, 0, 0, 0);
+        trigger.setHours(hour, minute, 0, 0);
         const triggerExact = trigger.getTime();
 
         leadOffsets.forEach((offsetMinutes) => {
