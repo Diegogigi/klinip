@@ -332,6 +332,30 @@ export default function App() {
   });
   const [booting, setBooting] = useState(true);
 
+  useEffect(() => {
+    document.body.classList.toggle("theme-dark", theme === "dark");
+    localStorage.setItem("theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    async function bootstrap() {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        setBooting(false);
+        return;
+      }
+      try {
+        const me = await getMe();
+        setUser(me);
+      } catch (err) {
+        setUser(null);
+      } finally {
+        setBooting(false);
+      }
+    }
+    bootstrap();
+  }, []);
+
   const persistNotifications = (items) => {
     setNotifications(items);
     try {
@@ -537,7 +561,6 @@ export default function App() {
     </div>
   );
 }
-
 
 
 

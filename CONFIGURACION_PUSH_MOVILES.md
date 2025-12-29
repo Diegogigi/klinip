@@ -270,3 +270,4 @@ Una vez configurado todo correctamente, el botón funcionará y verás el mensaj
 > ✅ Notificaciones push habilitadas correctamente. Recibirás recordatorios automáticos.
 
 
+
