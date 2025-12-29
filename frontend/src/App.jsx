@@ -431,7 +431,10 @@ export default function App() {
       }
     }
   }, [notifications.length]);
-  const navigate = useNavigate();
+  
+  const handleToggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -561,6 +564,5 @@ export default function App() {
     </div>
   );
 }
-
 
 
