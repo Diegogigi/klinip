@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import { updateMe, getAppointments, getDocuments } from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
@@ -8,6 +9,9 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const plan = "Backend activo";
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [consentRevoked, setConsentRevoked] = useState(() => {
+    return localStorage.getItem("klinip_consent_revoked") === "true";
+  });
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -170,6 +174,17 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     window.location.reload();
   };
 
+  const handleRevokeConsent = () => {
+    if (!window.confirm("¿Deseas revocar tu consentimiento de datos?")) return;
+    localStorage.setItem("klinip_consent_revoked", "true");
+    setConsentRevoked(true);
+  };
+
+  const handleRestoreConsent = () => {
+    localStorage.removeItem("klinip_consent_revoked");
+    setConsentRevoked(false);
+  };
+
   return (
     <>
       <div className="card">
@@ -284,6 +299,38 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </svg>
           Configurar Notificaciones
         </button>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">Legal</h3>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Revisa los documentos legales y administra tu consentimiento.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+          <Link className="secondary-btn" to="/legal/privacy">
+            Politica de privacidad
+          </Link>
+          <Link className="secondary-btn" to="/legal/terms">
+            Terminos de uso
+          </Link>
+          <Link className="secondary-btn" to="/legal/consent">
+            Consentimiento de datos
+          </Link>
+        </div>
+        <div>
+          <p className="muted" style={{ marginBottom: "0.5rem" }}>
+            Estado de consentimiento: {consentRevoked ? "Revocado" : "Activo"}
+          </p>
+          {consentRevoked ? (
+            <button className="secondary-btn" type="button" onClick={handleRestoreConsent}>
+              Restaurar consentimiento
+            </button>
+          ) : (
+            <button className="secondary-btn" type="button" onClick={handleRevokeConsent}>
+              Revocar consentimiento
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card">

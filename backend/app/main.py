@@ -182,6 +182,15 @@ def ensure_medication_schema():
                 statements.append("ALTER TABLE medications ADD COLUMN schedule_time VARCHAR")
             added_columns.append("schedule_time")
 
+        if "completed" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE medications ADD COLUMN IF NOT EXISTS completed BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append("ALTER TABLE medications ADD COLUMN completed BOOLEAN DEFAULT 0")
+            added_columns.append("completed")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -414,6 +423,7 @@ def _send_scheduled_push_reminders():
                     models.Medication.user_id == user_id,
                     models.Medication.end_date.isnot(None),
                     models.Medication.end_date >= now,
+                    models.Medication.completed.is_(False),
                 )
                 .all()
             )
@@ -1939,6 +1949,7 @@ async def create_medication(
             frequency=med_in.frequency or "",
             duration=med_in.duration or "",
             schedule_time=med_in.schedule_time or "",
+            completed=bool(med_in.completed) if med_in.completed is not None else False,
             end_date=med_in.end_date,
             notes=med_in.notes or "",
             document_id=med_in.document_id,
@@ -2257,6 +2268,7 @@ async def send_medication_reminders(
             models.Medication.user_id == current_user.id,
             models.Medication.end_date.isnot(None),
             models.Medication.end_date >= today,
+            models.Medication.completed.is_(False),
         )
         .all()
     )

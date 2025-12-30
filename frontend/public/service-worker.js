@@ -224,6 +224,20 @@ async function checkAndShowPendingNotifications() {
         source: "scheduled"
       });
 
+      const actions =
+        notification.actions ||
+        (notification.data && notification.data.type === "appointment"
+          ? [
+              { action: "done", title: "Realizada" },
+              { action: "open", title: "Ver detalles" }
+            ]
+          : notification.data && notification.data.type === "medication"
+          ? [
+              { action: "done", title: "Realizado" },
+              { action: "open", title: "Ver detalles" }
+            ]
+          : [{ action: "open", title: "Ver detalles" }]);
+
       await self.registration.showNotification(notification.title, {
         body: notification.body,
         icon: notification.icon || "/icons/k_logo.png",
@@ -232,10 +246,7 @@ async function checkAndShowPendingNotifications() {
         data: notification.data || { url: notification.url || "/" },
         requireInteraction: true,
         vibrate: [200, 100, 200],
-        actions: [
-          { action: "open", title: "Ver detalles" },
-          { action: "close", title: "Cerrar" }
-        ]
+        actions
       });
 
       const deleteTx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
@@ -379,9 +390,12 @@ self.addEventListener("push", (event) => {
         requireInteraction,
         tag,
         actions: [
-          { action: "open", title: "Ver detalles", icon: "/icons/k_logo.png" },
-          { action: "snooze", title: "Posponer 10 min", icon: "/icons/k_logo.png" },
-          { action: "close", title: "Cerrar" }
+          {
+            action: "done",
+            title: data.medicationId ? "Realizado" : "Realizada",
+            icon: "/icons/k_logo.png"
+          },
+          { action: "open", title: "Ver detalles", icon: "/icons/k_logo.png" }
         ],
         data: {
           url,
@@ -403,20 +417,31 @@ self.addEventListener("notificationclick", (event) => {
     return;
   }
 
-  if (event.action === "snooze") {
+  if (event.action === "done") {
+    const appointmentId = notificationData.appointmentId;
+    const medicationId = notificationData.medicationId;
+    const targetUrl = appointmentId
+      ? `/appointments?complete=${appointmentId}`
+      : medicationId
+      ? `/medications?complete=${medicationId}`
+      : notificationData.url || "/";
     event.waitUntil(
-      (async () => {
-        const snoozeTime = Date.now() + 10 * 60 * 1000;
-        await scheduleNotification({
-          id: `snooze-${Date.now()}`,
-          triggerAt: snoozeTime,
-          title: event.notification.title,
-          body: `${event.notification.body} (Pospuesto)`,
-          icon: "/icons/k_logo.png",
-          url: notificationData.url || "/",
-          data: notificationData
-        });
-      })()
+      clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clientList) => {
+          for (const client of clientList) {
+            if ("focus" in client) {
+              return client.focus().then(() => {
+                if (client.navigate) {
+                  return client.navigate(targetUrl);
+                }
+              });
+            }
+          }
+          if (clients.openWindow) {
+            return clients.openWindow(targetUrl);
+          }
+        })
     );
     return;
   }

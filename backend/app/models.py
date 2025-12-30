@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     LargeBinary,
+    Boolean,
 )
 from sqlalchemy.orm import relationship
 
@@ -106,6 +107,7 @@ class Medication(Base):
     frequency = Column(String, default="")
     duration = Column(String, default="")
     schedule_time = Column(String, default="")
+    completed = Column(Boolean, default=False)
     end_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)

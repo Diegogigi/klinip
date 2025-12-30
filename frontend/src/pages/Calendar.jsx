@@ -88,6 +88,7 @@ export default function Calendar() {
     today.setHours(0, 0, 0, 0);
     const horizon = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
     (medications || []).forEach((m) => {
+      if (m?.completed) return;
       if (!m?.end_date) return;
       const end = parseDate(m.end_date);
       if (!end) return;

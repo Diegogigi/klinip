@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getAppointments,
   createAppointment,
@@ -25,6 +26,8 @@ const statusLabels = {
 };
 
 export default function Appointments() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
@@ -57,6 +60,28 @@ export default function Appointments() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    const id = params.get("complete");
+    if (!id) return;
+    const target = appointments.find((a) => String(a.id) === String(id));
+    if (!target || target.status === "realizada") return;
+    updateAppointment(target.id, {
+      type: target.type,
+      specialty: target.specialty || "",
+      center: target.center || "",
+      date_time: target.date_time || null,
+      status: "realizada",
+      notes: target.notes || "",
+      checklist: target.checklist || []
+    })
+      .then(load)
+      .finally(() => {
+        navigate("/appointments", { replace: true });
+      });
+  }, [location.search, appointments, navigate]);
 
   const resetForm = () => {
     setForm({
@@ -119,6 +144,24 @@ export default function Appointments() {
     } catch (err) {
       console.error(err);
       alert("No se pudo eliminar");
+    }
+  };
+
+  const handleMarkCompleted = async (appt) => {
+    try {
+      await updateAppointment(appt.id, {
+        type: appt.type,
+        specialty: appt.specialty || "",
+        center: appt.center || "",
+        date_time: appt.date_time || null,
+        status: "realizada",
+        notes: appt.notes || "",
+        checklist: appt.checklist || []
+      });
+      await load();
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo marcar como realizada");
     }
   };
 
@@ -340,6 +383,15 @@ export default function Appointments() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: "0.3rem" }}>
+                        {a.status !== "realizada" && (
+                          <button
+                            className="secondary-btn"
+                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                            onClick={() => handleMarkCompleted(a)}
+                          >
+                            Marcar realizada
+                          </button>
+                        )}
                         <button
                           className="secondary-btn"
                           style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}

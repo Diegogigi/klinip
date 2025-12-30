@@ -7,6 +7,7 @@ export default function Register({ onRegistered }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [acceptedLegal, setAcceptedLegal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,8 +24,15 @@ export default function Register({ onRegistered }) {
       setError("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
+    if (!acceptedLegal) {
+      setError(
+        "Debes aceptar los Terminos, Politica de Privacidad y Consentimiento informado."
+      );
+      return;
+    }
     try {
       setLoading(true);
+      localStorage.removeItem("klinip_consent_revoked");
       await register({ name, email, password });
       console.log("Usuario registrado exitosamente");
       
@@ -192,6 +200,23 @@ export default function Register({ onRegistered }) {
                   autoComplete="new-password"
                 />
               </div>
+            </div>
+
+            <div className="auth-consent">
+              <label className="auth-consent-label">
+                <input
+                  type="checkbox"
+                  checked={acceptedLegal}
+                  onChange={(e) => setAcceptedLegal(e.target.checked)}
+                  required
+                />
+                <span>
+                  He leido y acepto los{" "}
+                  <Link to="/legal/terms">Terminos y Condiciones</Link>,{" "}
+                  <Link to="/legal/privacy">Politica de Privacidad</Link> y{" "}
+                  <Link to="/legal/consent">Consentimiento informado</Link>.
+                </span>
+              </label>
             </div>
 
             <button className="auth-submit" type="submit" disabled={loading}>

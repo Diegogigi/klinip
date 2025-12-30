@@ -10,6 +10,9 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
 import Landing from "./pages/Landing";
+import LegalPrivacy from "./pages/LegalPrivacy";
+import LegalTerms from "./pages/LegalTerms";
+import LegalConsent from "./pages/LegalConsent";
 import { getMe, logout as apiLogout } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
@@ -331,6 +334,8 @@ export default function App() {
       : "light";
   });
   const [booting, setBooting] = useState(true);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
@@ -355,6 +360,18 @@ export default function App() {
     }
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setConsentOpen(false);
+      return;
+    }
+    const accepted = localStorage.getItem("klinip_consent_accepted_v1") === "true";
+    if (!accepted) {
+      setConsentChecked(false);
+      setConsentOpen(true);
+    }
+  }, [user]);
 
   const persistNotifications = (items) => {
     setNotifications(items);
@@ -492,6 +509,12 @@ export default function App() {
     removePushSubscription();
   };
 
+  const handleAcceptConsent = () => {
+    localStorage.setItem("klinip_consent_accepted_v1", "true");
+    localStorage.removeItem("klinip_consent_revoked");
+    setConsentOpen(false);
+  };
+
 
 
   if (booting) {
@@ -509,6 +532,48 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {consentOpen && (
+        <div className="consent-backdrop">
+          <div className="consent-card" role="dialog" aria-modal="true">
+            <p className="consent-kicker">Asistente Klinip</p>
+            <h2 className="consent-title">Acepta los documentos legales</h2>
+            <p className="consent-text">
+              Antes de continuar, revisa y acepta los documentos legales de Klinip.
+            </p>
+            <div className="consent-links">
+              <Link to="/legal/terms" className="secondary-btn">
+                Terminos de uso
+              </Link>
+              <Link to="/legal/privacy" className="secondary-btn">
+                Politica de privacidad
+              </Link>
+              <Link to="/legal/consent" className="secondary-btn">
+                Consentimiento informado
+              </Link>
+            </div>
+            <label className="consent-checkbox">
+              <input
+                type="checkbox"
+                checked={consentChecked}
+                onChange={(e) => setConsentChecked(e.target.checked)}
+              />
+              <span>
+                He leido y acepto los Terminos, Politica de Privacidad y
+                Consentimiento informado.
+              </span>
+            </label>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={handleAcceptConsent}
+              disabled={!consentChecked}
+              style={{ width: "100%" }}
+            >
+              Aceptar terminos
+            </button>
+          </div>
+        </div>
+      )}
       <div className="layout">
         <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="main-area">
@@ -531,6 +596,9 @@ export default function App() {
                   user ? <Navigate to="/" replace /> : <Register onRegistered={setUser} />
                 }
               />
+              <Route path="/legal/privacy" element={<LegalPrivacy />} />
+              <Route path="/legal/terms" element={<LegalTerms />} />
+              <Route path="/legal/consent" element={<LegalConsent />} />
               <Route
                 path="/"
                 element={

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { deleteMedication, getMedications, saveMedication } from "../api";
 import {
   requestNotificationPermission,
@@ -7,6 +8,8 @@ import {
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 
 export default function Medications() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [meds, setMeds] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -16,6 +19,7 @@ export default function Medications() {
     frequency: "",
     duration: "",
     schedule_time: "",
+    completed: false,
     end_date: "",
     notes: "",
     document_id: "",
@@ -36,6 +40,18 @@ export default function Medications() {
     // return () => scheduleMedicationNotifications([]);
   }, []);
 
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    const id = params.get("complete");
+    if (!id) return;
+    const target = meds.find((m) => String(m.id) === String(id));
+    if (!target || target.completed) return;
+    handleMarkCompleted(target).finally(() => {
+      navigate("/medications", { replace: true });
+    });
+  }, [location.search, meds, navigate]);
+
   const resetForm = () => {
     setForm({
       id: null,
@@ -44,6 +60,7 @@ export default function Medications() {
       frequency: "",
       duration: "",
       schedule_time: "",
+      completed: false,
       end_date: "",
       notes: "",
       document_id: "",
@@ -61,6 +78,7 @@ export default function Medications() {
         frequency: form.frequency || "",
         duration: form.duration || "",
         schedule_time: form.schedule_time || "",
+        completed: Boolean(form.completed),
         end_date: toIsoOrNull(form.end_date),
         notes: form.notes || "",
         document_id: form.document_id ? parseInt(form.document_id) : null,
@@ -93,10 +111,32 @@ export default function Medications() {
       frequency: med.frequency,
       duration: med.duration,
       schedule_time: med.schedule_time || "",
+      completed: Boolean(med.completed),
       end_date: med.end_date ? med.end_date.slice(0, 10) : "",
       notes: med.notes || "",
       document_id: med.document_id || "",
     });
+  };
+
+  const handleMarkCompleted = async (med) => {
+    try {
+      await saveMedication({
+        id: med.id,
+        name: med.name,
+        dose: med.dose || "",
+        frequency: med.frequency || "",
+        duration: med.duration || "",
+        schedule_time: med.schedule_time || "",
+        completed: true,
+        end_date: med.end_date || null,
+        notes: med.notes || "",
+        document_id: med.document_id || null,
+      });
+      await load();
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo marcar como realizado");
+    }
   };
 
   const handleDelete = async (med) => {
@@ -247,6 +287,7 @@ export default function Medications() {
                   <th>Frecuencia</th>
                   <th>Duración</th>
                   <th>Horario</th>
+                  <th>Estado</th>
                   <th>Término</th>
                   <th></th>
                 </tr>
@@ -259,9 +300,19 @@ export default function Medications() {
                     <td>{m.frequency}</td>
                     <td>{m.duration}</td>
                     <td>{m.schedule_time || "-"}</td>
+                    <td>{m.completed ? "Realizado" : "Activo"}</td>
                     <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
+                        {!m.completed && (
+                          <button
+                            className="secondary-btn"
+                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                            onClick={() => handleMarkCompleted(m)}
+                          >
+                            Marcar realizado
+                          </button>
+                        )}
                         <button
                           className="secondary-btn"
                           style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}

@@ -367,6 +367,10 @@ ${rem.notes}` : ""}`;
           sound,
           url: "/appointments",
           tag: `appointment-${rem.id}-${label}`,
+          actions: [
+            { action: "done", title: "Realizada" },
+            { action: "open", title: "Ver detalles" }
+          ],
           data: notificationData
         });
 
@@ -377,6 +381,10 @@ ${rem.notes}` : ""}`;
             sound,
             url: "/appointments",
             tag: `appointment-${rem.id}-${label}`,
+            actions: [
+              { action: "done", title: "Realizada" },
+              { action: "open", title: "Ver detalles" }
+            ],
             data: notificationData
           });
         }, delay);
@@ -445,6 +453,7 @@ export function scheduleMedicationNotifications(medications) {
   const horizon = new Date(today.getTime() + 30 * dayMs);
 
   medications.forEach((med) => {
+    if (med?.completed) return;
     if (!med?.end_date) return;
 
     const end = parseDate(med.end_date);
@@ -494,19 +503,27 @@ ${med.dose ? `Dosis: ${med.dose}
             sound: "medication",
             url: "/medications",
             tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
+            actions: [
+              { action: "done", title: "Realizado" },
+              { action: "open", title: "Ver detalles" }
+            ],
             data: notificationData
           });
 
           // Programar timeout
           const timer = setTimeout(() => {
             notificationManager.removeScheduledNotification(created.id);
-            showNotification(title, body, {
-              sound: "medication",
-              url: "/medications",
-              tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
-              requireInteraction: true,
-              data: notificationData
-            });
+          showNotification(title, body, {
+            sound: "medication",
+            url: "/medications",
+            tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
+            requireInteraction: true,
+            actions: [
+              { action: "done", title: "Realizado" },
+              { action: "open", title: "Ver detalles" }
+            ],
+            data: notificationData
+          });
           }, delay);
 
           medicationTimers.push(timer);

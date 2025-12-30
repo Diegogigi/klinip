@@ -118,6 +118,7 @@ class MedicationBase(BaseModel):
     frequency: Optional[str] = ""
     duration: Optional[str] = ""
     schedule_time: Optional[str] = ""
+    completed: Optional[bool] = False
     end_date: Optional[datetime] = None
     notes: Optional[str] = ""
     document_id: Optional[int] = None
@@ -133,6 +134,7 @@ class MedicationUpdate(BaseModel):
     frequency: Optional[str] = None
     duration: Optional[str] = None
     schedule_time: Optional[str] = None
+    completed: Optional[bool] = None
     end_date: Optional[datetime] = None
     notes: Optional[str] = None
     document_id: Optional[int] = None
