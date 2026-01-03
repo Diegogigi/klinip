@@ -90,47 +90,19 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const getPathFromUrl = (url, item) => {
-    let raw = url || "";
-    if (!raw) {
-      if (item?.kind === "document") return "/documents";
-      if (item?.kind === "medication") return "/medications";
-      if (item?.kind === "appointment") return "/appointments";
-      if (item?.tag?.startsWith("document-")) return "/documents";
-      if (item?.tag?.startsWith("medication-")) return "/medications";
-      if (item?.tag?.startsWith("appointment-")) return "/appointments";
-      if (item?.tag?.startsWith("calendar-")) return "/calendar";
-      return "";
-    }
-    try {
-      if (raw.startsWith("http")) {
-        const parsed = new URL(raw);
-        raw = parsed.hash ? parsed.hash.slice(1) : parsed.pathname;
-      }
-    } catch (err) {
-      raw = url;
-    }
-    if (raw.includes("#")) {
-      raw = raw.split("#")[1] || "";
-    }
-    if (!raw.startsWith("/")) {
-      raw = `/${raw}`;
-    }
-    return raw.split("?")[0];
-  };
-
   const notificationCounts = (notifications || []).reduce((acc, item) => {
-    const path = getPathFromUrl(item.url || "", item);
+    const path = getPathFromNotification(item);
     if (path.startsWith("/appointments")) acc.appointments += 1;
     if (path.startsWith("/medications")) acc.medications += 1;
     if (path.startsWith("/documents")) acc.documents += 1;
+    if (path.startsWith("/calendar")) acc.calendar += 1;
     return acc;
-  }, { appointments: 0, medications: 0, documents: 0 });
+  }, { appointments: 0, medications: 0, documents: 0, calendar: 0 });
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
     { to: "/appointments", label: "Citas", icon: icons.calendar, badge: notificationCounts.appointments },
-    { to: "/calendar", label: "Calendario", icon: icons.calendar },
+    { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
@@ -247,7 +219,7 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
   );
 }
 
-function Topbar({ user, notifications, onClearNotifications }) {
+function Topbar({ user, notifications, onClearNotifications, onOpenNotification }) {
   const location = useLocation();
 
   const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
@@ -325,7 +297,7 @@ function Topbar({ user, notifications, onClearNotifications }) {
                       key={item.id}
                       className="notifications-item"
                       onClick={() => {
-                        if (item.url) navigate(item.url);
+                        onOpenNotification?.(item);
                         setNotificationsOpen(false);
                       }}
                     >
@@ -362,6 +334,34 @@ const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
+const getPathFromNotification = (item) => {
+  if (!item) return "";
+  if (item.kind === "document") return "/documents";
+  if (item.kind === "medication") return "/medications";
+  if (item.kind === "appointment") return "/appointments";
+  if (item.tag?.startsWith("document-")) return "/documents";
+  if (item.tag?.startsWith("medication-")) return "/medications";
+  if (item.tag?.startsWith("appointment-")) return "/appointments";
+  if (item.tag?.startsWith("calendar-")) return "/calendar";
+  let raw = item.url || "";
+  if (!raw) return "";
+  try {
+    if (raw.startsWith("http")) {
+      const parsed = new URL(raw);
+      raw = parsed.hash ? parsed.hash.slice(1) : parsed.pathname;
+    }
+  } catch (err) {
+    raw = item.url || "";
+  }
+  if (raw.includes("#")) {
+    raw = raw.split("#")[1] || "";
+  }
+  if (!raw.startsWith("/")) {
+    raw = `/${raw}`;
+  }
+  return raw.split("?")[0];
+};
+
 function ProtectedRoute({ user, children }) {
   if (!user) {
     return <Navigate to="/login" replace />;
@@ -371,6 +371,7 @@ function ProtectedRoute({ user, children }) {
 
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
@@ -559,6 +560,35 @@ export default function App() {
     }
   };
 
+  const removeNotificationsByPredicate = (predicate) => {
+    if (typeof predicate !== "function") return;
+    setNotifications((prev) => {
+      const toRemove = prev.filter(predicate);
+      if (!toRemove.length) return prev;
+      const next = prev.filter((item) => !predicate(item));
+      try {
+        localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(next));
+      } catch (err) {
+        console.warn("No se pudo guardar notificaciones localmente:", err);
+      }
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.active?.postMessage({
+            type: "REMOVE_RECEIVED_NOTIFICATIONS",
+            ids: toRemove.map((item) => item.id),
+          });
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleOpenNotification = (item) => {
+    if (!item) return;
+    removeNotificationsByPredicate((notif) => notif.id === item.id);
+    if (item.url) navigate(item.url);
+  };
+
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
     const handler = (event) => {
@@ -617,6 +647,19 @@ export default function App() {
       }
     }
   }, [notifications.length]);
+
+  useEffect(() => {
+    if (!location?.pathname) return;
+    const path = location.pathname;
+    if (
+      path.startsWith("/appointments") ||
+      path.startsWith("/medications") ||
+      path.startsWith("/documents") ||
+      path.startsWith("/calendar")
+    ) {
+      removeNotificationsByPredicate((item) => getPathFromNotification(item) === path);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return undefined;
@@ -863,6 +906,7 @@ export default function App() {
             user={user}
             notifications={notifications}
             onClearNotifications={handleClearNotifications}
+            onOpenNotification={handleOpenNotification}
           />
           {updateAvailable && (
             <div className="update-banner" role="status" aria-live="polite">

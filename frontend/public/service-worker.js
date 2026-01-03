@@ -52,6 +52,10 @@ self.addEventListener("message", (event) => {
     clearReceivedNotifications();
   }
 
+  if (data.type === "REMOVE_RECEIVED_NOTIFICATIONS") {
+    removeReceivedNotifications(data.ids || []);
+  }
+
   if (data.type === "CHECK_PENDING_NOTIFICATIONS") {
     checkAndShowPendingNotifications();
   }
@@ -178,6 +182,25 @@ async function clearReceivedNotifications() {
     await broadcastMessage({ type: "RECEIVED_NOTIFICATIONS", notifications: [] });
   } catch (err) {
     console.error("Error clearing notifications:", err);
+  }
+}
+
+async function removeReceivedNotifications(ids) {
+  if (!ids || !ids.length) return;
+  try {
+    const db = await openNotificationsDB();
+    const tx = db.transaction([RECEIVED_STORE, BADGE_STORE], "readwrite");
+    const received = tx.objectStore(RECEIVED_STORE);
+    for (const id of ids) {
+      await requestToPromise(received.delete(id));
+    }
+    const remaining = await requestToPromise(received.getAll());
+    const nextCount = Array.isArray(remaining) ? remaining.length : 0;
+    await requestToPromise(tx.objectStore(BADGE_STORE).put({ key: "count", value: nextCount }));
+    await updateAppBadge(nextCount);
+    await broadcastMessage({ type: "RECEIVED_NOTIFICATIONS", notifications: remaining || [] });
+  } catch (err) {
+    console.error("Error removing notifications:", err);
   }
 }
 
