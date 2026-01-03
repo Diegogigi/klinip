@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v7";
+const CACHE_NAME = "klinip-cache-v8";
 const ASSETS = [
   "/manifest.webmanifest",
   "/icons/k_logo_152.png",
@@ -415,6 +415,12 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   const notificationData = event.notification.data || {};
   event.notification.close();
+  const normalizeUrl = (url) => {
+    if (!url) return "/#/";
+    if (url.startsWith("/#")) return url;
+    if (url.startsWith("/")) return `/#${url}`;
+    return `/#/${url}`;
+  };
 
   if (event.action === "close") {
     return;
@@ -423,11 +429,13 @@ self.addEventListener("notificationclick", (event) => {
   if (event.action === "done") {
     const appointmentId = notificationData.appointmentId;
     const medicationId = notificationData.medicationId;
-    const targetUrl = appointmentId
-      ? `/appointments?complete=${appointmentId}`
-      : medicationId
-      ? `/medications?complete=${medicationId}`
-      : notificationData.url || "/";
+    const targetUrl = normalizeUrl(
+      appointmentId
+        ? `/appointments?complete=${appointmentId}`
+        : medicationId
+        ? `/medications?complete=${medicationId}`
+        : notificationData.url || "/"
+    );
     event.waitUntil(
       clients
         .matchAll({ type: "window", includeUncontrolled: true })
@@ -459,6 +467,7 @@ self.addEventListener("notificationclick", (event) => {
       targetUrl = `/medications?notify=1&medicationId=${notificationData.medicationId}`;
     }
   }
+  targetUrl = normalizeUrl(targetUrl);
 
   event.waitUntil(
     clients

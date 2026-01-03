@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { login, getMe } from "../api";
 
 export default function Login({ onAuthenticated }) {
@@ -8,7 +8,6 @@ export default function Login({ onAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,7 +35,6 @@ export default function Login({ onAuthenticated }) {
           const me = await getMe();
           console.log("Usuario obtenido:", me);
           onAuthenticated(me);
-          navigate("/");
         } catch (meError) {
           console.error("Error al obtener usuario:", meError);
           // Si falla getMe, el token puede ser inválido

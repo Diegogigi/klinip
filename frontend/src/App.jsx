@@ -394,11 +394,7 @@ export default function App() {
     const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
     const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
     const promptCountKey = getUserKey(NOTIF_PROMPT_COUNT_KEY_BASE, user.id);
-    const storedConsent =
-      localStorage.getItem(consentKey) || user.notifications_consent || "";
-    if (user.notifications_consent && storedConsent !== user.notifications_consent) {
-      localStorage.setItem(consentKey, user.notifications_consent);
-    }
+    const storedConsent = localStorage.getItem(consentKey) || "";
 
     if ("Notification" in window && Notification.permission === "denied") {
       localStorage.setItem(consentKey, "rejected");
