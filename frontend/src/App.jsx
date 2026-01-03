@@ -72,7 +72,7 @@ const icons = {
   ),
 };
 
-function Sidebar({ user, theme, onToggleTheme }) {
+function Sidebar({ user, theme, onToggleTheme, notifications }) {
   const location = useLocation();
   const isAuthRoute =
     location.pathname === "/login" ||
@@ -90,13 +90,50 @@ function Sidebar({ user, theme, onToggleTheme }) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const getPathFromUrl = (url, item) => {
+    let raw = url || "";
+    if (!raw) {
+      if (item?.kind === "document") return "/documents";
+      if (item?.kind === "medication") return "/medications";
+      if (item?.kind === "appointment") return "/appointments";
+      if (item?.tag?.startsWith("document-")) return "/documents";
+      if (item?.tag?.startsWith("medication-")) return "/medications";
+      if (item?.tag?.startsWith("appointment-")) return "/appointments";
+      if (item?.tag?.startsWith("calendar-")) return "/calendar";
+      return "";
+    }
+    try {
+      if (raw.startsWith("http")) {
+        const parsed = new URL(raw);
+        raw = parsed.hash ? parsed.hash.slice(1) : parsed.pathname;
+      }
+    } catch (err) {
+      raw = url;
+    }
+    if (raw.includes("#")) {
+      raw = raw.split("#")[1] || "";
+    }
+    if (!raw.startsWith("/")) {
+      raw = `/${raw}`;
+    }
+    return raw.split("?")[0];
+  };
+
+  const notificationCounts = (notifications || []).reduce((acc, item) => {
+    const path = getPathFromUrl(item.url || "", item);
+    if (path.startsWith("/appointments")) acc.appointments += 1;
+    if (path.startsWith("/medications")) acc.medications += 1;
+    if (path.startsWith("/documents")) acc.documents += 1;
+    return acc;
+  }, { appointments: 0, medications: 0, documents: 0 });
+
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/appointments", label: "Citas", icon: icons.calendar },
+    { to: "/appointments", label: "Citas", icon: icons.calendar, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
-    { to: "/medications", label: "Meds", icon: icons.heart },
-    { to: "/documents", label: "Docs", icon: icons.doc },
+    { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
+    { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/settings", label: "Perfil", icon: icons.user },
   ];
   const mobilePrimaryLinks = [links[0], links[1], links[2], links[4]];
@@ -135,6 +172,9 @@ function Sidebar({ user, theme, onToggleTheme }) {
                 onClick={() => setShowMobileMenu(false)}
               >
                 <span className="sidebar-icon">{link.icon}</span>
+                {link.badge > 0 && (
+                  <span className="sidebar-badge">{link.badge}</span>
+                )}
                 <span className="sidebar-label">{link.label}</span>
               </Link>
             ))}
@@ -162,6 +202,9 @@ function Sidebar({ user, theme, onToggleTheme }) {
                   onClick={() => setShowMobileMenu(false)}
                 >
                   <span className="sidebar-icon">{link.icon}</span>
+                  {link.badge > 0 && (
+                    <span className="sidebar-badge">{link.badge}</span>
+                  )}
                   <span className="sidebar-label">{link.label}</span>
                 </Link>
               ))}
@@ -175,6 +218,9 @@ function Sidebar({ user, theme, onToggleTheme }) {
               className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
             >
               <span className="sidebar-icon">{link.icon}</span>
+              {link.badge > 0 && (
+                <span className="sidebar-badge">{link.badge}</span>
+              )}
               <span className="sidebar-label">{link.label}</span>
             </Link>
           ))
@@ -788,7 +834,12 @@ export default function App() {
         </div>
       )}
       <div className="layout">
-        <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
+        <Sidebar
+          user={user}
+          theme={theme}
+          onToggleTheme={handleToggleTheme}
+          notifications={notifications}
+        />
         <div className="main-area">
           <Topbar
             user={user}
