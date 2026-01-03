@@ -14,7 +14,6 @@ self.addEventListener("install", (event) => {
     caches
       .open(CACHE_NAME)
       .then((cache) => cache.addAll(ASSETS).catch(() => Promise.resolve()))
-      .then(() => self.skipWaiting())
   );
 });
 

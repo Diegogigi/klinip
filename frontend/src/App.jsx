@@ -323,6 +323,8 @@ function ProtectedRoute({ user, children }) {
 export default function App() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [updateRegistration, setUpdateRegistration] = useState(null);
   const [notifications, setNotifications] = useState(() => {
     try {
       const saved = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
@@ -549,6 +551,37 @@ export default function App() {
       }
     }
   }, [notifications.length]);
+
+  useEffect(() => {
+    const onUpdate = (event) => {
+      const reg = event.detail?.registration || null;
+      setUpdateRegistration(reg);
+      setUpdateAvailable(true);
+      if ("Notification" in window && Notification.permission === "granted" && reg?.showNotification) {
+        reg.showNotification("Actualizacion disponible", {
+          body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
+          icon: "/icons/k_logo.png",
+        }).catch(() => null);
+      }
+    };
+    window.addEventListener("klinip-sw-update", onUpdate);
+    return () => window.removeEventListener("klinip-sw-update", onUpdate);
+  }, []);
+
+  const handleApplyUpdate = async () => {
+    try {
+      const reg = updateRegistration || (await navigator.serviceWorker.getRegistration());
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      window.location.reload();
+    } finally {
+      setUpdateAvailable(false);
+    }
+  };
   
   const handleToggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
@@ -714,6 +747,28 @@ export default function App() {
             notifications={notifications}
             onClearNotifications={handleClearNotifications}
           />
+          {updateAvailable && (
+            <div className="update-banner" role="status" aria-live="polite">
+              <div>
+                <p className="update-title">Actualizacion disponible</p>
+                <p className="update-text">
+                  Hay una nueva version de Klinip. Actualiza para aplicar los cambios.
+                </p>
+              </div>
+              <div className="update-actions">
+                <button className="primary-btn" type="button" onClick={handleApplyUpdate}>
+                  Actualizar ahora
+                </button>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => setUpdateAvailable(false)}
+                >
+                  Despues
+                </button>
+              </div>
+            </div>
+          )}
           <main className="main-content">
             <Routes>
               <Route

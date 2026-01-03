@@ -19,6 +19,14 @@ export async function registerServiceWorker() {
     const reg = await navigator.serviceWorker.register("/service-worker.js");
     reg.update().catch(() => null);
 
+    const notifyUpdate = () => {
+      window.dispatchEvent(
+        new CustomEvent("klinip-sw-update", {
+          detail: { registration: reg },
+        })
+      );
+    };
+
     let hasRefreshed = false;
     const refreshOnUpdate = () => {
       if (hasRefreshed) return;
@@ -28,8 +36,8 @@ export async function registerServiceWorker() {
 
     navigator.serviceWorker.addEventListener("controllerchange", refreshOnUpdate);
 
-    if (reg.waiting) {
-      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      notifyUpdate();
     }
 
     reg.addEventListener("updatefound", () => {
@@ -37,7 +45,7 @@ export async function registerServiceWorker() {
       if (!newWorker) return;
       newWorker.addEventListener("statechange", () => {
         if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-          newWorker.postMessage({ type: "SKIP_WAITING" });
+          notifyUpdate();
         }
       });
     });

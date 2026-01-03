@@ -311,6 +311,20 @@ body.theme-dark .summary-value {
   color: #e2e8f0;
 }
 
+body.theme-dark .update-banner {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.95));
+  border-color: #1e293b;
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.45);
+}
+
+body.theme-dark .update-title {
+  color: #e2e8f0;
+}
+
+body.theme-dark .update-text {
+  color: #94a3b8;
+}
+
 body.theme-dark .calendar-day-header {
   background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
   color: #94a3b8;
@@ -3224,6 +3238,38 @@ a {
 
 .summary-status .dot {
   transform: scale(1.1);
+}
+
+.update-banner {
+  margin: 0 1.25rem 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 16px;
+  border: 1px solid #cbd5f5;
+  background: linear-gradient(135deg, #f0f9ff, #eef2ff);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.update-title {
+  margin: 0 0 0.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.update-text {
+  margin: 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
+.update-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .ai-cta-row {
