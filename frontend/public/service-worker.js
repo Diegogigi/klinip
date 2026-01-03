@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v3";
+const CACHE_NAME = "klinip-cache-v4";
 const ASSETS = [
   "/manifest.webmanifest",
   "/icons/k_logo.png",
