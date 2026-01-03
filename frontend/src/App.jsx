@@ -756,17 +756,31 @@ export default function App() {
       )}
       {notifConsentOpen && (
         <div className="consent-backdrop">
-          <div className="consent-card" role="dialog" aria-modal="true">
+          <div className="consent-card notification-consent" role="dialog" aria-modal="true">
             <p className="consent-kicker">Recordatorios</p>
-            <h2 className="consent-title">¿Te ayudamos a recordar tus cuidados de salud?</h2>
+            <h2 className="consent-title">Te ayudamos a recordar tus cuidados de salud</h2>
             <p className="consent-text">
-              Klinip desea enviarte recordatorios de medicamentos, citas y examenes.
-              Podras cambiar esta configuracion en cualquier momento desde tu perfil.
+              Activa las notificaciones para medicamentos, citas y examenes.
+              Puedes cambiar esta configuracion desde tu perfil cuando quieras.
             </p>
-            <div className="consent-links">
-              <button className="primary-btn" type="button" onClick={handleAcceptNotifications}>
-                Aceptar
-              </button>
+            <div className="consent-switch-row">
+              <div>
+                <p className="consent-switch-title">Activar notificaciones</p>
+                <p className="consent-switch-sub">Recibe alertas importantes en tu dispositivo.</p>
+              </div>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      handleAcceptNotifications();
+                    }
+                  }}
+                />
+                <span className="switch-slider" />
+              </label>
+            </div>
+            <div className="consent-actions">
               <button className="secondary-btn" type="button" onClick={handleLaterNotifications}>
                 Configurar despues
               </button>

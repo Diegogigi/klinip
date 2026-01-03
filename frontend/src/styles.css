@@ -2388,13 +2388,7 @@ a {
 
 @media (max-width: 1023px) {
   .topbar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.75rem;
-    padding: 0.85rem 1rem;
-    border-radius: 16px;
-    margin: 0 1rem 1rem;
+    display: none;
   }
 
   .topbar-row {
@@ -4819,6 +4813,106 @@ body.theme-dark .alert-info strong {
   flex-wrap: wrap;
 }
 
+.notification-consent .consent-text {
+  margin-bottom: 0.5rem;
+}
+
+.consent-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.consent-switch-title {
+  margin: 0 0 0.2rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.consent-switch-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #e2e8f0;
+  transition: all 0.2s ease;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.6);
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + .switch-slider {
+  background: linear-gradient(135deg, #30d7ff, #1f7aff);
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(20px);
+}
+
+.consent-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 640px) {
+  .consent-card.notification-consent {
+    padding: 1.5rem;
+  }
+
+  .consent-switch-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .consent-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .consent-actions .secondary-btn,
+  .consent-actions .ghost-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .ghost-btn {
   background: transparent;
   border: none;
@@ -4839,4 +4933,39 @@ body.theme-dark .alert-info strong {
 
 .consent-checkbox input {
   margin-top: 0.2rem;
+}
+
+body.theme-dark .consent-card {
+  background: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 25px 60px rgba(2, 6, 23, 0.55);
+}
+
+body.theme-dark .consent-title {
+  color: #e2e8f0;
+}
+
+body.theme-dark .consent-text,
+body.theme-dark .consent-switch-sub,
+body.theme-dark .consent-checkbox {
+  color: #94a3b8;
+}
+
+body.theme-dark .consent-switch-row {
+  background: #0b1224;
+  border-color: #1e293b;
+}
+
+body.theme-dark .consent-switch-title {
+  color: #e2e8f0;
+}
+
+body.theme-dark .switch-slider {
+  background: #1e293b;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.4);
+}
+
+body.theme-dark .switch-slider::before {
+  background: #0f172a;
+  box-shadow: 0 4px 12px rgba(2, 6, 23, 0.5);
 }
