@@ -2348,14 +2348,12 @@ async def send_medication_reminders(
     sent_count = 0
 
     for med in medications:
-        title = f"?'S Recordatorio: {med.name}"
+        title = f"Recordatorio: {med.name}"
         body = "Es hora de tomar tu medicamento"
         if med.dose:
-            body += f"
-Dosis: {med.dose}"
+            body += f"\nDosis: {med.dose}"
         if med.frequency:
-            body += f"
-Frecuencia: {med.frequency}"
+            body += f"\nFrecuencia: {med.frequency}"
 
         for subscription in subscriptions:
             ok = send_web_push(
