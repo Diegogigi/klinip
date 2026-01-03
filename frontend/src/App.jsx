@@ -13,7 +13,8 @@ import Landing from "./pages/Landing";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
-import { getMe, logout as apiLogout } from "./api";
+import LegalNotifications from "./pages/LegalNotifications";
+import { getMe, updateMe, logout as apiLogout } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
 const icons = {
@@ -306,6 +307,11 @@ function Topbar({ user, notifications, onClearNotifications }) {
 }
 
 const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
+const NOTIF_CONSENT_KEY = "klinip_notifications_consent";
+const NOTIF_LAST_PROMPT_KEY = "klinip_notifications_last_prompt";
+const NOTIF_PROMPT_COUNT_KEY = "klinip_notifications_prompt_count";
+const NOTIF_PROMPT_DAYS = 5;
+const NOTIF_PROMPT_SESSIONS = 5;
 
 function ProtectedRoute({ user, children }) {
   if (!user) {
@@ -315,6 +321,7 @@ function ProtectedRoute({ user, children }) {
 }
 
 export default function App() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [notifications, setNotifications] = useState(() => {
     try {
@@ -336,6 +343,7 @@ export default function App() {
   const [booting, setBooting] = useState(true);
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
+  const [notifConsentOpen, setNotifConsentOpen] = useState(false);
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
@@ -372,6 +380,50 @@ export default function App() {
       setConsentOpen(true);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user || consentOpen) {
+      setNotifConsentOpen(false);
+      return;
+    }
+    const storedConsent =
+      localStorage.getItem(NOTIF_CONSENT_KEY) || user.notifications_consent || "";
+    if (user.notifications_consent && storedConsent !== user.notifications_consent) {
+      localStorage.setItem(NOTIF_CONSENT_KEY, user.notifications_consent);
+    }
+
+    if (Notification.permission === "denied") {
+      localStorage.setItem(NOTIF_CONSENT_KEY, "rejected");
+      updateMe({ notifications_consent: "rejected" }).catch(() => null);
+      setNotifConsentOpen(false);
+      return;
+    }
+
+    if (storedConsent === "accepted" || storedConsent === "rejected") {
+      setNotifConsentOpen(false);
+      return;
+    }
+
+    const lastPrompt = localStorage.getItem(NOTIF_LAST_PROMPT_KEY);
+    const promptCount = parseInt(
+      localStorage.getItem(NOTIF_PROMPT_COUNT_KEY) || "0",
+      10
+    );
+    const now = Date.now();
+    const lastTime = lastPrompt ? Date.parse(lastPrompt) : 0;
+    const daysSince = lastTime ? (now - lastTime) / (1000 * 60 * 60 * 24) : 999;
+    const nextCount = promptCount + 1;
+    localStorage.setItem(NOTIF_PROMPT_COUNT_KEY, String(nextCount));
+
+    const shouldPrompt =
+      !lastPrompt ||
+      daysSince >= NOTIF_PROMPT_DAYS ||
+      nextCount % NOTIF_PROMPT_SESSIONS === 0;
+
+    if (shouldPrompt) {
+      setNotifConsentOpen(true);
+    }
+  }, [user, consentOpen]);
 
   const persistNotifications = (items) => {
     setNotifications(items);
@@ -515,6 +567,63 @@ export default function App() {
     setConsentOpen(false);
   };
 
+  const handleAcceptNotifications = () => {
+    setNotifConsentOpen(false);
+    (async () => {
+      try {
+        if (!("Notification" in window)) {
+          localStorage.setItem(NOTIF_CONSENT_KEY, "later");
+          localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+          await updateMe({
+            notifications_consent: "later",
+            notifications_last_prompt: new Date().toISOString(),
+          });
+          return;
+        }
+        const permission = await Notification.requestPermission();
+        if (permission === "granted") {
+          localStorage.setItem(NOTIF_CONSENT_KEY, "accepted");
+          await updateMe({ notifications_consent: "accepted" });
+          await ensurePushSubscription();
+        } else if (permission === "denied") {
+          localStorage.setItem(NOTIF_CONSENT_KEY, "rejected");
+          await updateMe({ notifications_consent: "rejected" });
+        } else {
+          localStorage.setItem(NOTIF_CONSENT_KEY, "later");
+          localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+          await updateMe({
+            notifications_consent: "later",
+            notifications_last_prompt: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.error("Error solicitando permiso de notificaciones", err);
+        localStorage.setItem(NOTIF_CONSENT_KEY, "later");
+        localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+        updateMe({
+          notifications_consent: "later",
+          notifications_last_prompt: new Date().toISOString(),
+        }).catch(() => null);
+      }
+    })();
+  };
+
+  const handleLaterNotifications = () => {
+    localStorage.setItem(NOTIF_CONSENT_KEY, "later");
+    localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+    setNotifConsentOpen(false);
+    updateMe({
+      notifications_consent: "later",
+      notifications_last_prompt: new Date().toISOString(),
+    }).catch((err) => {
+      console.error("Error guardando consentimiento", err);
+    });
+  };
+
+  const handleLearnMoreNotifications = () => {
+    navigate("/legal/notificaciones");
+  };
+
 
 
   if (booting) {
@@ -574,6 +683,29 @@ export default function App() {
           </div>
         </div>
       )}
+      {notifConsentOpen && (
+        <div className="consent-backdrop">
+          <div className="consent-card" role="dialog" aria-modal="true">
+            <p className="consent-kicker">Recordatorios</p>
+            <h2 className="consent-title">¿Te ayudamos a recordar tus cuidados de salud?</h2>
+            <p className="consent-text">
+              Klinip desea enviarte recordatorios de medicamentos, citas y examenes.
+              Podras cambiar esta configuracion en cualquier momento desde tu perfil.
+            </p>
+            <div className="consent-links">
+              <button className="primary-btn" type="button" onClick={handleAcceptNotifications}>
+                Aceptar
+              </button>
+              <button className="secondary-btn" type="button" onClick={handleLaterNotifications}>
+                Configurar despues
+              </button>
+              <button className="ghost-btn" type="button" onClick={handleLearnMoreNotifications}>
+                Aprender mas
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="layout">
         <Sidebar user={user} theme={theme} onToggleTheme={handleToggleTheme} />
         <div className="main-area">
@@ -599,6 +731,7 @@ export default function App() {
               <Route path="/legal/privacy" element={<LegalPrivacy />} />
               <Route path="/legal/terms" element={<LegalTerms />} />
               <Route path="/legal/consent" element={<LegalConsent />} />
+              <Route path="/legal/notificaciones" element={<LegalNotifications />} />
               <Route
                 path="/"
                 element={

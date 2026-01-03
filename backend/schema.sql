@@ -7,6 +7,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
     timezone TEXT DEFAULT 'America/Santiago',
+    notifications_consent TEXT DEFAULT '',
+    notifications_last_prompt TIMESTAMPTZ,
+    data_consent_revoked BOOLEAN DEFAULT FALSE,
+    deleted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -75,5 +79,36 @@ CREATE TABLE IF NOT EXISTS push_notification_logs (
 );
 
 
+CREATE TABLE IF NOT EXISTS privacy_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason TEXT NOT NULL,
+    message TEXT NOT NULL,
+    include_tech BOOLEAN DEFAULT FALSE,
+    user_email TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS privacy_export_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT DEFAULT 'export',
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/Santiago';
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS notifications_consent TEXT DEFAULT '';
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS notifications_last_prompt TIMESTAMPTZ;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS data_consent_revoked BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;

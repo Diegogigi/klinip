@@ -23,6 +23,10 @@ export const getMedications = api.getMedications;
 export const saveMedication = api.saveMedication;
 export const deleteMedication = api.deleteMedication;
 
+export const revokeDataConsent = api.revokeDataConsent;
+export const deleteAccount = api.deleteAccount;
+export const submitPrivacyRequest = api.submitPrivacyRequest;
+
 export const subscribePush = api.subscribePush;
 export const unsubscribePush = api.unsubscribePush;
 export const sendTestPush = api.sendTestPush;

@@ -15,9 +15,13 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str
     timezone: str | None = None
+    notifications_consent: str | None = None
+    notifications_last_prompt: datetime | None = None
+    data_consent_revoked: bool | None = None
+    deleted: bool | None = None
     created_at: datetime
 
-    @field_serializer('created_at')
+    @field_serializer('created_at', 'notifications_last_prompt')
     def serialize_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
@@ -33,6 +37,9 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     timezone: Optional[str] = None
+    notifications_consent: Optional[str] = None
+    notifications_last_prompt: Optional[datetime] = None
+    data_consent_revoked: Optional[bool] = None
 
 class Token(BaseModel):
     access_token: str
@@ -175,3 +182,9 @@ class PushSubscriptionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PrivacyRequestIn(BaseModel):
+    reason: str
+    message: str
+    include_tech: Optional[bool] = False

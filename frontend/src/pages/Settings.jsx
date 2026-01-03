@@ -1,17 +1,31 @@
 import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
-import { updateMe, getAppointments, getDocuments } from "../api";
+import {
+  updateMe,
+  getAppointments,
+  getDocuments,
+  revokeDataConsent,
+  deleteAccount as deleteAccountApi,
+  submitPrivacyRequest,
+} from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
 
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
   const profile = user || {};
   const plan = "Backend activo";
+  const navigate = useNavigate();
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [consentRevoked, setConsentRevoked] = useState(() => {
     return localStorage.getItem("klinip_consent_revoked") === "true";
   });
+  const [privacyReason, setPrivacyReason] = useState("acceso");
+  const [privacyMessage, setPrivacyMessage] = useState("");
+  const [privacyIncludeTech, setPrivacyIncludeTech] = useState(true);
+  const [privacySending, setPrivacySending] = useState(false);
+  const [privacyNotice, setPrivacyNotice] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -175,14 +189,62 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   };
 
   const handleRevokeConsent = () => {
-    if (!window.confirm("¿Deseas revocar tu consentimiento de datos?")) return;
-    localStorage.setItem("klinip_consent_revoked", "true");
-    setConsentRevoked(true);
+    setPrivacyNotice("");
+    if (!window.confirm("¿Deseas revocar tu consentimiento de datos de salud?")) return;
+    revokeDataConsent()
+      .then(() => {
+        localStorage.setItem("klinip_consent_revoked", "true");
+        setConsentRevoked(true);
+        setPrivacyNotice(
+          "Has revocado tu consentimiento. Algunas funcionalidades avanzadas se han limitado."
+        );
+      })
+      .catch((err) => {
+        console.error(err);
+        setPrivacyNotice("No se pudo revocar el consentimiento.");
+      });
   };
 
   const handleRestoreConsent = () => {
     localStorage.removeItem("klinip_consent_revoked");
     setConsentRevoked(false);
+    setPrivacyNotice("Consentimiento restaurado.");
+  };
+
+  const handleDeleteAccount = async () => {
+    setPrivacyNotice("");
+    try {
+      await deleteAccountApi();
+      localStorage.removeItem("token");
+      onLogout?.();
+      navigate("/register");
+    } catch (err) {
+      console.error(err);
+      setPrivacyNotice("No se pudo eliminar la cuenta.");
+    }
+  };
+
+  const handleSendPrivacyRequest = async () => {
+    if (!privacyMessage.trim()) {
+      setPrivacyNotice("Debes escribir un mensaje.");
+      return;
+    }
+    setPrivacySending(true);
+    setPrivacyNotice("");
+    try {
+      await submitPrivacyRequest({
+        reason: privacyReason,
+        message: privacyMessage.trim(),
+        include_tech: privacyIncludeTech,
+      });
+      setPrivacyMessage("");
+      setPrivacyNotice("Solicitud enviada. Te responderemos pronto.");
+    } catch (err) {
+      console.error(err);
+      setPrivacyNotice("No se pudo enviar la solicitud.");
+    } finally {
+      setPrivacySending(false);
+    }
   };
 
   return (
@@ -336,16 +398,94 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       <div className="card">
         <h3 className="card-title">Privacidad y seguridad</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Para producción podrás exportar y borrar tus datos, y configurar notificaciones seguras.
+          Administra tus datos, consentimiento y solicitudes de privacidad.
         </p>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button className="secondary-btn" type="button">
-            Exportar datos
-          </button>
-          <button className="secondary-btn" type="button" onClick={handleClearLocal}>
-            Borrar datos locales
-          </button>
+        <div className="privacy-grid">
+          <div className="privacy-tile">
+            <h4>Exportar datos</h4>
+            <p className="muted">
+              Descarga un resumen de tus citas y documentos cuando lo necesites.
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button className="secondary-btn" type="button" onClick={exportCsv}>
+                CSV citas
+              </button>
+              <button className="secondary-btn" type="button" onClick={exportPdf}>
+                PDF resumen
+              </button>
+              <button className="secondary-btn" type="button" onClick={handleClearLocal}>
+                Borrar datos locales
+              </button>
+            </div>
+          </div>
+
+          <div className="privacy-tile">
+            <h4>Control de cuenta y consentimiento</h4>
+            <p className="muted">
+              Revoca el consentimiento de datos de salud o elimina tu cuenta de forma definitiva.
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button className="secondary-btn" type="button" onClick={handleRevokeConsent}>
+                Revocar consentimiento
+              </button>
+              <button className="secondary-btn" type="button" onClick={() => setShowDeleteConfirm(true)}>
+                Eliminar mi cuenta
+              </button>
+            </div>
+          </div>
+
+          <div className="privacy-tile">
+            <h4>Soporte de privacidad</h4>
+            <p className="muted">
+              Si necesitas acceso, rectificacion o eliminacion, dejanos tu solicitud.
+            </p>
+            <div className="form-row">
+              <div className="input-group">
+                <label className="input-label">Motivo</label>
+                <select
+                  className="select-field"
+                  value={privacyReason}
+                  onChange={(e) => setPrivacyReason(e.target.value)}
+                >
+                  <option value="acceso">Acceso a mis datos</option>
+                  <option value="rectificacion">Rectificacion</option>
+                  <option value="eliminacion">Eliminacion</option>
+                  <option value="otra">Otra consulta</option>
+                </select>
+              </div>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Mensaje</label>
+              <textarea
+                className="textarea-field"
+                value={privacyMessage}
+                onChange={(e) => setPrivacyMessage(e.target.value)}
+                placeholder="Escribe tu solicitud..."
+              />
+            </div>
+            <label className="auth-consent-label" style={{ marginBottom: "0.75rem" }}>
+              <input
+                type="checkbox"
+                checked={privacyIncludeTech}
+                onChange={(e) => setPrivacyIncludeTech(e.target.checked)}
+              />
+              <span>Adjuntar informacion tecnica basica</span>
+            </label>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={handleSendPrivacyRequest}
+              disabled={privacySending}
+            >
+              {privacySending ? "Enviando..." : "Enviar solicitud"}
+            </button>
+          </div>
         </div>
+        {privacyNotice && (
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            {privacyNotice}
+          </p>
+        )}
       </div>
 
       <div className="card">
@@ -371,6 +511,30 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           Cerrar sesión
         </button>
       </div>
+
+      {showDeleteConfirm && (
+        <div className="modal-backdrop">
+          <div className="modal-card" role="dialog" aria-modal="true">
+            <h3>Eliminar mi cuenta y todos mis datos</h3>
+            <p className="muted">
+              Esta accion es permanente. Se eliminaran tus datos de citas,
+              medicamentos y documentos. No podras deshacer este cambio.
+            </p>
+            <p className="muted">
+              ?Estas seguro de que deseas eliminar tu cuenta y todos tus datos de Klinip?
+              Esta accion es irreversible.
+            </p>
+            <div className="modal-actions">
+              <button className="secondary-btn" type="button" onClick={() => setShowDeleteConfirm(false)}>
+                Cancelar
+              </button>
+              <button className="primary-btn" type="button" onClick={handleDeleteAccount}>
+                Si, eliminar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showNotificationSettings && (
         <NotificationSettings onClose={() => setShowNotificationSettings(false)} />

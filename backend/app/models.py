@@ -46,6 +46,10 @@ class User(Base):
     name = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
     timezone = Column(String, default="America/Santiago")
+    notifications_consent = Column(String, default="")
+    notifications_last_prompt = Column(DateTime, nullable=True)
+    data_consent_revoked = Column(Boolean, default=False)
+    deleted = Column(Boolean, default=False)
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
@@ -139,5 +143,31 @@ class PushNotificationLog(Base):
     kind = Column(String, nullable=False)
     trigger_at = Column(DateTime, nullable=False)
     sent_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+
+
+class PrivacyRequest(Base):
+    __tablename__ = "privacy_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    reason = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    include_tech = Column(Boolean, default=False)
+    user_email = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+
+
+class PrivacyExportLog(Base):
+    __tablename__ = "privacy_export_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    kind = Column(String, default="export")
+    meta = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")

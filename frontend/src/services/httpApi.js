@@ -61,6 +61,22 @@ export async function updateMe(payload) {
   return res.data;
 }
 
+// Privacy
+export async function revokeDataConsent() {
+  const res = await api.post("/privacy/revoke-consent");
+  return res.data;
+}
+
+export async function deleteAccount() {
+  const res = await api.post("/privacy/delete-account");
+  return res.data;
+}
+
+export async function submitPrivacyRequest(payload) {
+  const res = await api.post("/privacy/contact", payload);
+  return res.data;
+}
+
 export async function getAppointments() {
   const res = await api.get("/appointments");
   return res.data;

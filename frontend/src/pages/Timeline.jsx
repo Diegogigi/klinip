@@ -228,30 +228,30 @@ export default function Timeline() {
         </p>
 
         {/* Estadísticas rápidas */}
-        <div className="stats-grid" style={{ marginTop: "1rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "0.75rem" }}>
-          <div style={{ background: "#f0f9ff", padding: "0.75rem", borderRadius: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#0284c7" }}>
+        <div className="timeline-stats">
+          <div className="timeline-stat-card is-appointments">
+            <div className="timeline-stat-number">
               {appointments.filter(a => a.date_time).length}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "#666" }}>Citas</div>
+            <div className="timeline-stat-label">Citas</div>
           </div>
-          <div style={{ background: "#fef3c7", padding: "0.75rem", borderRadius: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#f59e0b" }}>
+          <div className="timeline-stat-card is-documents">
+            <div className="timeline-stat-number">
               {documents.length}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "#666" }}>Documentos</div>
+            <div className="timeline-stat-label">Documentos</div>
           </div>
-          <div style={{ background: "#f0fdf4", padding: "0.75rem", borderRadius: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#10b981" }}>
+          <div className="timeline-stat-card is-medications">
+            <div className="timeline-stat-number">
               {medications.length}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "#666" }}>Medicamentos</div>
+            <div className="timeline-stat-label">Medicamentos</div>
           </div>
-          <div style={{ background: "#f5f3ff", padding: "0.75rem", borderRadius: "8px", textAlign: "center" }}>
-            <div style={{ fontSize: "1.5rem", fontWeight: "bold", color: "#8b5cf6" }}>
+          <div className="timeline-stat-card is-total">
+            <div className="timeline-stat-number">
               {items.length}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "#666" }}>Total</div>
+            <div className="timeline-stat-label">Total</div>
           </div>
         </div>
       </div>
@@ -330,8 +330,7 @@ export default function Timeline() {
               const isExpanded = expandedItems.has(item.id);
 
               return (
-                <li key={item.id} className="timeline-item" style={{ marginBottom: "1.5rem" }}>
-                  <div style={{ background: "#f9fafb", padding: "1rem", borderRadius: "8px", border: "1px solid #e5e7eb" }}>
+                <li key={item.id} className="timeline-item">
                     {/* Header */}
                     <div className="timeline-main" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
                       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
@@ -345,19 +344,12 @@ export default function Timeline() {
                           </span>
                         )}
                         {hasRelated && (
-                          <span style={{ 
-                            background: "#e0f2fe", 
-                            color: "#0369a1", 
-                            padding: "0.25rem 0.5rem", 
-                            borderRadius: "12px", 
-                            fontSize: "0.75rem",
-                            fontWeight: "600"
-                          }}>
+                          <span className="timeline-related-pill">
                             🔗 {related.appointments.length + related.documents.length + related.medications.length} vinculados
                           </span>
-                  )}
+                        )}
                 </div>
-                      <span className="timeline-meta" style={{ fontSize: "0.875rem", color: "#666", whiteSpace: "nowrap" }}>
+                      <span className="timeline-meta" style={{ fontSize: "0.875rem", whiteSpace: "nowrap" }}>
                         {item.date ? toLocaleDateOrEmpty(item.date) : ""}
                       </span>
                     </div>
@@ -369,7 +361,7 @@ export default function Timeline() {
 
                     {/* Notas */}
                     {item.notes && (
-                      <p className="timeline-notes" style={{ fontSize: "0.875rem", color: "#666", marginBottom: "0.5rem" }}>
+                      <p className="timeline-notes" style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>
                         📝 {item.notes}
                       </p>
                     )}
@@ -392,32 +384,19 @@ export default function Timeline() {
 
                     {/* Elementos relacionados expandidos */}
                     {isExpanded && hasRelated && (
-                      <div style={{ 
-                        marginTop: "1rem", 
-                        paddingTop: "1rem", 
-                        borderTop: "2px solid #e5e7eb",
-                        background: "#ffffff",
-                        padding: "1rem",
-                        borderRadius: "6px"
-                      }}>
-                        <h4 style={{ fontSize: "0.875rem", fontWeight: "600", marginBottom: "0.75rem", color: "#374151" }}>
+                      <div className="timeline-related-panel">
+                        <h4 className="timeline-related-title">
                           🔗 Elementos vinculados:
                         </h4>
                         
                         {/* Citas relacionadas */}
                         {related.appointments.length > 0 && (
                           <div style={{ marginBottom: "0.75rem" }}>
-                            <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#666", marginBottom: "0.25rem" }}>
+                            <div className="timeline-related-label">
                               📅 Citas:
                             </div>
                             {related.appointments.map(appt => (
-                              <div key={appt.id} style={{ 
-                                background: "#f0f9ff", 
-                                padding: "0.5rem", 
-                                borderRadius: "4px", 
-                                fontSize: "0.875rem",
-                                marginBottom: "0.25rem"
-                              }}>
+                              <div key={appt.id} className="timeline-related-item is-appointment">
                                 {appt.specialty || appt.type} · {appt.center} · {toLocaleDateOrEmpty(appt.date_time)}
                               </div>
                             ))}
@@ -427,17 +406,11 @@ export default function Timeline() {
                         {/* Documentos relacionados */}
                         {related.documents.length > 0 && (
                           <div style={{ marginBottom: "0.75rem" }}>
-                            <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#666", marginBottom: "0.25rem" }}>
+                            <div className="timeline-related-label">
                               📄 Documentos:
                             </div>
                             {related.documents.map(doc => (
-                              <div key={doc.id} style={{ 
-                                background: "#fef3c7", 
-                                padding: "0.5rem", 
-                                borderRadius: "4px", 
-                                fontSize: "0.875rem",
-                                marginBottom: "0.25rem"
-                              }}>
+                              <div key={doc.id} className="timeline-related-item is-document">
                                 {docLabels[doc.doc_type] || doc.doc_type} · {doc.center || "Sin centro"} · {toLocaleDateOrEmpty(doc.date || doc.created_at)}
                               </div>
                             ))}
@@ -447,17 +420,11 @@ export default function Timeline() {
                         {/* Medicamentos relacionados */}
                         {related.medications.length > 0 && (
                           <div>
-                            <div style={{ fontSize: "0.75rem", fontWeight: "600", color: "#666", marginBottom: "0.25rem" }}>
+                            <div className="timeline-related-label">
                               💊 Medicamentos:
                             </div>
                             {related.medications.map(med => (
-                              <div key={med.id} style={{ 
-                                background: "#f0fdf4", 
-                                padding: "0.5rem", 
-                                borderRadius: "4px", 
-                                fontSize: "0.875rem",
-                                marginBottom: "0.25rem"
-                              }}>
+                              <div key={med.id} className="timeline-related-item is-medication">
                                 {med.name} {med.dose ? `· ${med.dose}` : ''} {med.frequency ? `· ${med.frequency}` : ''}
                               </div>
                             ))}
@@ -465,8 +432,7 @@ export default function Timeline() {
                         )}
                       </div>
                     )}
-                  </div>
-              </li>
+                </li>
               );
             })}
           </ul>

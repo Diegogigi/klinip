@@ -62,6 +62,9 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[models
     if not user:
         print(f"DEBUG: Usuario no encontrado para email: {email}")
         return None
+    if getattr(user, "deleted", False):
+        print(f"DEBUG: Usuario eliminado para email: {email}")
+        return None
     print(f"DEBUG: Usuario encontrado: {user.email}, verificando contraseña...")
     is_valid = verify_password(password, user.password_hash)
     print(f"DEBUG: Contraseña válida: {is_valid}")
@@ -121,9 +124,16 @@ async def get_current_user(
     
     user = db.query(models.User).filter(models.User.id == user_id).first()
     print(f"DEBUG get_current_user: Usuario encontrado: {user.email if user else 'None'}")
-    
+
     if user is None:
         print(f"DEBUG get_current_user: Usuario con ID {user_id} no existe en BD")
         raise credentials_exception
-    
+
+    if getattr(user, "deleted", False):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Cuenta eliminada. Por favor, crea una nueva cuenta.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     return user

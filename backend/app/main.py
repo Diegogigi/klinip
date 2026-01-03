@@ -147,6 +147,42 @@ def ensure_user_schema():
                 )
             added_columns.append("timezone")
 
+        if "notifications_consent" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_consent VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN notifications_consent VARCHAR")
+            added_columns.append("notifications_consent")
+
+        if "notifications_last_prompt" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_prompt TIMESTAMP"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN notifications_last_prompt DATETIME")
+            added_columns.append("notifications_last_prompt")
+
+        if "data_consent_revoked" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_consent_revoked BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN data_consent_revoked BOOLEAN DEFAULT 0")
+            added_columns.append("data_consent_revoked")
+
+        if "deleted" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN deleted BOOLEAN DEFAULT 0")
+            added_columns.append("deleted")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -1832,6 +1868,15 @@ async def update_me(
             raise HTTPException(status_code=400, detail="Zona horaria invalida")
         current_user.timezone = payload.timezone
 
+    if payload.notifications_consent is not None:
+        current_user.notifications_consent = payload.notifications_consent
+
+    if payload.notifications_last_prompt is not None:
+        current_user.notifications_last_prompt = payload.notifications_last_prompt
+
+    if payload.data_consent_revoked is not None:
+        current_user.data_consent_revoked = payload.data_consent_revoked
+
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
@@ -2318,6 +2363,76 @@ async def send_medication_reminders(
         "medications_checked": len(medications),
         "message": f"Se enviaron {sent_count} recordatorios",
     }
+
+
+@app.post("/privacy/revoke-consent")
+async def revoke_data_consent(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    current_user.data_consent_revoked = True
+    current_user.notifications_consent = "revoked"
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return {"ok": True, "data_consent_revoked": True}
+
+
+@app.post("/privacy/delete-account")
+async def delete_account(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    user_id = current_user.id
+
+    db.query(models.Appointment).filter(models.Appointment.user_id == user_id).delete()
+    db.query(models.Medication).filter(models.Medication.user_id == user_id).delete()
+    db.query(models.Document).filter(models.Document.user_id == user_id).delete()
+    db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user_id).delete()
+    db.query(models.PushNotificationLog).filter(models.PushNotificationLog.user_id == user_id).delete()
+
+    current_user.deleted = True
+    current_user.data_consent_revoked = True
+    current_user.notifications_consent = "revoked"
+    current_user.name = "Usuario eliminado"
+    current_user.email = f"deleted-{user_id}@klinip.local"
+    current_user.password_hash = ""
+    db.add(current_user)
+    db.commit()
+
+    return {"ok": True}
+
+
+@app.post("/privacy/contact")
+async def privacy_contact(
+    payload: schemas.PrivacyRequestIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    req = models.PrivacyRequest(
+        user_id=current_user.id,
+        reason=payload.reason,
+        message=payload.message,
+        include_tech=bool(payload.include_tech),
+        user_email=current_user.email or "",
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    print(
+        "PRIVACY REQUEST",
+        {
+            "id": req.id,
+            "user_id": current_user.id,
+            "email": current_user.email,
+            "reason": payload.reason,
+            "message": payload.message,
+            "include_tech": payload.include_tech,
+        },
+    )
+
+    return {"ok": True, "request_id": req.id}
 
 
 # Documents
