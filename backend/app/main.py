@@ -2069,15 +2069,22 @@ async def subscribe_push(
     p256dh = keys.get("p256dh")
     auth_key = keys.get("auth")
     if not (sub_in.endpoint and p256dh and auth_key):
-        raise HTTPException(status_code=400, detail="SuscripciЧn incompleta")
+        raise HTTPException(status_code=400, detail="Suscripci??n incompleta")
 
-    # Eliminar todas las suscripciones antiguas del usuario para evitar duplicados
-    db.query(models.PushSubscription).filter(
-        models.PushSubscription.user_id == current_user.id
-    ).delete()
-    db.commit()
+    existing = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.endpoint == sub_in.endpoint)
+        .first()
+    )
 
-    # Crear nueva suscripción única para el usuario
+    if existing:
+        existing.user_id = current_user.id
+        existing.p256dh = p256dh
+        existing.auth = auth_key
+        db.commit()
+        db.refresh(existing)
+        return existing
+
     sub = models.PushSubscription(
         user_id=current_user.id,
         endpoint=sub_in.endpoint,
@@ -2143,18 +2150,20 @@ async def get_push_status(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """
-    Verificar si el usuario tiene una suscripción push activa
+    Verificar si el usuario tiene una suscripci??n push activa
     """
-    subscription = (
+    subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == current_user.id)
         .order_by(models.PushSubscription.created_at.desc())
-        .first()
+        .all()
     )
+    latest = subscriptions[0] if subscriptions else None
     return {
-        "enabled": subscription is not None,
-        "subscription_id": subscription.id if subscription else None,
-        "created_at": subscription.created_at if subscription else None,
+        "enabled": bool(subscriptions),
+        "count": len(subscriptions),
+        "subscription_id": latest.id if latest else None,
+        "created_at": latest.created_at if latest else None,
     }
 
 
@@ -2167,35 +2176,38 @@ async def test_push(
         raise HTTPException(
             status_code=400, detail="Claves VAPID no configuradas en el servidor"
         )
-    sub = (
+    subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == current_user.id)
         .order_by(models.PushSubscription.created_at.desc())
-        .first()
+        .all()
     )
-    if not sub:
+    if not subscriptions:
         raise HTTPException(
-            status_code=404, detail="No hay suscripciЧn push para el usuario"
+            status_code=404, detail="No hay suscripci??n push para el usuario"
         )
-    ok = send_web_push(
-        sub,
-        {
-            "title": "Klinip",
-            "body": "NotificaciЧn push de prueba",
-            "url": "/",
-        },
-    )
-    return {"sent": ok}
+    ok = False
+    for sub in subscriptions:
+        ok = send_web_push(
+            sub,
+            {
+                "title": "Prueba de notificaciones",
+                "body": "Notificaci??n push de prueba",
+                "url": "/",
+                "priority": "normal",
+                "sound": "default",
+            },
+        ) or ok
+    return {"ok": ok}
 
 
 @app.post("/push/send-reminders")
-async def send_appointment_reminders(
-    background_tasks: BackgroundTasks,
+async def send_reminders(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """
-    Enviar recordatorios push para citas próximas
+    Enviar recordatorios push para citas pr??ximas
     """
     if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
         raise HTTPException(
@@ -2216,15 +2228,14 @@ async def send_appointment_reminders(
     if not appointments:
         return {"sent": 0, "message": "No hay citas programadas"}
 
-    # Obtener la suscripción push más reciente del usuario (solo una para evitar duplicados)
-    subscription = (
+    subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == current_user.id)
         .order_by(models.PushSubscription.created_at.desc())
-        .first()
+        .all()
     )
 
-    if not subscription:
+    if not subscriptions:
         raise HTTPException(
             status_code=404, detail="No hay suscripciones push para el usuario"
         )
@@ -2238,7 +2249,7 @@ async def send_appointment_reminders(
         if not appt_dt:
             continue
 
-        # Calcular días hasta la cita
+        # Calcular d??as hasta la cita
         time_until = appt_dt - now
         days_until = time_until.days
         hours_until = time_until.total_seconds() / 3600
@@ -2269,21 +2280,23 @@ async def send_appointment_reminders(
             title = f"Recordatorio: {appt.specialty or appt.type}"
             when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
             center = appt.center or "Centro medico"
-            body = "\n".join([message, when_text, center])
+            body = "
+".join([message, when_text, center])
 
-            ok = send_web_push(
-                subscription,
-                {
-                    "title": title,
-                    "body": body,
-                    "url": "/appointments",
-                    "priority": priority,
-                    "sound": "appointment",
-                    "appointmentId": appt.id,
-                },
-            )
-            if ok:
-                sent_count += 1
+            for subscription in subscriptions:
+                ok = send_web_push(
+                    subscription,
+                    {
+                        "title": title,
+                        "body": body,
+                        "url": "/appointments",
+                        "priority": priority,
+                        "sound": "appointment",
+                        "appointmentId": appt.id,
+                    },
+                )
+                if ok:
+                    sent_count += 1
 
     return {
         "sent": sent_count,
@@ -2298,7 +2311,7 @@ async def send_medication_reminders(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """
-    Enviar recordatorios push para medicación del día
+    Enviar recordatorios push para medicaci??n del d??a
     """
     if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
         raise HTTPException(
@@ -2321,15 +2334,14 @@ async def send_medication_reminders(
     if not medications:
         return {"sent": 0, "message": "No hay medicamentos activos"}
 
-    # Obtener la suscripción push más reciente del usuario (solo una para evitar duplicados)
-    subscription = (
+    subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == current_user.id)
         .order_by(models.PushSubscription.created_at.desc())
-        .first()
+        .all()
     )
 
-    if not subscription:
+    if not subscriptions:
         raise HTTPException(
             status_code=404, detail="No hay suscripciones push para el usuario"
         )
@@ -2337,26 +2349,29 @@ async def send_medication_reminders(
     sent_count = 0
 
     for med in medications:
-        title = f"💊 Recordatorio: {med.name}"
-        body = f"Es hora de tomar tu medicamento"
+        title = f"?'S Recordatorio: {med.name}"
+        body = "Es hora de tomar tu medicamento"
         if med.dose:
-            body += f"\nDosis: {med.dose}"
+            body += f"
+Dosis: {med.dose}"
         if med.frequency:
-            body += f"\nFrecuencia: {med.frequency}"
+            body += f"
+Frecuencia: {med.frequency}"
 
-        ok = send_web_push(
-            subscription,
-            {
-                "title": title,
-                "body": body,
-                "url": "/medications",
-                "priority": "high",
-                "sound": "medication",
-                "medicationId": med.id,
-            },
-        )
-        if ok:
-            sent_count += 1
+        for subscription in subscriptions:
+            ok = send_web_push(
+                subscription,
+                {
+                    "title": title,
+                    "body": body,
+                    "url": "/medications",
+                    "priority": "high",
+                    "sound": "medication",
+                    "medicationId": med.id,
+                },
+            )
+            if ok:
+                sent_count += 1
 
     return {
         "sent": sent_count,

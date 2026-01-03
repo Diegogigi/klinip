@@ -307,11 +307,13 @@ function Topbar({ user, notifications, onClearNotifications }) {
 }
 
 const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
-const NOTIF_CONSENT_KEY = "klinip_notifications_consent";
-const NOTIF_LAST_PROMPT_KEY = "klinip_notifications_last_prompt";
-const NOTIF_PROMPT_COUNT_KEY = "klinip_notifications_prompt_count";
+const CONSENT_ACCEPTED_KEY = "klinip_consent_accepted_v1";
+const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
+const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
+const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
+const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
 function ProtectedRoute({ user, children }) {
   if (!user) {
@@ -376,7 +378,8 @@ export default function App() {
       setConsentOpen(false);
       return;
     }
-    const accepted = localStorage.getItem("klinip_consent_accepted_v1") === "true";
+    const consentKey = getUserKey(CONSENT_ACCEPTED_KEY, user.id);
+    const accepted = localStorage.getItem(consentKey) === "true";
     if (!accepted) {
       setConsentChecked(false);
       setConsentOpen(true);
@@ -388,14 +391,17 @@ export default function App() {
       setNotifConsentOpen(false);
       return;
     }
+    const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
+    const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
+    const promptCountKey = getUserKey(NOTIF_PROMPT_COUNT_KEY_BASE, user.id);
     const storedConsent =
-      localStorage.getItem(NOTIF_CONSENT_KEY) || user.notifications_consent || "";
+      localStorage.getItem(consentKey) || user.notifications_consent || "";
     if (user.notifications_consent && storedConsent !== user.notifications_consent) {
-      localStorage.setItem(NOTIF_CONSENT_KEY, user.notifications_consent);
+      localStorage.setItem(consentKey, user.notifications_consent);
     }
 
-    if (Notification.permission === "denied") {
-      localStorage.setItem(NOTIF_CONSENT_KEY, "rejected");
+    if ("Notification" in window && Notification.permission === "denied") {
+      localStorage.setItem(consentKey, "rejected");
       updateMe({ notifications_consent: "rejected" }).catch(() => null);
       setNotifConsentOpen(false);
       return;
@@ -406,16 +412,16 @@ export default function App() {
       return;
     }
 
-    const lastPrompt = localStorage.getItem(NOTIF_LAST_PROMPT_KEY);
+    const lastPrompt = localStorage.getItem(lastPromptKey);
     const promptCount = parseInt(
-      localStorage.getItem(NOTIF_PROMPT_COUNT_KEY) || "0",
+      localStorage.getItem(promptCountKey) || "0",
       10
     );
     const now = Date.now();
     const lastTime = lastPrompt ? Date.parse(lastPrompt) : 0;
     const daysSince = lastTime ? (now - lastTime) / (1000 * 60 * 60 * 24) : 999;
     const nextCount = promptCount + 1;
-    localStorage.setItem(NOTIF_PROMPT_COUNT_KEY, String(nextCount));
+    localStorage.setItem(promptCountKey, String(nextCount));
 
     const shouldPrompt =
       !lastPrompt ||
@@ -620,7 +626,8 @@ export default function App() {
   };
 
   const handleAcceptConsent = () => {
-    localStorage.setItem("klinip_consent_accepted_v1", "true");
+    const consentKey = getUserKey(CONSENT_ACCEPTED_KEY, user?.id);
+    localStorage.setItem(consentKey, "true");
     localStorage.removeItem("klinip_consent_revoked");
     setConsentOpen(false);
   };
@@ -629,9 +636,11 @@ export default function App() {
     setNotifConsentOpen(false);
     (async () => {
       try {
+        const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user?.id);
+        const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user?.id);
         if (!("Notification" in window)) {
-          localStorage.setItem(NOTIF_CONSENT_KEY, "later");
-          localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+          localStorage.setItem(consentKey, "later");
+          localStorage.setItem(lastPromptKey, new Date().toISOString());
           await updateMe({
             notifications_consent: "later",
             notifications_last_prompt: new Date().toISOString(),
@@ -640,15 +649,15 @@ export default function App() {
         }
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
-          localStorage.setItem(NOTIF_CONSENT_KEY, "accepted");
+          localStorage.setItem(consentKey, "accepted");
           await updateMe({ notifications_consent: "accepted" });
           await ensurePushSubscription();
         } else if (permission === "denied") {
-          localStorage.setItem(NOTIF_CONSENT_KEY, "rejected");
+          localStorage.setItem(consentKey, "rejected");
           await updateMe({ notifications_consent: "rejected" });
         } else {
-          localStorage.setItem(NOTIF_CONSENT_KEY, "later");
-          localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+          localStorage.setItem(consentKey, "later");
+          localStorage.setItem(lastPromptKey, new Date().toISOString());
           await updateMe({
             notifications_consent: "later",
             notifications_last_prompt: new Date().toISOString(),
@@ -656,8 +665,10 @@ export default function App() {
         }
       } catch (err) {
         console.error("Error solicitando permiso de notificaciones", err);
-        localStorage.setItem(NOTIF_CONSENT_KEY, "later");
-        localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+        const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user?.id);
+        const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user?.id);
+        localStorage.setItem(consentKey, "later");
+        localStorage.setItem(lastPromptKey, new Date().toISOString());
         updateMe({
           notifications_consent: "later",
           notifications_last_prompt: new Date().toISOString(),
@@ -667,8 +678,10 @@ export default function App() {
   };
 
   const handleLaterNotifications = () => {
-    localStorage.setItem(NOTIF_CONSENT_KEY, "later");
-    localStorage.setItem(NOTIF_LAST_PROMPT_KEY, new Date().toISOString());
+    const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user?.id);
+    const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user?.id);
+    localStorage.setItem(consentKey, "later");
+    localStorage.setItem(lastPromptKey, new Date().toISOString());
     setNotifConsentOpen(false);
     updateMe({
       notifications_consent: "later",
