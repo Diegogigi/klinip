@@ -12,6 +12,8 @@ export default function Medications() {
   const navigate = useNavigate();
   const [meds, setMeds] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTarget, setNotifyTarget] = useState(null);
   const [form, setForm] = useState({
     id: null,
     name: "",
@@ -51,6 +53,18 @@ export default function Medications() {
       navigate("/medications", { replace: true });
     });
   }, [location.search, meds, navigate]);
+
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    const notify = params.get("notify") === "1";
+    const notifyId = params.get("medicationId");
+    if (!notify || !notifyId) return;
+    const target = meds.find((m) => String(m.id) === String(notifyId));
+    if (!target) return;
+    setNotifyTarget(target);
+    setNotifyOpen(true);
+  }, [location.search, meds]);
 
   const resetForm = () => {
     setForm({
@@ -169,6 +183,51 @@ export default function Medications() {
           Agregar medicamento
         </button>
       </div>
+
+      {notifyOpen && notifyTarget && (
+        <div className="modal-backdrop" onClick={() => {
+          setNotifyOpen(false);
+          setNotifyTarget(null);
+          navigate("/medications", { replace: true });
+        }}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h3>Medicamento desde notificacion</h3>
+            <p className="muted">
+              {notifyTarget.name}
+              {notifyTarget.dose ? ` · ${notifyTarget.dose}` : ""}
+              {notifyTarget.schedule_time ? ` · ${notifyTarget.schedule_time}` : ""}
+              {notifyTarget.end_date ? ` · ${toLocaleDateOrEmpty(notifyTarget.end_date)}` : ""}
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  handleEdit(notifyTarget);
+                  setNotifyOpen(false);
+                  setNotifyTarget(null);
+                  navigate("/medications", { replace: true });
+                }}
+              >
+                Ver detalle
+              </button>
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={() => {
+                  handleMarkCompleted(notifyTarget).finally(() => {
+                    setNotifyOpen(false);
+                    setNotifyTarget(null);
+                    navigate("/medications", { replace: true });
+                  });
+                }}
+              >
+                Marcar realizado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>

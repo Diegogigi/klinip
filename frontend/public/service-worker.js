@@ -1,7 +1,11 @@
-const CACHE_NAME = "klinip-cache-v5";
+const CACHE_NAME = "klinip-cache-v7";
 const ASSETS = [
   "/manifest.webmanifest",
-  "/icons/k_logo.png",
+  "/icons/k_logo_152.png",
+  "/icons/k_logo_167.png",
+  "/icons/k_logo_180.png",
+  "/icons/k_logo_192.png",
+  "/icons/k_logo_512.png",
   "/sounds/notification.mp3"
 ];
 
@@ -239,8 +243,8 @@ async function checkAndShowPendingNotifications() {
 
       await self.registration.showNotification(notification.title, {
         body: notification.body,
-        icon: notification.icon || "/icons/k_logo.png",
-        badge: "/icons/k_logo.png",
+        icon: notification.icon || "/icons/k_logo_192.png",
+        badge: "/icons/k_logo_192.png",
         tag: notification.tag,
         data: notification.data || { url: notification.url || "/" },
         requireInteraction: true,
@@ -345,7 +349,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
-  const icon = data.icon || "/icons/k_logo.png";
+  const icon = data.icon || "/icons/k_logo_192.png";
   const priority = data.priority || "normal";
   const sound = data.sound || "default";
 
@@ -384,7 +388,7 @@ self.addEventListener("push", (event) => {
       self.registration.showNotification(title, {
         body,
         icon,
-        badge: "/icons/k_logo.png",
+        badge: "/icons/k_logo_192.png",
         vibrate,
         requireInteraction,
         tag,
@@ -392,9 +396,9 @@ self.addEventListener("push", (event) => {
           {
             action: "done",
             title: data.medicationId ? "Realizado" : "Realizada",
-            icon: "/icons/k_logo.png"
+            icon: "/icons/k_logo_192.png"
           },
-          { action: "open", title: "Ver detalles", icon: "/icons/k_logo.png" }
+          { action: "open", title: "Ver detalles", icon: "/icons/k_logo_192.png" }
         ],
         data: {
           url,
@@ -445,7 +449,16 @@ self.addEventListener("notificationclick", (event) => {
     return;
   }
 
-  const targetUrl = notificationData.url || "/";
+  const isDefaultClick = !event.action;
+  let targetUrl = notificationData.url || "/";
+
+  if (isDefaultClick) {
+    if (notificationData.appointmentId) {
+      targetUrl = `/appointments?notify=1&appointmentId=${notificationData.appointmentId}`;
+    } else if (notificationData.medicationId) {
+      targetUrl = `/medications?notify=1&medicationId=${notificationData.medicationId}`;
+    }
+  }
 
   event.waitUntil(
     clients

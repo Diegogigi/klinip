@@ -30,6 +30,8 @@ export default function Appointments() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTarget, setNotifyTarget] = useState(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -82,6 +84,18 @@ export default function Appointments() {
         navigate("/appointments", { replace: true });
       });
   }, [location.search, appointments, navigate]);
+
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    const notify = params.get("notify") === "1";
+    const notifyId = params.get("appointmentId");
+    if (!notify || !notifyId) return;
+    const target = appointments.find((a) => String(a.id) === String(notifyId));
+    if (!target) return;
+    setNotifyTarget(target);
+    setNotifyOpen(true);
+  }, [location.search, appointments]);
 
   const resetForm = () => {
     setForm({
@@ -195,6 +209,50 @@ export default function Appointments() {
           {form.id ? "Editar actividad" : "Nueva actividad"}
         </button>
       </div>
+
+      {notifyOpen && notifyTarget && (
+        <div className="modal-backdrop" onClick={() => {
+          setNotifyOpen(false);
+          setNotifyTarget(null);
+          navigate("/appointments", { replace: true });
+        }}>
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h3>Actividad desde notificacion</h3>
+            <p className="muted">
+              {notifyTarget.specialty || typeLabels[notifyTarget.type] || "Cita"}{" "}
+              {notifyTarget.center ? `· ${notifyTarget.center}` : ""}
+              {notifyTarget.date_time ? ` · ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  handleEdit(notifyTarget);
+                  setNotifyOpen(false);
+                  setNotifyTarget(null);
+                  navigate("/appointments", { replace: true });
+                }}
+              >
+                Ver detalle
+              </button>
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={() => {
+                  handleMarkCompleted(notifyTarget).finally(() => {
+                    setNotifyOpen(false);
+                    setNotifyTarget(null);
+                    navigate("/appointments", { replace: true });
+                  });
+                }}
+              >
+                Marcar realizada
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
