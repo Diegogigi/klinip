@@ -339,14 +339,14 @@ export default function NotificationSettings({ onClose }) {
     <div className="notification-settings-overlay" onClick={onClose}>
       <div className="notification-settings-panel" onClick={(e) => e.stopPropagation()}>
         <div className="settings-header">
-          <h2>⚙️ Configuración de Notificaciones</h2>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <h2>Configuracion de notificaciones</h2>
+          <button className="close-btn" onClick={onClose} aria-label="Cerrar">?</button>
         </div>
 
         <div className="settings-content">
           {/* Estado actual */}
           <section className="settings-section">
-            <h3>📊 Estado Actual</h3>
+            <h3>Estado actual</h3>
             <div className="status-grid">
               <div className="status-item">
                 <span className="status-label">Notificaciones del navegador:</span>
@@ -379,7 +379,7 @@ export default function NotificationSettings({ onClose }) {
           {!notificationsEnabled && (
             <section className="settings-section">
               <button className="primary-btn" onClick={handleEnableNotifications}>
-                🔔 Habilitar Notificaciones del Navegador
+                🔔 Habilitar notificaciones del navegador
               </button>
               <p className="help-text">
                 Necesitas habilitar las notificaciones para recibir recordatorios
@@ -389,7 +389,7 @@ export default function NotificationSettings({ onClose }) {
 
           {/* Push notifications */}
           <section className="settings-section">
-            <h3>📱 Notificaciones Push</h3>
+            <h3>Notificaciones push</h3>
             <p className="help-text">
               Las notificaciones push funcionan incluso cuando la aplicación está cerrada
             </p>
@@ -409,14 +409,14 @@ export default function NotificationSettings({ onClose }) {
                 </>
               )}
               <button className="secondary-btn" onClick={handleTestPush} disabled={!pushEnabled}>
-                🧪 Enviar Notificación de Prueba
+                🧪 Enviar notificacionón de Prueba
               </button>
             </div>
           </section>
 
           {/* Preferencias de recordatorios */}
           <section className="settings-section">
-            <h3>⏰ Preferencias de Recordatorios</h3>
+            <h3>Preferencias</h3>
             
             <div className="setting-item">
               <label>
@@ -539,16 +539,16 @@ export default function NotificationSettings({ onClose }) {
           {/* Acciones */}
           <section className="settings-section actions">
             <button className="primary-btn" onClick={rescheduleNotifications}>
-              🔄 Reprogramar Notificaciones
+              🔄 Reprogramar notificaciones
             </button>
             <button className="danger-btn" onClick={handleClearAll}>
-              🗑️ Borrar Todas las Notificaciones
+              🗑️ Borrar todas las notificaciones
             </button>
             <button className="secondary-btn" onClick={() => {
               updateStats();
               alert("📊 Estadísticas actualizadas");
             }}>
-              📊 Actualizar Estadísticas
+              📊 Actualizar estadísticas
             </button>
           </section>
         </div>
