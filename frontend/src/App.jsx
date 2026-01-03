@@ -354,6 +354,7 @@ function Topbar({ user, notifications, onClearNotifications }) {
 
 const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
 const CONSENT_ACCEPTED_KEY = "klinip_consent_accepted_v1";
+const PUSH_REGISTERED_KEY_BASE = "klinip_push_registered";
 const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
@@ -474,6 +475,23 @@ export default function App() {
       setNotifConsentOpen(true);
     }
   }, [user, consentOpen]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
+    const consentValue = localStorage.getItem(consentKey);
+    if (consentValue !== "accepted") return;
+    const registeredKey = getUserKey(PUSH_REGISTERED_KEY_BASE, user.id);
+    if (localStorage.getItem(registeredKey) === "true") return;
+
+    ensurePushSubscription()
+      .then(() => {
+        localStorage.setItem(registeredKey, "true");
+      })
+      .catch(() => null);
+  }, [user]);
 
   const persistNotifications = (items) => {
     setNotifications(items);

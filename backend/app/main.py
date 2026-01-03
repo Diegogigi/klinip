@@ -422,7 +422,7 @@ def _send_scheduled_push_reminders():
                         continue
 
                     label = offset["label"]
-                    tag = f"appointment-{appt.id}-{label}"
+                    tag = f"appointment-{appt.id}-{label}-sub-{subscription.id}"
                     if _notification_already_sent(db, tag):
                         continue
 
@@ -496,7 +496,7 @@ def _send_scheduled_push_reminders():
                                 continue
 
                             tag = (
-                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
+                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}-sub-{subscription.id}"
                             )
                             if _notification_already_sent(db, tag):
                                 continue
