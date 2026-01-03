@@ -2280,8 +2280,7 @@ async def send_reminders(
             title = f"Recordatorio: {appt.specialty or appt.type}"
             when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
             center = appt.center or "Centro medico"
-            body = "
-".join([message, when_text, center])
+            body = "\n".join([message, when_text, center])
 
             for subscription in subscriptions:
                 ok = send_web_push(
