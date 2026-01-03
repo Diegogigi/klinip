@@ -553,6 +553,31 @@ export default function App() {
   }, [notifications.length]);
 
   useEffect(() => {
+    if (!("serviceWorker" in navigator)) return undefined;
+    let active = true;
+
+    const initServiceWorker = async () => {
+      const reg = await registerServiceWorker().catch(() => null);
+      if (!active) return;
+      if (reg?.waiting && navigator.serviceWorker.controller) {
+        setUpdateRegistration(reg);
+        setUpdateAvailable(true);
+      }
+    };
+
+    initServiceWorker();
+
+    const intervalId = window.setInterval(() => {
+      navigator.serviceWorker.getRegistration().then((reg) => reg?.update?.().catch(() => null));
+    }, 5 * 60 * 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
     const onUpdate = (event) => {
       const reg = event.detail?.registration || null;
       setUpdateRegistration(reg);
