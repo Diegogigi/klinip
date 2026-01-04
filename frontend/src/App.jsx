@@ -727,6 +727,13 @@ export default function App() {
     apiLogout?.();
     setUser(null);
     removePushSubscription();
+    if ("caches" in window) {
+      caches.keys().then((keys) => {
+        keys
+          .filter((key) => key.startsWith("klinip-cache"))
+          .forEach((key) => caches.delete(key));
+      });
+    }
   };
 
   const handleAcceptConsent = () => {

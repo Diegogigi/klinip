@@ -12,6 +12,15 @@ export default function Register({ onRegistered }) {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const clearAppCaches = async () => {
+    if (!("caches" in window)) return;
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith("klinip-cache"))
+        .map((key) => caches.delete(key))
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,6 +41,7 @@ export default function Register({ onRegistered }) {
     }
     try {
       setLoading(true);
+      await clearAppCaches();
       localStorage.removeItem("token");
       localStorage.removeItem("klinip_consent_revoked");
       await register({ name, email, password });

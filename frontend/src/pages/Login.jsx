@@ -8,12 +8,22 @@ export default function Login({ onAuthenticated }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const clearAppCaches = async () => {
+    if (!("caches" in window)) return;
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => key.startsWith("klinip-cache"))
+        .map((key) => caches.delete(key))
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
+      await clearAppCaches();
       localStorage.removeItem("token");
       const res = await login({ email, password });
       console.log("Login response:", res);
