@@ -56,6 +56,12 @@ export default function Register({ onRegistered }) {
         // Intentar obtener el usuario
         try {
           const me = await getMe();
+          if (me?.email && me.email.toLowerCase() !== email.trim().toLowerCase()) {
+            localStorage.removeItem("token");
+            throw new Error(
+              "La sesion no coincide con el usuario registrado. Intenta de nuevo."
+            );
+          }
           console.log("Usuario obtenido:", me);
           onRegistered(me);
           navigate("/");
