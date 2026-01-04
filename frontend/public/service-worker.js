@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v9";
+const CACHE_NAME = "klinip-cache-v10";
 const ASSETS = [
   "/manifest.webmanifest",
   "/icons/k_logo_152.png",
@@ -76,7 +76,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
+  if (event.request.headers.get("authorization")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   if (
+    event.request.url.includes("/auth/") ||
+    event.request.url.includes("/me") ||
+    event.request.url.includes("/privacy/") ||
+    event.request.url.includes("/push/") ||
     event.request.url.includes("/api/") ||
     event.request.url.includes("/appointments") ||
     event.request.url.includes("/medications") ||
