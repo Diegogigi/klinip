@@ -1,6 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { deleteMedication, getMedications, saveMedication } from "../api";
+import {
+  deleteMedication,
+  getMedications,
+  recordMedicationIntake,
+  saveMedication,
+} from "../api";
 import {
   requestNotificationPermission,
   scheduleMedicationNotifications,
@@ -14,6 +19,8 @@ export default function Medications() {
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
+  const [intakeFeedback, setIntakeFeedback] = useState("");
+  const feedbackTimer = useRef(null);
   const [form, setForm] = useState({
     id: null,
     name: "",
@@ -43,13 +50,21 @@ export default function Medications() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!location.search) return;
     const params = new URLSearchParams(location.search);
-    const id = params.get("complete");
-    if (!id) return;
-    const target = meds.find((m) => String(m.id) === String(id));
-    if (!target || target.completed) return;
-    handleMarkCompleted(target).finally(() => {
+    const intakeId = params.get("intake") || params.get("complete");
+    if (!intakeId) return;
+    const target = meds.find((m) => String(m.id) === String(intakeId));
+    if (!target) return;
+    handleRecordIntake(target).finally(() => {
       navigate("/medications", { replace: true });
     });
   }, [location.search, meds, navigate]);
@@ -132,21 +147,17 @@ export default function Medications() {
     });
   };
 
-  const handleMarkCompleted = async (med) => {
+  const handleRecordIntake = async (med) => {
     try {
-      await saveMedication({
-        id: med.id,
-        name: med.name,
-        dose: med.dose || "",
-        frequency: med.frequency || "",
-        duration: med.duration || "",
-        schedule_time: med.schedule_time || "",
-        completed: true,
-        end_date: med.end_date || null,
-        notes: med.notes || "",
-        document_id: med.document_id || null,
-      });
+      await recordMedicationIntake(med.id);
       await load();
+      setIntakeFeedback(`Toma registrada: ${med.name}`);
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+      feedbackTimer.current = setTimeout(() => {
+        setIntakeFeedback("");
+      }, 2600);
     } catch (err) {
       console.error(err);
       alert("No se pudo marcar como realizado");
@@ -166,6 +177,11 @@ export default function Medications() {
 
   return (
     <>
+      {intakeFeedback && (
+        <div className="med-intake-toast" role="status">
+          {intakeFeedback}
+        </div>
+      )}
       <div className="card">
         <h2 className="card-title">Medicamentos y tratamientos</h2>
         <p className="muted">
@@ -215,7 +231,7 @@ export default function Medications() {
                 className="primary-btn"
                 type="button"
                 onClick={() => {
-                  handleMarkCompleted(notifyTarget).finally(() => {
+                  handleRecordIntake(notifyTarget).finally(() => {
                     setNotifyOpen(false);
                     setNotifyTarget(null);
                     navigate("/medications", { replace: true });
@@ -363,15 +379,13 @@ export default function Medications() {
                     <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
                     <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
-                        {!m.completed && (
-                          <button
-                            className="secondary-btn"
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                            onClick={() => handleMarkCompleted(m)}
-                          >
-                            Marcar realizado
-                          </button>
-                        )}
+                        <button
+                          className="secondary-btn"
+                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
+                          onClick={() => handleRecordIntake(m)}
+                        >
+                          Marcar realizado
+                        </button>
                         <button
                           className="secondary-btn"
                           style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}

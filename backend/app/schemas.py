@@ -163,6 +163,22 @@ class MedicationOut(MedicationBase):
         from_attributes = True
 
 
+class MedicationIntakeOut(BaseModel):
+    id: int
+    medication_id: int
+    user_id: int
+    taken_at: datetime
+
+    @field_serializer('taken_at')
+    def serialize_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
 class PushSubscriptionIn(BaseModel):
     endpoint: str
     keys: dict | None = None

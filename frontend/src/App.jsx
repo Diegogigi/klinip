@@ -413,6 +413,7 @@ export default function App() {
         const me = await getMe();
         setUser(me);
       } catch (err) {
+        localStorage.removeItem("token");
         setUser(null);
       } finally {
         setBooting(false);

@@ -4045,6 +4045,52 @@ body.theme-dark .alert-info strong {
   color: #fff;
 }
 
+.med-intake-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2000;
+  background: linear-gradient(135deg, #e8f6ff, #f4fbff);
+  color: #0b2b44;
+  border: 1px solid rgba(14, 116, 144, 0.2);
+  border-radius: 999px;
+  padding: 0.75rem 1.1rem;
+  box-shadow: 0 16px 30px rgba(10, 37, 64, 0.15);
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: 0.2px;
+  animation: intake-toast-in 0.25s ease-out;
+  pointer-events: none;
+}
+
+@keyframes intake-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+body.theme-dark .med-intake-toast {
+  background: linear-gradient(135deg, #0b1a27, #0f2436);
+  color: #e6f4ff;
+  border-color: rgba(96, 165, 250, 0.25);
+  box-shadow: 0 16px 30px rgba(7, 15, 25, 0.5);
+}
+
+@media (max-width: 640px) {
+  .med-intake-toast {
+    left: 16px;
+    right: 16px;
+    bottom: 18px;
+    text-align: center;
+    border-radius: 18px;
+  }
+}
+
 .secondary-btn.ghost {
   border: 1px dashed rgba(37, 99, 235, 0.3);
   color: var(--blue);

@@ -14,6 +14,7 @@ export default function Login({ onAuthenticated }) {
     setError("");
     setLoading(true);
     try {
+      localStorage.removeItem("token");
       const res = await login({ email, password });
       console.log("Login response:", res);
       

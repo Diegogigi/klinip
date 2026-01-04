@@ -32,6 +32,7 @@ export default function Register({ onRegistered }) {
     }
     try {
       setLoading(true);
+      localStorage.removeItem("token");
       localStorage.removeItem("klinip_consent_revoked");
       await register({ name, email, password });
       console.log("Usuario registrado exitosamente");

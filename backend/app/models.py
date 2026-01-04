@@ -121,6 +121,18 @@ class Medication(Base):
     document = relationship("Document")
 
 
+class MedicationIntake(Base):
+    __tablename__ = "medication_intakes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    medication_id = Column(Integer, ForeignKey("medications.id"))
+    taken_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+    medication = relationship("Medication")
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 

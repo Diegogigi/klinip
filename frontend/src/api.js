@@ -22,6 +22,7 @@ export const updateDocument = api.updateDocument;
 export const getMedications = api.getMedications;
 export const saveMedication = api.saveMedication;
 export const deleteMedication = api.deleteMedication;
+export const recordMedicationIntake = api.recordMedicationIntake;
 
 export const revokeDataConsent = api.revokeDataConsent;
 export const deleteAccount = api.deleteAccount;

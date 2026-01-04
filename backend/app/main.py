@@ -2037,6 +2037,33 @@ async def update_medication(
     return med
 
 
+@app.post("/medications/{medication_id}/intake", response_model=schemas.MedicationIntakeOut)
+async def record_medication_intake(
+    medication_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    med = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.id == medication_id,
+            models.Medication.user_id == current_user.id,
+        )
+        .first()
+    )
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+
+    intake = models.MedicationIntake(
+        user_id=current_user.id,
+        medication_id=medication_id,
+    )
+    db.add(intake)
+    db.commit()
+    db.refresh(intake)
+    return intake
+
+
 @app.delete("/medications/{medication_id}")
 async def delete_medication(
     medication_id: int,

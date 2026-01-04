@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v8";
+const CACHE_NAME = "klinip-cache-v9";
 const ASSETS = [
   "/manifest.webmanifest",
   "/icons/k_logo_152.png",
@@ -456,7 +456,7 @@ self.addEventListener("notificationclick", (event) => {
       appointmentId
         ? `/appointments?complete=${appointmentId}`
         : medicationId
-        ? `/medications?complete=${medicationId}`
+        ? `/medications?intake=${medicationId}`
         : notificationData.url || "/"
     );
     event.waitUntil(

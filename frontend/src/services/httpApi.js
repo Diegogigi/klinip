@@ -164,6 +164,11 @@ export async function deleteMedication(id) {
   return res.data;
 }
 
+export async function recordMedicationIntake(id) {
+  const res = await api.post(`/medications/${id}/intake`);
+  return res.data;
+}
+
 // Push subscriptions
 export async function subscribePush(payload) {
   const res = await api.post("/push/subscribe", payload);
