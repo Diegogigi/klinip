@@ -35,6 +35,7 @@ export default function Appointments() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedUndatedId, setSelectedUndatedId] = useState("");
   const [form, setForm] = useState({
     id: null,
     type: "cita",
@@ -179,6 +180,12 @@ export default function Appointments() {
     }
   };
 
+  const getAppointmentLabel = (appt) => {
+    const typeLabel = typeLabels[appt.type] || appt.type || "Actividad";
+    const detail = appt.specialty || appt.center || "Sin detalle";
+    return `${typeLabel} · ${detail}`;
+  };
+
   const filteredAppointments = appointments.filter((a) => {
     const matchesSearch =
       !search ||
@@ -189,6 +196,21 @@ export default function Appointments() {
     const matchesStatus = statusFilter === "all" || a.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
   });
+  const undatedAppointments = filteredAppointments.filter((a) => !a.date_time);
+  const hasUndatedAppointments = undatedAppointments.length > 0;
+
+  useEffect(() => {
+    if (!undatedAppointments.length) {
+      setSelectedUndatedId("");
+      return;
+    }
+    setSelectedUndatedId((prev) => {
+      const exists = undatedAppointments.some(
+        (a) => String(a.id) === String(prev)
+      );
+      return exists ? prev : String(undatedAppointments[0].id);
+    });
+  }, [undatedAppointments]);
 
   return (
     <>
@@ -198,6 +220,63 @@ export default function Appointments() {
           Organiza tus citas, examenes y tramites. Todo queda guardado.
         </p>
       </div>
+
+      {hasUndatedAppointments && (
+        <div className="card">
+          <div className="alert-info">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v5" />
+              <circle cx="12" cy="17" r="1" />
+            </svg>
+            <p>
+              <strong>Hay actividades sin fecha.</strong> Agrega una fecha real para
+              verlas en el calendario y recibir recordatorios.
+            </p>
+            <div
+              style={{
+                marginLeft: "auto",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+              }}
+            >
+              <select
+                className="select-field"
+                value={selectedUndatedId}
+                onChange={(e) => setSelectedUndatedId(e.target.value)}
+                style={{ minWidth: "200px" }}
+              >
+                {undatedAppointments.map((appt) => (
+                  <option key={appt.id} value={String(appt.id)}>
+                    {getAppointmentLabel(appt)}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  const target =
+                    undatedAppointments.find(
+                      (a) => String(a.id) === String(selectedUndatedId)
+                    ) || undatedAppointments[0];
+                  if (target) {
+                    handleEdit(target);
+                  } else {
+                    resetForm();
+                    setShowForm(true);
+                  }
+                }}
+                style={{ whiteSpace: "nowrap" }}
+              >
+                Agregar fecha
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <button

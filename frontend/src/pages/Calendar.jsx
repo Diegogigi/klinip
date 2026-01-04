@@ -37,6 +37,14 @@ function getMonthDays(viewDate) {
   return cells;
 }
 
+function parseDurationDays(value) {
+  if (!value) return null;
+  const match = String(value).match(/(\d+)/);
+  if (!match) return null;
+  const days = parseInt(match[1], 10);
+  return Number.isNaN(days) || days <= 0 ? null : days;
+}
+
 export default function Calendar() {
   const [appointments, setAppointments] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -77,8 +85,9 @@ export default function Calendar() {
     };
 
     (appointments || []).forEach((a) => {
-      if (!a?.date_time) return;
-      const d = parseDate(a.date_time);
+      const dateValue = a?.date_time || a?.created_at;
+      if (!dateValue) return;
+      const d = parseDate(dateValue);
       if (!d) return;
       const key = d.toISOString().slice(0, 10);
       pushEvent(key, a);
@@ -89,9 +98,17 @@ export default function Calendar() {
     const horizon = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
     (medications || []).forEach((m) => {
       if (m?.completed) return;
-      if (!m?.end_date) return;
-      const end = parseDate(m.end_date);
-      if (!end) return;
+      let end = m?.end_date ? parseDate(m.end_date) : null;
+      if (!end) {
+        const durationDays = parseDurationDays(m?.duration);
+        if (durationDays) {
+          end = new Date(today.getTime());
+          end.setDate(end.getDate() + durationDays);
+        } else {
+          end = new Date(today.getTime());
+          end.setDate(end.getDate() + 7);
+        }
+      }
       const lastDay = end < horizon ? end : horizon;
       for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
         const key = day.toISOString().slice(0, 10);
