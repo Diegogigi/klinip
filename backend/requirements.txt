@@ -10,6 +10,7 @@ email-validator
 bcrypt==4.0.1
 psycopg2-binary
 pywebpush
+py-vapid==1.8.2
 pytesseract
 Pillow
 pdf2image
