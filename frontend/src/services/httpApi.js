@@ -51,6 +51,16 @@ export async function logout() {
   return true;
 }
 
+export async function forgotPassword(payload) {
+  const res = await api.post("/auth/forgot-password", payload);
+  return res.data;
+}
+
+export async function resetPassword(payload) {
+  const res = await api.post("/auth/reset-password", payload);
+  return res.data;
+}
+
 export async function getMe() {
   const res = await api.get("/me");
   return res.data;

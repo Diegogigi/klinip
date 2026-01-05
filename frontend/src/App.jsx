@@ -2,6 +2,8 @@
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import Appointments from "./pages/Appointments";
 import Calendar from "./pages/Calendar";
@@ -324,7 +326,8 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
   );
 }
 
-const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
+const NOTIFICATION_STORAGE_KEY_BASE = "klinip_received_notifications";
+const LAST_USER_ID_KEY = "klinip_last_user_id";
 const CONSENT_ACCEPTED_KEY = "klinip_consent_accepted_v1";
 const PUSH_REGISTERED_KEY_BASE = "klinip_push_registered";
 const PUSH_ENDPOINT_KEY_BASE = "klinip_push_endpoint";
@@ -376,14 +379,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const saved = localStorage.getItem(NOTIFICATION_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [notifications, setNotifications] = useState([]);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
     if (savedTheme === "dark" || savedTheme === "light") {
@@ -520,8 +516,10 @@ export default function App() {
 
   const persistNotifications = (items) => {
     setNotifications(items);
+    if (!user) return;
+    const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
     try {
-      localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(items));
+      localStorage.setItem(key, JSON.stringify(items));
     } catch (err) {
       console.warn("No se pudo guardar notificaciones localmente:", err);
     }
@@ -553,13 +551,21 @@ export default function App() {
     });
 
   const addNotification = (notification) => {
-    if (!notification) return;
+    if (!notification || !user) return;
+    if (notification.userId && String(notification.userId) !== String(user.id)) {
+      return;
+    }
+    const normalized = {
+      ...notification,
+      userId: notification.userId || user.id,
+    };
     setNotifications((prev) => {
-      const exists = prev.some((item) => item.id === notification.id);
+      const exists = prev.some((item) => item.id === normalized.id);
       if (exists) return prev;
-      const next = [notification, ...prev].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      const next = [normalized, ...prev].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       try {
-        localStorage.setItem(NOTIFICATION_STORAGE_KEY, JSON.stringify(next));
+        const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
+        localStorage.setItem(key, JSON.stringify(next));
       } catch (err) {
         console.warn("No se pudo guardar notificaciones localmente:", err);
       }
@@ -569,10 +575,13 @@ export default function App() {
 
   const handleClearNotifications = () => {
     setNotifications([]);
-    try {
-      localStorage.removeItem(NOTIFICATION_STORAGE_KEY);
-    } catch (err) {
-      console.warn("No se pudo limpiar notificaciones localmente:", err);
+    if (user) {
+      try {
+        const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
+        localStorage.removeItem(key);
+      } catch (err) {
+        console.warn("No se pudo limpiar notificaciones localmente:", err);
+      }
     }
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.ready.then((reg) => {
@@ -621,14 +630,18 @@ export default function App() {
         addNotification(data.notification);
       }
       if (data.type === "RECEIVED_NOTIFICATIONS") {
+        if (!user) return;
         const list = Array.isArray(data.notifications) ? data.notifications : [];
-        const sorted = list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        const filtered = list.filter(
+          (item) => String(item.userId || "") === String(user.id)
+        );
+        const sorted = filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         persistNotifications(sorted);
       }
     };
     navigator.serviceWorker.addEventListener("message", handler);
     return () => navigator.serviceWorker.removeEventListener("message", handler);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (!user || !("serviceWorker" in navigator)) return;
@@ -643,7 +656,10 @@ export default function App() {
       }
       const stored = await loadNotificationsFromIdb();
       if (!cancelled && stored.length) {
-        const sorted = stored.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        const filtered = stored.filter(
+          (item) => String(item.userId || "") === String(user.id)
+        );
+        const sorted = filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         persistNotifications(sorted);
       }
     };
@@ -671,6 +687,34 @@ export default function App() {
       }
     }
   }, [notifications.length]);
+
+  useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+    const lastUserId = localStorage.getItem(LAST_USER_ID_KEY);
+    if (lastUserId && String(lastUserId) !== String(user.id)) {
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.active?.postMessage({ type: "CLEAR_RECEIVED_NOTIFICATIONS" });
+        });
+      }
+      setNotifications([]);
+    }
+    const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
+    try {
+      const saved = localStorage.getItem(key);
+      const parsed = saved ? JSON.parse(saved) : [];
+      const filtered = parsed.filter(
+        (item) => String(item.userId || "") === String(user.id)
+      );
+      setNotifications(filtered);
+    } catch (err) {
+      setNotifications([]);
+    }
+    localStorage.setItem(LAST_USER_ID_KEY, String(user.id));
+  }, [user]);
 
   useEffect(() => {
     if (!location?.pathname) return;
@@ -751,6 +795,10 @@ export default function App() {
     localStorage.removeItem("token");
     if (registeredKey) localStorage.removeItem(registeredKey);
     if (endpointKey) localStorage.removeItem(endpointKey);
+    if (user?.id) {
+      const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
+      localStorage.removeItem(key);
+    }
     apiLogout?.();
     setUser(null);
     removePushSubscription();
@@ -972,6 +1020,14 @@ export default function App() {
                 element={
                   user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
                 }
+              />
+              <Route
+                path="/forgot-password"
+                element={user ? <Navigate to="/" replace /> : <ForgotPassword />}
+              />
+              <Route
+                path="/reset-password"
+                element={user ? <Navigate to="/" replace /> : <ResetPassword />}
               />
               <Route
                 path="/register"

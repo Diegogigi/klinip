@@ -18,6 +18,10 @@ from typing import List
 import os
 import mimetypes
 from datetime import timedelta, datetime
+import hashlib
+import secrets
+import smtplib
+from email.message import EmailMessage
 import json
 import io
 import re
@@ -265,6 +269,37 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
     except WebPushException as exc:
         print(f"WARNING push: fallo al enviar push: {exc}")
         return False
+
+
+def _hash_token(raw_token: str) -> str:
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _send_reset_email(to_email: str, reset_url: str):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+
+    if not (smtp_user and smtp_pass and smtp_from):
+        raise RuntimeError("SMTP no configurado")
+
+    msg = EmailMessage()
+    msg["Subject"] = "Klinip - Restablecer contrasena"
+    msg["From"] = smtp_from
+    msg["To"] = to_email
+    msg.set_content(
+        "Hola,\n\n"
+        "Recibimos una solicitud para restablecer tu contrasena.\n"
+        f"Ingresa al siguiente enlace para continuar:\n{reset_url}\n\n"
+        "Si no solicitaste este cambio, ignora este mensaje.\n"
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
 
 
 
@@ -1847,6 +1882,73 @@ def login(
         data={"sub": str(user.id)}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/auth/forgot-password")
+def forgot_password(payload: schemas.ForgotPasswordIn, request: Request, db: Session = Depends(auth.get_db)):
+    email = payload.email.lower().strip()
+    user = auth.get_user_by_email(db, email)
+    if not user or getattr(user, "deleted", False):
+        return {"ok": True}
+
+    db.query(models.PasswordResetToken).filter(
+        models.PasswordResetToken.user_id == user.id,
+        models.PasswordResetToken.used.is_(False),
+    ).update({models.PasswordResetToken.used: True})
+
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(raw_token)
+    expires_at = datetime.utcnow() + timedelta(hours=1)
+    reset = models.PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at,
+        used=False,
+    )
+    db.add(reset)
+    db.commit()
+
+    origin = request.headers.get("origin") or os.getenv("FRONTEND_BASE_URL") or str(request.base_url).rstrip("/")
+    reset_url = f"{origin}/#/reset-password?token={raw_token}"
+    try:
+        _send_reset_email(user.email, reset_url)
+    except Exception as exc:
+        print(f"ERROR sending reset email: {exc}")
+        raise HTTPException(status_code=500, detail="No se pudo enviar el correo de recuperacion")
+
+    return {"ok": True}
+
+
+@app.post("/auth/reset-password")
+def reset_password(payload: schemas.ResetPasswordIn, db: Session = Depends(auth.get_db)):
+    new_password = payload.new_password.strip()
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 6 caracteres")
+
+    token_hash = _hash_token(payload.token)
+    token = (
+        db.query(models.PasswordResetToken)
+        .filter(
+            models.PasswordResetToken.token_hash == token_hash,
+            models.PasswordResetToken.used.is_(False),
+            models.PasswordResetToken.expires_at > datetime.utcnow(),
+        )
+        .first()
+    )
+    if not token:
+        raise HTTPException(status_code=400, detail="Token invalido o expirado")
+
+    user = db.query(models.User).filter(models.User.id == token.user_id).first()
+    if not user or getattr(user, "deleted", False):
+        raise HTTPException(status_code=400, detail="Usuario no valido")
+
+    user.password_hash = auth.get_password_hash(new_password)
+    token.used = True
+    db.add(user)
+    db.add(token)
+    db.commit()
+
+    return {"ok": True}
 
 
 @app.get("/me", response_model=schemas.UserOut)

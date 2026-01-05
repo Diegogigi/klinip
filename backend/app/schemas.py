@@ -50,6 +50,15 @@ class TokenData(BaseModel):
     user_id: Optional[int] = None
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str
+
+
 class AppointmentBase(BaseModel):
     type: AppointmentType
     specialty: Optional[str] = ""

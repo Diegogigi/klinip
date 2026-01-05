@@ -6,6 +6,8 @@ const api = httpApi;
 export const register = api.register;
 export const login = api.login;
 export const logout = api.logout;
+export const forgotPassword = api.forgotPassword;
+export const resetPassword = api.resetPassword;
 export const getMe = api.getMe;
 export const updateMe = api.updateMe;
 

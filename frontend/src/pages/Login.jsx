@@ -175,6 +175,12 @@ export default function Login({ onAuthenticated }) {
             </button>
           </form>
 
+          <p className="auth-footer" style={{ marginTop: "0.75rem" }}>
+            <Link to="/forgot-password" className="auth-link">
+              ¿Olvidaste tu contrasena?
+            </Link>
+          </p>
+
           <div className="auth-divider">
             <span>o</span>
           </div>

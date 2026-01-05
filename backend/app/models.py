@@ -159,6 +159,19 @@ class PushNotificationLog(Base):
     user = relationship("User")
 
 
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    token_hash = Column(String, index=True, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+
+
 class PrivacyRequest(Base):
     __tablename__ = "privacy_requests"
 
