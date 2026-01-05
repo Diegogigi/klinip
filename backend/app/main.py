@@ -2080,6 +2080,10 @@ async def delete_medication(
     )
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+    db.query(models.MedicationIntake).filter(
+        models.MedicationIntake.medication_id == medication_id,
+        models.MedicationIntake.user_id == current_user.id,
+    ).delete()
     db.delete(med)
     db.commit()
     return {"ok": True}
@@ -2424,6 +2428,7 @@ async def delete_account(
 ):
     user_id = current_user.id
 
+    db.query(models.MedicationIntake).filter(models.MedicationIntake.user_id == user_id).delete()
     db.query(models.Appointment).filter(models.Appointment.user_id == user_id).delete()
     db.query(models.Medication).filter(models.Medication.user_id == user_id).delete()
     db.query(models.Document).filter(models.Document.user_id == user_id).delete()
