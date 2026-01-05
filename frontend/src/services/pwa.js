@@ -97,6 +97,7 @@ export async function ensurePushSubscription() {
     if (existingSub) {
       try {
         console.log("Cancelando suscripción anterior...");
+        await unsubscribePush({ endpoint: existingSub.endpoint });
         await existingSub.unsubscribe();
         console.log("Suscripción anterior cancelada");
       } catch (err) {

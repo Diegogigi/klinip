@@ -327,6 +327,7 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
 const NOTIFICATION_STORAGE_KEY = "klinip_received_notifications";
 const CONSENT_ACCEPTED_KEY = "klinip_consent_accepted_v1";
 const PUSH_REGISTERED_KEY_BASE = "klinip_push_registered";
+const PUSH_ENDPOINT_KEY_BASE = "klinip_push_endpoint";
 const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
@@ -486,13 +487,35 @@ export default function App() {
     const consentValue = localStorage.getItem(consentKey);
     if (consentValue !== "accepted") return;
     const registeredKey = getUserKey(PUSH_REGISTERED_KEY_BASE, user.id);
-    if (localStorage.getItem(registeredKey) === "true") return;
+    const endpointKey = getUserKey(PUSH_ENDPOINT_KEY_BASE, user.id);
 
-    ensurePushSubscription()
-      .then(() => {
-        localStorage.setItem(registeredKey, "true");
-      })
-      .catch(() => null);
+    const syncSubscription = async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        const currentEndpoint = sub?.endpoint || "";
+        const storedEndpoint = localStorage.getItem(endpointKey) || "";
+        const alreadyRegistered = localStorage.getItem(registeredKey) === "true";
+
+        if (alreadyRegistered && storedEndpoint && currentEndpoint === storedEndpoint) {
+          return;
+        }
+
+        await ensurePushSubscription();
+        const newSub = await reg.pushManager.getSubscription();
+        if (newSub?.endpoint) {
+          localStorage.setItem(endpointKey, newSub.endpoint);
+          localStorage.setItem(registeredKey, "true");
+        } else {
+          localStorage.removeItem(endpointKey);
+          localStorage.removeItem(registeredKey);
+        }
+      } catch (err) {
+        console.warn("No se pudo sincronizar la suscripcion push", err);
+      }
+    };
+
+    syncSubscription();
   }, [user]);
 
   const persistNotifications = (items) => {
@@ -723,7 +746,11 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    const registeredKey = getUserKey(PUSH_REGISTERED_KEY_BASE, user?.id);
+    const endpointKey = getUserKey(PUSH_ENDPOINT_KEY_BASE, user?.id);
     localStorage.removeItem("token");
+    if (registeredKey) localStorage.removeItem(registeredKey);
+    if (endpointKey) localStorage.removeItem(endpointKey);
     apiLogout?.();
     setUser(null);
     removePushSubscription();
