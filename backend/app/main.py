@@ -447,6 +447,7 @@ def _send_scheduled_push_reminders():
                             "priority": offset["priority"],
                             "sound": "appointment",
                             "appointmentId": appt.id,
+                            "userId": user_id,
                             "tag": tag,
                         },
                     )
@@ -523,6 +524,7 @@ def _send_scheduled_push_reminders():
                                     "priority": "high",
                                     "sound": "medication",
                                     "medicationId": med.id,
+                                    "userId": user_id,
                                     "tag": tag,
                                 },
                             )
@@ -2227,6 +2229,7 @@ async def test_push(
                 "url": "/",
                 "priority": "normal",
                 "sound": "default",
+                "userId": current_user.id,
             },
         ) or ok
     return {"ok": ok}
@@ -2323,6 +2326,7 @@ async def send_reminders(
                         "priority": priority,
                         "sound": "appointment",
                         "appointmentId": appt.id,
+                        "userId": current_user.id,
                     },
                 )
                 if ok:
@@ -2396,6 +2400,7 @@ async def send_medication_reminders(
                     "priority": "high",
                     "sound": "medication",
                     "medicationId": med.id,
+                    "userId": current_user.id,
                 },
             )
             if ok:
