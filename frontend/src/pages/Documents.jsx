@@ -55,6 +55,11 @@ export default function Documents() {
       alert("Debes seleccionar un archivo (foto o PDF)");
       return;
     }
+    const maxBytes = 10 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      alert("El archivo supera el limite de 10 MB. Reduce el tamanio e intenta de nuevo.");
+      return;
+    }
 
     setUploading(true);
     try {
@@ -136,6 +141,24 @@ export default function Documents() {
     } catch (err) {
       console.error("Error al abrir documento:", err);
       alert("No se pudo abrir el documento. " + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      const url = await getDocumentFile(doc.id);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = doc.filename || `documento-${doc.id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 2000);
+    } catch (err) {
+      console.error("Error al descargar documento:", err);
+      alert("No se pudo descargar el documento.");
     }
   };
 
@@ -339,6 +362,16 @@ export default function Documents() {
                           }}
                         >
                           Ver
+                        </button>
+                        <button
+                          onClick={() => handleDownload(d)}
+                          className="secondary-btn"
+                          style={{
+                            padding: "0.25rem 0.5rem",
+                            fontSize: "0.75rem",
+                          }}
+                        >
+                          Descargar
                         </button>
                         <button
                           className="secondary-btn"

@@ -2589,6 +2589,7 @@ async def privacy_contact(
 # Documents
 UPLOAD_DIR = "uploaded_docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 @app.get("/documents", response_model=List[schemas.DocumentOut])
@@ -2619,6 +2620,11 @@ async def upload_document(
 ):
     # Leer el contenido del archivo
     file_content = await file.read()
+    if len(file_content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="Archivo demasiado grande. Maximo permitido: 10 MB.",
+        )
     original_filename = file.filename or "document"
 
     print(
