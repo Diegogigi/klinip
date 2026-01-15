@@ -630,6 +630,16 @@ def _guess_doc_type(text: str) -> str | None:
         return "orden"
     if "orden" in lowered or "ordenes" in lowered:
         return "orden"
+    if "citacion" in lowered or "toma de muestra" in lowered:
+        return "orden"
+    if (
+        "vacuna" in lowered
+        or "vacunacion" in lowered
+        or "carnet" in lowered
+        or "inmunizacion" in lowered
+        or "antihepatitis" in lowered
+    ):
+        return "informe"
     if "informe" in lowered or "reporte" in lowered:
         return "informe"
     return None
@@ -842,6 +852,9 @@ def _guess_notes(text: str) -> str | None:
                         return f"Indicaciones especiales: {_safe_text(special_instructions)[:200]}"
         return None  # No extraer notas genéricas para recetas electrónicas
 
+    vaccine_notes = _extract_vaccine_notes(text)
+    if vaccine_notes:
+        return vaccine_notes[:400]
     lab_results = _extract_lab_results(text)
     if lab_results:
         return "\n".join(lab_results)[:400]
@@ -888,6 +901,104 @@ def _guess_notes(text: str) -> str | None:
     return None
 
 
+def _extract_vaccine_notes(text: str) -> str | None:
+    if not text:
+        return None
+    normalized = _normalize_text(text)
+    if not any(
+        k in normalized
+        for k in ("vacuna", "vacunacion", "carnet", "inmunizacion", "antihepatitis")
+    ):
+        return None
+
+    vaccine = ""
+    if "antihepatitis" in normalized or "hepatitis b" in normalized:
+        vaccine = "Vacuna Antihepatitis B"
+    elif "influenza" in normalized:
+        vaccine = "Vacuna Influenza"
+    elif "covid" in normalized or "coronavirus" in normalized:
+        vaccine = "Vacuna COVID-19"
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    dose_notes = []
+    for idx, line in enumerate(lines):
+        norm_line = _normalize_text(line)
+        if "dosis" not in norm_line:
+            continue
+        dose_label = ""
+        if "1" in norm_line and "dosis" in norm_line:
+            dose_label = "1a dosis"
+        elif "2" in norm_line and "dosis" in norm_line:
+            dose_label = "2a dosis"
+        elif "3" in norm_line and "dosis" in norm_line:
+            dose_label = "3a dosis"
+
+        date_value = _extract_date_token(line)
+        if not date_value and idx + 1 < len(lines):
+            date_value = _extract_date_token(lines[idx + 1])
+        if not date_value and idx + 2 < len(lines):
+            date_value = _extract_date_token(lines[idx + 2])
+
+        if dose_label and date_value:
+            dose_notes.append(f"{dose_label}: {date_value}")
+        elif date_value:
+            dose_notes.append(f"Dosis: {date_value}")
+
+    parts = []
+    if vaccine:
+        parts.append(vaccine)
+    if dose_notes:
+        parts.append(" | ".join(dose_notes))
+    if parts:
+        return "Carnet de vacunacion: " + " - ".join(parts)
+    return None
+
+
+def _extract_date_token(text: str) -> str | None:
+    if not text:
+        return None
+
+    match = re.search(r"\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b", text)
+    if match:
+        day = int(match.group(1))
+        month = int(match.group(2))
+        year = int(match.group(3))
+        if year < 100:
+            year += 2000
+        return f"{day:02d}/{month:02d}/{year}"
+
+    month_map = {
+        "ene": 1,
+        "feb": 2,
+        "mar": 3,
+        "abr": 4,
+        "may": 5,
+        "jun": 6,
+        "jul": 7,
+        "ago": 8,
+        "sep": 9,
+        "oct": 10,
+        "nov": 11,
+        "dic": 12,
+        "jan": 1,
+        "apr": 4,
+        "aug": 8,
+        "dec": 12,
+    }
+    match = re.search(r"\b(\d{1,2})\s*([A-Za-z]{3,})\s*(\d{2,4})\b", text)
+    if match:
+        day = int(match.group(1))
+        month_raw = match.group(2).lower()
+        month_key = month_raw[:3]
+        month = month_map.get(month_key)
+        year = int(match.group(3))
+        if year < 100:
+            year += 2000
+        if month:
+            return f"{day:02d}/{month:02d}/{year}"
+    return None
+
+
 def _extract_lab_results(text: str) -> list[str]:
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     if not lines:
@@ -912,6 +1023,19 @@ def _extract_lab_results(text: str) -> list[str]:
         ref_low = match.group(4)
         ref_high = match.group(5)
         results.append(f"{name} {value} {unit} (ref {ref_low}-{ref_high})")
+    if not results:
+        fallback_pattern = re.compile(
+            r"(glucosa(?:\s+(?:basal|120\s*min|post))?)\s+(\d+(?:[.,]\d+)?)\s*(mg\/dl|mmol\/l)?",
+            re.IGNORECASE,
+        )
+        for line in lines:
+            match = fallback_pattern.search(line)
+            if not match:
+                continue
+            name = _safe_text(match.group(1).title())
+            value = match.group(2)
+            unit = match.group(3) or "mg/dL"
+            results.append(f"{name} {value} {unit}")
     if sample:
         results.insert(0, f"Muestra: {sample}")
     return results
@@ -921,6 +1045,7 @@ def _extract_order_notes(text: str) -> list[str]:
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     if not lines:
         return []
+    notes = []
     tipo = ""
     diagnostico = ""
     diagnostico_keywords = (
@@ -933,7 +1058,17 @@ def _extract_order_notes(text: str) -> list[str]:
         "dental",
         "examen",
         "consulta",
+        "ecografia",
+        "ultrasonido",
+        "abdominal",
+        "muestra",
     )
+    post_notes = _extract_post_sample_notes(lines)
+    if post_notes:
+        notes.append("Indicaciones post toma de muestra: " + " | ".join(post_notes))
+    for line in lines:
+        if "sin ayuno" in _normalize_text(line):
+            notes.append(_safe_text(line))
     for idx, line in enumerate(lines):
         normalized = _normalize_text(line)
         if "tipo de atencion" in normalized:
@@ -968,8 +1103,32 @@ def _extract_order_notes(text: str) -> list[str]:
             diagnostico = ""
     parts = [p for p in [tipo, diagnostico] if p]
     if parts:
-        return [" - ".join(parts)]
-    return []
+        notes.insert(0, " - ".join(parts))
+    return notes
+
+
+def _extract_post_sample_notes(lines: list[str]) -> list[str]:
+    notes = []
+    if not lines:
+        return notes
+    start_idx = None
+    for idx, line in enumerate(lines):
+        normalized = _normalize_text(line)
+        if "indicacion y cuidados post" in normalized:
+            start_idx = idx + 1
+            break
+    if start_idx is None:
+        return notes
+    for line in lines[start_idx:]:
+        normalized = _normalize_text(line)
+        if "preparacion" in normalized and "examen" in normalized:
+            break
+        if normalized.startswith("procedimientos relacionados"):
+            break
+        cleaned = _safe_text(line.lstrip("•-").strip())
+        if cleaned:
+            notes.append(cleaned)
+    return notes
 
 
 def _extract_order_schedule(text: str) -> dict | None:
@@ -994,9 +1153,41 @@ def _extract_order_schedule(text: str) -> dict | None:
         "diciembre": 12,
     }
     date_pattern = re.compile(r"(\d{1,2})\s+de\s+([a-z]+)\s+de\s+(\d{4})")
+    date_numeric_pattern = re.compile(r"\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b")
     time_pattern = re.compile(r"\b(\d{1,2})[:.](\d{2})\b")
     date_match = date_pattern.search(normalized)
     time_match = None
+    citacion_date = None
+    citacion_time = None
+    for idx, (raw_line, norm_line) in enumerate(zip(raw_lines, normalized_lines)):
+        if "fecha y hora citacion" in norm_line:
+            for look_ahead in raw_lines[idx : idx + 4]:
+                date_match_local = date_numeric_pattern.search(look_ahead)
+                if date_match_local:
+                    day = int(date_match_local.group(1))
+                    month = int(date_match_local.group(2))
+                    year = int(date_match_local.group(3))
+                    if year < 100:
+                        year += 2000
+                    citacion_date = (year, month, day)
+                else:
+                    date_match_local = date_pattern.search(_normalize_text(look_ahead))
+                    if date_match_local:
+                        day = int(date_match_local.group(1))
+                        month_name = date_match_local.group(2)
+                        month = month_map.get(month_name)
+                        year = int(date_match_local.group(3))
+                        if month:
+                            citacion_date = (year, month, day)
+                time_match_local = time_pattern.search(look_ahead)
+                if time_match_local:
+                    citacion_time = (
+                        int(time_match_local.group(1)),
+                        int(time_match_local.group(2)),
+                    )
+                if citacion_date and citacion_time:
+                    break
+            break
     for raw_line, norm_line in zip(raw_lines, normalized_lines):
         if any(k in norm_line for k in ("hora", "hrs", "horario")):
             time_match = time_pattern.search(raw_line)
@@ -1004,17 +1195,22 @@ def _extract_order_schedule(text: str) -> dict | None:
                 break
     if not time_match:
         time_match = time_pattern.search(text)
-    if not date_match:
+    if not date_match and not citacion_date:
         return None
-    day = int(date_match.group(1))
-    month_name = date_match.group(2)
-    month = month_map.get(month_name)
-    year = int(date_match.group(3))
-    if not month:
-        return None
+    if citacion_date:
+        year, month, day = citacion_date
+    else:
+        day = int(date_match.group(1))
+        month_name = date_match.group(2)
+        month = month_map.get(month_name)
+        year = int(date_match.group(3))
+        if not month:
+            return None
     hour = 0
     minute = 0
-    if time_match:
+    if citacion_time:
+        hour, minute = citacion_time
+    elif time_match:
         hour = int(time_match.group(1))
         minute = int(time_match.group(2))
     try:
@@ -1034,6 +1230,14 @@ def _extract_order_schedule(text: str) -> dict | None:
                 value = lines[idx + 1].strip()
             specialty = _safe_text(value)
             break
+    if not specialty:
+        for line in lines:
+            normalized_line = _normalize_text(line)
+            if "toma de muestra" in normalized_line:
+                specialty = "Toma de muestra"
+                break
+    if not specialty and "citacion" in normalized:
+        specialty = "Citacion examen"
 
     return {"date_time": date_time, "specialty": specialty}
 
@@ -1446,16 +1650,36 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
         img = img.filter(ImageFilter.SHARPEN)
         return img
 
+    def _binarize_image(img: Image.Image) -> Image.Image:
+        return img.point(lambda x: 0 if x < 140 else 255)
+
+    def _run_ocr(img: Image.Image, lang_value: str) -> list[str]:
+        configs = ("--oem 3 --psm 6", "--oem 3 --psm 4", "--oem 3 --psm 11")
+        results = []
+        for config in configs:
+            try:
+                text = pytesseract.image_to_string(
+                    img, lang=lang_value, config=config
+                )
+            except Exception:
+                continue
+            if text and text.strip():
+                results.append(text)
+        return results
+
     texts = []
     for img in images:
         img = _preprocess_image(img)
+        bin_img = _binarize_image(img)
         try:
-            text = pytesseract.image_to_string(img, lang=lang, config="--oem 3 --psm 6")
+            ocr_texts = _run_ocr(img, lang)
+            ocr_texts += _run_ocr(bin_img, lang)
+            text = "\n".join(ocr_texts)
         except Exception:
             # Fallback to English if the language pack is missing.
-            text = pytesseract.image_to_string(
-                img, lang="eng", config="--oem 3 --psm 6"
-            )
+            ocr_texts = _run_ocr(img, "eng")
+            ocr_texts += _run_ocr(bin_img, "eng")
+            text = "\n".join(ocr_texts)
         texts.append(text)
     return "\n".join(texts)
 
@@ -1542,10 +1766,10 @@ def _run_document_ocr(document_id: int):
                     rut_info = " | ".join(rut_info_parts)
 
                     if not doc.notes:
-                        doc.notes = f"📋 Receta Electrónica MINSAL\n{rut_info}"
+                        doc.notes = f"Receta Electronica MINSAL\n{rut_info}"
                     elif "Receta Electronica" not in doc.notes:
                         doc.notes = (
-                            f"📋 Receta Electrónica MINSAL\n{rut_info}\n\n{doc.notes}"
+                            f"Receta Electronica MINSAL\n{rut_info}\n\n{doc.notes}"
                         )
 
             # Verificar si ya existen medicamentos
@@ -1606,9 +1830,12 @@ def _run_document_ocr(document_id: int):
                     # Agregar info detallada del medicamento a las notas del documento
                     # Para recetas electrónicas, usar el formato estructurado completo
                     if is_electronic and med.get("raw"):
-                        med_summary = f"💊 {med.get('raw')}"
+                        med_summary = f"Detalle medicamento: {med.get('raw')}"
                     else:
-                        med_summary = f"💊 {med.get('name', 'Medicamento')}: {med.get('dose', '')} - {med.get('frequency', '')}"
+                        med_summary = (
+                            f"Medicamento: {med.get('name', 'Medicamento')}: "
+                            f"{med.get('dose', '')} - {med.get('frequency', '')}"
+                        )
 
                     if doc.notes:
                         # Evitar duplicados verificando si el nombre del medicamento ya está
