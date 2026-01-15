@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v10";
+const CACHE_NAME = "klinip-cache-v11";
 const ASSETS = [
   "/manifest.webmanifest",
   "/icons/k_logo_152.png",
@@ -134,6 +134,7 @@ async function scheduleNotification(notification) {
 async function recordReceivedNotification(notification) {
   if (!notification) return;
   try {
+    const userId = notification.userId || (notification.data && notification.data.userId) || null;
     const db = await openNotificationsDB();
     const tx = db.transaction([RECEIVED_STORE, BADGE_STORE], "readwrite");
     const received = tx.objectStore(RECEIVED_STORE);
@@ -146,7 +147,8 @@ async function recordReceivedNotification(notification) {
       url: notification.url || "/",
       tag: notification.tag || "",
       timestamp: notification.timestamp || Date.now(),
-      source: notification.source || "system"
+      source: notification.source || "system",
+      userId
     }));
     const current = await requestToPromise(badge.get("count"));
     const nextCount = (current && current.value ? current.value : 0) + 1;
@@ -161,7 +163,8 @@ async function recordReceivedNotification(notification) {
         url: notification.url || "/",
         tag: notification.tag || "",
         timestamp: notification.timestamp || Date.now(),
-        source: notification.source || "system"
+        source: notification.source || "system",
+        userId
       }
     });
   } catch (err) {
@@ -256,7 +259,8 @@ async function checkAndShowPendingNotifications() {
         url: notification.url || "/",
         tag: notification.tag,
         timestamp: Date.now(),
-        source: "scheduled"
+        source: "scheduled",
+        userId: notification.userId || (notification.data && notification.data.userId) || null
       });
 
       const actions =
@@ -415,7 +419,8 @@ self.addEventListener("push", (event) => {
         url,
         tag,
         timestamp: Date.now(),
-        source: "push"
+        source: "push",
+        userId: data.userId || null
       }),
       self.registration.showNotification(title, {
         body,

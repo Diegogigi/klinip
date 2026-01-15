@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getDocuments, uploadDocument, deleteDocument } from "../api";
 import { getDocumentFile } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
@@ -19,6 +20,7 @@ const ocrLabels = {
 };
 
 export default function Documents() {
+  const navigate = useNavigate();
   const [docs, setDocs] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
@@ -43,6 +45,12 @@ export default function Documents() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Debes iniciar sesion para subir documentos.");
+      navigate("/login");
+      return;
+    }
     if (!file) {
       alert("Debes seleccionar un archivo (foto o PDF)");
       return;
@@ -50,6 +58,9 @@ export default function Documents() {
 
     setUploading(true);
     try {
+      const timeoutId = setTimeout(() => {
+        alert("La subida esta tardando mas de lo esperado. Mantente en esta pantalla.");
+      }, 8000);
       await uploadDocument({
         doc_type: form.doc_type,
         date: toIsoOrNull(form.date),
@@ -57,6 +68,7 @@ export default function Documents() {
         notes: form.notes,
         file,
       });
+      clearTimeout(timeoutId);
       await load();
       setForm({
         doc_type: "receta",
@@ -68,6 +80,15 @@ export default function Documents() {
       setShowForm(false);
     } catch (err) {
       console.error(err);
+      if (err?.response?.status === 401) {
+        alert("Tu sesion expiro. Inicia sesion nuevamente.");
+        navigate("/login");
+        return;
+      }
+      if (err?.response?.status === 524) {
+        alert("El servidor demoro demasiado en responder. Intenta nuevamente.");
+        return;
+      }
       alert("No se pudo subir el documento");
     } finally {
       setUploading(false);
