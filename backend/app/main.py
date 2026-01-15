@@ -620,6 +620,13 @@ def _normalize_text(value: str) -> str:
 
 def _guess_doc_type(text: str) -> str | None:
     lowered = _normalize_text(text)
+    if "rp" in lowered and (
+        "favor realizar" in lowered
+        or "ecografia" in lowered
+        or "ultrasonido" in lowered
+        or "examen" in lowered
+    ):
+        return "orden"
     if "receta" in lowered or "prescripcion" in lowered:
         return "receta"
     if "resultado" in lowered or "laboratorio" in lowered:
@@ -631,6 +638,14 @@ def _guess_doc_type(text: str) -> str | None:
     if "orden" in lowered or "ordenes" in lowered:
         return "orden"
     if "citacion" in lowered or "toma de muestra" in lowered:
+        return "orden"
+    if (
+        "ecografia" in lowered
+        or "ultrasonido" in lowered
+        or "radiografia" in lowered
+        or "rx" in lowered
+        or "examen" in lowered
+    ):
         return "orden"
     if (
         "vacuna" in lowered
@@ -673,7 +688,10 @@ def _clean_center_line(line: str) -> str:
         flags=re.IGNORECASE,
     )
     cleaned = re.sub(r"\b[A-Z]\b$", "", cleaned, flags=re.IGNORECASE)
-    return _safe_text(cleaned)
+    cleaned = _safe_text(cleaned)
+    if "rosita renard" in _normalize_text(cleaned):
+        return "CESFAM Rosita Renard"
+    return cleaned
 
 
 def _extract_center_from_electronic_prescription(text: str) -> str | None:
@@ -772,6 +790,20 @@ def _guess_center(text: str) -> str | None:
 def _guess_date(text: str) -> datetime | None:
     if not text:
         return None
+
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    for idx, line in enumerate(lines):
+        normalized = _normalize_text(line)
+        if "fecha" in normalized:
+            token = _extract_date_token(line)
+            if not token and idx + 1 < len(lines):
+                token = _extract_date_token(lines[idx + 1])
+            if token:
+                try:
+                    day, month, year = token.split("/")
+                    return datetime(int(year), int(month), int(day))
+                except Exception:
+                    pass
 
     # Patrón específico para recetas electrónicas chilenas
     # Formato: "Fecha de emisión: 2 de septiembre, 2025"
@@ -1062,6 +1094,8 @@ def _extract_order_notes(text: str) -> list[str]:
         "ultrasonido",
         "abdominal",
         "muestra",
+        "polipo",
+        "vesicular",
     )
     post_notes = _extract_post_sample_notes(lines)
     if post_notes:
@@ -1071,6 +1105,17 @@ def _extract_order_notes(text: str) -> list[str]:
             notes.append(_safe_text(line))
     for idx, line in enumerate(lines):
         normalized = _normalize_text(line)
+        if normalized.startswith("rp") or normalized == "rp":
+            rp_value = line.split(":", 1)[1].strip() if ":" in line else ""
+            rp_parts = [rp_value] if rp_value else []
+            for extra_line in lines[idx + 1 : idx + 4]:
+                extra_norm = _normalize_text(extra_line)
+                if extra_norm.startswith("dx") or extra_norm.startswith("diagnostico"):
+                    break
+                rp_parts.append(_safe_text(extra_line))
+            rp_text = " ".join([p for p in rp_parts if p]).strip()
+            if rp_text:
+                notes.append(rp_text)
         if "tipo de atencion" in normalized:
             value = ""
             if ":" in line:
@@ -1093,6 +1138,14 @@ def _extract_order_notes(text: str) -> list[str]:
                 _, tail = line.split(":", 1)
                 value = tail.strip()
             if not value and line.endswith(":") and idx + 1 < len(lines):
+                value = lines[idx + 1].strip()
+            diagnostico = _safe_text(value)
+        if not diagnostico and normalized.startswith("dx"):
+            value = ""
+            if ":" in line:
+                _, tail = line.split(":", 1)
+                value = tail.strip()
+            if not value and idx + 1 < len(lines):
                 value = lines[idx + 1].strip()
             diagnostico = _safe_text(value)
     tipo = re.sub(r"[|]+", "", tipo).strip()
@@ -1880,6 +1933,45 @@ def _run_document_ocr(document_id: int):
                             doc.notes = f"{doc.notes}\n{missing_msg}"
                     else:
                         doc.notes = missing_msg
+        elif (
+            not doc.appointment_id
+            and doc.doc_type in (models.DocumentType.otro, models.DocumentType.informe)
+        ):
+            normalized = _normalize_text(text)
+            if any(
+                k in normalized
+                for k in ("ecografia", "ultrasonido", "radiografia", "examen")
+            ) and "resultado" not in normalized:
+                doc.doc_type = models.DocumentType.orden
+                schedule = _extract_order_schedule(text) or {}
+                date_time = schedule.get("date_time")
+                specialty = schedule.get("specialty") or ""
+                if not specialty:
+                    if "ecografia" in normalized:
+                        specialty = "Ecografia"
+                    elif "ultrasonido" in normalized:
+                        specialty = "Ultrasonido"
+                    elif "radiografia" in normalized:
+                        specialty = "Radiografia"
+                if not specialty:
+                    specialty = "Examen"
+                status = (
+                    models.AppointmentStatus.agendada
+                    if date_time
+                    else models.AppointmentStatus.pendiente
+                )
+                appointment = models.Appointment(
+                    user_id=doc.user_id,
+                    type=models.AppointmentType.examen,
+                    specialty=specialty,
+                    center=doc.center or "",
+                    date_time=date_time,
+                    status=status,
+                    notes=doc.notes or "",
+                )
+                db.add(appointment)
+                db.flush()
+                doc.appointment_id = appointment.id
 
         db.commit()
     finally:
