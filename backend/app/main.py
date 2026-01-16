@@ -27,6 +27,7 @@ import io
 import re
 import unicodedata
 import threading
+from difflib import SequenceMatcher
 import time
 from zoneinfo import ZoneInfo
 
@@ -1078,6 +1079,21 @@ def _extract_order_notes(text: str) -> list[str]:
     if not lines:
         return []
     notes = []
+    normalized_text = _normalize_text(" ".join(lines))
+    tokens = normalized_text.split()
+    has_favor = _has_similar_token(tokens, "favor")
+    has_realizar = _has_similar_token(tokens, "realizar")
+    has_ecografia = _has_similar_token(tokens, "ecografia") or "ecogra" in normalized_text
+    has_abdominal = (
+        _has_similar_token(tokens, "abdominal")
+        or _has_similar_token(tokens, "abdomen")
+        or "abdom" in normalized_text
+    )
+    has_control = _has_similar_token(tokens, "control")
+    has_polipos = _has_similar_token(tokens, "polipos")
+    has_vesicular = _has_similar_token(tokens, "vesicular") or _has_similar_token(
+        tokens, "vesiculares"
+    )
     tipo = ""
     diagnostico = ""
     diagnostico_keywords = (
@@ -1102,7 +1118,7 @@ def _extract_order_notes(text: str) -> list[str]:
         notes.append("Indicaciones post toma de muestra: " + " | ".join(post_notes))
     for line in lines:
         if "sin ayuno" in _normalize_text(line):
-            notes.append(_safe_text(line))
+            notes.append(_clean_ocr_line(line))
     for idx, line in enumerate(lines):
         normalized = _normalize_text(line)
         if normalized.startswith("rp") or normalized == "rp":
@@ -1112,7 +1128,7 @@ def _extract_order_notes(text: str) -> list[str]:
                 extra_norm = _normalize_text(extra_line)
                 if extra_norm.startswith("dx") or extra_norm.startswith("diagnostico"):
                     break
-                rp_parts.append(_safe_text(extra_line))
+                rp_parts.append(_clean_ocr_line(extra_line))
             rp_text = " ".join([p for p in rp_parts if p]).strip()
             if rp_text:
                 notes.append(rp_text)
@@ -1139,7 +1155,7 @@ def _extract_order_notes(text: str) -> list[str]:
                 value = tail.strip()
             if not value and line.endswith(":") and idx + 1 < len(lines):
                 value = lines[idx + 1].strip()
-            diagnostico = _safe_text(value)
+            diagnostico = _clean_ocr_line(value)
         if not diagnostico and normalized.startswith("dx"):
             value = ""
             if ":" in line:
@@ -1147,7 +1163,7 @@ def _extract_order_notes(text: str) -> list[str]:
                 value = tail.strip()
             if not value and idx + 1 < len(lines):
                 value = lines[idx + 1].strip()
-            diagnostico = _safe_text(value)
+            diagnostico = _clean_ocr_line(value)
     tipo = re.sub(r"[|]+", "", tipo).strip()
     diagnostico = re.sub(r"[|]+", "", diagnostico).strip()
     if diagnostico:
@@ -1157,7 +1173,25 @@ def _extract_order_notes(text: str) -> list[str]:
     parts = [p for p in [tipo, diagnostico] if p]
     if parts:
         notes.insert(0, " - ".join(parts))
-    return notes
+    if has_ecografia:
+        phrase = "Ecografia"
+        if has_abdominal:
+            phrase += " abdominal"
+        if has_favor and has_realizar:
+            notes.append(f"Favor realizar {phrase}")
+        else:
+            notes.append(phrase)
+    if has_control and has_polipos:
+        dx = "Control polipos"
+        if has_vesicular:
+            dx += " vesiculares"
+        notes.append(f"Dx: {dx}")
+    notes = [note for note in notes if note]
+    deduped = []
+    for note in notes:
+        if note not in deduped:
+            deduped.append(note)
+    return deduped
 
 
 def _extract_post_sample_notes(lines: list[str]) -> list[str]:
@@ -1182,6 +1216,28 @@ def _extract_post_sample_notes(lines: list[str]) -> list[str]:
         if cleaned:
             notes.append(cleaned)
     return notes
+
+
+def _clean_ocr_line(value: str) -> str:
+    if not value:
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9\\s]", " ", value)
+    cleaned = re.sub(r"\\s+", " ", cleaned).strip()
+    letters = sum(1 for ch in cleaned if ch.isalpha())
+    if letters < 6:
+        return ""
+    return cleaned
+
+
+def _has_similar_token(tokens: list[str], target: str, threshold: float = 0.72) -> bool:
+    for token in tokens:
+        if token == target:
+            return True
+        if len(token) < 3:
+            continue
+        if SequenceMatcher(None, token, target).ratio() >= threshold:
+            return True
+    return False
 
 
 def _extract_order_schedule(text: str) -> dict | None:
