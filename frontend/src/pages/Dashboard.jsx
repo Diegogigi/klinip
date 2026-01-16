@@ -5,6 +5,7 @@ import {
   getMedications,
   uploadDocument,
   updateDocument,
+  deleteDocument,
 } from "../api";
 import {
   requestNotificationPermission,
@@ -51,6 +52,8 @@ export default function Dashboard({ user }) {
   const [ocrResult, setOcrResult] = useState(null);
   const [ocrEdit, setOcrEdit] = useState(null);
   const [ocrSaving, setOcrSaving] = useState(false);
+  const [ocrSaved, setOcrSaved] = useState(false);
+  const [ocrMessage, setOcrMessage] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -112,6 +115,14 @@ export default function Dashboard({ user }) {
     });
   }, [ocrResult]);
 
+  useEffect(() => {
+    if (!ocrMessage) return undefined;
+    const timeoutId = setTimeout(() => {
+      setOcrMessage("");
+    }, 4000);
+    return () => clearTimeout(timeoutId);
+  }, [ocrMessage]);
+
   const handleOcrSave = async () => {
     if (!ocrDocId || !ocrEdit) return;
     setOcrSaving(true);
@@ -124,12 +135,13 @@ export default function Dashboard({ user }) {
       });
       const docData = await getDocuments();
       setDocuments(docData || []);
-      window.alert("Documento actualizado.");
+      setOcrMessage("Documento actualizado.");
+      setOcrSaved(true);
       resetDocForm();
       setShowDocForm(false);
     } catch (err) {
       console.error(err);
-      window.alert("No se pudo actualizar el documento.");
+      setOcrMessage("No se pudo actualizar el documento.");
     } finally {
       setOcrSaving(false);
     }
@@ -149,12 +161,49 @@ export default function Dashboard({ user }) {
     setOcrResult(null);
     setOcrEdit(null);
     setOcrSaving(false);
+    setOcrSaved(false);
+    setOcrMessage("");
   };
 
   const handleOpenAiAnalysis = () => {
     resetDocForm();
     setDocAutoFill(true);
     setShowDocForm(true);
+  };
+
+  const handleDocClose = async () => {
+    if (docUploading || ocrSaving) {
+      window.alert("Espera a que termine la subida antes de cerrar.");
+      return;
+    }
+    const hasUnsavedForm =
+      docFile ||
+      docForm.date ||
+      docForm.center.trim() ||
+      docForm.notes.trim() ||
+      docForm.doc_type !== "otro" ||
+      !docAutoFill;
+    if (hasUnsavedForm && !ocrDocId) {
+      const shouldClose = window.confirm(
+        "¿Cerrar sin guardar? Se perderán los cambios."
+      );
+      if (!shouldClose) return;
+    }
+    if (ocrDocId && !ocrSaved) {
+      const shouldDiscard = window.confirm(
+        "¿Cerrar sin guardar? Se descartará el documento subido."
+      );
+      if (!shouldDiscard) return;
+      try {
+        await deleteDocument(ocrDocId);
+      } catch (err) {
+        console.error("No se pudo descartar el documento", err);
+      }
+      const docData = await getDocuments();
+      setDocuments(docData || []);
+    }
+    resetDocForm();
+    setShowDocForm(false);
   };
 
   const handleDocSubmit = async (e) => {
@@ -164,6 +213,7 @@ export default function Dashboard({ user }) {
       return;
     }
     setDocUploading(true);
+    setOcrSaved(false);
     try {
       const payload = docAutoFill
         ? {
@@ -337,10 +387,7 @@ export default function Dashboard({ user }) {
               <button
                 className="secondary-btn"
                 type="button"
-                onClick={() => {
-                  resetDocForm();
-                  setShowDocForm(false);
-                }}
+                onClick={handleDocClose}
               >
                 Cerrar
               </button>
@@ -420,6 +467,11 @@ export default function Dashboard({ user }) {
                     </div>
                   </div>
                 )}
+                {ocrMessage ? (
+                  <p className="muted" style={{ marginTop: "0.75rem" }}>
+                    {ocrMessage}
+                  </p>
+                ) : null}
                 <div className="floating-actions">
                   {ocrResult ? (
                     <button
@@ -434,10 +486,7 @@ export default function Dashboard({ user }) {
                   <button
                     className="secondary-btn"
                     type="button"
-                    onClick={() => {
-                      resetDocForm();
-                      setShowDocForm(false);
-                    }}
+                    onClick={handleDocClose}
                   >
                     Cerrar
                   </button>
@@ -537,10 +586,7 @@ export default function Dashboard({ user }) {
                   <button
                     type="button"
                     className="secondary-btn"
-                    onClick={() => {
-                      resetDocForm();
-                      setShowDocForm(false);
-                    }}
+                    onClick={handleDocClose}
                   >
                     Cancelar
                   </button>

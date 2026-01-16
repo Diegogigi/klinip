@@ -34,6 +34,33 @@ export default function Documents() {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  const handleFormClose = () => {
+    if (uploading) {
+      alert("Espera a que termine la subida antes de cerrar.");
+      return;
+    }
+    const hasChanges =
+      file ||
+      form.date ||
+      form.center.trim() ||
+      form.notes.trim() ||
+      form.doc_type !== "receta";
+    if (hasChanges) {
+      const shouldClose = window.confirm(
+        "¿Cerrar sin guardar? Se perderán los cambios."
+      );
+      if (!shouldClose) return;
+    }
+    setForm({
+      doc_type: "receta",
+      date: "",
+      center: "",
+      notes: "",
+    });
+    setFile(null);
+    setShowForm(false);
+  };
+
   async function load() {
     const data = await getDocuments();
     setDocs(data);
@@ -75,14 +102,7 @@ export default function Documents() {
       });
       clearTimeout(timeoutId);
       await load();
-      setForm({
-        doc_type: "receta",
-        date: "",
-        center: "",
-        notes: "",
-      });
-      setFile(null);
-      setShowForm(false);
+      handleFormClose();
     } catch (err) {
       console.error(err);
       if (err?.response?.status === 401) {
@@ -193,7 +213,7 @@ export default function Documents() {
       </div>
 
       {showForm && (
-        <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
+        <div className="floating-form-backdrop" onClick={handleFormClose}>
           <div
             className="floating-form-card"
             onClick={(e) => e.stopPropagation()}
@@ -203,7 +223,7 @@ export default function Documents() {
               <button
                 className="secondary-btn"
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={handleFormClose}
               >
                 Cerrar
               </button>
@@ -275,7 +295,7 @@ export default function Documents() {
                 <button
                   type="button"
                   className="secondary-btn"
-                  onClick={() => setShowForm(false)}
+                  onClick={handleFormClose}
                 >
                   Cancelar
                 </button>

@@ -1118,7 +1118,9 @@ def _extract_order_notes(text: str) -> list[str]:
         notes.append("Indicaciones post toma de muestra: " + " | ".join(post_notes))
     for line in lines:
         if "sin ayuno" in _normalize_text(line):
-            notes.append(_clean_ocr_line(line))
+            cleaned = _clean_ocr_line(line)
+            if cleaned:
+                notes.append(cleaned)
     for idx, line in enumerate(lines):
         normalized = _normalize_text(line)
         if normalized.startswith("rp") or normalized == "rp":
@@ -1130,7 +1132,10 @@ def _extract_order_notes(text: str) -> list[str]:
                     break
                 rp_parts.append(_clean_ocr_line(extra_line))
             rp_text = " ".join([p for p in rp_parts if p]).strip()
-            if rp_text:
+            rp_norm = _normalize_text(rp_text)
+            if rp_text and any(
+                k in rp_norm for k in ("ecografia", "ultrasonido", "radiografia")
+            ):
                 notes.append(rp_text)
         if "tipo de atencion" in normalized:
             value = ""
@@ -1187,6 +1192,27 @@ def _extract_order_notes(text: str) -> list[str]:
             dx += " vesiculares"
         notes.append(f"Dx: {dx}")
     notes = [note for note in notes if note]
+    filtered = []
+    for note in notes:
+        note_norm = _normalize_text(note)
+        if any(
+            k in note_norm
+            for k in (
+                "ecografia",
+                "ultrasonido",
+                "radiografia",
+                "dx",
+                "diagnostico",
+                "polipo",
+                "vesicular",
+                "sin ayuno",
+                "indicaciones post",
+                "toma de muestra",
+            )
+        ):
+            filtered.append(note)
+    if filtered:
+        notes = filtered
     deduped = []
     for note in notes:
         if note not in deduped:
@@ -1224,7 +1250,10 @@ def _clean_ocr_line(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9\\s]", " ", value)
     cleaned = re.sub(r"\\s+", " ", cleaned).strip()
     letters = sum(1 for ch in cleaned if ch.isalpha())
+    total = len(cleaned.replace(" ", ""))
     if letters < 6:
+        return ""
+    if total > 0 and (letters / total) < 0.65:
         return ""
     return cleaned
 
