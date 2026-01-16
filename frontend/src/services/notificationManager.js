@@ -216,8 +216,8 @@ async function showNotification(title, body, options = {}) {
   if (Notification.permission !== "granted") return;
 
   const {
-    icon = "/icons/k_logo.png",
-    badge = "/icons/k_logo.png",
+    icon = "/icons/k_logo_192.png",
+    badge = "/icons/k_logo_192.png",
     tag = "",
     requireInteraction = true,
     vibrate = [200, 100, 200],
