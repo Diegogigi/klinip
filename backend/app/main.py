@@ -1269,6 +1269,131 @@ def _has_similar_token(tokens: list[str], target: str, threshold: float = 0.72) 
     return False
 
 
+def _extract_label_medication(text: str) -> dict | None:
+    if not text:
+        return None
+
+    raw_lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not raw_lines:
+        return None
+
+    normalized = _normalize_text(" ".join(raw_lines))
+    if not any(
+        token in normalized
+        for token in (
+            "mg",
+            "ml",
+            "capsula",
+            "comprimido",
+            "tableta",
+            "sobres",
+            "sobre",
+            "jarabe",
+        )
+    ):
+        return None
+
+    stop_words = {
+        "capsulas",
+        "capsula",
+        "comprimidos",
+        "comprimido",
+        "tabletas",
+        "tableta",
+        "polvo",
+        "solucion",
+        "oral",
+        "sabor",
+        "libre",
+        "gluten",
+        "bioequivalente",
+        "bago",
+        "hetero",
+        "opko",
+        "precisionbiotics",
+    }
+
+    name_candidate = ""
+    uppercase_words = re.findall(r"\b[A-ZÁÉÍÓÚÑ]{4,}\b", text)
+    for word in uppercase_words:
+        if _normalize_text(word) in stop_words:
+            continue
+        name_candidate = word.title()
+        break
+
+    if not name_candidate:
+        for line in raw_lines[:8]:
+            cleaned = _clean_ocr_line(line)
+            normalized_line = _normalize_text(cleaned)
+            if not cleaned:
+                continue
+            tokens = [t for t in normalized_line.split() if t]
+            if not tokens:
+                continue
+            if any(t in stop_words for t in tokens):
+                continue
+            if sum(1 for ch in cleaned if ch.isalpha()) >= 6:
+                name_candidate = cleaned.title()
+                break
+
+    if not name_candidate:
+        return None
+
+    dose_match = re.search(
+        r"(\d+(?:[.,]\d+)?)\s*(mg|ml|cc|mcg|ug|g)",
+        normalized,
+        re.IGNORECASE,
+    )
+    dose = ""
+    if dose_match:
+        dose = f"{dose_match.group(1)} {dose_match.group(2)}"
+
+    instruction_text = " ".join(raw_lines[-6:])
+    instruction_norm = _normalize_text(instruction_text)
+
+    duration_days = None
+    duration_match = re.search(r"x\s*(\d+)\s*dias", instruction_norm)
+    if not duration_match:
+        duration_match = re.search(r"por\s*(\d+)\s*dias", instruction_norm)
+    if duration_match:
+        duration_days = int(duration_match.group(1))
+    else:
+        duration_weeks = re.search(r"x\s*(\d+)\s*semanas", instruction_norm)
+        if duration_weeks:
+            duration_days = int(duration_weeks.group(1)) * 7
+
+    frequency = ""
+    dose_hint = ""
+    dose_unit_match = re.search(
+        r"(\d+)\s*(sobre|sobres|capsula|capsulas|comprimido|comprimidos|tableta|tabletas|cc|ml|gotas?)",
+        instruction_norm,
+    )
+    if dose_unit_match:
+        dose_hint = f"{dose_unit_match.group(1)} {dose_unit_match.group(2)}"
+
+    freq_match = re.search(r"cada\s*(\d+)\s*horas", instruction_norm)
+    if freq_match:
+        frequency = f"cada {freq_match.group(1)} horas"
+    elif re.search(r"\b1\s*al\s*dia\b", instruction_norm) or re.search(
+        r"\b1\s*por\s*dia\b", instruction_norm
+    ):
+        frequency = "cada 24 horas"
+    elif re.search(r"\bal\s*dia\b", instruction_norm):
+        frequency = "cada 24 horas"
+
+    notes = _clean_ocr_line(instruction_text)
+    if not frequency and notes:
+        notes = f"{notes} (frecuencia pendiente)"
+
+    return {
+        "name": name_candidate,
+        "dose": dose or dose_hint,
+        "frequency": frequency,
+        "duration_days": duration_days,
+        "notes": notes,
+    }
+
+
 def _extract_order_schedule(text: str) -> dict | None:
     if not text:
         return None
@@ -2018,6 +2143,35 @@ def _run_document_ocr(document_id: int):
                             doc.notes = f"{doc.notes}\n{missing_msg}"
                     else:
                         doc.notes = missing_msg
+        elif (
+            not doc.appointment_id
+            and doc.doc_type in (models.DocumentType.otro, models.DocumentType.informe)
+        ):
+            label_med = _extract_label_medication(text)
+            if label_med:
+                start_date = doc.date or datetime.now()
+                end_date = None
+                duration_days = label_med.get("duration_days")
+                if duration_days:
+                    end_date = start_date + timedelta(days=duration_days)
+                duration_label = f"{duration_days} dias" if duration_days else ""
+
+                medication = models.Medication(
+                    user_id=doc.user_id,
+                    name=label_med.get("name") or "Medicamento",
+                    dose=label_med.get("dose") or "",
+                    frequency=label_med.get("frequency") or "",
+                    duration=duration_label,
+                    end_date=end_date,
+                    notes=label_med.get("notes") or "",
+                )
+                db.add(medication)
+                db.flush()
+
+                # Eliminar el documento para mantenerlo solo como medicamento
+                db.delete(doc)
+                db.commit()
+                return
         elif (
             not doc.appointment_id
             and doc.doc_type in (models.DocumentType.otro, models.DocumentType.informe)

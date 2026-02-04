@@ -4232,6 +4232,18 @@ body.theme-dark .alert-info strong {
   pointer-events: none;
 }
 
+.med-intake-toast.is-success {
+  background: linear-gradient(135deg, #e8fff2, #f6fffb);
+  color: #0b3a2b;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.med-intake-toast.is-info {
+  background: linear-gradient(135deg, #e8f6ff, #f4fbff);
+  color: #0b2b44;
+  border-color: rgba(14, 116, 144, 0.2);
+}
+
 @keyframes intake-toast-in {
   from {
     opacity: 0;
@@ -4248,6 +4260,12 @@ body.theme-dark .med-intake-toast {
   color: #e6f4ff;
   border-color: rgba(96, 165, 250, 0.25);
   box-shadow: 0 16px 30px rgba(7, 15, 25, 0.5);
+}
+
+body.theme-dark .med-intake-toast.is-success {
+  background: linear-gradient(135deg, #0b2a22, #0f3a2f);
+  color: #d1fae5;
+  border-color: rgba(16, 185, 129, 0.35);
 }
 
 @media (max-width: 640px) {

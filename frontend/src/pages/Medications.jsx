@@ -19,6 +19,7 @@ export default function Medications() {
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
+  const [missingFrequency, setMissingFrequency] = useState(null);
   const [intakeFeedback, setIntakeFeedback] = useState("");
   const feedbackTimer = useRef(null);
   const [form, setForm] = useState({
@@ -26,6 +27,7 @@ export default function Medications() {
     name: "",
     dose: "",
     frequency: "",
+    frequency_initial: "",
     duration: "",
     schedule_time: "",
     completed: false,
@@ -38,6 +40,16 @@ export default function Medications() {
   const load = async () => {
     const data = await getMedications();
     setMeds(data || []);
+    const missing = (data || []).find(
+      (m) => !m.frequency || m.frequency.trim() === ""
+    );
+    if (missing) {
+      const dismissedKey = `klinip_missing_freq_dismissed_${missing.id}`;
+      const dismissed = localStorage.getItem(dismissedKey) === "1";
+      setMissingFrequency(dismissed ? null : missing);
+    } else {
+      setMissingFrequency(null);
+    }
     // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
     // scheduleMedicationNotifications(data || []);
   };
@@ -82,17 +94,18 @@ export default function Medications() {
   }, [location.search, meds]);
 
   const resetForm = () => {
-    setForm({
-      id: null,
-      name: "",
-      dose: "",
-      frequency: "",
-      duration: "",
-      schedule_time: "",
-      completed: false,
-      end_date: "",
-      notes: "",
-      document_id: "",
+      setForm({
+        id: null,
+        name: "",
+        dose: "",
+        frequency: "",
+        frequency_initial: "",
+        duration: "",
+        schedule_time: "",
+        completed: false,
+        end_date: "",
+        notes: "",
+        document_id: "",
     });
   };
 
@@ -119,6 +132,20 @@ export default function Medications() {
       }
 
       await saveMedication(payload);
+      if (payload.id && payload.frequency) {
+        localStorage.removeItem(
+          `klinip_missing_freq_dismissed_${payload.id}`
+        );
+      }
+      if (payload.frequency && !form.frequency_initial) {
+        setIntakeFeedback("success:Frecuencia guardada. Recordatorios activados.");
+        if (feedbackTimer.current) {
+          clearTimeout(feedbackTimer.current);
+        }
+        feedbackTimer.current = setTimeout(() => {
+          setIntakeFeedback("");
+        }, 2600);
+      }
       await load();
       resetForm();
       setShowForm(false);
@@ -138,6 +165,7 @@ export default function Medications() {
       name: med.name,
       dose: med.dose,
       frequency: med.frequency,
+      frequency_initial: med.frequency || "",
       duration: med.duration,
       schedule_time: med.schedule_time || "",
       completed: Boolean(med.completed),
@@ -151,7 +179,7 @@ export default function Medications() {
     try {
       await recordMedicationIntake(med.id);
       await load();
-      setIntakeFeedback(`Toma registrada: ${med.name}`);
+      setIntakeFeedback(`info:Toma registrada: ${med.name}`);
       if (feedbackTimer.current) {
         clearTimeout(feedbackTimer.current);
       }
@@ -175,11 +203,22 @@ export default function Medications() {
     }
   };
 
+  const medsMissingFrequency = (medications || []).filter(
+    (m) => !m.frequency || m.frequency.trim() === ""
+  );
+
   return (
     <>
       {intakeFeedback && (
-        <div className="med-intake-toast" role="status">
-          {intakeFeedback}
+        <div
+          className={`med-intake-toast ${
+            intakeFeedback.startsWith("success:")
+              ? "is-success"
+              : "is-info"
+          }`}
+          role="status"
+        >
+          {intakeFeedback.replace(/^(success:|info:)/, "")}
         </div>
       )}
       <div className="card">
@@ -199,6 +238,23 @@ export default function Medications() {
           Agregar medicamento
         </button>
       </div>
+
+      {medsMissingFrequency.length > 0 && (
+        <div className="card">
+          <h3 className="card-title">Faltan indicaciones</h3>
+          <p className="muted">
+            {medsMissingFrequency.length} medicamento(s) no tienen frecuencia.
+            Completa la indicacion para activar recordatorios.
+          </p>
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={() => handleEdit(medsMissingFrequency[0])}
+          >
+            Completar ahora
+          </button>
+        </div>
+      )}
 
       {notifyOpen && notifyTarget && (
         <div className="modal-backdrop" onClick={() => {
@@ -239,6 +295,47 @@ export default function Medications() {
                 }}
               >
                 Marcar realizado
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {missingFrequency && !showForm && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setMissingFrequency(null)}
+        >
+          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+            <h3>Falta frecuencia</h3>
+            <p className="muted">
+              Se detecto el medicamento <strong>{missingFrequency.name}</strong>
+              {missingFrequency.dose ? ` (${missingFrequency.dose})` : ""} pero no
+              se pudo leer la frecuencia. Indicala para activar recordatorios.
+            </p>
+            <div className="modal-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  localStorage.setItem(
+                    `klinip_missing_freq_dismissed_${missingFrequency.id}`,
+                    "1"
+                  );
+                  setMissingFrequency(null);
+                }}
+              >
+                Luego
+              </button>
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={() => {
+                  handleEdit(missingFrequency);
+                  setMissingFrequency(null);
+                }}
+              >
+                Completar ahora
               </button>
             </div>
           </div>
