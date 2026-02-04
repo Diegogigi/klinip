@@ -203,7 +203,7 @@ export default function Medications() {
     }
   };
 
-  const medsMissingFrequency = (medications || []).filter(
+  const medsMissingFrequency = (meds || []).filter(
     (m) => !m.frequency || m.frequency.trim() === ""
   );
 
