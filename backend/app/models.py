@@ -48,6 +48,7 @@ class User(Base):
     timezone = Column(String, default="America/Santiago")
     notifications_consent = Column(String, default="")
     notifications_last_prompt = Column(DateTime, nullable=True)
+    token_version = Column(Integer, default=0)
     data_consent_revoked = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False)
 

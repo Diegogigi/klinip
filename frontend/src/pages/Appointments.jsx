@@ -12,6 +12,7 @@ import {
   toLocaleDateTimeOrEmpty,
   toLocalInputValue,
 } from "../utils/dates";
+import RowActionsMenu from "../components/RowActionsMenu";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -519,31 +520,28 @@ export default function Appointments() {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: "0.3rem" }}>
-                        {a.status !== "realizada" && (
-                          <button
-                            className="secondary-btn"
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                            onClick={() => handleMarkCompleted(a)}
-                          >
-                            Marcar realizada
-                          </button>
-                        )}
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleEdit(a)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleDelete(a)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+                      <RowActionsMenu
+                        items={[
+                          a.status !== "realizada"
+                            ? {
+                                key: "complete",
+                                label: "Marcar realizada",
+                                onClick: () => handleMarkCompleted(a),
+                              }
+                            : null,
+                          {
+                            key: "edit",
+                            label: "Editar",
+                            onClick: () => handleEdit(a),
+                          },
+                          {
+                            key: "delete",
+                            label: "Eliminar",
+                            danger: true,
+                            onClick: () => handleDelete(a),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}

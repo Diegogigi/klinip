@@ -36,7 +36,15 @@ const icons = {
   ),
   heart: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M12 20s-7-4.5-7-9.5S8.5 4 12 7.5C15.5 4 19 6.5 19 10.5S12 20 12 20Z" />
+      <g transform="rotate(-35 12 12)">
+        <rect x="5" y="8" width="14" height="8" rx="4" fill="#ffffff" stroke="currentColor" />
+        <path
+          d="M5 12a4 4 0 0 1 4-4h3v8H9a4 4 0 0 1-4-4z"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path d="M12 8v8" />
+      </g>
     </svg>
   ),
   chart: (
@@ -239,7 +247,7 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
   );
 }
 
-function Topbar({ user, notifications, onClearNotifications, onOpenNotification }) {
+function Topbar({ user, notifications, onClearNotifications, onOpenNotification, onLogout }) {
   const location = useLocation();
 
   const isAuthRoute =
@@ -261,6 +269,8 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
   const subtitle = location.pathname === "/" ? "Panel general" : "Tu ruta de salud";
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef(null);
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -269,7 +279,28 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
 
   useEffect(() => {
     setNotificationsOpen(false);
+    setProfileMenuOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (!profileMenuRef.current) return;
+      if (!profileMenuRef.current.contains(event.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   if (isAuthRoute || (!user && location.pathname === "/")) return null;
 
@@ -340,9 +371,32 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
             </div>
           )}
         </div>
-        <div className="topbar-user">
-          <span className="topbar-avatar">{initials}</span>
-          <span className="topbar-name">{user?.name || "Invitado"}</span>
+        <div className="topbar-user-wrap" ref={profileMenuRef}>
+          <button
+            type="button"
+            className="topbar-user"
+            aria-expanded={profileMenuOpen}
+            aria-haspopup="menu"
+            onClick={() => setProfileMenuOpen((prev) => !prev)}
+          >
+            <span className="topbar-avatar">{initials}</span>
+            <span className="topbar-name">{user?.name || "Invitado"}</span>
+          </button>
+          {profileMenuOpen && (
+            <div className="topbar-user-menu" role="menu">
+              <button
+                type="button"
+                className="topbar-user-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setProfileMenuOpen(false);
+                  onLogout?.();
+                }}
+              >
+                Cerrar sesión
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
@@ -1102,6 +1156,7 @@ export default function App() {
             notifications={notifications}
             onClearNotifications={handleClearNotifications}
             onOpenNotification={handleOpenNotification}
+            onLogout={handleLogout}
           />
           {updateAvailable && (
             <div className="update-banner" role="status" aria-live="polite">

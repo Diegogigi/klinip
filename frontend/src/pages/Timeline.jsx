@@ -221,7 +221,7 @@ export default function Timeline() {
   return (
     <>
       <div className="card">
-        <h2 className="card-title">🏥 Mi Historia Clínica</h2>
+        <h2 className="card-title">Mi Historia Clinica</h2>
         <p className="muted">
           Línea de tiempo cronológica completa de tus citas, exámenes, documentos y medicamentos. 
           Útil para seguir tratamientos y mostrar a tu médico tu historial de salud.

@@ -170,6 +170,15 @@ def ensure_user_schema():
                 statements.append("ALTER TABLE users ADD COLUMN notifications_last_prompt DATETIME")
             added_columns.append("notifications_last_prompt")
 
+        if "token_version" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0")
+            added_columns.append("token_version")
+
         if "data_consent_revoked" not in columns:
             if backend == "postgresql":
                 statements.append(
@@ -274,6 +283,50 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
 
 def _hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def _is_production_env() -> bool:
+    return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
+
+
+def _password_reset_config_errors() -> list[str]:
+    errors = []
+    if not os.getenv("SMTP_USER"):
+        errors.append("SMTP_USER")
+    if not os.getenv("SMTP_PASS"):
+        errors.append("SMTP_PASS")
+    if not os.getenv("SMTP_FROM"):
+        errors.append("SMTP_FROM")
+    if _is_production_env() and not os.getenv("FRONTEND_BASE_URL"):
+        errors.append("FRONTEND_BASE_URL")
+    if _is_production_env() and os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production") == "supersecretkey_change_me_in_production":
+        errors.append("SECRET_KEY")
+    return errors
+
+
+def _build_reset_url(request: Request, raw_token: str) -> str:
+    frontend_base_url = (os.getenv("FRONTEND_BASE_URL") or "").strip().rstrip("/")
+    if not frontend_base_url:
+        if _is_production_env():
+            raise RuntimeError("FRONTEND_BASE_URL no configurado")
+        origin = (request.headers.get("origin") or "").strip().rstrip("/")
+        if origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+            frontend_base_url = origin
+        else:
+            frontend_base_url = str(request.base_url).rstrip("/")
+    return f"{frontend_base_url}/#/reset-password?token={raw_token}"
+
+
+def _warn_password_reset_config():
+    errors = _password_reset_config_errors()
+    if errors:
+        print(
+            "WARNING password reset: configuracion incompleta. Faltan variables: "
+            + ", ".join(errors)
+        )
+
+
+_warn_password_reset_config()
 
 
 def _send_reset_email(to_email: str, reset_url: str):
@@ -2510,13 +2563,21 @@ def login(
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     # JWT requiere que 'sub' sea una cadena, no un entero
     access_token = auth.create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
+        data={"sub": str(user.id), "tv": int(getattr(user, "token_version", 0) or 0)},
+        expires_delta=access_token_expires,
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.post("/auth/forgot-password")
 def forgot_password(payload: schemas.ForgotPasswordIn, request: Request, db: Session = Depends(auth.get_db)):
+    config_errors = _password_reset_config_errors()
+    if config_errors:
+        raise HTTPException(
+            status_code=503,
+            detail="Recuperacion de contrasena no disponible temporalmente. Contacta soporte.",
+        )
+
     email = payload.email.lower().strip()
     user = auth.get_user_by_email(db, email)
     if not user or getattr(user, "deleted", False):
@@ -2539,8 +2600,7 @@ def forgot_password(payload: schemas.ForgotPasswordIn, request: Request, db: Ses
     db.add(reset)
     db.commit()
 
-    origin = request.headers.get("origin") or os.getenv("FRONTEND_BASE_URL") or str(request.base_url).rstrip("/")
-    reset_url = f"{origin}/#/reset-password?token={raw_token}"
+    reset_url = _build_reset_url(request, raw_token)
     try:
         _send_reset_email(user.email, reset_url)
     except Exception as exc:
@@ -2574,6 +2634,7 @@ def reset_password(payload: schemas.ResetPasswordIn, db: Session = Depends(auth.
         raise HTTPException(status_code=400, detail="Usuario no valido")
 
     user.password_hash = auth.get_password_hash(new_password)
+    user.token_version = int(getattr(user, "token_version", 0) or 0) + 1
     token.used = True
     db.add(user)
     db.add(token)

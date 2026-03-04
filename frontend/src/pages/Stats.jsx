@@ -160,7 +160,7 @@ export default function Stats() {
   return (
     <div className="stats-page">
       <section className="card stats-hero">
-        <h2 className="stats-hero-title">Mi Historia Clinica</h2>
+        <h2 className="stats-hero-title">Estadisticas de mi salud</h2>
         <p className="stats-hero-sub">
           Linea de tiempo cuantificable de citas, examenes, documentos y medicamentos.
         </p>

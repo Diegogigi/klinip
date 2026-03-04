@@ -95,15 +95,22 @@ async def get_current_user(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         print(f"DEBUG get_current_user: Payload decodificado: {payload}")
         user_id = payload.get("sub")
+        token_version = payload.get("tv")
         print(f"DEBUG get_current_user: User ID del token: {user_id}, tipo: {type(user_id)}")
         
         if user_id is None:
             print("DEBUG get_current_user: user_id es None en payload")
             raise credentials_exception
+
+        if token_version is None:
+            print("DEBUG get_current_user: token_version ausente en payload")
+            raise credentials_exception
         
         # Asegurar que user_id sea int
         if isinstance(user_id, str):
             user_id = int(user_id)
+        if isinstance(token_version, str):
+            token_version = int(token_version)
             
     except jwt.ExpiredSignatureError:
         print("DEBUG get_current_user: Token expirado")
@@ -128,6 +135,14 @@ async def get_current_user(
     if user is None:
         print(f"DEBUG get_current_user: Usuario con ID {user_id} no existe en BD")
         raise credentials_exception
+
+    current_token_version = int(getattr(user, "token_version", 0) or 0)
+    if int(token_version) != current_token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Sesion expirada. Por seguridad, inicia sesion nuevamente.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     if getattr(user, "deleted", False):
         raise HTTPException(

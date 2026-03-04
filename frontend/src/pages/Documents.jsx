@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { getDocuments, uploadDocument, deleteDocument } from "../api";
 import { getDocumentFile } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
+import RowActionsMenu from "../components/RowActionsMenu";
 
 const docLabels = {
   receta: "Receta",
@@ -372,35 +373,26 @@ export default function Documents() {
                       <span style={{ fontSize: "0.85rem" }}>{d.notes}</span>
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: "0.25rem" }}>
-                        <button
-                          onClick={() => handleView(d)}
-                          className="secondary-btn"
-                          style={{
-                            padding: "0.25rem 0.5rem",
-                            fontSize: "0.75rem",
-                          }}
-                        >
-                          Ver
-                        </button>
-                        <button
-                          onClick={() => handleDownload(d)}
-                          className="secondary-btn"
-                          style={{
-                            padding: "0.25rem 0.5rem",
-                            fontSize: "0.75rem",
-                          }}
-                        >
-                          Descargar
-                        </button>
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleDelete(d)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+                      <RowActionsMenu
+                        items={[
+                          {
+                            key: "view",
+                            label: "Ver",
+                            onClick: () => handleView(d),
+                          },
+                          {
+                            key: "download",
+                            label: "Descargar",
+                            onClick: () => handleDownload(d),
+                          },
+                          {
+                            key: "delete",
+                            label: "Eliminar",
+                            danger: true,
+                            onClick: () => handleDelete(d),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}

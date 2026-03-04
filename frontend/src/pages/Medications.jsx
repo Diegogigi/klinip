@@ -11,6 +11,7 @@ import {
   scheduleMedicationNotifications,
 } from "../services/notifications";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
+import RowActionsMenu from "../components/RowActionsMenu";
 
 const MED_ALERT_POLL_MS = 15000;
 
@@ -709,22 +710,21 @@ export default function Medications() {
                       })()}
                     </td>
                     <td>
-                      <div style={{ display: "flex", gap: "0.25rem" }}>
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleEdit(m)}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleDelete(m)}
-                        >
-                          Eliminar
-                        </button>
-                      </div>
+                      <RowActionsMenu
+                        items={[
+                          {
+                            key: "edit",
+                            label: "Editar",
+                            onClick: () => handleEdit(m),
+                          },
+                          {
+                            key: "delete",
+                            label: "Eliminar",
+                            danger: true,
+                            onClick: () => handleDelete(m),
+                          },
+                        ]}
+                      />
                     </td>
                   </tr>
                 ))}
