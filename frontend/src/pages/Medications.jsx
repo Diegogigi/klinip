@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   deleteMedication,
@@ -12,6 +12,42 @@ import {
 } from "../services/notifications";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 
+const MED_ALERT_POLL_MS = 15000;
+
+function parseScheduleTimeValue(value) {
+  if (!value || typeof value !== "string") return null;
+  const parts = value.split(":");
+  if (parts.length < 2) return null;
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function buildDosePromptKey(med, date) {
+  const day = date.toISOString().slice(0, 10);
+  const slot = med.schedule_time || "manual";
+  return `klinip_med_prompt_${med.id}_${day}_${slot}`;
+}
+
+function isMedicationActiveToday(med, now) {
+  if (med?.completed) return false;
+  if (!med?.end_date) return true;
+  const end = new Date(med.end_date);
+  if (Number.isNaN(end.getTime())) return true;
+  end.setHours(23, 59, 59, 999);
+  return now.getTime() <= end.getTime();
+}
+
+function formatAlertDay(date) {
+  return new Intl.DateTimeFormat("es-CL", {
+    weekday: "long",
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
 export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -19,9 +55,14 @@ export default function Medications() {
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
+  const [notifyQueue, setNotifyQueue] = useState([]);
+  const [notifyPromptKey, setNotifyPromptKey] = useState("");
+  const [notifyTriggeredAt, setNotifyTriggeredAt] = useState(null);
+  const [notifyActionLoading, setNotifyActionLoading] = useState(false);
   const [missingFrequency, setMissingFrequency] = useState(null);
   const [intakeFeedback, setIntakeFeedback] = useState("");
   const feedbackTimer = useRef(null);
+  const doseCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const [form, setForm] = useState({
     id: null,
     name: "",
@@ -50,15 +91,13 @@ export default function Medications() {
     } else {
       setMissingFrequency(null);
     }
-    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
-    // scheduleMedicationNotifications(data || []);
+    scheduleMedicationNotifications(data || []);
   };
 
   useEffect(() => {
     load();
     requestNotificationPermission();
-    // DESACTIVADO: No programar notificaciones locales para evitar duplicados
-    // return () => scheduleMedicationNotifications([]);
+    return () => scheduleMedicationNotifications([]);
   }, []);
 
   useEffect(() => {
@@ -89,9 +128,67 @@ export default function Medications() {
     if (!notify || !notifyId) return;
     const target = meds.find((m) => String(m.id) === String(notifyId));
     if (!target) return;
-    setNotifyTarget(target);
+    const now = new Date();
+    const key = buildDosePromptKey(target, now);
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, "prompted");
+    }
+    setNotifyQueue((prev) => {
+      if (prev.some((item) => item.key === key)) return prev;
+      return [...prev, { med: target, key, triggeredAt: now }];
+    });
+    navigate("/medications", { replace: true });
+  }, [location.search, meds, navigate]);
+
+  useEffect(() => {
+    const checkDueMedicationPrompt = () => {
+      const now = new Date();
+      const lastCheckedAt = doseCheckRef.current;
+      const nowTs = now.getTime();
+
+      const dueMeds = (meds || []).filter((med) => {
+        if (!med?.schedule_time) return false;
+        if (!isMedicationActiveToday(med, now)) return false;
+        const slot = parseScheduleTimeValue(med.schedule_time);
+        if (!slot) return false;
+        const trigger = new Date(now);
+        trigger.setHours(slot.hour, slot.minute, 0, 0);
+        const triggerTs = trigger.getTime();
+        if (triggerTs <= lastCheckedAt || triggerTs > nowTs) return false;
+        const key = buildDosePromptKey(med, now);
+        return !localStorage.getItem(key);
+      });
+
+      if (!dueMeds.length) {
+        doseCheckRef.current = nowTs;
+        return;
+      }
+
+      dueMeds.forEach((med) => {
+        const key = buildDosePromptKey(med, now);
+        localStorage.setItem(key, "prompted");
+        setNotifyQueue((prev) => {
+          if (prev.some((item) => item.key === key)) return prev;
+          return [...prev, { med, key, triggeredAt: now }];
+        });
+      });
+      doseCheckRef.current = nowTs;
+    };
+
+    checkDueMedicationPrompt();
+    const intervalId = setInterval(checkDueMedicationPrompt, MED_ALERT_POLL_MS);
+    return () => clearInterval(intervalId);
+  }, [meds]);
+
+  useEffect(() => {
+    if (notifyOpen || notifyTarget || notifyQueue.length === 0) return;
+    const [nextPrompt, ...rest] = notifyQueue;
+    setNotifyQueue(rest);
+    setNotifyPromptKey(nextPrompt.key);
+    setNotifyTriggeredAt(nextPrompt.triggeredAt);
+    setNotifyTarget(nextPrompt.med);
     setNotifyOpen(true);
-  }, [location.search, meds]);
+  }, [notifyOpen, notifyQueue, notifyTarget]);
 
   const resetForm = () => {
       setForm({
@@ -192,6 +289,91 @@ export default function Medications() {
     }
   };
 
+  const closeNotifyModal = () => {
+    if (notifyActionLoading) return;
+    if (notifyPromptKey) {
+      localStorage.setItem(notifyPromptKey, "skipped");
+    }
+    notifyQueue.forEach((item) => {
+      if (item.key) {
+        localStorage.setItem(item.key, "skipped");
+      }
+    });
+    setNotifyQueue([]);
+    setNotifyOpen(false);
+    setNotifyTarget(null);
+    setNotifyPromptKey("");
+    setNotifyTriggeredAt(null);
+    navigate("/medications", { replace: true });
+  };
+
+  const handleTakenFromAlert = async () => {
+    if (!notifyTarget) return;
+    setNotifyActionLoading(true);
+    try {
+      await recordMedicationIntake(notifyTarget.id);
+      if (notifyPromptKey) {
+        localStorage.setItem(notifyPromptKey, "taken");
+      }
+      await load();
+      setIntakeFeedback(`success:Toma registrada: ${notifyTarget.name}`);
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+      feedbackTimer.current = setTimeout(() => {
+        setIntakeFeedback("");
+      }, 2600);
+      setNotifyOpen(false);
+      setNotifyTarget(null);
+      setNotifyPromptKey("");
+      setNotifyTriggeredAt(null);
+      navigate("/medications", { replace: true });
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo registrar la toma.");
+    } finally {
+      setNotifyActionLoading(false);
+    }
+  };
+
+  const handleTakenAllFromAlert = async () => {
+    if (!notifyTarget) return;
+    const batch = [
+      { med: notifyTarget, key: notifyPromptKey },
+      ...notifyQueue.map((item) => ({ med: item.med, key: item.key })),
+    ];
+    setNotifyActionLoading(true);
+    try {
+      for (const item of batch) {
+        await recordMedicationIntake(item.med.id);
+        if (item.key) {
+          localStorage.setItem(item.key, "taken");
+        }
+      }
+      await load();
+      setNotifyQueue([]);
+      setIntakeFeedback(
+        `success:Tomas registradas: ${batch.length}`
+      );
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+      feedbackTimer.current = setTimeout(() => {
+        setIntakeFeedback("");
+      }, 2600);
+      setNotifyOpen(false);
+      setNotifyTarget(null);
+      setNotifyPromptKey("");
+      setNotifyTriggeredAt(null);
+      navigate("/medications", { replace: true });
+    } catch (err) {
+      console.error(err);
+      alert("No se pudieron registrar todas las tomas.");
+    } finally {
+      setNotifyActionLoading(false);
+    }
+  };
+
   const handleDelete = async (med) => {
     if (!window.confirm("¿Eliminar este medicamento?")) return;
     try {
@@ -206,6 +388,18 @@ export default function Medications() {
   const medsMissingFrequency = (meds || []).filter(
     (m) => !m.frequency || m.frequency.trim() === ""
   );
+  const adherenceTotals = (meds || []).reduce(
+    (acc, med) => {
+      acc.expected += Number(med.expected_doses || 0);
+      acc.taken += Number(med.taken_doses || 0);
+      return acc;
+    },
+    { expected: 0, taken: 0 }
+  );
+  const globalAdherence =
+    adherenceTotals.expected > 0
+      ? Math.round((adherenceTotals.taken / adherenceTotals.expected) * 100)
+      : null;
 
   return (
     <>
@@ -257,45 +451,59 @@ export default function Medications() {
       )}
 
       {notifyOpen && notifyTarget && (
-        <div className="modal-backdrop" onClick={() => {
-          setNotifyOpen(false);
-          setNotifyTarget(null);
-          navigate("/medications", { replace: true });
-        }}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <h3>Medicamento desde notificacion</h3>
-            <p className="muted">
-              {notifyTarget.name}
-              {notifyTarget.dose ? ` · ${notifyTarget.dose}` : ""}
-              {notifyTarget.schedule_time ? ` · ${notifyTarget.schedule_time}` : ""}
-              {notifyTarget.end_date ? ` · ${toLocaleDateOrEmpty(notifyTarget.end_date)}` : ""}
+        <div className="med-dose-alert-backdrop" onClick={closeNotifyModal}>
+          <div
+            className="med-dose-alert"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="med-dose-alert-close"
+              onClick={closeNotifyModal}
+              aria-label="Cerrar alerta"
+            >
+              ×
+            </button>
+            <p className="med-dose-alert-day">
+              {formatAlertDay(notifyTriggeredAt || new Date())}
             </p>
-            <div className="modal-actions">
+            <div className="med-dose-alert-icon" aria-hidden="true">
+              💊
+            </div>
+            <h3 className="med-dose-alert-title">
+              Medicamento de las{" "}
+              {notifyTarget.schedule_time || new Date().toTimeString().slice(0, 5)}
+            </h3>
+            {notifyQueue.length > 0 && (
               <button
-                className="secondary-btn"
                 type="button"
-                onClick={() => {
-                  handleEdit(notifyTarget);
-                  setNotifyOpen(false);
-                  setNotifyTarget(null);
-                  navigate("/medications", { replace: true });
-                }}
+                className="med-dose-batch-btn"
+                onClick={handleTakenAllFromAlert}
+                disabled={notifyActionLoading}
               >
-                Ver detalle
+                {notifyActionLoading
+                  ? "Registrando..."
+                  : `Registrar todos como tomados (${notifyQueue.length + 1})`}
               </button>
-              <button
-                className="primary-btn"
-                type="button"
-                onClick={() => {
-                  handleRecordIntake(notifyTarget).finally(() => {
-                    setNotifyOpen(false);
-                    setNotifyTarget(null);
-                    navigate("/medications", { replace: true });
-                  });
-                }}
-              >
-                Marcar realizado
-              </button>
+            )}
+            <div className="med-dose-alert-card">
+              <p className="med-dose-alert-name">{notifyTarget.name}</p>
+              <p className="med-dose-alert-meta">
+                {notifyTarget.dose || "Sin dosis definida"}
+              </p>
+              {notifyTarget.notes && (
+                <p className="med-dose-alert-notes">{notifyTarget.notes}</p>
+              )}
+              <div className="med-dose-alert-actions">
+                <button
+                  className="med-dose-btn is-primary"
+                  type="button"
+                  onClick={handleTakenFromAlert}
+                  disabled={notifyActionLoading}
+                >
+                  {notifyActionLoading ? "Registrando..." : "Tomado"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -447,6 +655,13 @@ export default function Medications() {
 
       <div className="card">
         <h3 className="card-title">Tratamientos activos</h3>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Adherencia global:{" "}
+          <strong>
+            {globalAdherence === null ? "Sin datos suficientes" : `${globalAdherence}%`}
+          </strong>{" "}
+          ({adherenceTotals.taken}/{adherenceTotals.expected} tomas)
+        </p>
         {meds.length === 0 ? (
           <p className="muted">Aún no has registrado medicamentos.</p>
         ) : (
@@ -461,6 +676,8 @@ export default function Medications() {
                   <th>Horario</th>
                   <th>Estado</th>
                   <th>Término</th>
+                  <th>Tomas</th>
+                  <th>Adherencia</th>
                   <th></th>
                 </tr>
               </thead>
@@ -475,14 +692,24 @@ export default function Medications() {
                     <td>{m.completed ? "Realizado" : "Activo"}</td>
                     <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
                     <td>
+                      {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
+                    </td>
+                    <td>
+                      {(() => {
+                        const taken = Number(m.taken_doses || 0);
+                        const expected = Number(m.expected_doses || 0);
+                        const apiRate = Number(m.adherence_rate);
+                        if (Number.isFinite(apiRate)) {
+                          return `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`;
+                        }
+                        if (expected > 0) {
+                          return `${Math.round((taken / expected) * 100)}%`;
+                        }
+                        return "0%";
+                      })()}
+                    </td>
+                    <td>
                       <div style={{ display: "flex", gap: "0.25rem" }}>
-                        <button
-                          className="secondary-btn"
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                          onClick={() => handleRecordIntake(m)}
-                        >
-                          Marcar realizado
-                        </button>
                         <button
                           className="secondary-btn"
                           style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
@@ -509,3 +736,4 @@ export default function Medications() {
     </>
   );
 }
+

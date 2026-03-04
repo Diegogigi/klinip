@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -11,12 +11,13 @@ import Medications from "./pages/Medications";
 import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
+import Stats from "./pages/Stats";
 import Landing from "./pages/Landing";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
 import LegalNotifications from "./pages/LegalNotifications";
-import { getMe, updateMe, logout as apiLogout } from "./api";
+import { getMe, getMedications, updateMe, logout as apiLogout } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
 const icons = {
@@ -64,6 +65,12 @@ const icons = {
       <path d="M9 3v3M15 3v3M4 10h16" />
     </svg>
   ),
+  appointment: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 8v4l2.5 2.5" />
+    </svg>
+  ),
   timeline: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M6 4v16M18 4v16" />
@@ -103,15 +110,16 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/appointments", label: "Citas", icon: icons.calendar, badge: notificationCounts.appointments },
+    { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
+    { to: "/stats", label: "Stats", icon: icons.chart },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/settings", label: "Perfil", icon: icons.user },
   ];
   const mobilePrimaryLinks = [links[0], links[1], links[2], links[4]];
-  const mobileOverflowLinks = [links[3], links[5], links[6]];
+  const mobileOverflowLinks = [links[3], links[5], links[6], links[7]];
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -231,6 +239,7 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification 
     "/documents": "Documentos",
     "/medications": "Medicamentos",
     "/calendar": "Calendario",
+    "/stats": "Estadisticas",
     "/timeline": "Historia",
     "/settings": "Perfil",
   };
@@ -336,7 +345,34 @@ const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
+const MED_ALERT_POLL_MS = 15000;
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
+
+const parseMedicationScheduleTime = (value = "") => {
+  if (!value || typeof value !== "string") return null;
+  const parts = value.split(":");
+  if (parts.length < 2) return null;
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return { hour, minute };
+};
+
+const buildMedicationPromptKey = (med, date) => {
+  const day = date.toISOString().slice(0, 10);
+  const slot = med.schedule_time || "manual";
+  return `klinip_med_prompt_${med.id}_${day}_${slot}`;
+};
+
+const isMedicationActive = (med, now) => {
+  if (med?.completed) return false;
+  if (!med?.end_date) return true;
+  const end = new Date(med.end_date);
+  if (Number.isNaN(end.getTime())) return true;
+  end.setHours(23, 59, 59, 999);
+  return now.getTime() <= end.getTime();
+};
 
 const getPathFromNotification = (item) => {
   if (!item) return "";
@@ -393,6 +429,7 @@ export default function App() {
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [notifConsentOpen, setNotifConsentOpen] = useState(false);
+  const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
@@ -418,6 +455,65 @@ export default function App() {
     }
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!user || booting) return undefined;
+
+    let active = true;
+
+    const checkDueMedicationPopups = async () => {
+      const now = new Date();
+      const nowTs = now.getTime();
+      const lastChecked = globalMedCheckRef.current;
+
+      try {
+        const meds = (await getMedications()) || [];
+        if (!active) return;
+
+        const due = meds
+          .filter((med) => {
+            if (!med?.schedule_time) return false;
+            if (!isMedicationActive(med, now)) return false;
+            const slot = parseMedicationScheduleTime(med.schedule_time);
+            if (!slot) return false;
+            const trigger = new Date(now);
+            trigger.setHours(slot.hour, slot.minute, 0, 0);
+            const triggerTs = trigger.getTime();
+            if (triggerTs <= lastChecked || triggerTs > nowTs) return false;
+            const key = buildMedicationPromptKey(med, now);
+            return !localStorage.getItem(key);
+          })
+          .map((med) => {
+            const slot = parseMedicationScheduleTime(med.schedule_time);
+            const trigger = new Date(now);
+            trigger.setHours(slot.hour, slot.minute, 0, 0);
+            return { med, triggerTs: trigger.getTime() };
+          })
+          .sort((a, b) => a.triggerTs - b.triggerTs);
+
+        if (due.length > 0) {
+          const first = due[0].med;
+          const key = buildMedicationPromptKey(first, now);
+          localStorage.setItem(key, "prompted");
+          const target = `/medications?notify=1&medicationId=${first.id}`;
+          if (!(location.pathname === "/medications" && location.search.includes(`medicationId=${first.id}`) && location.search.includes("notify=1"))) {
+            navigate(target);
+          }
+        }
+      } catch (err) {
+        console.error("No se pudo verificar alertas de medicamentos", err);
+      } finally {
+        globalMedCheckRef.current = nowTs;
+      }
+    };
+
+    checkDueMedicationPopups();
+    const intervalId = window.setInterval(checkDueMedicationPopups, MED_ALERT_POLL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [user, booting, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     if (!user) {
@@ -1088,6 +1184,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <Timeline />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/stats"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Stats />
                   </ProtectedRoute>
                 }
               />

@@ -32,6 +32,8 @@ const statusLabels = {
   realizada: "Realizada",
 };
 
+const AI_ANALYSIS_ENABLED = false;
+
 export default function Dashboard({ user }) {
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -358,26 +360,28 @@ export default function Dashboard({ user }) {
         ))}
       </div>
 
-      <div className="ai-cta-row">
-        <button
-          className="ai-analysis-btn"
-          type="button"
-          onClick={handleOpenAiAnalysis}
-        >
-          <span className="ai-analysis-glow" aria-hidden="true" />
-          <span className="ai-analysis-label">Analisis con IA</span>
-          <span className="ai-analysis-sub">Interpretar documentos automaticamente</span>
-        </button>
-        <div className="ai-cta-message">
-          <span className="ai-cta-dot" aria-hidden="true" />
-          <div>
-            <p className="ai-cta-kicker">Asistente IA</p>
-            <p className="ai-cta-note">Klinip cuenta con un asistente de inteligencia artificial pensado para ayudarte a ahorrar tiempo y no olvidar nada importante de tus documentos medicos.</p>
+      {AI_ANALYSIS_ENABLED && (
+        <div className="ai-cta-row">
+          <button
+            className="ai-analysis-btn"
+            type="button"
+            onClick={handleOpenAiAnalysis}
+          >
+            <span className="ai-analysis-glow" aria-hidden="true" />
+            <span className="ai-analysis-label">Analisis con IA</span>
+            <span className="ai-analysis-sub">Interpretar documentos automaticamente</span>
+          </button>
+          <div className="ai-cta-message">
+            <span className="ai-cta-dot" aria-hidden="true" />
+            <div>
+              <p className="ai-cta-kicker">Asistente IA</p>
+              <p className="ai-cta-note">Klinip cuenta con un asistente de inteligencia artificial pensado para ayudarte a ahorrar tiempo y no olvidar nada importante de tus documentos medicos.</p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {showDocForm && (
+      {AI_ANALYSIS_ENABLED && showDocForm && (
         <div className="floating-form-backdrop" onClick={() => setShowDocForm(false)}>
           <div className="floating-form-card ai-modal" onClick={(e) => e.stopPropagation()}>
             <div className="card-header" style={{ marginBottom: "0.75rem" }}>
@@ -757,6 +761,11 @@ export default function Dashboard({ user }) {
     </>
   );
 }
+
+
+
+
+
 
 
 

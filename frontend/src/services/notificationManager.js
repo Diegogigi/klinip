@@ -429,7 +429,7 @@ function deriveDoseHours(frequencyText = "") {
 function parseScheduleTime(value = "") {
   if (!value || typeof value !== "string") return null;
   const parts = value.split(":");
-  if (parts.length !== 2) return null;
+  if (parts.length < 2) return null;
   const hour = Number(parts[0]);
   const minute = Number(parts[1]);
   if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
@@ -495,13 +495,18 @@ ${med.dose ? `Dosis: ${med.dose}
 ` : ""}${med.frequency ? `Frecuencia: ${med.frequency}
 ` : ""}${med.notes ? `${med.notes}` : "Tomar segun indicacion medica"}`;
 
+          const targetUrl =
+            offsetMinutes === 0
+              ? `/medications?notify=1&medicationId=${med.id}`
+              : "/medications";
+
           // Guardar en persistencia
           const created = notificationManager.addScheduledNotification({
             triggerAt,
             title,
             body,
             sound: "medication",
-            url: "/medications",
+            url: targetUrl,
             tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
             actions: [
               { action: "done", title: "Realizado" },
@@ -515,7 +520,7 @@ ${med.dose ? `Dosis: ${med.dose}
             notificationManager.removeScheduledNotification(created.id);
           showNotification(title, body, {
             sound: "medication",
-            url: "/medications",
+            url: targetUrl,
             tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
             requireInteraction: true,
             actions: [

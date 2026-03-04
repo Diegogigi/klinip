@@ -10,6 +10,18 @@ export function parseDate(value) {
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (!trimmed) return null;
+
+    // Fecha solo con dia (YYYY-MM-DD): tratar como fecha local para evitar
+    // desplazamientos por zona horaria al convertir desde UTC.
+    const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnlyMatch) {
+      const year = Number(dateOnlyMatch[1]);
+      const month = Number(dateOnlyMatch[2]);
+      const day = Number(dateOnlyMatch[3]);
+      const localDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+      return Number.isNaN(localDate.getTime()) ? null : localDate;
+    }
+
     const normalized = trimmed.replace(" ", "T");
     const fromNormalized = new Date(normalized);
     if (!Number.isNaN(fromNormalized.getTime())) return fromNormalized;
