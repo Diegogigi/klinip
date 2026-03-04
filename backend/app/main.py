@@ -2760,7 +2760,6 @@ def login(
 def forgot_password(
     payload: schemas.ForgotPasswordIn,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
 ):
     config_errors = _password_reset_config_errors()
@@ -2793,7 +2792,14 @@ def forgot_password(
     db.commit()
 
     reset_url = _build_reset_url(request, raw_token)
-    background_tasks.add_task(_send_reset_email_safe, user.email, reset_url)
+    try:
+        _send_reset_email(user.email, reset_url)
+    except Exception as exc:
+        print(f"ERROR sending reset email sync: {exc!r}")
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo enviar el correo de recuperacion. Intenta nuevamente.",
+        )
 
     return {"ok": True}
 
@@ -3445,6 +3451,13 @@ async def privacy_contact(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    config_errors = _password_reset_config_errors()
+    if config_errors:
+        raise HTTPException(
+            status_code=503,
+            detail="Canal de correo no disponible temporalmente. Intenta nuevamente.",
+        )
+
     req = models.PrivacyRequest(
         user_id=current_user.id,
         reason=payload.reason,
@@ -3468,19 +3481,26 @@ async def privacy_contact(
         },
     )
 
-    background_tasks.add_task(
-        _send_privacy_support_email_safe,
-        {
-            "request_id": req.id,
-            "user_id": current_user.id,
-            "email": current_user.email,
-            "reason": payload.reason,
-            "message": payload.message,
-            "include_tech": bool(payload.include_tech),
-            "ip": getattr(request.client, "host", "") if request.client else "",
-            "user_agent": request.headers.get("user-agent", ""),
-        },
-    )
+    support_payload = {
+        "request_id": req.id,
+        "user_id": current_user.id,
+        "email": current_user.email,
+        "reason": payload.reason,
+        "message": payload.message,
+        "include_tech": bool(payload.include_tech),
+        "ip": getattr(request.client, "host", "") if request.client else "",
+        "user_agent": request.headers.get("user-agent", ""),
+    }
+
+    try:
+        _send_privacy_support_email(support_payload)
+    except Exception as exc:
+        print(f"ERROR sending privacy support email sync: {exc!r}")
+        raise HTTPException(
+            status_code=502,
+            detail="No se pudo enviar la solicitud por correo. Intenta nuevamente.",
+        )
+
     if current_user.email:
         background_tasks.add_task(
             _send_privacy_user_ack_email_safe,
