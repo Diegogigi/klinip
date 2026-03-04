@@ -22,6 +22,7 @@ import hashlib
 import secrets
 import smtplib
 from email.message import EmailMessage
+from html import escape
 import json
 import io
 import re
@@ -350,10 +351,196 @@ def _send_reset_email(to_email: str, reset_url: str):
         "Si no solicitaste este cambio, ignora este mensaje.\n"
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port) as server:
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
         server.starttls()
         server.login(smtp_user, smtp_pass)
         server.send_message(msg)
+
+
+def _send_reset_email_safe(to_email: str, reset_url: str):
+    try:
+        _send_reset_email(to_email, reset_url)
+        print(f"DEBUG reset email: enviado a {to_email}")
+    except Exception as exc:
+        print(f"ERROR sending reset email async: {exc}")
+
+
+def _support_email_target() -> str:
+    return (
+        os.getenv("SUPPORT_EMAIL")
+        or os.getenv("SMTP_SUPPORT_TO")
+        or os.getenv("SMTP_USER")
+        or "klinip.informacion@gmail.com"
+    )
+
+
+def _send_privacy_support_email(payload: dict):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    support_to = _support_email_target()
+
+    if not (smtp_user and smtp_pass and smtp_from and support_to):
+        raise RuntimeError("SMTP no configurado para soporte de privacidad")
+
+    msg = EmailMessage()
+    msg["Subject"] = f"Klinip - Solicitud de privacidad #{payload.get('request_id')}"
+    msg["From"] = smtp_from
+    msg["To"] = support_to
+    text_body = (
+        "Nueva solicitud de soporte de privacidad\n\n"
+        f"Request ID: {payload.get('request_id')}\n"
+        f"Usuario ID: {payload.get('user_id')}\n"
+        f"Email usuario: {payload.get('email')}\n"
+        f"Motivo: {payload.get('reason')}\n"
+        f"Incluir informacion tecnica: {payload.get('include_tech')}\n"
+        f"IP: {payload.get('ip')}\n"
+        f"User-Agent: {payload.get('user_agent')}\n\n"
+        f"Mensaje:\n{payload.get('message')}\n"
+    )
+    msg.set_content(text_body)
+    msg.add_alternative(
+        f"""
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
+                <h2 style="margin:0;font-size:20px;">Klinip · Nueva solicitud de privacidad</h2>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 22px;">
+                <p style="margin:0 0 10px;"><strong>Seguimiento:</strong> #{escape(str(payload.get('request_id') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>Usuario ID:</strong> {escape(str(payload.get('user_id') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>Email:</strong> {escape(str(payload.get('email') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>Motivo:</strong> {escape(str(payload.get('reason') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>Incluye info tecnica:</strong> {escape(str(payload.get('include_tech') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>IP:</strong> {escape(str(payload.get('ip') or ''))}</p>
+                <p style="margin:0 0 10px;"><strong>User-Agent:</strong> {escape(str(payload.get('user_agent') or ''))}</p>
+                <div style="margin-top:14px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">
+                  <p style="margin:0 0 8px;font-weight:700;">Mensaje</p>
+                  <p style="margin:0;white-space:pre-wrap;">{escape(str(payload.get('message') or ''))}</p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
+                Klinip · Canal interno de soporte de privacidad
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+        """.strip(),
+        subtype="html",
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _send_privacy_support_email_safe(payload: dict):
+    try:
+        _send_privacy_support_email(payload)
+        print(
+            f"DEBUG privacy support email: enviado request_id={payload.get('request_id')} a {_support_email_target()}"
+        )
+    except Exception as exc:
+        print(f"ERROR sending privacy support email async: {exc}")
+
+
+def _send_privacy_user_ack_email(to_email: str, payload: dict):
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+
+    if not (smtp_user and smtp_pass and smtp_from and to_email):
+        raise RuntimeError("SMTP no configurado para acuse de recibo al usuario")
+
+    msg = EmailMessage()
+    msg["Subject"] = f"Klinip - Solicitud recibida #{payload.get('request_id')}"
+    msg["From"] = smtp_from
+    msg["To"] = to_email
+    text_body = (
+        "Hola,\n\n"
+        "Recibimos tu solicitud de soporte de privacidad correctamente.\n"
+        f"Numero de seguimiento: #{payload.get('request_id')}\n\n"
+        "Resumen de tu solicitud:\n"
+        f"- Motivo: {payload.get('reason')}\n"
+        f"- Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
+        "Nuestro equipo revisara tu caso y te respondera lo antes posible.\n\n"
+        "Gracias,\n"
+        "Equipo Klinip\n"
+    )
+    msg.set_content(text_body)
+    msg.add_alternative(
+        f"""
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
+                <h2 style="margin:0;font-size:20px;">Klinip · Solicitud recibida</h2>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 22px;">
+                <p style="margin:0 0 12px;">Hola,</p>
+                <p style="margin:0 0 12px;">Recibimos tu solicitud de soporte de privacidad correctamente.</p>
+                <div style="margin:10px 0;padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;">
+                  <p style="margin:0 0 6px;"><strong>Numero de seguimiento:</strong> #{escape(str(payload.get('request_id') or ''))}</p>
+                  <p style="margin:0;"><strong>Motivo:</strong> {escape(str(payload.get('reason') or ''))}</p>
+                </div>
+                <p style="margin:12px 0 0;">Nuestro equipo revisara tu caso y te respondera lo antes posible.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
+                Gracias por confiar en Klinip.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
+        """.strip(),
+        subtype="html",
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _send_privacy_user_ack_email_safe(to_email: str, payload: dict):
+    try:
+        _send_privacy_user_ack_email(to_email, payload)
+        print(
+            f"DEBUG privacy ack email: enviado request_id={payload.get('request_id')} a {to_email}"
+        )
+    except Exception as exc:
+        print(f"ERROR sending privacy ack email async: {exc}")
 
 
 
@@ -2570,7 +2757,12 @@ def login(
 
 
 @app.post("/auth/forgot-password")
-def forgot_password(payload: schemas.ForgotPasswordIn, request: Request, db: Session = Depends(auth.get_db)):
+def forgot_password(
+    payload: schemas.ForgotPasswordIn,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth.get_db),
+):
     config_errors = _password_reset_config_errors()
     if config_errors:
         raise HTTPException(
@@ -2601,11 +2793,7 @@ def forgot_password(payload: schemas.ForgotPasswordIn, request: Request, db: Ses
     db.commit()
 
     reset_url = _build_reset_url(request, raw_token)
-    try:
-        _send_reset_email(user.email, reset_url)
-    except Exception as exc:
-        print(f"ERROR sending reset email: {exc}")
-        raise HTTPException(status_code=500, detail="No se pudo enviar el correo de recuperacion")
+    background_tasks.add_task(_send_reset_email_safe, user.email, reset_url)
 
     return {"ok": True}
 
@@ -3252,6 +3440,8 @@ async def delete_account(
 @app.post("/privacy/contact")
 async def privacy_contact(
     payload: schemas.PrivacyRequestIn,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -3277,6 +3467,29 @@ async def privacy_contact(
             "include_tech": payload.include_tech,
         },
     )
+
+    background_tasks.add_task(
+        _send_privacy_support_email_safe,
+        {
+            "request_id": req.id,
+            "user_id": current_user.id,
+            "email": current_user.email,
+            "reason": payload.reason,
+            "message": payload.message,
+            "include_tech": bool(payload.include_tech),
+            "ip": getattr(request.client, "host", "") if request.client else "",
+            "user_agent": request.headers.get("user-agent", ""),
+        },
+    )
+    if current_user.email:
+        background_tasks.add_task(
+            _send_privacy_user_ack_email_safe,
+            current_user.email,
+            {
+                "request_id": req.id,
+                "reason": payload.reason,
+            },
+        )
 
     return {"ok": True, "request_id": req.id}
 

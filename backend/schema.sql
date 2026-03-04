@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     timezone TEXT DEFAULT 'America/Santiago',
     notifications_consent TEXT DEFAULT '',
     notifications_last_prompt TIMESTAMPTZ,
+    token_version INTEGER DEFAULT 0,
     data_consent_revoked BOOLEAN DEFAULT FALSE,
     deleted BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -36,10 +37,15 @@ CREATE TABLE IF NOT EXISTS documents (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     appointment_id INTEGER REFERENCES appointments(id) ON DELETE SET NULL,
     doc_type document_type NOT NULL,
-    file_path TEXT NOT NULL,
+    file_path TEXT,
+    file_data BYTEA,
+    filename TEXT,
     date TIMESTAMPTZ,
     center TEXT DEFAULT '',
     notes TEXT,
+    ocr_text TEXT,
+    ocr_status TEXT DEFAULT 'pending',
+    ocr_lang TEXT DEFAULT 'spa',
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -124,7 +130,25 @@ ALTER TABLE users
     ADD COLUMN IF NOT EXISTS notifications_last_prompt TIMESTAMPTZ;
 
 ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0;
+
+ALTER TABLE users
     ADD COLUMN IF NOT EXISTS data_consent_revoked BOOLEAN DEFAULT FALSE;
 
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE;
+
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS file_data BYTEA;
+
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS filename TEXT;
+
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS ocr_text TEXT;
+
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS ocr_status TEXT DEFAULT 'pending';
+
+ALTER TABLE documents
+    ADD COLUMN IF NOT EXISTS ocr_lang TEXT DEFAULT 'spa';

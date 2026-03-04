@@ -497,6 +497,9 @@ export default function App() {
   const [consentOpen, setConsentOpen] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
   const [notifConsentOpen, setNotifConsentOpen] = useState(false);
+  const [notifSwitchChecked, setNotifSwitchChecked] = useState(false);
+  const [notifSwitchLoading, setNotifSwitchLoading] = useState(false);
+  const [notifSwitchMessage, setNotifSwitchMessage] = useState("");
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
 
   useEffect(() => {
@@ -638,6 +641,22 @@ export default function App() {
       setNotifConsentOpen(true);
     }
   }, [user, consentOpen]);
+
+  useEffect(() => {
+    if (!notifConsentOpen || !user) {
+      setNotifSwitchLoading(false);
+      return;
+    }
+    const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
+    const storedConsent = localStorage.getItem(consentKey) || "";
+    const grantedByBrowser =
+      "Notification" in window && Notification.permission === "granted";
+    const enabled = storedConsent === "accepted" || grantedByBrowser;
+    setNotifSwitchChecked(enabled);
+    setNotifSwitchMessage(
+      enabled ? "Notificaciones activadas." : ""
+    );
+  }, [notifConsentOpen, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -983,12 +1002,15 @@ export default function App() {
   };
 
   const handleAcceptNotifications = () => {
-    setNotifConsentOpen(false);
+    setNotifSwitchLoading(true);
+    setNotifSwitchMessage("");
     (async () => {
       try {
         const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user?.id);
         const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user?.id);
         if (!("Notification" in window)) {
+          setNotifSwitchChecked(false);
+          setNotifSwitchMessage("Este navegador no soporta notificaciones.");
           localStorage.setItem(consentKey, "later");
           localStorage.setItem(lastPromptKey, new Date().toISOString());
           await updateMe({
@@ -999,13 +1021,19 @@ export default function App() {
         }
         const permission = await Notification.requestPermission();
         if (permission === "granted") {
+          setNotifSwitchChecked(true);
+          setNotifSwitchMessage("Notificaciones activadas.");
           localStorage.setItem(consentKey, "accepted");
           await updateMe({ notifications_consent: "accepted" });
           await ensurePushSubscription();
         } else if (permission === "denied") {
+          setNotifSwitchChecked(false);
+          setNotifSwitchMessage("Permiso denegado en el navegador.");
           localStorage.setItem(consentKey, "rejected");
           await updateMe({ notifications_consent: "rejected" });
         } else {
+          setNotifSwitchChecked(false);
+          setNotifSwitchMessage("Permiso no concedido.");
           localStorage.setItem(consentKey, "later");
           localStorage.setItem(lastPromptKey, new Date().toISOString());
           await updateMe({
@@ -1015,6 +1043,8 @@ export default function App() {
         }
       } catch (err) {
         console.error("Error solicitando permiso de notificaciones", err);
+        setNotifSwitchChecked(false);
+        setNotifSwitchMessage("No se pudo activar notificaciones.");
         const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user?.id);
         const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user?.id);
         localStorage.setItem(consentKey, "later");
@@ -1023,6 +1053,8 @@ export default function App() {
           notifications_consent: "later",
           notifications_last_prompt: new Date().toISOString(),
         }).catch(() => null);
+      } finally {
+        setNotifSwitchLoading(false);
       }
     })();
   };
@@ -1123,18 +1155,27 @@ export default function App() {
               <label className="switch">
                 <input
                   type="checkbox"
+                  checked={notifSwitchChecked}
+                  disabled={notifSwitchLoading}
                   onChange={(event) => {
                     if (event.target.checked) {
                       handleAcceptNotifications();
+                    } else if (notifSwitchChecked) {
+                      setNotifSwitchChecked(true);
                     }
                   }}
                 />
                 <span className="switch-slider" />
               </label>
             </div>
+            {notifSwitchMessage ? (
+              <p className="consent-switch-sub" style={{ marginTop: "0.5rem" }}>
+                {notifSwitchMessage}
+              </p>
+            ) : null}
             <div className="consent-actions">
               <button className="secondary-btn" type="button" onClick={handleLaterNotifications}>
-                Configurar despues
+                {notifSwitchChecked ? "Cerrar" : "Configurar despues"}
               </button>
               <button className="ghost-btn" type="button" onClick={handleLearnMoreNotifications}>
                 Aprender mas
