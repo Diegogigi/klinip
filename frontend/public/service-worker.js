@@ -1,13 +1,11 @@
 const CACHE_NAME = "klinip-cache-v13";
 const ASSETS = [
   "/manifest.webmanifest",
-  "/icons/k_logo_152.png",
-  "/icons/k_logo_167.png",
-  "/icons/k_logo_180.png",
-  "/icons/k_logo_192.png",
-  "/icons/k_logo_512.png",
-  "/icons/favicon-16.png",
-  "/icons/favicon-32.png",
+  "/icons/apple-touch-icon.png",
+  "/icons/android-chrome-192x192.png",
+  "/icons/android-chrome-512x512.png",
+  "/icons/favicon-16x16.png",
+  "/icons/favicon-32x32.png",
   "/icons/favicon.ico",
   "/sounds/notification.mp3"
 ];
@@ -282,8 +280,8 @@ async function checkAndShowPendingNotifications() {
 
       await self.registration.showNotification(notification.title, {
         body: notification.body,
-        icon: notification.icon || "/icons/k_logo_192.png",
-        badge: "/icons/k_logo_192.png",
+        icon: notification.icon || "/icons/android-chrome-192x192.png",
+        badge: "/icons/android-chrome-192x192.png",
         tag: notification.tag,
         data: notification.data || { url: notification.url || "/" },
         requireInteraction: true,
@@ -388,7 +386,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
-  const icon = data.icon || "/icons/k_logo_192.png";
+  const icon = data.icon || "/icons/android-chrome-192x192.png";
   const priority = data.priority || "normal";
   const sound = data.sound || "default";
 
@@ -428,7 +426,7 @@ self.addEventListener("push", (event) => {
       self.registration.showNotification(title, {
         body,
         icon,
-        badge: "/icons/k_logo_192.png",
+        badge: "/icons/android-chrome-192x192.png",
         vibrate,
         requireInteraction,
         tag,
@@ -436,9 +434,9 @@ self.addEventListener("push", (event) => {
           {
             action: "done",
             title: data.medicationId ? "Realizado" : "Realizada",
-            icon: "/icons/k_logo_192.png"
+            icon: "/icons/android-chrome-192x192.png"
           },
-          { action: "open", title: "Ver detalles", icon: "/icons/k_logo_192.png" }
+          { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
         ],
         data: {
           url,

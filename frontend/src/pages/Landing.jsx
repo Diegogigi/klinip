@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLandingStats } from "../api";
 
@@ -16,7 +16,7 @@ const formatPercent = (value) => `${value}%`;
 const features = [
   {
     title: "Asistente IA en salud",
-    desc: "Sugiere alertas para citas, documentos y medicacion con recordatorios claros.",
+    desc: "Sugiere alertas para citas, documentos y medicación con recordatorios claros.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M12 3a7 7 0 0 0-4 12.9V19a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-3.1A7 7 0 0 0 12 3z" />
@@ -26,7 +26,7 @@ const features = [
   },
   {
     title: "Calendario unificado",
-    desc: "Citas, examenes y medicamentos en una sola linea de tiempo.",
+    desc: "Citas, exámenes y medicamentos en una sola línea de tiempo.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <rect x="3" y="4" width="18" height="18" rx="3" />
@@ -36,7 +36,7 @@ const features = [
   },
   {
     title: "Documentos siempre a mano",
-    desc: "Resultados, recetas y ordenes seguras, con OCR y busqueda rapida.",
+    desc: "Resultados, recetas y órdenes seguras, con OCR y búsqueda rápida.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
@@ -46,7 +46,7 @@ const features = [
   },
   {
     title: "Seguimiento integral",
-    desc: "Historial clinico y linea de tiempo para compartir con tu medico.",
+    desc: "Historial clínico y línea de tiempo para compartir con tu médico.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M4 12h4l2-4 4 8 2-4h4" />
@@ -58,11 +58,11 @@ const features = [
 const modules = [
   {
     title: "Medicamentos y adherencia",
-    desc: "Registra tomas, frecuencia y duracion para mejorar tu adherencia.",
+    desc: "Registra tomas, frecuencia y duración para mejorar tu adherencia.",
   },
   {
     title: "Recordatorios inteligentes",
-    desc: "Alertas en tiempo real para no olvidar citas y examenes.",
+    desc: "Alertas en tiempo real para no olvidar citas y exámenes.",
   },
   {
     title: "Documentos con OCR",
@@ -74,24 +74,24 @@ const modules = [
   },
   {
     title: "Notificaciones push",
-    desc: "Avisos en movil y escritorio, incluso con la app cerrada.",
+    desc: "Avisos en móvil y escritorio, incluso con la app cerrada.",
   },
   {
     title: "Control de privacidad",
-    desc: "Tu informacion, tus reglas: consentimiento y exportacion.",
+    desc: "Tu información, tus reglas: consentimiento y exportación.",
   },
 ];
 
 const plans = [
   {
-    name: "Basico",
+    name: "Básico",
     priceMonthly: "Gratis",
     priceYearly: "Gratis",
     note: "Ideal para comenzar",
     recommended: false,
     features: [
       "Citas, calendario y documentos",
-      "OCR basico",
+      "OCR básico",
       "Recordatorios esenciales",
       "Acceso desde movil y escritorio",
     ],
@@ -100,7 +100,7 @@ const plans = [
   {
     name: "Plus",
     priceMonthly: "$3.990 / mes",
-    priceYearly: "$39.990 / ano",
+    priceYearly: "$39.990 / año",
     note: "Para usuarios activos",
     recommended: true,
     features: [
@@ -114,7 +114,7 @@ const plans = [
   {
     name: "Familiar",
     priceMonthly: "$6.990 / mes",
-    priceYearly: "$69.990 / ano",
+    priceYearly: "$69.990 / año",
     note: "Hasta 5 perfiles",
     recommended: false,
     features: [
@@ -153,19 +153,19 @@ export default function Landing() {
     { value: formatCount(stats.users), label: "Usuarios registrados" },
     { value: formatCount(stats.appointments), label: "Citas gestionadas" },
     { value: formatCount(stats.reminders), label: "Recordatorios enviados" },
-    { value: formatPercent(stats.satisfaction), label: "Satisfaccion" },
+    { value: formatPercent(stats.satisfaction), label: "Satisfacción" },
   ];
 
   return (
     <div className="landing">
       <header className="landing-nav">
         <div className="landing-logo">
-          <div className="landing-logo-mark">K</div>
+          <div className="landing-logo-mark"><img src="/icons/new_log.png" alt="Klinip" className="landing-logo-mark-img" /></div>
           <span>Klinip</span>
         </div>
         <div className="landing-nav-actions">
           <Link to="/login" className="landing-btn-ghost">
-            Iniciar sesion
+            Iniciar sesión
           </Link>
           <Link to="/register" className="landing-btn-primary">
             Crear cuenta
@@ -179,7 +179,7 @@ export default function Landing() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
             </svg>
-            Asistente clinico inteligente
+            Asistente clínico inteligente
           </div>
           <h1>
             Tu salud organizada
@@ -187,9 +187,9 @@ export default function Landing() {
             <span className="landing-hero-gradient">en un solo lugar</span>
           </h1>
           <p className="landing-hero-description">
-            Klinip es tu companero digital de salud. Organiza tus <strong>citas medicas</strong>,
-            gestiona tu <strong>medicacion</strong>, almacena <strong>documentos</strong> importantes
-            y manten un <strong>historial completo</strong> de tu salud. Todo sincronizado,
+            Klinip es tu compañero digital de salud. Organiza tus <strong>citas médicas</strong>,
+            gestiona tu <strong>medicación</strong>, almacena <strong>documentos</strong> importantes
+            y mantén un <strong>historial completo</strong> de tu salud. Todo sincronizado,
             seguro y siempre disponible.
           </p>
           <div className="landing-actions">
@@ -232,7 +232,7 @@ export default function Landing() {
               </div>
               <div className="landing-tile">
                 <div>
-                  <p className="landing-tile-title">Tomar medicacion</p>
+                  <p className="landing-tile-title">Tomar medicación</p>
                   <p className="landing-tile-meta">08:00 | Amlodipino 5mg</p>
                 </div>
                 <span className="chip-status-pendiente">Recordar</span>
@@ -252,7 +252,7 @@ export default function Landing() {
       <section className="landing-section">
         <div className="landing-section-header">
           <h2>Todo lo que necesitas para cuidar tu salud</h2>
-          <p>Funciones disenadas para simplificar la gestion de tu salud y la de tu familia.</p>
+          <p>Funciones diseñadas para simplificar la gestión de tu salud y la de tu familia.</p>
         </div>
         <div className="landing-cards">
           {features.map((f) => (
@@ -267,7 +267,7 @@ export default function Landing() {
 
       <section className="landing-section landing-section-alt">
         <div className="landing-section-header">
-          <h2>Mas cosas que hace Klinip</h2>
+          <h2>Más cosas que hace Klinip</h2>
           <p>Una plataforma completa para tu salud diaria.</p>
         </div>
         <div className="landing-modules">
@@ -336,7 +336,7 @@ export default function Landing() {
       <section className="landing-cta-section">
         <div className="landing-cta-content">
           <h2>Comienza a organizar tu salud hoy</h2>
-          <p>Unete a miles de personas que ya confian en Klinip para gestionar su salud.</p>
+          <p>Únete a miles de personas que ya confían en Klinip para gestionar su salud.</p>
           <div className="landing-cta-actions">
             <Link to="/register" className="landing-btn-cta">
               <span>Crear cuenta gratis</span>
@@ -352,7 +352,7 @@ export default function Landing() {
         <div className="landing-footer-content">
           <div className="landing-footer-brand">
             <div className="landing-logo">
-              <div className="landing-logo-mark">K</div>
+              <div className="landing-logo-mark"><img src="/icons/new_log.png" alt="Klinip" className="landing-logo-mark-img" /></div>
               <span>Klinip</span>
             </div>
             <p>Tu ruta de salud, simplificada</p>
@@ -365,3 +365,6 @@ export default function Landing() {
     </div>
   );
 }
+
+
+

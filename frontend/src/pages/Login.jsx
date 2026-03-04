@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { login, getMe } from "../api";
 
@@ -78,10 +78,17 @@ export default function Login({ onAuthenticated }) {
       </div>
       
       <div className="auth-content">
+        <Link to="/" className="auth-back-link" aria-label="Volver a la landing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Volver al inicio
+        </Link>
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon">K</div>
+              <div className="auth-logo-icon"><img src="/icons/new_log.png" alt="Klinip" className="auth-logo-image" /></div>
               <h1 className="auth-logo-text">Klinip</h1>
             </div>
             <h2 className="auth-welcome">¡Bienvenido de nuevo!</h2>
@@ -177,7 +184,7 @@ export default function Login({ onAuthenticated }) {
 
           <p className="auth-footer" style={{ marginTop: "0.75rem" }}>
             <Link to="/forgot-password" className="auth-link">
-              ¿Olvidaste tu contrasena?
+              ¿Olvidaste tu contraseña?
             </Link>
           </p>
 
@@ -197,3 +204,6 @@ export default function Login({ onAuthenticated }) {
     </div>
   );
 }
+
+
+

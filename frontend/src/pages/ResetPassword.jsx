@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resetPassword } from "../api";
 
@@ -57,7 +57,7 @@ export default function ResetPassword() {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon">K</div>
+              <div className="auth-logo-icon"><img src="/icons/new_log.png" alt="Klinip" className="auth-logo-image" /></div>
               <h1 className="auth-logo-text">Klinip</h1>
             </div>
             <h2 className="auth-welcome">Nueva contrasena</h2>
@@ -139,3 +139,6 @@ export default function ResetPassword() {
     </div>
   );
 }
+
+
+

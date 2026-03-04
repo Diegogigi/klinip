@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -83,9 +83,13 @@ const icons = {
 
 function Sidebar({ user, theme, onToggleTheme, notifications }) {
   const location = useLocation();
-  const isAuthRoute =
+  const isPublicAuthRoute =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
+    location.pathname === "/forgot-password" ||
+    location.pathname === "/reset-password";
+  const isAuthRoute =
+    isPublicAuthRoute ||
     (!user && location.pathname === "/");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -134,7 +138,13 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
       onMouseLeave={() => !isMobile && setExpanded(false)}
     >
       <div className="sidebar-brand">
-        <div className="brand-avatar">K</div>
+        <div className="brand-avatar">
+          <img
+            src="/icons/new_log.png"
+            alt="Klinip"
+            className="brand-avatar-img"
+          />
+        </div>
         {expanded && (
           <div>
             <div className="brand-title">Klinip</div>
@@ -232,7 +242,11 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
 function Topbar({ user, notifications, onClearNotifications, onOpenNotification }) {
   const location = useLocation();
 
-  const isAuthRoute = location.pathname === "/login" || location.pathname === "/register";
+  const isAuthRoute =
+    location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    location.pathname === "/forgot-password" ||
+    location.pathname === "/reset-password";
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",
@@ -854,14 +868,14 @@ export default function App() {
     const onUpdate = (event) => {
       const reg = event.detail?.registration || null;
       setUpdateRegistration(reg);
-      setUpdateAvailable(true);
-      if ("Notification" in window && Notification.permission === "granted" && reg?.showNotification) {
-        reg.showNotification("Actualizacion disponible", {
-          body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
-          icon: "/icons/k_logo.png",
-        }).catch(() => null);
-      }
-    };
+        setUpdateAvailable(true);
+        if ("Notification" in window && Notification.permission === "granted" && reg?.showNotification) {
+          reg.showNotification("Actualizacion disponible", {
+            body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
+            icon: "/icons/android-chrome-192x192.png",
+          }).catch(() => null);
+        }
+      };
     window.addEventListener("klinip-sw-update", onUpdate);
     return () => window.removeEventListener("klinip-sw-update", onUpdate);
   }, []);
@@ -992,6 +1006,8 @@ export default function App() {
     );
   }
 
+  const isPublicLanding = !user && location.pathname === "/";
+
   return (
     <div className="app-shell">
       {consentOpen && (
@@ -1080,7 +1096,7 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
           notifications={notifications}
         />
-        <div className="main-area">
+        <div className={`main-area ${isPublicLanding ? "main-area-public" : ""}`}>
           <Topbar
             user={user}
             notifications={notifications}
@@ -1109,7 +1125,7 @@ export default function App() {
               </div>
             </div>
           )}
-          <main className="main-content">
+          <main className={`main-content ${isPublicLanding ? "main-content-landing" : ""}`}>
             <Routes>
               <Route
                 path="/login"
@@ -1217,5 +1233,7 @@ export default function App() {
     </div>
   );
 }
+
+
 
 

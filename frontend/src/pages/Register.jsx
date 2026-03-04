@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { register, login, getMe } from "../api";
 
@@ -102,10 +102,17 @@ export default function Register({ onRegistered }) {
       </div>
       
       <div className="auth-content">
+        <Link to="/" className="auth-back-link" aria-label="Volver a la landing">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          Volver al inicio
+        </Link>
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon">K</div>
+              <div className="auth-logo-icon"><img src="/icons/new_log.png" alt="Klinip" className="auth-logo-image" /></div>
               <h1 className="auth-logo-text">Klinip</h1>
             </div>
             <h2 className="auth-welcome">¡Crea tu cuenta!</h2>
@@ -270,3 +277,6 @@ export default function Register({ onRegistered }) {
     </div>
   );
 }
+
+
+

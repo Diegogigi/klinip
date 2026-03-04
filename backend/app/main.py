@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, func
 from typing import List
 import os
 import mimetypes
@@ -383,6 +383,79 @@ def _build_med_trigger(day: datetime, hour: int, minute: int = 0) -> datetime:
     if hour == 24 and minute == 0:
         return (day + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+
+def _medication_time_slots(med: models.Medication):
+    schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    if schedule_slot:
+        return [schedule_slot]
+    return [(hour, 0) for hour in _derive_dose_hours(med.frequency)]
+
+
+def _calculate_expected_doses_until(med: models.Medication, now: datetime) -> int:
+    start = med.created_at or now
+    end = now
+    if med.end_date and med.end_date < end:
+        end = med.end_date
+    if end < start:
+        return 0
+
+    slots = _medication_time_slots(med)
+    day = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_day = end.replace(hour=0, minute=0, second=0, microsecond=0)
+    expected = 0
+
+    while day <= end_day:
+        for hour, minute in slots:
+            trigger_at = _build_med_trigger(day, hour, minute)
+            if trigger_at < start:
+                continue
+            if trigger_at <= end:
+                expected += 1
+        day += timedelta(days=1)
+
+    return expected
+
+
+def _attach_medication_adherence(
+    db: Session, medications: list[models.Medication], current_user: models.User
+):
+    if not medications:
+        return medications
+
+    now = datetime.now()
+    medication_ids = [m.id for m in medications]
+    taken_counts = {mid: 0 for mid in medication_ids}
+
+    intake_rows = (
+        db.query(
+            models.MedicationIntake.medication_id,
+            func.count(models.MedicationIntake.id),
+        )
+        .filter(
+            models.MedicationIntake.user_id == current_user.id,
+            models.MedicationIntake.medication_id.in_(medication_ids),
+        )
+        .group_by(models.MedicationIntake.medication_id)
+        .all()
+    )
+
+    for medication_id, count in intake_rows:
+        taken_counts[medication_id] = int(count or 0)
+
+    for med in medications:
+        expected = _calculate_expected_doses_until(med, now)
+        taken = int(taken_counts.get(med.id, 0))
+        missed = max(expected - taken, 0)
+        adherence = None
+        if expected > 0:
+            adherence = round(min((taken / expected) * 100, 100), 1)
+        setattr(med, "expected_doses", expected)
+        setattr(med, "taken_doses", taken)
+        setattr(med, "missed_doses", missed)
+        setattr(med, "adherence_rate", adherence)
+
+    return medications
 
 
 def _is_due(now: datetime, trigger_at: datetime) -> bool:
@@ -2634,12 +2707,13 @@ async def list_medications(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    return (
+    medications = (
         db.query(models.Medication)
         .filter(models.Medication.user_id == current_user.id)
         .order_by(models.Medication.created_at.desc())
         .all()
     )
+    return _attach_medication_adherence(db, medications, current_user)
 
 
 @app.post("/medications", response_model=schemas.MedicationOut)
@@ -2664,6 +2738,7 @@ async def create_medication(
         db.add(med)
         db.commit()
         db.refresh(med)
+        _attach_medication_adherence(db, [med], current_user)
         return med
     except Exception as e:
         db.rollback()
@@ -2696,6 +2771,7 @@ async def update_medication(
 
     db.commit()
     db.refresh(med)
+    _attach_medication_adherence(db, [med], current_user)
     return med
 
 

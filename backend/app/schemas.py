@@ -160,6 +160,10 @@ class MedicationOut(MedicationBase):
     id: int
     user_id: int
     created_at: datetime
+    expected_doses: int = 0
+    taken_doses: int = 0
+    missed_doses: int = 0
+    adherence_rate: Optional[float] = None
 
     @field_serializer('end_date', 'created_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):

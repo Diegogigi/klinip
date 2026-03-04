@@ -441,14 +441,22 @@ body.theme-dark .primary-btn {
 }
 
 .brand-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #30d7ff, #1f7aff);
-  color: #0f172a;
-  font-weight: 800;
+  width: 42px;
+  height: 42px;
+  border-radius: 0;
+  background: transparent;
   display: grid;
   place-items: center;
+  overflow: hidden;
+}
+
+.brand-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: none;
+  image-rendering: auto;
+  backface-visibility: hidden;
 }
 
 .brand-title {
@@ -601,6 +609,10 @@ body.theme-dark .primary-btn {
   transition: margin-left 0.2s ease;
 }
 
+.main-area.main-area-public {
+  margin-left: 0;
+}
+
 .sidebar.expanded ~ .main-area {
   margin-left: 240px;
 }
@@ -611,6 +623,13 @@ body.theme-dark .primary-btn {
   max-width: 1080px;
   width: 100%;
   margin: 0 auto;
+}
+
+.main-content.main-content-landing {
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .card {
@@ -1347,6 +1366,34 @@ body.theme-dark .primary-btn {
   margin-bottom: 2rem;
 }
 
+.auth-back-link {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid #dbeafe;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.auth-back-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.auth-back-link:hover {
+  color: #0ea5e9;
+}
+
 .auth-logo {
   display: flex;
   align-items: center;
@@ -1356,17 +1403,25 @@ body.theme-dark .primary-btn {
 }
 
 .auth-logo-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: linear-gradient(145deg, #1d4ed8, #22d3ee);
-  color: #fff;
+  width: 70px;
+  height: 70px;
+  border-radius: 0;
+  background: transparent;
   display: grid;
   place-items: center;
-  font-weight: 800;
-  font-size: 1.5rem;
-  letter-spacing: -0.02em;
-  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.4);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.auth-logo-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(1.08);
+  transform-origin: center;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  backface-visibility: hidden;
 }
 
 .auth-logo-text {
@@ -2253,9 +2308,10 @@ body.theme-dark .primary-btn {
 }
 
 .landing {
-  max-width: 1100px;
-  margin: 1.5rem auto 2.5rem;
-  padding: 0 1.25rem;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -2284,16 +2340,25 @@ body.theme-dark .primary-btn {
 }
 
 .landing-logo-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #1d4ed8, #22d3ee);
-  color: #fff;
+  width: 52px;
+  height: 52px;
+  border-radius: 0;
+  background: transparent;
   display: grid;
   place-items: center;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  box-shadow: 0 4px 12px rgba(34, 211, 238, 0.3);
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.landing-logo-mark-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scale(1.12);
+  transform-origin: center;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  backface-visibility: hidden;
 }
 
 .landing-nav-actions {
@@ -2310,7 +2375,7 @@ body.theme-dark .primary-btn {
 
 .landing-hero {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: minmax(480px, 1.35fr) minmax(320px, 1fr);
   gap: 1.5rem;
   align-items: center;
   background: #fff;
@@ -2339,7 +2404,7 @@ body.theme-dark .primary-btn {
 
 .landing-hero p {
   margin: 0;
-  max-width: 560px;
+  max-width: none;
   font-size: 1rem;
   color: #475569;
 }
@@ -2819,7 +2884,7 @@ body.theme-dark .toggle-badge {
 
 .landing-hero-description {
   margin: 0.75rem 0 0;
-  max-width: 560px;
+  max-width: none;
   font-size: 1.05rem;
   line-height: 1.65;
   color: #475569;
@@ -2920,8 +2985,8 @@ body.theme-dark .toggle-badge {
 
 @media (max-width: 900px) {
   .landing {
-    margin: 1rem auto 2rem;
-    padding: 0 1rem;
+    margin: 0;
+    padding: 0.65rem 0.75rem;
   }
 
   .landing-nav {
@@ -5111,8 +5176,8 @@ body.theme-dark .med-intake-toast.is-success {
   }
 
   .auth-logo-icon {
-    width: 48px;
-    height: 48px;
+    width: 62px;
+    height: 62px;
     font-size: 1.3rem;
   }
 
