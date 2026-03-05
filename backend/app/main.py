@@ -296,8 +296,12 @@ def _password_reset_config_errors() -> list[str]:
         errors.append("SMTP_USER")
     if not os.getenv("SMTP_PASS"):
         errors.append("SMTP_PASS")
-    if not os.getenv("SMTP_FROM"):
-        errors.append("SMTP_FROM")
+    if not (
+        os.getenv("SMTP_FROM_SECURITY")
+        or os.getenv("SMTP_FROM_NOTIFICATIONS")
+        or os.getenv("SMTP_FROM")
+    ):
+        errors.append("SMTP_FROM_SECURITY|SMTP_FROM_NOTIFICATIONS|SMTP_FROM")
     if _is_production_env() and not os.getenv("FRONTEND_BASE_URL"):
         errors.append("FRONTEND_BASE_URL")
     if _is_production_env() and os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production") == "supersecretkey_change_me_in_production":
@@ -330,12 +334,20 @@ def _warn_password_reset_config():
 _warn_password_reset_config()
 
 
+def _smtp_from_security(smtp_user: str | None) -> str | None:
+    return os.getenv("SMTP_FROM_SECURITY") or os.getenv("SMTP_FROM") or smtp_user
+
+
+def _smtp_from_notifications(smtp_user: str | None) -> str | None:
+    return os.getenv("SMTP_FROM_NOTIFICATIONS") or os.getenv("SMTP_FROM") or smtp_user
+
+
 def _send_reset_email(to_email: str, reset_url: str):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
-    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    smtp_from = _smtp_from_security(smtp_user)
 
     if not (smtp_user and smtp_pass and smtp_from):
         raise RuntimeError("SMTP no configurado")
@@ -370,16 +382,16 @@ def _support_email_target() -> str:
         os.getenv("SUPPORT_EMAIL")
         or os.getenv("SMTP_SUPPORT_TO")
         or os.getenv("SMTP_USER")
-        or "klinip.informacion@gmail.com"
+        or "soporte@klinip.cl"
     )
 
 
 def _send_privacy_support_email(payload: dict):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
-    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    smtp_from = _smtp_from_notifications(smtp_user)
     support_to = _support_email_target()
 
     if not (smtp_user and smtp_pass and smtp_from and support_to):
@@ -462,11 +474,11 @@ def _send_privacy_support_email_safe(payload: dict):
 
 
 def _send_privacy_user_ack_email(to_email: str, payload: dict):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
-    smtp_from = os.getenv("SMTP_FROM") or smtp_user
+    smtp_from = _smtp_from_notifications(smtp_user)
 
     if not (smtp_user and smtp_pass and smtp_from and to_email):
         raise RuntimeError("SMTP no configurado para acuse de recibo al usuario")
