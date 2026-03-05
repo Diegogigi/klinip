@@ -225,23 +225,30 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   };
 
   const handleSendPrivacyRequest = async () => {
-    if (!privacyMessage.trim()) {
+    const cleanMessage = privacyMessage.trim();
+    if (!cleanMessage) {
       setPrivacyNotice("Debes escribir un mensaje.");
       return;
     }
     setPrivacySending(true);
     setPrivacyNotice("");
     try {
-      await submitPrivacyRequest({
+      const response = await submitPrivacyRequest({
         reason: privacyReason,
-        message: privacyMessage.trim(),
+        message: cleanMessage,
         include_tech: privacyIncludeTech,
       });
       setPrivacyMessage("");
-      setPrivacyNotice("Solicitud enviada. Te responderemos pronto.");
+      const requestId = response?.request_id;
+      setPrivacyNotice(
+        requestId
+          ? `Solicitud enviada (#${requestId}). Te responderemos pronto.`
+          : "Solicitud enviada. Te responderemos pronto."
+      );
     } catch (err) {
       console.error(err);
-      setPrivacyNotice("No se pudo enviar la solicitud.");
+      const detail = err?.response?.data?.detail;
+      setPrivacyNotice(detail || "No se pudo enviar la solicitud.");
     } finally {
       setPrivacySending(false);
     }
@@ -475,7 +482,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               className="primary-btn"
               type="button"
               onClick={handleSendPrivacyRequest}
-              disabled={privacySending}
+              disabled={privacySending || !privacyMessage.trim()}
             >
               {privacySending ? "Enviando..." : "Enviar solicitud"}
             </button>

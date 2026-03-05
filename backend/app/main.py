@@ -3564,15 +3564,23 @@ async def privacy_contact(
 ):
     config_errors = _privacy_contact_config_errors()
     if config_errors:
+        print(
+            "ERROR privacy contact: configuracion incompleta SMTP",
+            {"missing": config_errors},
+        )
         raise HTTPException(
             status_code=503,
             detail="Canal de correo no disponible temporalmente. Intenta nuevamente.",
         )
 
+    clean_message = (payload.message or "").strip()
+    if not clean_message:
+        raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
+
     req = models.PrivacyRequest(
         user_id=current_user.id,
         reason=payload.reason,
-        message=payload.message,
+        message=clean_message,
         include_tech=bool(payload.include_tech),
         user_email=current_user.email or "",
     )
@@ -3587,7 +3595,7 @@ async def privacy_contact(
             "user_id": current_user.id,
             "email": current_user.email,
             "reason": payload.reason,
-            "message": payload.message,
+            "message": clean_message,
             "include_tech": payload.include_tech,
         },
     )
@@ -3597,12 +3605,16 @@ async def privacy_contact(
         "user_id": current_user.id,
         "email": current_user.email,
         "reason": payload.reason,
-        "message": payload.message,
+        "message": clean_message,
         "include_tech": bool(payload.include_tech),
         "ip": getattr(request.client, "host", "") if request.client else "",
         "user_agent": request.headers.get("user-agent", ""),
     }
 
+    print(
+        "DEBUG privacy contact: encolando correos",
+        {"request_id": req.id, "support_to": _support_email_target(), "user_email": current_user.email},
+    )
     background_tasks.add_task(_send_privacy_support_email_safe, support_payload)
 
     if current_user.email:
