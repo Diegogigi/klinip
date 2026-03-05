@@ -21,6 +21,7 @@ from datetime import timedelta, datetime
 import hashlib
 import secrets
 import smtplib
+import ssl
 from email.message import EmailMessage
 from html import escape
 import json
@@ -309,6 +310,27 @@ def _password_reset_config_errors() -> list[str]:
     return errors
 
 
+def _privacy_contact_config_errors() -> list[str]:
+    errors = []
+    if not os.getenv("SMTP_USER"):
+        errors.append("SMTP_USER")
+    if not os.getenv("SMTP_PASS"):
+        errors.append("SMTP_PASS")
+    if not (
+        os.getenv("SMTP_FROM_NOTIFICATIONS")
+        or os.getenv("SMTP_FROM")
+        or os.getenv("SMTP_USER")
+    ):
+        errors.append("SMTP_FROM_NOTIFICATIONS|SMTP_FROM")
+    if not (
+        os.getenv("SUPPORT_EMAIL")
+        or os.getenv("SMTP_SUPPORT_TO")
+        or os.getenv("SMTP_USER")
+    ):
+        errors.append("SUPPORT_EMAIL|SMTP_SUPPORT_TO")
+    return errors
+
+
 def _build_reset_url(request: Request, raw_token: str) -> str:
     frontend_base_url = (os.getenv("FRONTEND_BASE_URL") or "").strip().rstrip("/")
     if not frontend_base_url:
@@ -358,23 +380,86 @@ def _smtp_connection_settings() -> tuple[str, int, int, bool]:
     return smtp_host, smtp_port, smtp_timeout, smtp_use_ssl
 
 
+def _smtp_candidate_hosts(primary_host: str) -> list[str]:
+    raw_hosts = (os.getenv("SMTP_HOSTS") or "").strip()
+    hosts = []
+    if raw_hosts:
+        hosts.extend([h.strip() for h in raw_hosts.split(",") if h.strip()])
+    if primary_host:
+        hosts.append(primary_host)
+
+    # Fallback tipico para Zoho por region/infra
+    if any("zoho" in h for h in hosts) or ("zoho" in primary_host):
+        hosts.extend(
+            [
+                "smtp.zoho.com",
+                "smtppro.zoho.com",
+                "smtp.zoho.eu",
+                "smtp.zoho.in",
+                "smtp.zoho.com.au",
+            ]
+        )
+
+    unique_hosts = []
+    for h in hosts:
+        if h not in unique_hosts:
+            unique_hosts.append(h)
+    return unique_hosts
+
+
+def _smtp_delivery_attempts(host: str, port: int, use_ssl: bool) -> list[tuple[str, int, bool]]:
+    attempts = [(host, port, use_ssl)]
+    if port == 587:
+        attempts.append((host, 465, True))
+    elif port == 465:
+        attempts.append((host, 587, False))
+    else:
+        attempts.append((host, 587, False))
+        attempts.append((host, 465, True))
+
+    uniq = []
+    for item in attempts:
+        if item not in uniq:
+            uniq.append(item)
+    return uniq
+
+
 def _smtp_send_message(msg: EmailMessage, smtp_user: str, smtp_pass: str):
     smtp_host, smtp_port, smtp_timeout, smtp_use_ssl = _smtp_connection_settings()
-    print(
-        f"DEBUG smtp: host={smtp_host} port={smtp_port} use_ssl={smtp_use_ssl} timeout={smtp_timeout}"
-    )
-    if smtp_use_ssl:
-        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=smtp_timeout) as server:
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
-        return
+    max_attempts = int(os.getenv("SMTP_MAX_ATTEMPTS", "4"))
+    hosts = _smtp_candidate_hosts(smtp_host)
+    failures = []
+    attempt_counter = 0
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as server:
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
+    for host in hosts:
+        for try_host, try_port, try_ssl in _smtp_delivery_attempts(host, smtp_port, smtp_use_ssl):
+            attempt_counter += 1
+            if attempt_counter > max_attempts:
+                break
+            try:
+                print(
+                    f"DEBUG smtp: intento={attempt_counter}/{max_attempts} host={try_host} port={try_port} use_ssl={try_ssl} timeout={smtp_timeout}"
+                )
+                if try_ssl:
+                    with smtplib.SMTP_SSL(try_host, try_port, timeout=smtp_timeout) as server:
+                        server.login(smtp_user, smtp_pass)
+                        server.send_message(msg)
+                    return
+
+                with smtplib.SMTP(try_host, try_port, timeout=smtp_timeout) as server:
+                    server.ehlo()
+                    server.starttls(context=ssl.create_default_context())
+                    server.ehlo()
+                    server.login(smtp_user, smtp_pass)
+                    server.send_message(msg)
+                return
+            except Exception as exc:
+                failures.append(f"{try_host}:{try_port} ssl={try_ssl} -> {exc!r}")
+        if attempt_counter > max_attempts:
+            break
+
+    detail = " | ".join(failures[:max_attempts]) if failures else "sin detalle"
+    raise RuntimeError(f"SMTP delivery failed. {detail}")
 
 
 def _send_reset_email(to_email: str, reset_url: str):
@@ -2792,6 +2877,7 @@ def login(
 def forgot_password(
     payload: schemas.ForgotPasswordIn,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
 ):
     config_errors = _password_reset_config_errors()
@@ -2824,14 +2910,7 @@ def forgot_password(
     db.commit()
 
     reset_url = _build_reset_url(request, raw_token)
-    try:
-        _send_reset_email(user.email, reset_url)
-    except Exception as exc:
-        print(f"ERROR sending reset email sync: {exc!r}")
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo enviar el correo de recuperacion. Intenta nuevamente.",
-        )
+    background_tasks.add_task(_send_reset_email_safe, user.email, reset_url)
 
     return {"ok": True}
 
@@ -3483,7 +3562,7 @@ async def privacy_contact(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    config_errors = _password_reset_config_errors()
+    config_errors = _privacy_contact_config_errors()
     if config_errors:
         raise HTTPException(
             status_code=503,
@@ -3524,14 +3603,7 @@ async def privacy_contact(
         "user_agent": request.headers.get("user-agent", ""),
     }
 
-    try:
-        _send_privacy_support_email(support_payload)
-    except Exception as exc:
-        print(f"ERROR sending privacy support email sync: {exc!r}")
-        raise HTTPException(
-            status_code=502,
-            detail="No se pudo enviar la solicitud por correo. Intenta nuevamente.",
-        )
+    background_tasks.add_task(_send_privacy_support_email_safe, support_payload)
 
     if current_user.email:
         background_tasks.add_task(
