@@ -342,9 +342,42 @@ def _smtp_from_notifications(smtp_user: str | None) -> str | None:
     return os.getenv("SMTP_FROM_NOTIFICATIONS") or os.getenv("SMTP_FROM") or smtp_user
 
 
-def _send_reset_email(to_email: str, reset_url: str):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
+def _smtp_connection_settings() -> tuple[str, int, int, bool]:
+    smtp_host = (os.getenv("SMTP_HOST", "smtp.zoho.com") or "smtp.zoho.com").strip()
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_timeout = int(os.getenv("SMTP_TIMEOUT", "25"))
+    smtp_use_ssl = (os.getenv("SMTP_USE_SSL", "false") or "false").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    # Puerto 465 normalmente usa SSL directo.
+    if smtp_port == 465:
+        smtp_use_ssl = True
+    return smtp_host, smtp_port, smtp_timeout, smtp_use_ssl
+
+
+def _smtp_send_message(msg: EmailMessage, smtp_user: str, smtp_pass: str):
+    smtp_host, smtp_port, smtp_timeout, smtp_use_ssl = _smtp_connection_settings()
+    print(
+        f"DEBUG smtp: host={smtp_host} port={smtp_port} use_ssl={smtp_use_ssl} timeout={smtp_timeout}"
+    )
+    if smtp_use_ssl:
+        with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=smtp_timeout) as server:
+            server.login(smtp_user, smtp_pass)
+            server.send_message(msg)
+        return
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _send_reset_email(to_email: str, reset_url: str):
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_security(smtp_user)
@@ -363,10 +396,7 @@ def _send_reset_email(to_email: str, reset_url: str):
         "Si no solicitaste este cambio, ignora este mensaje.\n"
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
+    _smtp_send_message(msg, smtp_user, smtp_pass)
 
 
 def _send_reset_email_safe(to_email: str, reset_url: str):
@@ -387,8 +417,6 @@ def _support_email_target() -> str:
 
 
 def _send_privacy_support_email(payload: dict):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_notifications(smtp_user)
@@ -457,10 +485,7 @@ def _send_privacy_support_email(payload: dict):
         subtype="html",
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
+    _smtp_send_message(msg, smtp_user, smtp_pass)
 
 
 def _send_privacy_support_email_safe(payload: dict):
@@ -474,8 +499,6 @@ def _send_privacy_support_email_safe(payload: dict):
 
 
 def _send_privacy_user_ack_email(to_email: str, payload: dict):
-    smtp_host = os.getenv("SMTP_HOST", "smtp.zoho.com")
-    smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_notifications(smtp_user)
@@ -539,10 +562,7 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
         subtype="html",
     )
 
-    with smtplib.SMTP(smtp_host, smtp_port, timeout=12) as server:
-        server.starttls()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
+    _smtp_send_message(msg, smtp_user, smtp_pass)
 
 
 def _send_privacy_user_ack_email_safe(to_email: str, payload: dict):
