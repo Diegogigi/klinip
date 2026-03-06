@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+            <tr>
+              <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
+                <img src="{{ logo_url }}" alt="{{ app_name }} logo" width="36" height="36" style="display:block;margin-bottom:10px;border-radius:8px;">
+                <h2 style="margin:0;font-size:22px;">Cita confirmada</h2>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 22px;">
+                <p style="margin:0 0 12px;">Hola {{ user_name }},</p>
+                <p style="margin:0 0 12px;">Tu cita médica fue agendada:</p>
+                <div style="margin:10px 0;padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;">
+                  <p style="margin:0 0 6px;"><strong>Centro:</strong> {{ center }}</p>
+                  <p style="margin:0 0 6px;"><strong>Especialidad:</strong> {{ specialty }}</p>
+                  <p style="margin:0;"><strong>Fecha/Hora:</strong> {{ date_label }}</p>
+                </div>
+                {% if notes %}
+                <p style="margin:12px 0 0;"><strong>Notas:</strong> {{ notes }}</p>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
+                {{ app_name }} · Tu salud organizada en un solo lugar · {{ year }}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

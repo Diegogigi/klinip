@@ -25,6 +25,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [privacyIncludeTech, setPrivacyIncludeTech] = useState(true);
   const [privacySending, setPrivacySending] = useState(false);
   const [privacyNotice, setPrivacyNotice] = useState("");
+  const [privacySuccessMessage, setPrivacySuccessMessage] = useState("");
+  const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const detectedTimezone = useMemo(() => {
@@ -240,11 +242,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       });
       setPrivacyMessage("");
       const requestId = response?.request_id;
-      setPrivacyNotice(
+      setPrivacyNotice("");
+      setPrivacySuccessMessage(
         requestId
           ? `Solicitud enviada (#${requestId}). Te responderemos pronto.`
           : "Solicitud enviada. Te responderemos pronto."
       );
+      setShowPrivacySuccessModal(true);
     } catch (err) {
       console.error(err);
       const detail = err?.response?.data?.detail;
@@ -537,6 +541,25 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </button>
               <button className="primary-btn" type="button" onClick={handleDeleteAccount}>
                 Si, eliminar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPrivacySuccessModal && (
+        <div className="modal-backdrop" onClick={() => setShowPrivacySuccessModal(false)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Solicitud enviada</h3>
+            <p className="muted">{privacySuccessMessage}</p>
+            <div className="modal-actions">
+              <button className="primary-btn" type="button" onClick={() => setShowPrivacySuccessModal(false)}>
+                Entendido
               </button>
             </div>
           </div>

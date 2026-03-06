@@ -22,6 +22,7 @@ import hashlib
 import secrets
 import smtplib
 import ssl
+from pathlib import Path
 from email.message import EmailMessage
 from html import escape
 import json
@@ -34,6 +35,13 @@ import time
 from zoneinfo import ZoneInfo
 from urllib import request as urlrequest
 from urllib import error as urlerror
+
+try:
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+except Exception:
+    Environment = None
+    FileSystemLoader = None
+    select_autoescape = None
 
 from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
@@ -367,6 +375,83 @@ def _email_channel_errors(require_support_target: bool = False) -> list[str]:
         errors.append("EMAIL_TO_PRIVACY|SUPPORT_EMAIL|EMAIL_TO_SUPPORT|SMTP_SUPPORT_TO")
 
     return errors
+
+
+_EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates" / "email"
+_EMAIL_TEMPLATE_ENV = None
+
+
+def _email_logo_url() -> str:
+    return (os.getenv("EMAIL_LOGO_URL") or "https://www.klinip.cl/icons/android-chrome-192x192.png").strip()
+
+
+def _app_display_name() -> str:
+    return (os.getenv("APP_DISPLAY_NAME") or "Klinip").strip()
+
+
+def _email_template_env():
+    global _EMAIL_TEMPLATE_ENV
+    if _EMAIL_TEMPLATE_ENV is not None:
+        return _EMAIL_TEMPLATE_ENV
+    if not (Environment and FileSystemLoader and select_autoescape):
+        return None
+    _EMAIL_TEMPLATE_ENV = Environment(
+        loader=FileSystemLoader(str(_EMAIL_TEMPLATES_DIR)),
+        autoescape=select_autoescape(["html", "xml"]),
+    )
+    return _EMAIL_TEMPLATE_ENV
+
+
+def _render_email_template(template_name: str, context: dict) -> str:
+    env = _email_template_env()
+    if env is None:
+        raise RuntimeError("Jinja2 no disponible para renderizar plantillas de correo")
+    template = env.get_template(template_name)
+    return template.render(**context)
+
+
+def _html_to_text(html_value: str) -> str:
+    compact = re.sub(r"(?is)<(script|style).*?>.*?</\\1>", "", html_value)
+    compact = re.sub(r"(?i)<br\\s*/?>", "\n", compact)
+    compact = re.sub(r"(?i)</p>|</div>|</li>|</tr>|</h[1-6]>", "\n", compact)
+    compact = re.sub(r"(?is)<[^>]+>", "", compact)
+    compact = compact.replace("&nbsp;", " ")
+    compact = compact.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    compact = re.sub(r"\n{3,}", "\n\n", compact)
+    return compact.strip()
+
+
+def _send_templated_email(
+    to_email: str,
+    subject: str,
+    template_name: str,
+    context: dict,
+    from_security: bool = False,
+):
+    if not to_email:
+        raise RuntimeError("Destinatario de correo no definido")
+
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASS")
+    sender = _smtp_from_security(smtp_user) if from_security else _smtp_from_notifications(smtp_user)
+    if not sender:
+        raise RuntimeError("Remitente de correo no configurado")
+
+    template_context = {
+        "app_name": _app_display_name(),
+        "logo_url": _email_logo_url(),
+        **(context or {}),
+    }
+    html_body = _render_email_template(template_name, template_context)
+    text_body = _html_to_text(html_body)
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = to_email
+    msg.set_content(text_body or subject)
+    msg.add_alternative(html_body, subtype="html")
+    _deliver_message(msg, smtp_user, smtp_pass)
 
 
 def _password_reset_config_errors() -> list[str]:
@@ -772,6 +857,7 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
         f"Numero de seguimiento: #{payload.get('request_id')}\n\n"
         "Resumen de tu solicitud:\n"
         f"- Motivo: {payload.get('reason')}\n"
+        f"- Mensaje: {payload.get('message')}\n"
         f"- Fecha: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
         "Nuestro equipo revisara tu caso y te respondera lo antes posible.\n\n"
         "Gracias,\n"
@@ -798,7 +884,8 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
                 <p style="margin:0 0 12px;">Recibimos tu solicitud de soporte de privacidad correctamente.</p>
                 <div style="margin:10px 0;padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;">
                   <p style="margin:0 0 6px;"><strong>Numero de seguimiento:</strong> #{escape(str(payload.get('request_id') or ''))}</p>
-                  <p style="margin:0;"><strong>Motivo:</strong> {escape(str(payload.get('reason') or ''))}</p>
+                  <p style="margin:0 0 6px;"><strong>Motivo:</strong> {escape(str(payload.get('reason') or ''))}</p>
+                  <p style="margin:0;"><strong>Mensaje:</strong> {escape(str(payload.get('message') or ''))}</p>
                 </div>
                 <p style="margin:12px 0 0;">Nuestro equipo revisara tu caso y te respondera lo antes posible.</p>
               </td>
@@ -829,6 +916,116 @@ def _send_privacy_user_ack_email_safe(to_email: str, payload: dict):
         )
     except Exception as exc:
         print(f"ERROR sending privacy ack email async: {exc}")
+
+
+def _send_welcome_email_safe(to_email: str, user_name: str):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Bienvenido a Klinip",
+            template_name="welcome.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "year": datetime.utcnow().year,
+            },
+        )
+        print(f"DEBUG welcome email: enviado a {to_email}")
+    except Exception as exc:
+        print(f"ERROR sending welcome email async: {exc}")
+
+
+def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Cita confirmada",
+            template_name="appointment_confirmation.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "center": payload.get("center") or "Centro de salud",
+                "specialty": payload.get("specialty") or "Atencion medica",
+                "date_label": payload.get("date_label") or "Pendiente",
+                "notes": payload.get("notes") or "",
+                "year": datetime.utcnow().year,
+            },
+        )
+        print(f"DEBUG appointment email: enviado a {to_email}")
+    except Exception as exc:
+        print(f"ERROR sending appointment confirmation email async: {exc}")
+
+
+def _send_medical_order_uploaded_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Orden medica procesada",
+            template_name="medical_order_processed.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "document_type": payload.get("document_type") or "Documento medico",
+                "uploaded_at": payload.get("uploaded_at") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "year": datetime.utcnow().year,
+            },
+        )
+        print(f"DEBUG order processed email: enviado a {to_email}")
+    except Exception as exc:
+        print(f"ERROR sending order processed email async: {exc}")
+
+
+def _send_medications_detected_email_safe(to_email: str, user_name: str, medications: list[dict]):
+    if not medications:
+        return
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Medicamentos detectados en tu orden medica",
+            template_name="medications_detected.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "medications": medications,
+                "year": datetime.utcnow().year,
+            },
+        )
+        print(f"DEBUG medications detected email: enviado a {to_email} total={len(medications)}")
+    except Exception as exc:
+        print(f"ERROR sending medications detected email async: {exc}")
+
+
+def _send_medication_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Recordatorio de medicamento",
+            template_name="reminder.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "medication": payload.get("medication") or "Medicamento",
+                "dose": payload.get("dose") or "-",
+                "time_label": payload.get("time_label") or "Ahora",
+                "notes": payload.get("notes") or "",
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending medication reminder email async: {exc}")
+
+
+def _send_health_alert_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject=payload.get("subject") or "Alerta importante de salud",
+            template_name="health_alert.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "title": payload.get("title") or "Alerta importante",
+                "message": payload.get("message") or "",
+                "year": datetime.utcnow().year,
+            },
+            from_security=True,
+        )
+    except Exception as exc:
+        print(f"ERROR sending health alert email async: {exc}")
 
 
 
@@ -1138,6 +1335,9 @@ def _send_scheduled_push_reminders():
                             )
                             if _notification_already_sent(db, tag):
                                 continue
+                            email_tag = (
+                                f"medication-email-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
+                            )
 
                             title = f"Medicacion: {med.name}"
                             prefix = (
@@ -1167,6 +1367,30 @@ def _send_scheduled_push_reminders():
                             )
                             if ok:
                                 _record_sent(db, user_id, tag, "medication", trigger_at, now)
+                            if (
+                                user
+                                and user.email
+                                and not _notification_already_sent(db, email_tag)
+                            ):
+                                time_label = trigger_exact.strftime("%H:%M hrs")
+                                _send_medication_reminder_email_safe(
+                                    user.email,
+                                    user.name or "",
+                                    {
+                                        "medication": med.name or "Medicamento",
+                                        "dose": med.dose or "",
+                                        "time_label": time_label,
+                                        "notes": med.notes or "",
+                                    },
+                                )
+                                _record_sent(
+                                    db,
+                                    user_id,
+                                    email_tag,
+                                    "medication_email",
+                                    trigger_at,
+                                    now,
+                                )
     finally:
         db.close()
 
@@ -2551,6 +2775,7 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
 def _run_document_ocr(document_id: int):
     db = SessionLocal()
     try:
+        detected_meds_for_email: list[dict] = []
         doc = (
             db.query(models.Document).filter(models.Document.id == document_id).first()
         )
@@ -2690,6 +2915,13 @@ def _run_document_ocr(document_id: int):
                         document_id=doc.id,
                     )
                     db.add(medication)
+                    detected_meds_for_email.append(
+                        {
+                            "name": med.get("name") or "Medicamento",
+                            "dose": med.get("dose") or "",
+                            "frequency": med.get("frequency") or "",
+                        }
+                    )
 
                     # Agregar info detallada del medicamento a las notas del documento
                     # Para recetas electrónicas, usar el formato estructurado completo
@@ -2768,10 +3000,24 @@ def _run_document_ocr(document_id: int):
                 )
                 db.add(medication)
                 db.flush()
+                detected_meds_for_email.append(
+                    {
+                        "name": label_med.get("name") or "Medicamento",
+                        "dose": label_med.get("dose") or "",
+                        "frequency": label_med.get("frequency") or "",
+                    }
+                )
 
                 # Eliminar el documento para mantenerlo solo como medicamento
                 db.delete(doc)
                 db.commit()
+                user = db.query(models.User).filter(models.User.id == medication.user_id).first()
+                if user and user.email:
+                    _send_medications_detected_email_safe(
+                        user.email,
+                        user.name or "",
+                        detected_meds_for_email,
+                    )
                 return
         elif (
             not doc.appointment_id
@@ -2813,7 +3059,14 @@ def _run_document_ocr(document_id: int):
                 db.flush()
                 doc.appointment_id = appointment.id
 
+        user = db.query(models.User).filter(models.User.id == doc.user_id).first()
         db.commit()
+        if user and user.email and detected_meds_for_email:
+            _send_medications_detected_email_safe(
+                user.email,
+                user.name or "",
+                detected_meds_for_email,
+            )
     finally:
         db.close()
 
@@ -3011,7 +3264,11 @@ async def log_requests(request: Request, call_next):
 
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
-def register(user_in: schemas.UserCreate, db: Session = Depends(auth.get_db)):
+def register(
+    user_in: schemas.UserCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth.get_db),
+):
     try:
         existing = auth.get_user_by_email(db, user_in.email)
         if existing:
@@ -3025,6 +3282,8 @@ def register(user_in: schemas.UserCreate, db: Session = Depends(auth.get_db)):
         db.add(user)
         db.commit()
         db.refresh(user)
+        if user.email:
+            background_tasks.add_task(_send_welcome_email_safe, user.email, user.name or "")
         return user
     except HTTPException:
         raise
@@ -3182,6 +3441,7 @@ async def list_appointments(
 @app.post("/appointments", response_model=schemas.AppointmentOut)
 async def create_appointment(
     appt_in: schemas.AppointmentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -3198,6 +3458,18 @@ async def create_appointment(
     db.add(appt)
     db.commit()
     db.refresh(appt)
+    if current_user.email:
+        background_tasks.add_task(
+            _send_appointment_confirmation_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "center": appt.center or "",
+                "specialty": appt.specialty or appt.type.value,
+                "date_label": appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente",
+                "notes": appt.notes or "",
+            },
+        )
     return appt
 
 
@@ -3805,6 +4077,7 @@ async def privacy_contact(
             {
                 "request_id": req.id,
                 "reason": payload.reason,
+                "message": clean_message,
             },
         )
 
@@ -3886,6 +4159,16 @@ async def upload_document(
     print(
         f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}"
     )
+    if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
+        background_tasks.add_task(
+            _send_medical_order_uploaded_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
+                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            },
+        )
     if background_tasks is not None:
         background_tasks.add_task(_run_document_ocr, doc.id)
     return doc

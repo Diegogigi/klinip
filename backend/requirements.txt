@@ -14,3 +14,4 @@ py-vapid==1.8.2
 pytesseract
 Pillow
 pdf2image
+jinja2
