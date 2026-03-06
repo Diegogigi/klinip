@@ -413,7 +413,7 @@ const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
-const MED_ALERT_POLL_MS = 15000;
+const MED_ALERT_POLL_MS = 60000;
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
 const parseMedicationScheduleTime = (value = "") => {
@@ -501,11 +501,16 @@ export default function App() {
   const [notifSwitchLoading, setNotifSwitchLoading] = useState(false);
   const [notifSwitchMessage, setNotifSwitchMessage] = useState("");
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
+  const locationRef = useRef(location);
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -533,6 +538,12 @@ export default function App() {
     let active = true;
 
     const checkDueMedicationPopups = async () => {
+      // Evita tráfico innecesario en pestañas en segundo plano.
+      if (typeof document !== "undefined" && document.hidden) return;
+      const currentPath = locationRef.current?.pathname || "";
+      // Si el usuario ya está en medicamentos, evita doble polling (esa vista maneja su propio flujo).
+      if (currentPath.startsWith("/medications")) return;
+
       const now = new Date();
       const nowTs = now.getTime();
       const lastChecked = globalMedCheckRef.current;
@@ -567,7 +578,8 @@ export default function App() {
           const key = buildMedicationPromptKey(first, now);
           localStorage.setItem(key, "prompted");
           const target = `/medications?notify=1&medicationId=${first.id}`;
-          if (!(location.pathname === "/medications" && location.search.includes(`medicationId=${first.id}`) && location.search.includes("notify=1"))) {
+          const currentSearch = locationRef.current?.search || "";
+          if (!(currentPath === "/medications" && currentSearch.includes(`medicationId=${first.id}`) && currentSearch.includes("notify=1"))) {
             navigate(target);
           }
         }
@@ -584,7 +596,7 @@ export default function App() {
       active = false;
       window.clearInterval(intervalId);
     };
-  }, [user, booting, location.pathname, location.search, navigate]);
+  }, [user, booting, navigate]);
 
   useEffect(() => {
     if (!user) {
