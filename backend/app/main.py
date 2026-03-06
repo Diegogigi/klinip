@@ -32,6 +32,8 @@ import threading
 from difflib import SequenceMatcher
 import time
 from zoneinfo import ZoneInfo
+from urllib import request as urlrequest
+from urllib import error as urlerror
 
 from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
@@ -291,18 +293,84 @@ def _is_production_env() -> bool:
     return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
 
 
-def _password_reset_config_errors() -> list[str]:
-    errors = []
-    if not os.getenv("SMTP_USER"):
-        errors.append("SMTP_USER")
-    if not os.getenv("SMTP_PASS"):
-        errors.append("SMTP_PASS")
-    if not (
-        os.getenv("SMTP_FROM_SECURITY")
+def _email_provider() -> str:
+    # auto: usa Resend si hay API key; de lo contrario SMTP
+    return (os.getenv("EMAIL_PROVIDER", "auto") or "auto").strip().lower()
+
+
+def _resend_enabled() -> bool:
+    return bool(os.getenv("RESEND_API_KEY"))
+
+
+def _smtp_enabled() -> bool:
+    return bool(os.getenv("SMTP_USER") and os.getenv("SMTP_PASS"))
+
+
+def _mail_from_security() -> str | None:
+    return (
+        os.getenv("EMAIL_FROM_SECURITY")
+        or os.getenv("EMAIL_FROM")
+        or os.getenv("MAIL_FROM_SECURITY")
+        or os.getenv("RESEND_FROM_SECURITY")
+        or os.getenv("MAIL_FROM")
+        or os.getenv("RESEND_FROM")
+        or os.getenv("SMTP_FROM_SECURITY")
+        or os.getenv("SMTP_FROM")
+        or os.getenv("SMTP_USER")
+    )
+
+
+def _mail_from_notifications() -> str | None:
+    return (
+        os.getenv("EMAIL_FROM_NOTIFICATIONS")
+        or os.getenv("EMAIL_FROM")
+        or os.getenv("MAIL_FROM_NOTIFICATIONS")
+        or os.getenv("RESEND_FROM_NOTIFICATIONS")
+        or os.getenv("MAIL_FROM")
+        or os.getenv("RESEND_FROM")
         or os.getenv("SMTP_FROM_NOTIFICATIONS")
         or os.getenv("SMTP_FROM")
+        or os.getenv("SMTP_USER")
+    )
+
+
+def _email_channel_errors(require_support_target: bool = False) -> list[str]:
+    provider = _email_provider()
+    errors = []
+    from_security = _mail_from_security()
+    from_notifications = _mail_from_notifications()
+
+    if provider in ("resend",):
+        if not _resend_enabled():
+            errors.append("RESEND_API_KEY")
+    elif provider in ("smtp",):
+        if not os.getenv("SMTP_USER"):
+            errors.append("SMTP_USER")
+        if not os.getenv("SMTP_PASS"):
+            errors.append("SMTP_PASS")
+    else:
+        if not (_resend_enabled() or _smtp_enabled()):
+            errors.append("RESEND_API_KEY|SMTP_USER+SMTP_PASS")
+
+    if not (from_security or from_notifications):
+        errors.append(
+            "EMAIL_FROM_*|EMAIL_FROM|MAIL_FROM_SECURITY|MAIL_FROM_NOTIFICATIONS|MAIL_FROM|RESEND_FROM_*|SMTP_FROM_*"
+        )
+
+    if require_support_target and not (
+        os.getenv("EMAIL_TO_PRIVACY")
+        or os.getenv("SUPPORT_EMAIL")
+        or os.getenv("EMAIL_TO_SUPPORT")
+        or os.getenv("SMTP_SUPPORT_TO")
+        or os.getenv("SMTP_USER")
     ):
-        errors.append("SMTP_FROM_SECURITY|SMTP_FROM_NOTIFICATIONS|SMTP_FROM")
+        errors.append("EMAIL_TO_PRIVACY|SUPPORT_EMAIL|EMAIL_TO_SUPPORT|SMTP_SUPPORT_TO")
+
+    return errors
+
+
+def _password_reset_config_errors() -> list[str]:
+    errors = _email_channel_errors(require_support_target=False)
     if _is_production_env() and not os.getenv("FRONTEND_BASE_URL"):
         errors.append("FRONTEND_BASE_URL")
     if _is_production_env() and os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production") == "supersecretkey_change_me_in_production":
@@ -311,24 +379,13 @@ def _password_reset_config_errors() -> list[str]:
 
 
 def _privacy_contact_config_errors() -> list[str]:
-    errors = []
-    if not os.getenv("SMTP_USER"):
-        errors.append("SMTP_USER")
-    if not os.getenv("SMTP_PASS"):
-        errors.append("SMTP_PASS")
-    if not (
-        os.getenv("SMTP_FROM_NOTIFICATIONS")
-        or os.getenv("SMTP_FROM")
-        or os.getenv("SMTP_USER")
-    ):
-        errors.append("SMTP_FROM_NOTIFICATIONS|SMTP_FROM")
-    if not (
-        os.getenv("SUPPORT_EMAIL")
-        or os.getenv("SMTP_SUPPORT_TO")
-        or os.getenv("SMTP_USER")
-    ):
-        errors.append("SUPPORT_EMAIL|SMTP_SUPPORT_TO")
-    return errors
+    return _email_channel_errors(require_support_target=True)
+
+
+def _email_config_error_detail(config_errors: list[str]) -> str:
+    base = "Canal de correo no disponible temporalmente. Intenta nuevamente."
+    # Facilita diagnostico en despliegues donde no se tienen logs a mano.
+    return f"{base} Missing: {', '.join(config_errors)}"
 
 
 def _build_reset_url(request: Request, raw_token: str) -> str:
@@ -357,11 +414,109 @@ _warn_password_reset_config()
 
 
 def _smtp_from_security(smtp_user: str | None) -> str | None:
-    return os.getenv("SMTP_FROM_SECURITY") or os.getenv("SMTP_FROM") or smtp_user
+    return (
+        _mail_from_security()
+        or os.getenv("SMTP_FROM_SECURITY")
+        or os.getenv("SMTP_FROM")
+        or smtp_user
+    )
 
 
 def _smtp_from_notifications(smtp_user: str | None) -> str | None:
-    return os.getenv("SMTP_FROM_NOTIFICATIONS") or os.getenv("SMTP_FROM") or smtp_user
+    return (
+        _mail_from_notifications()
+        or os.getenv("SMTP_FROM_NOTIFICATIONS")
+        or os.getenv("SMTP_FROM")
+        or smtp_user
+    )
+
+
+def _msg_text_body(msg: EmailMessage) -> str:
+    text_part = msg.get_body(preferencelist=("plain",))
+    if text_part:
+        return text_part.get_content()
+    try:
+        return msg.get_content()
+    except Exception:
+        return ""
+
+
+def _msg_html_body(msg: EmailMessage) -> str | None:
+    html_part = msg.get_body(preferencelist=("html",))
+    if html_part:
+        return html_part.get_content()
+    return None
+
+
+def _resend_send_message(msg: EmailMessage):
+    api_key = (os.getenv("RESEND_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("RESEND_API_KEY no configurado")
+
+    from_email = (msg.get("From") or "").strip()
+    to_email = (msg.get("To") or "").strip()
+    subject = (msg.get("Subject") or "").strip()
+    text_body = _msg_text_body(msg)
+    html_body = _msg_html_body(msg)
+
+    if not (from_email and to_email and subject):
+        raise RuntimeError("Mensaje invalido para Resend (From/To/Subject)")
+
+    payload = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "text": text_body or "",
+    }
+    if html_body:
+        payload["html"] = html_body
+
+    req = urlrequest.Request(
+        "https://api.resend.com/emails",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    timeout = int(os.getenv("EMAIL_API_TIMEOUT", "20"))
+    try:
+        with urlrequest.urlopen(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+            body = resp.read().decode("utf-8", errors="ignore")
+            if status < 200 or status >= 300:
+                raise RuntimeError(f"Resend HTTP {status}: {body[:300]}")
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"Resend HTTP {exc.code}: {detail[:300]}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Resend delivery failed: {exc}") from exc
+
+
+def _deliver_message(msg: EmailMessage, smtp_user: str | None = None, smtp_pass: str | None = None):
+    provider = _email_provider()
+
+    if provider == "resend":
+        _resend_send_message(msg)
+        return
+
+    if provider == "smtp":
+        if not (smtp_user and smtp_pass):
+            raise RuntimeError("SMTP no configurado")
+        _smtp_send_message(msg, smtp_user, smtp_pass)
+        return
+
+    # auto: prioriza API HTTPS si existe para Railway Hobby
+    if _resend_enabled():
+        _resend_send_message(msg)
+        return
+    if smtp_user and smtp_pass:
+        _smtp_send_message(msg, smtp_user, smtp_pass)
+        return
+
+    raise RuntimeError("Canal de correo no configurado (RESEND_API_KEY o SMTP_USER/SMTP_PASS)")
 
 
 def _smtp_connection_settings() -> tuple[str, int, int, bool]:
@@ -467,8 +622,8 @@ def _send_reset_email(to_email: str, reset_url: str):
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_security(smtp_user)
 
-    if not (smtp_user and smtp_pass and smtp_from):
-        raise RuntimeError("SMTP no configurado")
+    if not (smtp_from and to_email):
+        raise RuntimeError("Canal de correo no configurado")
 
     msg = EmailMessage()
     msg["Subject"] = "Klinip - Restablecer contrasena"
@@ -481,7 +636,7 @@ def _send_reset_email(to_email: str, reset_url: str):
         "Si no solicitaste este cambio, ignora este mensaje.\n"
     )
 
-    _smtp_send_message(msg, smtp_user, smtp_pass)
+    _deliver_message(msg, smtp_user, smtp_pass)
 
 
 def _send_reset_email_safe(to_email: str, reset_url: str):
@@ -493,8 +648,22 @@ def _send_reset_email_safe(to_email: str, reset_url: str):
 
 
 def _support_email_target() -> str:
+    # Destino para soporte general
     return (
-        os.getenv("SUPPORT_EMAIL")
+        os.getenv("EMAIL_TO_SUPPORT")
+        or os.getenv("SUPPORT_EMAIL")
+        or os.getenv("SMTP_SUPPORT_TO")
+        or os.getenv("SMTP_USER")
+        or "soporte@klinip.cl"
+    )
+
+
+def _privacy_email_target() -> str:
+    # Destino para solicitudes sensibles de privacidad
+    return (
+        os.getenv("EMAIL_TO_PRIVACY")
+        or os.getenv("SUPPORT_EMAIL")
+        or os.getenv("EMAIL_TO_SUPPORT")
         or os.getenv("SMTP_SUPPORT_TO")
         or os.getenv("SMTP_USER")
         or "soporte@klinip.cl"
@@ -505,10 +674,10 @@ def _send_privacy_support_email(payload: dict):
     smtp_user = os.getenv("SMTP_USER")
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_notifications(smtp_user)
-    support_to = _support_email_target()
+    support_to = _privacy_email_target()
 
-    if not (smtp_user and smtp_pass and smtp_from and support_to):
-        raise RuntimeError("SMTP no configurado para soporte de privacidad")
+    if not (smtp_from and support_to):
+        raise RuntimeError("Canal de correo no configurado para soporte de privacidad")
 
     msg = EmailMessage()
     msg["Subject"] = f"Klinip - Solicitud de privacidad #{payload.get('request_id')}"
@@ -570,14 +739,14 @@ def _send_privacy_support_email(payload: dict):
         subtype="html",
     )
 
-    _smtp_send_message(msg, smtp_user, smtp_pass)
+    _deliver_message(msg, smtp_user, smtp_pass)
 
 
 def _send_privacy_support_email_safe(payload: dict):
     try:
         _send_privacy_support_email(payload)
         print(
-            f"DEBUG privacy support email: enviado request_id={payload.get('request_id')} a {_support_email_target()}"
+            f"DEBUG privacy support email: enviado request_id={payload.get('request_id')} a {_privacy_email_target()}"
         )
     except Exception as exc:
         print(f"ERROR sending privacy support email async: {exc}")
@@ -588,8 +757,8 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
     smtp_pass = os.getenv("SMTP_PASS")
     smtp_from = _smtp_from_notifications(smtp_user)
 
-    if not (smtp_user and smtp_pass and smtp_from and to_email):
-        raise RuntimeError("SMTP no configurado para acuse de recibo al usuario")
+    if not (smtp_from and to_email):
+        raise RuntimeError("Canal de correo no configurado para acuse de recibo al usuario")
 
     msg = EmailMessage()
     msg["Subject"] = f"Klinip - Solicitud recibida #{payload.get('request_id')}"
@@ -647,7 +816,7 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
         subtype="html",
     )
 
-    _smtp_send_message(msg, smtp_user, smtp_pass)
+    _deliver_message(msg, smtp_user, smtp_pass)
 
 
 def _send_privacy_user_ack_email_safe(to_email: str, payload: dict):
@@ -2707,6 +2876,16 @@ def health_check(db: Session = Depends(auth.get_db)):
         "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "...",
         "secret_key": secret_key_status,
         "environment": "production" if is_production else "development",
+        "email_provider": _email_provider(),
+        "resend_configured": bool(os.getenv("RESEND_API_KEY")),
+        "email_from_configured": bool(_mail_from_security() or _mail_from_notifications()),
+        "privacy_target_configured": bool(
+            os.getenv("EMAIL_TO_PRIVACY")
+            or os.getenv("SUPPORT_EMAIL")
+            or os.getenv("EMAIL_TO_SUPPORT")
+            or os.getenv("SMTP_SUPPORT_TO")
+            or os.getenv("SMTP_USER")
+        ),
     }
 
 
@@ -2884,7 +3063,7 @@ def forgot_password(
     if config_errors:
         raise HTTPException(
             status_code=503,
-            detail="Recuperacion de contrasena no disponible temporalmente. Contacta soporte.",
+            detail=_email_config_error_detail(config_errors),
         )
 
     email = payload.email.lower().strip()
@@ -3565,12 +3744,12 @@ async def privacy_contact(
     config_errors = _privacy_contact_config_errors()
     if config_errors:
         print(
-            "ERROR privacy contact: configuracion incompleta SMTP",
+            "ERROR privacy contact: configuracion incompleta de correo",
             {"missing": config_errors},
         )
         raise HTTPException(
             status_code=503,
-            detail="Canal de correo no disponible temporalmente. Intenta nuevamente.",
+            detail=_email_config_error_detail(config_errors),
         )
 
     clean_message = (payload.message or "").strip()
@@ -3613,7 +3792,7 @@ async def privacy_contact(
 
     print(
         "DEBUG privacy contact: encolando correos",
-        {"request_id": req.id, "support_to": _support_email_target(), "user_email": current_user.email},
+        {"request_id": req.id, "support_to": _privacy_email_target(), "user_email": current_user.email},
     )
     background_tasks.add_task(_send_privacy_support_email_safe, support_payload)
 
