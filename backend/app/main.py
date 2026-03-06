@@ -477,6 +477,8 @@ def _resend_send_message(msg: EmailMessage):
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "User-Agent": "klinip-backend/1.0",
+            "Accept": "application/json",
         },
         method="POST",
     )
