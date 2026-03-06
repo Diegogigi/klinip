@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import {
@@ -33,7 +33,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
   }, []);
   const [timezone, setTimezone] = useState(profile.timezone || detectedTimezone || "America/Santiago");
+  const [reminderPreferredTime, setReminderPreferredTime] = useState(profile.reminder_preferred_time || "08:00");
   const [timezoneStatus, setTimezoneStatus] = useState("");
+  const [chronicCondition, setChronicCondition] = useState(profile.chronic_condition || "");
+  const [primaryCareCenter, setPrimaryCareCenter] = useState(profile.primary_care_center || "");
+  const [healthProfileStatus, setHealthProfileStatus] = useState("");
 
   const timezoneOptions = [
     "America/Santiago",
@@ -48,10 +52,20 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     "UTC",
   ];
 
+  useEffect(() => {
+    setTimezone(profile.timezone || detectedTimezone || "America/Santiago");
+    setReminderPreferredTime(profile.reminder_preferred_time || "08:00");
+    setChronicCondition(profile.chronic_condition || "");
+    setPrimaryCareCenter(profile.primary_care_center || "");
+  }, [profile.id, profile.timezone, profile.reminder_preferred_time, profile.chronic_condition, profile.primary_care_center, detectedTimezone]);
+
   const handleSaveTimezone = async () => {
     setTimezoneStatus("");
     try {
-      const updated = await updateMe({ timezone });
+      const updated = await updateMe({
+        timezone,
+        reminder_preferred_time: reminderPreferredTime,
+      });
       onUserUpdate?.(updated);
       setTimezoneStatus("Zona horaria actualizada");
     } catch (err) {
@@ -184,6 +198,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       "klinip_documents",
       "klinip_medications",
       "klinip_onboarding_seen",
+      "klinip_onboarding_completed_v1",
     ];
     keys.forEach((k) => localStorage.removeItem(k));
     alert("Datos locales borrados. Vuelve a iniciar sesión para continuar.");
@@ -258,6 +273,21 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const handleSaveHealthProfile = async () => {
+    setHealthProfileStatus("");
+    try {
+      const updated = await updateMe({
+        chronic_condition: (chronicCondition || "").trim(),
+        primary_care_center: (primaryCareCenter || "").trim(),
+      });
+      onUserUpdate?.(updated);
+      setHealthProfileStatus("Perfil de salud actualizado");
+    } catch (err) {
+      setHealthProfileStatus("No se pudo actualizar el perfil de salud");
+      console.error("Error actualizando perfil de salud:", err);
+    }
+  };
+
   return (
     <>
       <div className="card">
@@ -304,11 +334,51 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
           <div className="input-group" style={{ alignSelf: "flex-end" }}>
             <button className="secondary-btn" type="button" onClick={handleSaveTimezone}>
-              Guardar zona horaria
+              Guardar configuración de recordatorios
             </button>
           </div>
         </div>
+        <div className="form-row" style={{ marginTop: "0.5rem" }}>
+          <div className="input-group">
+            <label className="input-label">Hora preferida de recordatorios</label>
+            <input
+              className="input-field"
+              type="time"
+              value={reminderPreferredTime}
+              onChange={(e) => setReminderPreferredTime(e.target.value || "08:00")}
+            />
+          </div>
+        </div>
         {timezoneStatus && <p className="muted">{timezoneStatus}</p>}
+
+        <div className="form-row" style={{ marginTop: "0.75rem" }}>
+          <div className="input-group">
+            <label className="input-label">Patología crónica (opcional)</label>
+            <input
+              className="input-field"
+              value={chronicCondition}
+              onChange={(e) => setChronicCondition(e.target.value)}
+              placeholder="Ej: Hipertensión, diabetes, asma"
+            />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Centro habitual (opcional)</label>
+            <input
+              className="input-field"
+              value={primaryCareCenter}
+              onChange={(e) => setPrimaryCareCenter(e.target.value)}
+              placeholder="Ej: CESFAM Norte, Clínica ..."
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="input-group" style={{ alignSelf: "flex-end" }}>
+            <button className="secondary-btn" type="button" onClick={handleSaveHealthProfile}>
+              Guardar perfil de salud
+            </button>
+          </div>
+        </div>
+        {healthProfileStatus && <p className="muted">{healthProfileStatus}</p>}
 
       </div>
 

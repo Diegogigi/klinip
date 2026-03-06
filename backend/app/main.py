@@ -209,6 +209,35 @@ def ensure_user_schema():
                 statements.append("ALTER TABLE users ADD COLUMN deleted BOOLEAN DEFAULT 0")
             added_columns.append("deleted")
 
+        if "chronic_condition" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS chronic_condition VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN chronic_condition VARCHAR")
+            added_columns.append("chronic_condition")
+
+        if "primary_care_center" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_care_center VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN primary_care_center VARCHAR")
+            added_columns.append("primary_care_center")
+
+        if "reminder_preferred_time" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_preferred_time VARCHAR DEFAULT '08:00'"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN reminder_preferred_time VARCHAR DEFAULT '08:00'"
+                )
+            added_columns.append("reminder_preferred_time")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -3417,6 +3446,15 @@ async def update_me(
 
     if payload.data_consent_revoked is not None:
         current_user.data_consent_revoked = payload.data_consent_revoked
+
+    if payload.chronic_condition is not None:
+        current_user.chronic_condition = payload.chronic_condition
+
+    if payload.primary_care_center is not None:
+        current_user.primary_care_center = payload.primary_care_center
+
+    if payload.reminder_preferred_time is not None:
+        current_user.reminder_preferred_time = payload.reminder_preferred_time
 
     db.add(current_user)
     db.commit()

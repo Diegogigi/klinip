@@ -51,6 +51,9 @@ class User(Base):
     token_version = Column(Integer, default=0)
     data_consent_revoked = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False)
+    chronic_condition = Column(String, default="")
+    primary_care_center = Column(String, default="")
+    reminder_preferred_time = Column(String, default="08:00")
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"

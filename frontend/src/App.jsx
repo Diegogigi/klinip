@@ -411,9 +411,22 @@ const PUSH_ENDPOINT_KEY_BASE = "klinip_push_endpoint";
 const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
+const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v1";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
+const ONBOARDING_TIMEZONE_OPTIONS = [
+  "America/Santiago",
+  "America/Lima",
+  "America/Bogota",
+  "America/Mexico_City",
+  "America/Argentina/Buenos_Aires",
+  "America/Sao_Paulo",
+  "America/New_York",
+  "Europe/Madrid",
+  "Europe/London",
+  "UTC",
+];
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
 const parseMedicationScheduleTime = (value = "") => {
@@ -500,6 +513,19 @@ export default function App() {
   const [notifSwitchChecked, setNotifSwitchChecked] = useState(false);
   const [notifSwitchLoading, setNotifSwitchLoading] = useState(false);
   const [notifSwitchMessage, setNotifSwitchMessage] = useState("");
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
+  const [onboardingSaving, setOnboardingSaving] = useState(false);
+  const [onboardingNotifLoading, setOnboardingNotifLoading] = useState(false);
+  const [onboardingNotifMessage, setOnboardingNotifMessage] = useState("");
+  const [onboardingData, setOnboardingData] = useState({
+    notificationsConsent: "",
+    timezone: "America/Santiago",
+    reminderPreferredTime: "08:00",
+    hasChronicCondition: "",
+    chronicCondition: "",
+    primaryCareCenter: "",
+  });
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const locationRef = useRef(location);
 
@@ -616,6 +642,12 @@ export default function App() {
       setNotifConsentOpen(false);
       return;
     }
+    const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
+    const onboardingDone = localStorage.getItem(onboardingKey) === "true";
+    if (!onboardingDone || onboardingOpen) {
+      setNotifConsentOpen(false);
+      return;
+    }
     const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
     const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
     const promptCountKey = getUserKey(NOTIF_PROMPT_COUNT_KEY_BASE, user.id);
@@ -652,7 +684,28 @@ export default function App() {
     if (shouldPrompt) {
       setNotifConsentOpen(true);
     }
-  }, [user, consentOpen]);
+  }, [user, consentOpen, onboardingOpen]);
+
+  useEffect(() => {
+    if (!user || booting || consentOpen || notifConsentOpen) return;
+    const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
+    const onboardingDone = localStorage.getItem(onboardingKey) === "true";
+    if (onboardingDone) return;
+    const notifConsent = localStorage.getItem(
+      getUserKey(NOTIF_CONSENT_KEY_BASE, user.id)
+    ) || "";
+    setOnboardingData({
+      notificationsConsent: notifConsent,
+      timezone: user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago",
+      reminderPreferredTime: user?.reminder_preferred_time || "08:00",
+      hasChronicCondition: (user?.chronic_condition || "").trim() ? "yes" : "no",
+      chronicCondition: user?.chronic_condition || "",
+      primaryCareCenter: user?.primary_care_center || "",
+    });
+    setOnboardingNotifMessage("");
+    setOnboardingStep(0);
+    setOnboardingOpen(true);
+  }, [user, booting, consentOpen, notifConsentOpen]);
 
   useEffect(() => {
     if (!notifConsentOpen || !user) {
@@ -1089,6 +1142,88 @@ export default function App() {
     navigate("/legal/notificaciones");
   };
 
+  const handleSkipOnboarding = () => {
+    if (!user?.id) return;
+    const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
+    const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
+    const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
+    if (!localStorage.getItem(consentKey)) {
+      localStorage.setItem(consentKey, "later");
+      localStorage.setItem(lastPromptKey, new Date().toISOString());
+      updateMe({
+        notifications_consent: "later",
+        notifications_last_prompt: new Date().toISOString(),
+      }).catch(() => null);
+    }
+    localStorage.setItem(onboardingKey, "true");
+    setOnboardingOpen(false);
+  };
+
+  const handleOnboardingEnableNotifications = async () => {
+    if (!user?.id) return;
+    setOnboardingNotifLoading(true);
+    setOnboardingNotifMessage("");
+    try {
+      if (!("Notification" in window)) {
+        setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }));
+        setOnboardingNotifMessage("Este navegador no soporta notificaciones.");
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission === "granted") {
+        await ensurePushSubscription();
+        setOnboardingData((prev) => ({ ...prev, notificationsConsent: "accepted" }));
+        setOnboardingNotifMessage("Notificaciones activadas.");
+      } else if (permission === "denied") {
+        setOnboardingData((prev) => ({ ...prev, notificationsConsent: "rejected" }));
+        setOnboardingNotifMessage("Permiso denegado. Puedes cambiarlo después.");
+      } else {
+        setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }));
+        setOnboardingNotifMessage("Puedes activarlas más tarde desde tu perfil.");
+      }
+    } catch (err) {
+      console.error("Error habilitando notificaciones en onboarding", err);
+      setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }));
+      setOnboardingNotifMessage("No se pudo activar notificaciones ahora.");
+    } finally {
+      setOnboardingNotifLoading(false);
+    }
+  };
+
+  const handleCompleteOnboarding = async () => {
+    if (!user?.id) return;
+    setOnboardingSaving(true);
+    try {
+      const condition =
+        onboardingData.hasChronicCondition === "yes"
+          ? (onboardingData.chronicCondition || "").trim()
+          : "";
+      const center = (onboardingData.primaryCareCenter || "").trim();
+      const notifConsent = onboardingData.notificationsConsent || "later";
+      const nowIso = new Date().toISOString();
+      const updated = await updateMe({
+        timezone: onboardingData.timezone,
+        reminder_preferred_time: onboardingData.reminderPreferredTime,
+        chronic_condition: condition,
+        primary_care_center: center,
+        notifications_consent: notifConsent,
+        notifications_last_prompt: nowIso,
+      });
+      setUser(updated || user);
+      const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
+      const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
+      localStorage.setItem(consentKey, notifConsent);
+      localStorage.setItem(lastPromptKey, nowIso);
+      const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
+      localStorage.setItem(onboardingKey, "true");
+      setOnboardingOpen(false);
+    } catch (err) {
+      console.error("Error guardando onboarding", err);
+    } finally {
+      setOnboardingSaving(false);
+    }
+  };
+
 
 
   if (booting) {
@@ -1192,6 +1327,196 @@ export default function App() {
               <button className="ghost-btn" type="button" onClick={handleLearnMoreNotifications}>
                 Aprender mas
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {onboardingOpen && (
+        <div className="consent-backdrop">
+          <div className="consent-card" role="dialog" aria-modal="true">
+            <p className="consent-kicker">Bienvenido a Klinip</p>
+            {onboardingStep === 0 && (
+              <>
+                <h2 className="consent-title">Organiza tu salud en un solo lugar</h2>
+                <p className="consent-text">
+                  Organiza medicamentos, citas y documentos en un lugar.
+                  Te guiaremos en 5 pasos cortos para personalizar Klinip.
+                </p>
+              </>
+            )}
+            {onboardingStep === 1 && (
+              <>
+                <h2 className="consent-title">Activa recordatorios importantes</h2>
+                <p className="consent-text">
+                  Si activas notificaciones, podrás recibir avisos de medicamentos, citas y alertas de salud.
+                </p>
+                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
+                  <button
+                    className="primary-btn"
+                    type="button"
+                    onClick={handleOnboardingEnableNotifications}
+                    disabled={onboardingNotifLoading}
+                  >
+                    {onboardingNotifLoading ? "Activando..." : "Activar notificaciones"}
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() =>
+                      setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }))
+                    }
+                    disabled={onboardingNotifLoading}
+                  >
+                    Configurar después
+                  </button>
+                </div>
+                {onboardingNotifMessage ? (
+                  <p className="consent-switch-sub" style={{ marginTop: "0.6rem" }}>
+                    {onboardingNotifMessage}
+                  </p>
+                ) : null}
+              </>
+            )}
+            {onboardingStep === 2 && (
+              <>
+                <h2 className="consent-title">Configuración mínima útil</h2>
+                <p className="consent-text">Ajusta zona horaria y hora preferida de recordatorios.</p>
+                <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.6rem" }}>
+                  <input
+                    className="input-field"
+                    list="onboarding-timezone-options"
+                    value={onboardingData.timezone}
+                    onChange={(event) =>
+                      setOnboardingData((prev) => ({ ...prev, timezone: event.target.value }))
+                    }
+                    placeholder="America/Santiago"
+                  />
+                  <datalist id="onboarding-timezone-options">
+                    {ONBOARDING_TIMEZONE_OPTIONS.map((tz) => (
+                      <option value={tz} key={tz} />
+                    ))}
+                  </datalist>
+                  <input
+                    className="input-field"
+                    type="time"
+                    value={onboardingData.reminderPreferredTime}
+                    onChange={(event) =>
+                      setOnboardingData((prev) => ({
+                        ...prev,
+                        reminderPreferredTime: event.target.value || "08:00",
+                      }))
+                    }
+                  />
+                </div>
+              </>
+            )}
+            {onboardingStep === 3 && (
+              <>
+                <h2 className="consent-title">¿Tienes una patología crónica?</h2>
+                <p className="consent-text">Opcional. Nos ayuda a personalizar recomendaciones.</p>
+                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
+                  <button
+                    className={`secondary-btn ${onboardingData.hasChronicCondition === "yes" ? "is-active" : ""}`}
+                    type="button"
+                    onClick={() => setOnboardingData((prev) => ({ ...prev, hasChronicCondition: "yes" }))}
+                  >
+                    Sí
+                  </button>
+                  <button
+                    className={`secondary-btn ${onboardingData.hasChronicCondition === "no" ? "is-active" : ""}`}
+                    type="button"
+                    onClick={() =>
+                      setOnboardingData((prev) => ({
+                        ...prev,
+                        hasChronicCondition: "no",
+                        chronicCondition: "",
+                      }))
+                    }
+                  >
+                    No
+                  </button>
+                </div>
+                {onboardingData.hasChronicCondition === "yes" && (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <input
+                      className="input-field"
+                      type="text"
+                      value={onboardingData.chronicCondition}
+                      onChange={(event) =>
+                        setOnboardingData((prev) => ({ ...prev, chronicCondition: event.target.value }))
+                      }
+                      placeholder="Ej: hipertension, diabetes, asma..."
+                    />
+                  </div>
+                )}
+                <div style={{ marginTop: "0.75rem" }}>
+                  <input
+                    className="input-field"
+                    type="text"
+                    value={onboardingData.primaryCareCenter}
+                    onChange={(event) =>
+                      setOnboardingData((prev) => ({ ...prev, primaryCareCenter: event.target.value }))
+                    }
+                    placeholder="Centro habitual (opcional): CESFAM Norte, Clinica ..."
+                  />
+                </div>
+              </>
+            )}
+            {onboardingStep === 4 && (
+              <>
+                <h2 className="consent-title">Primer acción guiada</h2>
+                <p className="consent-text">Puedes comenzar con una de estas acciones:</p>
+                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
+                  <button className="secondary-btn" type="button" onClick={() => navigate("/documents")}>
+                    Subir orden médica
+                  </button>
+                  <button className="secondary-btn" type="button" onClick={() => navigate("/medications")}>
+                    Agregar medicamento
+                  </button>
+                  <button className="secondary-btn" type="button" onClick={() => navigate("/appointments")}>
+                    Agendar cita
+                  </button>
+                </div>
+              </>
+            )}
+            <div className="consent-actions" style={{ marginTop: "1rem" }}>
+              <button className="ghost-btn" type="button" onClick={handleSkipOnboarding} disabled={onboardingSaving}>
+                Omitir
+              </button>
+              {onboardingStep > 0 && (
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => setOnboardingStep((prev) => Math.max(prev - 1, 0))}
+                  disabled={onboardingSaving}
+                >
+                  Atras
+                </button>
+              )}
+              {onboardingStep < 4 ? (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={() => setOnboardingStep((prev) => Math.min(prev + 1, 4))}
+                  disabled={
+                    onboardingSaving ||
+                    (onboardingStep === 3 &&
+                      onboardingData.hasChronicCondition === "yes" &&
+                      !(onboardingData.chronicCondition || "").trim())
+                  }
+                >
+                  Siguiente
+                </button>
+              ) : (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={handleCompleteOnboarding}
+                  disabled={onboardingSaving}
+                >
+                  {onboardingSaving ? "Guardando..." : "Finalizar"}
+                </button>
+              )}
             </div>
           </div>
         </div>
