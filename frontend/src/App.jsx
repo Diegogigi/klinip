@@ -100,8 +100,6 @@ const icons = {
 
 function Sidebar({
   user,
-  theme,
-  onToggleTheme,
   notifications,
   planInfo,
   healthProfiles,
@@ -147,10 +145,14 @@ function Sidebar({
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
-    { to: "/settings", label: "Perfil", icon: icons.user },
+    { to: "/family", label: "Mi familia", icon: icons.user },
   ];
-  const mobilePrimaryLinks = [links[0], links[1], links[2], links[4]];
-  const mobileOverflowLinks = [links[3], links[5], links[6], links[7]];
+  const mobilePrimaryLinks = links.filter((item) =>
+    ["/", "/appointments", "/calendar", "/timeline"].includes(item.to)
+  );
+  const mobileOverflowLinks = links.filter((item) =>
+    ["/stats", "/medications", "/documents", "/family"].includes(item.to)
+  );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
     Array.isArray(healthProfiles) && healthProfiles.length > 1;
@@ -289,22 +291,6 @@ function Sidebar({
         )}
       </nav>
 
-      <div className="sidebar-footer">
-        <button
-          className="theme-toggle"
-          type="button"
-          onClick={onToggleTheme}
-          role="switch"
-          aria-checked={theme === "dark"}
-        >
-          <span className="theme-toggle-label">
-            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-          </span>
-          <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
-            <span className="theme-switch-thumb" />
-          </span>
-        </button>
-      </div>
     </aside>
   );
 }
@@ -315,6 +301,8 @@ function Topbar({
   onClearNotifications,
   onOpenNotification,
   onLogout,
+  theme,
+  onToggleTheme,
   planInfo,
   healthProfiles,
   activeProfileId,
@@ -322,6 +310,7 @@ function Topbar({
   switchingProfile,
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const isAuthRoute =
     location.pathname === "/login" ||
@@ -336,6 +325,7 @@ function Topbar({
     "/calendar": "Calendario",
     "/stats": "Estadisticas",
     "/timeline": "Historia",
+    "/family": "Mi familia",
     "/settings": "Perfil",
   };
   const title = titles[location.pathname] || "Klinip";
@@ -401,47 +391,6 @@ function Topbar({
         </div>
       </div>
       <div className="topbar-actions">
-        <div className="topbar-profile-switcher">
-          <div className="topbar-profile-head">
-            <span className="topbar-profile-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-                <circle cx="12" cy="8" r="3.2" />
-                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-              </svg>
-            </span>
-            <p className="topbar-profile-plan">{planLabel}</p>
-          </div>
-          {canSwitchProfiles ? (
-            <>
-              <div className="topbar-profile-switcher-row">
-                <label className="topbar-profile-switcher-label" htmlFor="active-profile-select">
-                  Perfil activo
-                </label>
-                <select
-                  id="active-profile-select"
-                  className="topbar-profile-select"
-                  value={activeProfileId || ""}
-                  onChange={(e) => onSwitchProfile?.(e.target.value)}
-                  disabled={!!switchingProfile}
-                >
-                  {(healthProfiles || []).map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.full_name}
-                      {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="topbar-profile-current">
-                {activeProfile?.full_name || user?.name || "Perfil personal"}
-              </div>
-            </>
-          ) : (
-            <div className="topbar-profile-current">
-              {activeProfile?.full_name || user?.name || "Perfil personal"}
-            </div>
-          )}
-        </div>
         <div className="topbar-notifications">
           <button
             className="topbar-quick"
@@ -512,16 +461,102 @@ function Topbar({
           </button>
           {profileMenuOpen && (
             <div className="topbar-user-menu" role="menu">
+              <div className="topbar-user-menu-head">
+                <span className="topbar-user-menu-avatar">{initials}</span>
+                <div>
+                  <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
+                  <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
+                </div>
+              </div>
+              <div className="topbar-user-menu-profile-card">
+                <div className="topbar-user-menu-profile-head">
+                  <span className="topbar-user-menu-profile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="12" cy="8" r="3.2" />
+                      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                    </svg>
+                  </span>
+                  <span className="topbar-user-menu-plan">{planLabel}</span>
+                </div>
+                <p className="topbar-user-menu-profile-name">
+                  {activeProfile?.full_name || user?.name || "Perfil personal"}
+                </p>
+                {canSwitchProfiles ? (
+                  <select
+                    className="topbar-user-menu-profile-select"
+                    value={activeProfileId || ""}
+                    onChange={(e) => onSwitchProfile?.(e.target.value)}
+                    disabled={!!switchingProfile}
+                  >
+                    {(healthProfiles || []).map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.full_name}
+                        {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+              </div>
+              <div className="topbar-user-menu-actions">
+                <button
+                  type="button"
+                  className="topbar-user-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    navigate("/settings");
+                  }}
+                >
+                  <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="12" cy="8" r="3.2" />
+                      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                    </svg>
+                  </span>
+                  <span>Mi perfil</span>
+                </button>
+                <button
+                  type="button"
+                  className="topbar-user-menu-item"
+                  role="menuitem"
+                >
+                  <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                    </svg>
+                  </span>
+                  <span className="topbar-user-theme-text">
+                    {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+                  </span>
+                  <label className="switch topbar-user-theme-switch">
+                    <input
+                      type="checkbox"
+                      checked={theme === "dark"}
+                      onChange={() => onToggleTheme?.()}
+                    />
+                    <span className="switch-slider" />
+                  </label>
+                </button>
+              </div>
+              <div className="topbar-user-menu-divider" />
               <button
                 type="button"
-                className="topbar-user-menu-item"
+                className="topbar-user-menu-item is-danger"
                 role="menuitem"
                 onClick={() => {
                   setProfileMenuOpen(false);
                   onLogout?.();
                 }}
               >
-                Cerrar sesión
+                <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <path d="M16 17l5-5-5-5" />
+                    <path d="M21 12H9" />
+                  </svg>
+                </span>
+                <span>Cerrar sesión</span>
               </button>
             </div>
           )}
@@ -1732,8 +1767,6 @@ export default function App() {
       <div className="layout">
         <Sidebar
           user={user}
-          theme={theme}
-          onToggleTheme={handleToggleTheme}
           notifications={notifications}
           planInfo={planInfo}
           healthProfiles={healthProfiles}
@@ -1748,6 +1781,8 @@ export default function App() {
             onClearNotifications={handleClearNotifications}
             onOpenNotification={handleOpenNotification}
             onLogout={handleLogout}
+            theme={theme}
+            onToggleTheme={handleToggleTheme}
             planInfo={planInfo}
             healthProfiles={healthProfiles}
             activeProfileId={activeHealthProfileId}
@@ -1863,6 +1898,22 @@ export default function App() {
                 }
               />
               <Route
+                path="/family"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Settings
+                      key={`family-${activeHealthProfileId || "none"}`}
+                      user={user}
+                      onLogout={handleLogout}
+                      theme={theme}
+                      onToggleTheme={handleToggleTheme}
+                      onUserUpdate={setUser}
+                      initialSection="familia"
+                    />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/settings"
                 element={
                   <ProtectedRoute user={user}>
@@ -1873,6 +1924,7 @@ export default function App() {
                       theme={theme}
                       onToggleTheme={handleToggleTheme}
                       onUserUpdate={setUser}
+                      initialSection="perfil"
                     />
                   </ProtectedRoute>
                 }

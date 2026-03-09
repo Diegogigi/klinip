@@ -45,3 +45,7 @@ uploaded_docs/
 # Backups
 *.bak
 *.backup
+
+backend/app/__pycache__/
+backend/mirutasalud.db
+

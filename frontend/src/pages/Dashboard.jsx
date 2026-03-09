@@ -56,6 +56,13 @@ export default function Dashboard({ user }) {
   const [ocrSaving, setOcrSaving] = useState(false);
   const [ocrSaved, setOcrSaved] = useState(false);
   const [ocrMessage, setOcrMessage] = useState("");
+  const [quickNoteDraft, setQuickNoteDraft] = useState("");
+  const [quickNotes, setQuickNotes] = useState([]);
+
+  const quickNotesStorageKey = useMemo(() => {
+    const uid = user?.id || "anon";
+    return `klinip.quick-notes.${uid}`;
+  }, [user?.id]);
 
   useEffect(() => {
     async function load() {
@@ -125,6 +132,16 @@ export default function Dashboard({ user }) {
     return () => clearTimeout(timeoutId);
   }, [ocrMessage]);
 
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(quickNotesStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      setQuickNotes(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setQuickNotes([]);
+    }
+  }, [quickNotesStorageKey]);
+
   const handleOcrSave = async () => {
     if (!ocrDocId || !ocrEdit) return;
     setOcrSaving(true);
@@ -147,6 +164,22 @@ export default function Dashboard({ user }) {
     } finally {
       setOcrSaving(false);
     }
+  };
+
+  const handleSaveQuickNote = () => {
+    const text = quickNoteDraft.trim();
+    if (!text) return;
+    const next = [
+      {
+        id: `${Date.now()}`,
+        text,
+        created_at: new Date().toISOString(),
+      },
+      ...quickNotes,
+    ].slice(0, 6);
+    setQuickNotes(next);
+    window.localStorage.setItem(quickNotesStorageKey, JSON.stringify(next));
+    setQuickNoteDraft("");
   };
 
   const resetDocForm = () => {
@@ -358,6 +391,37 @@ export default function Dashboard({ user }) {
             <p className="kpi-value">{k.value}</p>
           </div>
         ))}
+      </div>
+
+      <div className="card home-note-card">
+        <h2 className="card-title">Notas rápidas de salud</h2>
+        <p className="muted">
+          Guarda ideas o pendientes para no olvidar temas importantes de tu cuidado.
+        </p>
+        <div className="input-group">
+          <label className="input-label">Nueva nota</label>
+          <textarea
+            className="textarea-field"
+            value={quickNoteDraft}
+            onChange={(e) => setQuickNoteDraft(e.target.value)}
+            placeholder="Ej: Consultar dosis en próximo control o subir resultado pendiente."
+          />
+        </div>
+        <button className="secondary-btn" type="button" onClick={handleSaveQuickNote}>
+          Guardar nota
+        </button>
+        <div className="home-note-list">
+          {quickNotes.length ? (
+            quickNotes.map((note) => (
+              <article className="home-note-item" key={note.id}>
+                <p>{note.text}</p>
+                <small>{toLocaleDateTimeOrEmpty(note.created_at)}</small>
+              </article>
+            ))
+          ) : (
+            <p className="muted">Sin notas guardadas todavía.</p>
+          )}
+        </div>
       </div>
 
       {AI_ANALYSIS_ENABLED && (

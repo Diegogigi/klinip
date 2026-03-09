@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import {
@@ -33,7 +33,7 @@ import {
 } from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
 
-export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
+export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate, initialSection = "perfil" }) {
   const profile = user || {};
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,7 +49,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [privacySuccessMessage, setPrivacySuccessMessage] = useState("");
   const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [activeSection, setActiveSection] = useState("perfil");
+  const [activeSection, setActiveSection] = useState(initialSection || "perfil");
   const [isMobileSettings, setIsMobileSettings] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth <= 640 : false
   );
@@ -87,6 +87,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     role: "viewer",
     relationship_type: "",
   });
+  const [quickAddSelection, setQuickAddSelection] = useState(null);
+  const [quickAddName, setQuickAddName] = useState("");
   const plan = planInfo?.plan_type || "basico";
 
   const detectedTimezone = useMemo(() => {
@@ -108,6 +110,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const profileDisplayName = profile.name || "Usuario Klinip";
   const profileDisplayEmail = profile.email || "sin-correo";
   const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
+  const isFamilyStandalone = (initialSection || "perfil") === "familia";
+  const familyNameInputRef = useRef(null);
 
   const timezoneOptions = [
     "America/Santiago",
@@ -121,6 +125,64 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     "Europe/London",
     "UTC",
   ];
+
+  const familyQuickCards = [
+    {
+      id: "minor",
+      title: "Menor de edad",
+      description: "Anade a tus hijos o menores a tu cuidado.",
+      relation: "Hijo/a",
+      gender: "",
+      icon: "minor",
+    },
+    {
+      id: "adult_guarded",
+      title: "Adulto con apoyo",
+      description: "Anade a quien este a tu cargo o necesite ayuda.",
+      relation: "Persona a cargo",
+      gender: "",
+      icon: "guarded",
+    },
+    {
+      id: "adult",
+      title: "Adulto",
+      description: "Anade a tu pareja, madre, padre o familiar.",
+      relation: "Familiar adulto",
+      gender: "",
+      icon: "adult",
+    },
+  ];
+
+  const renderFamilyQuickIcon = (kind) => {
+    if (kind === "minor") {
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="8" cy="9" r="2.6" />
+          <circle cx="16" cy="8" r="2.2" />
+          <path d="M3.8 19a4.6 4.6 0 0 1 8.4 0" />
+          <path d="M12.4 19a4 4 0 0 1 7.2 0" />
+        </svg>
+      );
+    }
+    if (kind === "guarded") {
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="9" cy="8" r="2.6" />
+          <path d="M4.8 18a4.6 4.6 0 0 1 8.4 0" />
+          <circle cx="17" cy="10" r="2.1" />
+          <path d="M14 19a3.7 3.7 0 0 1 6 0" />
+        </svg>
+      );
+    }
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="9" cy="8" r="2.6" />
+        <path d="M4.8 19a4.6 4.6 0 0 1 8.4 0" />
+        <circle cx="17" cy="9" r="2.4" />
+        <path d="M13.2 19a4.2 4.2 0 0 1 7.6 0" />
+      </svg>
+    );
+  };
 
   useEffect(() => {
     setTimezone(profile.timezone || detectedTimezone || "America/Santiago");
@@ -148,6 +210,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    setActiveSection(initialSection || "perfil");
+    if ((initialSection || "perfil") === "familia" && isMobileSettings) {
+      setMobileSectionOpen(true);
+    }
+  }, [initialSection, isMobileSettings]);
 
   useEffect(() => {
     let mounted = true;
@@ -372,7 +441,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       const link = `${window.location.origin}/#share=${encoded}`;
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
-        window.alert("Link de comparticiИn copiado al portapapeles.");
+        window.alert("Link de comparticiÐ˜n copiado al portapapeles.");
       } else {
         prompt("Copia este link", link);
       }
@@ -386,7 +455,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
 
   const handleClearLocal = () => {
-    if (!window.confirm("¿Borrar los datos locales de Klinip en este navegador?")) return;
+    if (!window.confirm("Â¿Borrar los datos locales de Klinip en este navegador?")) return;
     const keys = [
       "klinip_users",
       "klinip_session",
@@ -397,13 +466,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       "klinip_onboarding_completed_v1",
     ];
     keys.forEach((k) => localStorage.removeItem(k));
-    alert("Datos locales borrados. Vuelve a iniciar sesión para continuar.");
+    alert("Datos locales borrados. Vuelve a iniciar sesiÃ³n para continuar.");
     window.location.reload();
   };
 
   const handleRevokeConsent = () => {
     setPrivacyNotice("");
-    if (!window.confirm("¿Deseas revocar tu consentimiento de datos de salud?")) return;
+    if (!window.confirm("Â¿Deseas revocar tu consentimiento de datos de salud?")) return;
     revokeDataConsent()
       .then(() => {
         localStorage.setItem("klinip_consent_revoked", "true");
@@ -530,6 +599,60 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const handleFamilyQuickAdd = async (card) => {
+    const maxProfiles = Number(planInfo?.max_profiles ?? 1);
+    const currentProfiles = Number(planInfo?.current_profiles ?? familyProfiles.length ?? 0);
+    if (currentProfiles >= maxProfiles) {
+      setFamilyStatus("Alcanzaste el limite de perfiles de tu plan. Para agregar mas, sube de plan.");
+      window.alert("Alcanzaste el limite de perfiles de tu plan.");
+      return;
+    }
+
+    setQuickAddSelection(card);
+    setQuickAddName("");
+    setNewFamilyProfile((prev) => ({
+      ...prev,
+      relation_with_owner: card?.relation || prev.relation_with_owner || "",
+      gender: card?.gender ?? prev.gender,
+    }));
+    setFamilyStatus(`Tipo seleccionado: ${card?.title || "Perfil"}. Escribe el nombre y confirma.`);
+    setTimeout(() => {
+      familyNameInputRef.current?.focus();
+    }, 0);
+  };
+
+  const handleConfirmQuickAdd = async () => {
+    if (!quickAddSelection) return;
+    const cleanName = (quickAddName || "").trim();
+    if (!cleanName) {
+      setFamilyStatus("Debes ingresar nombre completo para agregar el familiar.");
+      return;
+    }
+    setFamilyStatus("");
+    try {
+      const created = await createHealthProfile({
+        full_name: cleanName,
+        relation_with_owner: quickAddSelection?.relation || "",
+        gender: quickAddSelection?.gender || "",
+      });
+      const [plan, cards] = await Promise.all([
+        getMyPlan().catch(() => null),
+        getFamilyPanel().catch(() => []),
+      ]);
+      setPlanInfo(plan || planInfo);
+      setFamilyProfiles((prev) => [...prev, created]);
+      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
+      setActiveFamilyProfileId(created?.id || activeFamilyProfileId);
+      setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
+      setQuickAddSelection(null);
+      setQuickAddName("");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo crear el perfil");
+      console.error("Error creando perfil rapido:", err);
+    }
+  };
+
   const handleInviteCaregiver = async () => {
     if (!activeFamilyProfileId) {
       setFamilyStatus("Selecciona un perfil activo para invitar");
@@ -582,6 +705,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
       setFamilyStatus("Invitacion aceptada correctamente");
       setActiveSection("familia");
+      navigate("/family");
       if (isMobileSettings) {
         setMobileSectionOpen(true);
       }
@@ -752,8 +876,9 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       <div
         className={`card settings-shell ${
           isMobileSettings && mobileSectionOpen ? "is-mobile-section-open" : ""
-        }`}
+        } ${isFamilyStandalone ? "is-family-standalone" : ""}`}
       >
+        {!isFamilyStandalone && (
         <aside className="settings-sidebar">
           <h2 className="card-title">Mi perfil</h2>
           <div className="settings-mobile-hero">
@@ -775,13 +900,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               onClick={() => handleSectionSelect("perfil")}
             >
               Perfil
-            </button>
-            <button
-              className={`settings-nav-btn ${activeSection === "familia" ? "is-active" : ""}`}
-              type="button"
-              onClick={() => handleSectionSelect("familia")}
-            >
-              Mi familia
             </button>
             <button
               className={`settings-nav-btn ${activeSection === "privacidad" ? "is-active" : ""}`}
@@ -833,17 +951,18 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             className="settings-logout-btn"
             type="button"
             onClick={() => {
-              if (window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+              if (window.confirm("Â¿EstÃ¡s seguro de que deseas cerrar sesiÃ³n?")) {
                 onLogout?.();
               }
             }}
           >
-            Cerrar sesión
+            Cerrar sesiÃ³n
           </button>
         </aside>
+        )}
 
-        <div className="settings-main">
-      {isMobileSettings && mobileSectionOpen && (
+        <div className={`settings-main ${isFamilyStandalone ? "is-family-standalone-main" : ""}`}>
+      {isMobileSettings && mobileSectionOpen && !isFamilyStandalone && (
         <div className="settings-mobile-backbar">
           <button
             className="secondary-btn"
@@ -858,151 +977,225 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
       {activeSection === "perfil" && (
       <div className="settings-section">
-        <h2 className="card-title profile-section-title">Perfil</h2>
-        <div className="family-active-banner">
+        <div className="profile-page-header">
           <div>
-            <p className="family-active-label">Perfil de salud activo</p>
-            <p className="muted">
-              Cambia rapidamente el contexto para evitar errores al gestionar datos.
-            </p>
+            <h2 className="card-title profile-section-title">Mi perfil</h2>
+            <p className="muted">Centraliza tu cuenta, recordatorios y datos de salud base.</p>
           </div>
-          <select
-            className="select-field"
-            value={activeFamilyProfileId || ""}
-            onChange={(e) => handleSetActiveProfile(e.target.value)}
-          >
-            <option value="" disabled>
-              Seleccionar perfil
-            </option>
-            {familyProfiles.map((item) => (
-              <option value={item.id} key={item.id}>
-                {item.full_name} {item.relation_with_owner ? `(${item.relation_with_owner})` : ""}
+          <div className="family-page-plan-chip">{plan}</div>
+        </div>
+
+        <div className="profile-quick-grid">
+          <article className="profile-quick-card">
+            <span className="profile-quick-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <circle cx="12" cy="8" r="3.2" />
+                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <p className="profile-quick-title">Cuenta</p>
+            <p className="profile-quick-description">Nombre, correo y plan activo.</p>
+            <span className="profile-quick-action">{profile.email || "sin correo"}</span>
+          </article>
+          <article className="profile-quick-card">
+            <span className="profile-quick-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+              </svg>
+            </span>
+            <p className="profile-quick-title">Recordatorios</p>
+            <p className="profile-quick-description">Horario preferido y notificaciones por correo.</p>
+            <span className="profile-quick-action">{emailRemindersEnabled ? "Correo activo" : "Correo desactivado"}</span>
+          </article>
+          <article className="profile-quick-card">
+            <span className="profile-quick-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <path d="M12 21s-6.5-4.2-6.5-10A4.5 4.5 0 0 1 10 6.5c.9 0 1.7.26 2 .9.3-.64 1.1-.9 2-.9a4.5 4.5 0 0 1 4.5 4.5c0 5.8-6.5 10-6.5 10z" />
+              </svg>
+            </span>
+            <p className="profile-quick-title">Salud base</p>
+            <p className="profile-quick-description">Patologia cronica y centro habitual.</p>
+            <span className="profile-quick-action">{primaryCareCenter || "Sin centro definido"}</span>
+          </article>
+        </div>
+
+        <div className="family-collab-card">
+          <h4>Cuenta y perfil activo</h4>
+          <div className="family-active-banner">
+            <div>
+              <p className="family-active-label">Perfil de salud activo</p>
+              <p className="muted">Cambia rapidamente el contexto para evitar errores al gestionar datos.</p>
+            </div>
+            <select
+              className="select-field"
+              value={activeFamilyProfileId || ""}
+              onChange={(e) => handleSetActiveProfile(e.target.value)}
+            >
+              <option value="" disabled>
+                Seleccionar perfil
               </option>
-            ))}
-          </select>
-        </div>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Informacion basica de tu cuenta. Proximamente podras activar recordatorios por correo. Ya existen plantillas base de correo configuradas para su lanzamiento.
-        </p>
-        <div className="settings-email-reminder-row">
-          <div className="settings-email-reminder-copy">
-            <p className="settings-email-reminder-title">Recordatorios por correo</p>
-            <p className="settings-email-reminder-sub">
-              Activa o desactiva la recepcion de recordatorios por email.
-            </p>
-          </div>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={emailRemindersEnabled}
-              onChange={(e) => handleToggleEmailReminders(e.target.checked)}
-            />
-            <span className="switch-slider" />
-          </label>
-        </div>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Estado actual: {emailRemindersEnabled ? "Activados" : "Desactivados"}
-        </p>
-        {emailReminderStatus && <p className="muted">{emailReminderStatus}</p>}
-
-        <div className="profile-grid">
-          <div className="profile-tile">
-            <p className="profile-label">Nombre</p>
-            <p className="profile-value">{profile.name || "—"}</p>
-          </div>
-          <div className="profile-tile">
-            <p className="profile-label">Correo</p>
-            <p className="profile-value">{profile.email || "—"}</p>
-          </div>
-          <div className="profile-tile">
-            <p className="profile-label">Plan</p>
-            <p className="profile-value">{plan}</p>
-          </div>
-          <div className="profile-tile">
-            <p className="profile-label">Zona horaria</p>
-            <p className="profile-value">{profile.timezone || detectedTimezone}</p>
-          </div>
-        </div>
-
-        <div className="form-row">
-          <div className="input-group">
-            <label className="input-label">Actualizar zona horaria</label>
-            <input
-              className="input-field"
-              list="timezone-options"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              placeholder="America/Santiago"
-            />
-            <datalist id="timezone-options">
-              {timezoneOptions.map((tz) => (
-                <option value={tz} key={tz} />
+              {familyProfiles.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.full_name} {item.relation_with_owner ? `(${item.relation_with_owner})` : ""}
+                </option>
               ))}
-            </datalist>
+            </select>
           </div>
-          <div className="input-group" style={{ alignSelf: "flex-end" }}>
-            <button className="secondary-btn" type="button" onClick={handleSaveTimezone}>
-              Guardar configuración de recordatorios
-            </button>
+          <div className="profile-grid">
+            <div className="profile-tile">
+              <p className="profile-label">Nombre</p>
+              <p className="profile-value">{profile.name || "-"}</p>
+            </div>
+            <div className="profile-tile">
+              <p className="profile-label">Correo</p>
+              <p className="profile-value">{profile.email || "-"}</p>
+            </div>
+            <div className="profile-tile">
+              <p className="profile-label">Plan</p>
+              <p className="profile-value">{plan}</p>
+            </div>
+            <div className="profile-tile">
+              <p className="profile-label">Zona horaria</p>
+              <p className="profile-value">{profile.timezone || detectedTimezone}</p>
+            </div>
           </div>
         </div>
-        <div className="form-row" style={{ marginTop: "0.5rem" }}>
-          <div className="input-group">
-            <label className="input-label">Hora preferida de recordatorios</label>
-            <input
-              className="input-field"
-              type="time"
-              value={reminderPreferredTime}
-              onChange={(e) => setReminderPreferredTime(e.target.value || "08:00")}
-            />
-          </div>
-        </div>
-        {timezoneStatus && <p className="muted">{timezoneStatus}</p>}
 
-        <div className="form-row" style={{ marginTop: "0.75rem" }}>
-          <div className="input-group">
-            <label className="input-label">Patología crónica (opcional)</label>
-            <input
-              className="input-field"
-              value={chronicCondition}
-              onChange={(e) => setChronicCondition(e.target.value)}
-              placeholder="Ej: Hipertensión, diabetes, asma"
-            />
+        <div className="family-collab-card">
+          <h4>Recordatorios y horario</h4>
+          <div className="settings-email-reminder-row">
+            <div className="settings-email-reminder-copy">
+              <p className="settings-email-reminder-title">Recordatorios por correo</p>
+              <p className="settings-email-reminder-sub">Activa o desactiva la recepcion de recordatorios por email.</p>
+            </div>
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={emailRemindersEnabled}
+                onChange={(e) => handleToggleEmailReminders(e.target.checked)}
+              />
+              <span className="switch-slider" />
+            </label>
           </div>
-          <div className="input-group">
-            <label className="input-label">Centro habitual (opcional)</label>
-            <input
-              className="input-field"
-              value={primaryCareCenter}
-              onChange={(e) => setPrimaryCareCenter(e.target.value)}
-              placeholder="Ej: CESFAM Norte, Clínica ..."
-            />
+          <p className="muted" style={{ marginBottom: "0.75rem" }}>
+            Estado actual: {emailRemindersEnabled ? "Activados" : "Desactivados"}
+          </p>
+          {emailReminderStatus && <p className="muted">{emailReminderStatus}</p>}
+          <div className="form-row">
+            <div className="input-group">
+              <label className="input-label">Actualizar zona horaria</label>
+              <input
+                className="input-field"
+                list="timezone-options"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                placeholder="America/Santiago"
+              />
+              <datalist id="timezone-options">
+                {timezoneOptions.map((tz) => (
+                  <option value={tz} key={tz} />
+                ))}
+              </datalist>
+            </div>
+            <div className="input-group" style={{ alignSelf: "flex-end" }}>
+              <button className="secondary-btn" type="button" onClick={handleSaveTimezone}>
+                Guardar configuracion de recordatorios
+              </button>
+            </div>
           </div>
+          <div className="form-row" style={{ marginTop: "0.5rem" }}>
+            <div className="input-group">
+              <label className="input-label">Hora preferida de recordatorios</label>
+              <input
+                className="input-field"
+                type="time"
+                value={reminderPreferredTime}
+                onChange={(e) => setReminderPreferredTime(e.target.value || "08:00")}
+              />
+            </div>
+          </div>
+          {timezoneStatus && <p className="muted">{timezoneStatus}</p>}
         </div>
-        <div className="form-row">
-          <div className="input-group" style={{ alignSelf: "flex-end" }}>
-            <button className="secondary-btn" type="button" onClick={handleSaveHealthProfile}>
-              Guardar perfil de salud
-            </button>
-          </div>
-        </div>
-        {healthProfileStatus && <p className="muted">{healthProfileStatus}</p>}
 
+        <div className="family-collab-card">
+          <h4>Perfil de salud base</h4>
+          <div className="form-row" style={{ marginTop: "0.25rem" }}>
+            <div className="input-group">
+              <label className="input-label">Patologia cronica (opcional)</label>
+              <input
+                className="input-field"
+                value={chronicCondition}
+                onChange={(e) => setChronicCondition(e.target.value)}
+                placeholder="Ej: Hipertension, diabetes, asma"
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Centro habitual (opcional)</label>
+              <input
+                className="input-field"
+                value={primaryCareCenter}
+                onChange={(e) => setPrimaryCareCenter(e.target.value)}
+                placeholder="Ej: CESFAM Norte, Clinica ..."
+              />
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="input-group" style={{ alignSelf: "flex-end" }}>
+              <button className="secondary-btn" type="button" onClick={handleSaveHealthProfile}>
+                Guardar perfil de salud
+              </button>
+            </div>
+          </div>
+          {healthProfileStatus && <p className="muted">{healthProfileStatus}</p>}
+        </div>
       </div>
       )}
 
       {activeSection === "familia" && (
-      <div className="settings-section">
-        <h2 className="card-title">Mi familia</h2>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Gestiona perfiles de salud vinculados segun tu plan actual.
-        </p>
+      <div className={`settings-section ${isFamilyStandalone ? "family-section-standalone" : ""}`}>
+        {isFamilyStandalone && (
+          <div className="family-page-header">
+            <div>
+              <h2 className="card-title">Mi familia</h2>
+              <p className="muted">Gestiona perfiles, accesos y colaboracion de forma centralizada.</p>
+            </div>
+            <div className="family-page-plan-chip">
+              {planInfo?.plan_type || "basico"}
+            </div>
+          </div>
+        )}
+        {!isFamilyStandalone && (
+          <>
+            <h2 className="card-title">Mi familia</h2>
+            <p className="muted" style={{ marginBottom: "0.75rem" }}>
+              Gestiona perfiles de salud vinculados segun tu plan actual.
+            </p>
+          </>
+        )}
 
-        <div className="family-collab-card">
-          <h4>Invitaciones pendientes para ti</h4>
-          <div className="family-table">
-            {myPendingInvitations.length ? (
-              myPendingInvitations.map((inv) => (
+        <div className="family-summary-card">
+          <div className="family-summary-metrics">
+            <div className="family-summary-metric">
+              <p className="family-summary-label">Plan</p>
+              <p className="family-summary-value">{planInfo?.plan_type || "basico"}</p>
+            </div>
+            <div className="family-summary-metric">
+              <p className="family-summary-label">Perfiles usados</p>
+              <p className="family-summary-value">{planInfo?.current_profiles ?? familyProfiles.length} / {planInfo?.max_profiles ?? 1}</p>
+            </div>
+            <div className="family-summary-metric">
+              <p className="family-summary-label">Colaboracion</p>
+              <p className="family-summary-value">{planInfo?.collaboration_enabled ? "Habilitada" : "No disponible"}</p>
+            </div>
+            <div className="family-summary-metric">
+              <p className="family-summary-label">Invitaciones pendientes</p>
+              <p className="family-summary-value">{myPendingInvitations.length}</p>
+            </div>
+          </div>
+          {myPendingInvitations.length ? (
+            <div className="family-summary-pending">
+              {myPendingInvitations.map((inv) => (
                 <div className="family-table-row" key={inv.id}>
                   <div>
                     <p className="family-name">{inv.profile_name}</p>
@@ -1018,38 +1211,80 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                     Aceptar
                   </button>
                 </div>
-              ))
-            ) : (
-              <p className="muted">No tienes invitaciones pendientes.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="family-plan-card">
-          <p><strong>Plan:</strong> {planInfo?.plan_type || "basico"}</p>
-          <p><strong>Perfiles usados:</strong> {planInfo?.current_profiles ?? familyProfiles.length} / {planInfo?.max_profiles ?? 1}</p>
-          <p><strong>Colaboracion:</strong> {planInfo?.collaboration_enabled ? "Habilitada" : "No disponible en este plan"}</p>
-        </div>
-
-        <h4 className="family-section-title">Panel familiar</h4>
-        <div className="family-panel-grid">
-          {familyPanelCards.length ? (
-            familyPanelCards.map((card) => (
-              <article className="family-panel-card" key={card.profile_id}>
-                <p className="family-panel-name">{card.name}</p>
-                <p className="muted">{card.relationship || "Sin relacion"} {typeof card.age_years === "number" ? `- ${card.age_years} años` : ""}</p>
-                <p className="muted">Medicamentos activos: {card.medications_active}</p>
-                <p className="muted">Recordatorios pendientes: {card.reminders_pending}</p>
-                <p className="muted">Proxima cita: {card.next_appointment_at ? toLocaleDateTimeOrEmpty(card.next_appointment_at) : "Sin cita"}</p>
-                <p className="muted">Cuidadores: {card.caregivers_count}</p>
-              </article>
-            ))
+              ))}
+            </div>
           ) : (
-            <p className="muted">No hay datos de panel familiar disponibles aun.</p>
+            <p className="muted">No tienes invitaciones pendientes.</p>
           )}
         </div>
 
-        <div className="family-collab-card">
+        <div className="family-create-card">
+          <h4>Agregar familiar rapido</h4>
+          <div className="family-quick-grid">
+            {familyQuickCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                className="family-quick-card"
+                onClick={() => handleFamilyQuickAdd(card)}
+              >
+                <span className="family-quick-icon" aria-hidden="true">
+                  {renderFamilyQuickIcon(card.icon)}
+                </span>
+                <p className="family-quick-title">{card.title}</p>
+                <p className="family-quick-description">{card.description}</p>
+                <span className="family-quick-action">Agregar</span>
+              </button>
+            ))}
+          </div>
+          {quickAddSelection ? (
+            <div className="family-quick-inline">
+              <p className="muted">
+                Agregando: <strong>{quickAddSelection.title}</strong>
+              </p>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Nombre completo</label>
+                  <input
+                    className="input-field"
+                    ref={familyNameInputRef}
+                    value={quickAddName}
+                    onChange={(e) => setQuickAddName(e.target.value)}
+                    placeholder="Ej: Maria Gonzalez"
+                  />
+                </div>
+                <div className="input-group" style={{ alignSelf: "flex-end" }}>
+                  <button className="secondary-btn" type="button" onClick={handleConfirmQuickAdd}>
+                    Agregar ahora
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="family-overview-grid">
+          <div className="family-collab-card">
+            <h4>Panel familiar</h4>
+            <div className="family-panel-grid">
+              {familyPanelCards.length ? (
+                familyPanelCards.map((card) => (
+                  <article className="family-panel-card" key={card.profile_id}>
+                    <p className="family-panel-name">{card.name}</p>
+                    <p className="muted">{card.relationship || "Sin relacion"} {typeof card.age_years === "number" ? `- ${card.age_years} aÃ±os` : ""}</p>
+                    <p className="muted">Medicamentos activos: {card.medications_active}</p>
+                    <p className="muted">Recordatorios pendientes: {card.reminders_pending}</p>
+                    <p className="muted">Proxima cita: {card.next_appointment_at ? toLocaleDateTimeOrEmpty(card.next_appointment_at) : "Sin cita"}</p>
+                    <p className="muted">Cuidadores: {card.caregivers_count}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="muted">No hay datos de panel familiar disponibles aun.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="family-collab-card">
           <h4>Alertas inteligentes</h4>
           <div className="family-activity-list">
             {familyAlerts.length ? (
@@ -1068,34 +1303,35 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               <p className="muted">No hay alertas activas por ahora.</p>
             )}
           </div>
-        </div>
+          </div>
 
-        <div className="family-collab-card">
-          <h4>Reporte familiar (30 dias)</h4>
-          {familyReport ? (
-            <>
-              <div className="family-report-totals">
-                <p><strong>Perfiles:</strong> {familyReport?.totals?.profiles ?? 0}</p>
-                <p><strong>Medicamentos activos:</strong> {familyReport?.totals?.medications_active ?? 0}</p>
-                <p><strong>Citas totales:</strong> {familyReport?.totals?.appointments_total ?? 0}</p>
-                <p><strong>Documentos:</strong> {familyReport?.totals?.documents_uploaded ?? 0}</p>
-              </div>
-              <div className="family-table">
-                {(familyReport?.profiles || []).map((rp) => (
-                  <div className="family-table-row" key={rp.profile_id}>
-                    <div>
-                      <p className="family-name">{rp.profile_name}</p>
-                      <p className="muted">
-                        Citas proximas: {rp.appointments_upcoming} | Adherencia: {rp.adherence_rate ?? "-"}%
-                      </p>
+          <div className="family-collab-card">
+            <h4>Reporte familiar (30 dias)</h4>
+            {familyReport ? (
+              <>
+                <div className="family-report-totals">
+                  <p><strong>Perfiles:</strong> {familyReport?.totals?.profiles ?? 0}</p>
+                  <p><strong>Medicamentos activos:</strong> {familyReport?.totals?.medications_active ?? 0}</p>
+                  <p><strong>Citas totales:</strong> {familyReport?.totals?.appointments_total ?? 0}</p>
+                  <p><strong>Documentos:</strong> {familyReport?.totals?.documents_uploaded ?? 0}</p>
+                </div>
+                <div className="family-table">
+                  {(familyReport?.profiles || []).map((rp) => (
+                    <div className="family-table-row" key={rp.profile_id}>
+                      <div>
+                        <p className="family-name">{rp.profile_name}</p>
+                        <p className="muted">
+                          Citas proximas: {rp.appointments_upcoming} | Adherencia: {rp.adherence_rate ?? "-"}%
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <p className="muted">Sin datos de reporte aun.</p>
-          )}
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="muted">Sin datos de reporte aun.</p>
+            )}
+          </div>
         </div>
 
         {planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
@@ -1106,6 +1342,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 <label className="input-label">Nombre completo</label>
                 <input
                   className="input-field"
+                  ref={familyNameInputRef}
                   value={newFamilyProfile.full_name}
                   onChange={(e) =>
                     setNewFamilyProfile((prev) => ({ ...prev, full_name: e.target.value }))
@@ -1321,7 +1558,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </>
         )}
 
-        {!!activeFamilyProfileId && (
+        {!!activeFamilyProfileId && planInfo?.collaboration_enabled && (
           <div className="family-collab-card">
             <h4>Notas colaborativas</h4>
             <div className="input-group">
@@ -1349,6 +1586,15 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 <p className="muted">Sin notas colaborativas todavia.</p>
               )}
             </div>
+          </div>
+        )}
+
+        {!!activeFamilyProfileId && !planInfo?.collaboration_enabled && (
+          <div className="family-collab-card">
+            <h4>Notas colaborativas</h4>
+            <p className="muted">
+              Disponible en plan Familiar para coordinacion entre cuidadores.
+            </p>
           </div>
         )}
 
@@ -1386,7 +1632,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="export-card">
             <h4>Descargar archivos</h4>
             <p className="muted">
-              Exporta tus citas y documentos para respaldo o revisión externa.
+              Exporta tus citas y documentos para respaldo o revisiÃ³n externa.
             </p>
             <div className="export-actions">
               <button className="secondary-btn" type="button" onClick={exportCsv}>
@@ -1401,7 +1647,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="export-card">
             <h4>Compartir por enlace</h4>
             <p className="muted">
-              Crea un enlace temporal con tus datos actuales y cópialo al portapapeles.
+              Crea un enlace temporal con tus datos actuales y cÃ³pialo al portapapeles.
             </p>
             <div className="export-actions">
               <button className="secondary-btn" type="button" onClick={shareLink} disabled={exporting}>
@@ -1409,17 +1655,17 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </button>
             </div>
             <p className="muted export-note">
-              El enlace se genera con la información disponible al momento de crearlo.
+              El enlace se genera con la informaciÃ³n disponible al momento de crearlo.
             </p>
           </div>
         </div>
         <div className="export-footer">
           <div className="export-footer-tip">
-            Recomendación: usa PDF para lectura y CSV para análisis o importación.
+            RecomendaciÃ³n: usa PDF para lectura y CSV para anÃ¡lisis o importaciÃ³n.
           </div>
           <div>
             <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
-              {exporting ? "Generando..." : "Compartir link rápido"}
+              {exporting ? "Generando..." : "Compartir link rÃ¡pido"}
             </button>
           </div>
         </div>
@@ -1428,10 +1674,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
       {activeSection === "notificaciones" && (
       <div className="settings-section">
-        <h3 className="card-title">🔔 Notificaciones y Recordatorios</h3>
+        <h3 className="card-title">ðŸ”” Notificaciones y Recordatorios</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Configura tus preferencias de notificaciones, recordatorios de citas y medicamentos. 
-          Personaliza cuándo quieres recibir alertas.
+          Personaliza cuÃ¡ndo quieres recibir alertas.
         </p>
         <NotificationSettings embedded />
       </div>
@@ -1486,7 +1732,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </span>
             </div>
             <p className="muted">
-              Gestiona el permiso para datos de salud y las acciones críticas de tu cuenta.
+              Gestiona el permiso para datos de salud y las acciones crÃ­ticas de tu cuenta.
             </p>
             <div className="privacy-actions">
               {consentRevoked ? (
@@ -1507,7 +1753,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="privacy-card">
             <h4>Exportar y limpieza</h4>
             <p className="muted">
-              Descarga tus datos o limpia información local del navegador.
+              Descarga tus datos o limpia informaciÃ³n local del navegador.
             </p>
             <div className="privacy-actions">
               <button className="secondary-btn" type="button" onClick={exportCsv}>
@@ -1525,7 +1771,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="privacy-card privacy-support-card">
             <h4>Soporte de privacidad</h4>
             <p className="muted">
-              Si necesitas acceso, rectificación o eliminación de datos, envía tu solicitud aquí.
+              Si necesitas acceso, rectificaciÃ³n o eliminaciÃ³n de datos, envÃ­a tu solicitud aquÃ­.
             </p>
             <div className="privacy-form-grid">
               <div className="input-group">
@@ -1536,8 +1782,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   onChange={(e) => setPrivacyReason(e.target.value)}
                 >
                   <option value="acceso">Acceso a mis datos</option>
-                  <option value="rectificacion">Rectificación</option>
-                  <option value="eliminacion">Eliminación</option>
+                  <option value="rectificacion">RectificaciÃ³n</option>
+                  <option value="eliminacion">EliminaciÃ³n</option>
                   <option value="otra">Otra consulta</option>
                 </select>
               </div>
@@ -1557,7 +1803,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 checked={privacyIncludeTech}
                 onChange={(e) => setPrivacyIncludeTech(e.target.checked)}
               />
-              <span>Adjuntar información técnica básica</span>
+              <span>Adjuntar informaciÃ³n tÃ©cnica bÃ¡sica</span>
             </label>
             <div className="privacy-form-actions">
               <button
@@ -1626,6 +1872,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     </>
   );
 }
+
 
 
 
