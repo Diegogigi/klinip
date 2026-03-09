@@ -31,6 +31,7 @@ export default function Documents() {
     date: "",
     center: "",
     notes: "",
+    send_email_backup: false,
   });
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -45,6 +46,7 @@ export default function Documents() {
       form.date ||
       form.center.trim() ||
       form.notes.trim() ||
+      form.send_email_backup ||
       form.doc_type !== "receta";
     if (hasChanges) {
       const shouldClose = window.confirm(
@@ -57,6 +59,7 @@ export default function Documents() {
       date: "",
       center: "",
       notes: "",
+      send_email_backup: false,
     });
     setFile(null);
     setShowForm(false);
@@ -99,6 +102,7 @@ export default function Documents() {
         date: toIsoOrNull(form.date),
         center: form.center,
         notes: form.notes,
+        send_email_backup: form.send_email_backup,
         file,
       });
       clearTimeout(timeoutId);
@@ -288,6 +292,19 @@ export default function Documents() {
                 />
                 <span className="tiny-note">Ten en cuenta el tama?o soportado por tu navegador y conexi?n.</span>
               </div>
+
+              <label className="auth-consent-label" style={{ marginBottom: "0.75rem" }}>
+                <input
+                  type="checkbox"
+                  checked={form.send_email_backup}
+                  onChange={(e) =>
+                    setForm({ ...form, send_email_backup: e.target.checked })
+                  }
+                />
+                <span>
+                  Enviarme una copia de respaldo por correo (documento adjunto)
+                </span>
+              </label>
 
               <div className="floating-actions">
                 <button className="primary-btn" type="submit" disabled={uploading}>

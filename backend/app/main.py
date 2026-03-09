@@ -17,6 +17,7 @@ from sqlalchemy import text, inspect, func
 from typing import List
 import os
 import mimetypes
+import base64
 from datetime import timedelta, datetime
 import hashlib
 import secrets
@@ -248,6 +249,17 @@ def ensure_user_schema():
                     "ALTER TABLE users ADD COLUMN email_reminders_enabled BOOLEAN DEFAULT 0"
                 )
             added_columns.append("email_reminders_enabled")
+
+        if "notification_settings_json" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_settings_json TEXT DEFAULT ''"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN notification_settings_json TEXT DEFAULT ''"
+                )
+            added_columns.append("notification_settings_json")
 
         if statements:
             with engine.begin() as conn:
@@ -573,6 +585,25 @@ def _msg_html_body(msg: EmailMessage) -> str | None:
     return None
 
 
+def _msg_attachments(msg: EmailMessage) -> list[dict]:
+    items = []
+    try:
+        for part in msg.iter_attachments():
+            filename = (part.get_filename() or "adjunto").strip()
+            payload_bytes = part.get_payload(decode=True) or b""
+            if not payload_bytes:
+                continue
+            items.append(
+                {
+                    "filename": filename,
+                    "content": base64.b64encode(payload_bytes).decode("ascii"),
+                }
+            )
+    except Exception:
+        return []
+    return items
+
+
 def _resend_send_message(msg: EmailMessage):
     api_key = (os.getenv("RESEND_API_KEY") or "").strip()
     if not api_key:
@@ -595,6 +626,9 @@ def _resend_send_message(msg: EmailMessage):
     }
     if html_body:
         payload["html"] = html_body
+    attachments = _msg_attachments(msg)
+    if attachments:
+        payload["attachments"] = attachments
 
     req = urlrequest.Request(
         "https://api.resend.com/emails",
@@ -994,6 +1028,26 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
         print(f"ERROR sending appointment confirmation email async: {exc}")
 
 
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject=f"Recordatorio de cita - {payload.get('offset_label') or 'proxima cita'}",
+            template_name="appointment_reminder.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "offset_label": payload.get("offset_label") or "",
+                "specialty": payload.get("specialty") or "Atencion medica",
+                "center": payload.get("center") or "Centro de salud",
+                "date_label": payload.get("date_label") or "",
+                "notes": payload.get("notes") or "",
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending appointment reminder email async: {exc}")
+
+
 def _send_medical_order_uploaded_email_safe(to_email: str, user_name: str, payload: dict):
     try:
         _send_templated_email(
@@ -1010,6 +1064,67 @@ def _send_medical_order_uploaded_email_safe(to_email: str, user_name: str, paylo
         print(f"DEBUG order processed email: enviado a {to_email}")
     except Exception as exc:
         print(f"ERROR sending order processed email async: {exc}")
+
+
+def _send_document_backup_email_safe(
+    to_email: str,
+    user_name: str,
+    payload: dict,
+    filename: str,
+    file_bytes: bytes,
+):
+    try:
+        if not to_email or not file_bytes:
+            return
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_pass = os.getenv("SMTP_PASS")
+        sender = _smtp_from_notifications(smtp_user)
+        if not sender:
+            raise RuntimeError("Remitente de correo no configurado")
+
+        subject = f"Respaldo de documento: {filename}"
+        doc_type = payload.get("document_type") or "Documento"
+        center = payload.get("center") or "Sin centro"
+        uploaded_at = payload.get("uploaded_at") or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        text_body = (
+            f"Hola {user_name or 'Usuario'},\n\n"
+            f"Adjuntamos una copia de respaldo de tu documento subido en Klinip.\n\n"
+            f"Tipo: {doc_type}\n"
+            f"Centro: {center}\n"
+            f"Fecha de carga: {uploaded_at}\n\n"
+            f"Equipo {_app_display_name()}"
+        )
+        html_body = (
+            f"<p>Hola {escape(user_name or 'Usuario')},</p>"
+            f"<p>Adjuntamos una copia de respaldo de tu documento subido en {_app_display_name()}.</p>"
+            f"<p><strong>Tipo:</strong> {escape(doc_type)}<br>"
+            f"<strong>Centro:</strong> {escape(center)}<br>"
+            f"<strong>Fecha de carga:</strong> {escape(uploaded_at)}</p>"
+        )
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = sender
+        msg["To"] = to_email
+        msg.set_content(text_body)
+        msg.add_alternative(html_body, subtype="html")
+
+        mime_type, _ = mimetypes.guess_type(filename or "")
+        maintype, subtype = ("application", "octet-stream")
+        if mime_type and "/" in mime_type:
+            maintype, subtype = mime_type.split("/", 1)
+        msg.add_attachment(
+            file_bytes,
+            maintype=maintype,
+            subtype=subtype,
+            filename=filename or "documento",
+        )
+
+        _deliver_message(msg, smtp_user, smtp_pass)
+        print(f"DEBUG document backup email: enviado a {to_email} adjunto={filename}")
+    except Exception as exc:
+        print(f"ERROR sending document backup email async: {exc}")
 
 
 def _send_medications_detected_email_safe(to_email: str, user_name: str, medications: list[dict]):
@@ -1109,6 +1224,66 @@ def _appointment_offsets():
         {"label": "30 minutos antes", "delta": timedelta(minutes=30), "priority": "urgent"},
         {"label": "5 minutos antes", "delta": timedelta(minutes=5), "priority": "urgent"},
     ]
+
+
+_DEFAULT_NOTIFICATION_SETTINGS = {
+    "appointmentReminders": True,
+    "medicationReminders": True,
+    "customOffsets": {
+        "days7": True,
+        "days3": True,
+        "days1": True,
+        "hours2": True,
+        "minutes30": True,
+        "minutes5": True,
+    },
+}
+
+
+def _user_notification_settings(user: models.User) -> dict:
+    raw = getattr(user, "notification_settings_json", "") or ""
+    if not raw:
+        return _DEFAULT_NOTIFICATION_SETTINGS
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return _DEFAULT_NOTIFICATION_SETTINGS
+
+    custom = (parsed.get("customOffsets") or {}) if isinstance(parsed, dict) else {}
+    defaults_custom = _DEFAULT_NOTIFICATION_SETTINGS["customOffsets"]
+
+    return {
+        "appointmentReminders": bool(parsed.get("appointmentReminders", True)) if isinstance(parsed, dict) else True,
+        "medicationReminders": bool(parsed.get("medicationReminders", True)) if isinstance(parsed, dict) else True,
+        "customOffsets": {
+            "days7": bool(custom.get("days7", defaults_custom["days7"])),
+            "days3": bool(custom.get("days3", defaults_custom["days3"])),
+            "days1": bool(custom.get("days1", defaults_custom["days1"])),
+            "hours2": bool(custom.get("hours2", defaults_custom["hours2"])),
+            "minutes30": bool(custom.get("minutes30", defaults_custom["minutes30"])),
+            "minutes5": bool(custom.get("minutes5", defaults_custom["minutes5"])),
+        },
+    }
+
+
+def _appointment_offsets_for_user(user: models.User):
+    prefs = _user_notification_settings(user)
+    custom = prefs.get("customOffsets", {})
+    all_offsets = _appointment_offsets()
+    mapping = {
+        "7 dias antes": "days7",
+        "3 dias antes": "days3",
+        "1 dia antes": "days1",
+        "2 horas antes": "hours2",
+        "30 minutos antes": "minutes30",
+        "5 minutos antes": "minutes5",
+    }
+    selected = []
+    for item in all_offsets:
+        key = mapping.get(item["label"])
+        if key and bool(custom.get(key, True)):
+            selected.append(item)
+    return selected or all_offsets
 
 
 def _derive_dose_hours(frequency_text: str = ""):
@@ -1272,61 +1447,90 @@ def _send_scheduled_push_reminders():
             user = subscription.user or db.query(models.User).filter(models.User.id == user_id).first()
             if not user:
                 continue
+            user_settings = _user_notification_settings(user)
             user_tz = _resolve_user_tz(user)
             now = datetime.now(user_tz)
 
-            appointments = (
-                db.query(models.Appointment)
-                .filter(
-                    models.Appointment.user_id == user_id,
-                    models.Appointment.date_time.isnot(None),
-                    models.Appointment.status != models.AppointmentStatus.realizada,
-                )
-                .all()
-            )
-
-            for appt in appointments:
-                appt_dt = _to_schedule_tz(appt.date_time, user_tz)
-                if not appt_dt:
-                    continue
-
-                for offset in _appointment_offsets():
-                    trigger_at = appt_dt - offset["delta"]
-                    if not _is_due(now, trigger_at):
-                        continue
-
-                    label = offset["label"]
-                    tag = f"appointment-{appt.id}-{label}-sub-{subscription.id}"
-                    if _notification_already_sent(db, tag):
-                        continue
-
-                    category = _appointment_type_label(appt.type)
-                    title = f"{category} - Recordatorio: {label}"
-                    when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
-                    center = appt.center or "Centro medico"
-                    body_lines = [
-                        f"{appt.specialty or appt.type} en {center}",
-                        when_text,
-                    ]
-                    if appt.notes:
-                        body_lines.append(appt.notes)
-                    body = "\n".join(body_lines)
-
-                    ok = send_web_push(
-                        subscription,
-                        {
-                            "title": title,
-                            "body": body,
-                            "url": "/appointments",
-                            "priority": offset["priority"],
-                            "sound": "appointment",
-                            "appointmentId": appt.id,
-                            "userId": user_id,
-                            "tag": tag,
-                        },
+            if bool(user_settings.get("appointmentReminders", True)):
+                appointments = (
+                    db.query(models.Appointment)
+                    .filter(
+                        models.Appointment.user_id == user_id,
+                        models.Appointment.date_time.isnot(None),
+                        models.Appointment.status != models.AppointmentStatus.realizada,
                     )
-                    if ok:
-                        _record_sent(db, user_id, tag, "appointment", trigger_at, now)
+                    .all()
+                )
+
+                for appt in appointments:
+                    appt_dt = _to_schedule_tz(appt.date_time, user_tz)
+                    if not appt_dt:
+                        continue
+
+                    for offset in _appointment_offsets_for_user(user):
+                        trigger_at = appt_dt - offset["delta"]
+                        if not _is_due(now, trigger_at):
+                            continue
+
+                        label = offset["label"]
+                        tag = f"appointment-{appt.id}-{label}-sub-{subscription.id}"
+                        if _notification_already_sent(db, tag):
+                            continue
+
+                        category = _appointment_type_label(appt.type)
+                        title = f"{category} - Recordatorio: {label}"
+                        when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
+                        center = appt.center or "Centro medico"
+                        body_lines = [
+                            f"{appt.specialty or appt.type} en {center}",
+                            when_text,
+                        ]
+                        if appt.notes:
+                            body_lines.append(appt.notes)
+                        body = "\n".join(body_lines)
+
+                        ok = send_web_push(
+                            subscription,
+                            {
+                                "title": title,
+                                "body": body,
+                                "url": "/appointments",
+                                "priority": offset["priority"],
+                                "sound": "appointment",
+                                "appointmentId": appt.id,
+                                "userId": user_id,
+                                "tag": tag,
+                            },
+                        )
+                        if ok:
+                            _record_sent(db, user_id, tag, "appointment", trigger_at, now)
+
+                        email_tag = f"appointment-email-{appt.id}-{label}"
+                        if (
+                            user
+                            and user.email
+                            and bool(getattr(user, "email_reminders_enabled", False))
+                            and not _notification_already_sent(db, email_tag)
+                        ):
+                            _send_appointment_reminder_email_safe(
+                                user.email,
+                                user.name or "",
+                                {
+                                    "offset_label": label,
+                                    "specialty": appt.specialty or appt.type,
+                                    "center": center,
+                                    "date_label": when_text,
+                                    "notes": appt.notes or "",
+                                },
+                            )
+                            _record_sent(
+                                db,
+                                user_id,
+                                email_tag,
+                                "appointment_email",
+                                trigger_at,
+                                now,
+                            )
 
             medications = (
                 db.query(models.Medication)
@@ -1340,6 +1544,9 @@ def _send_scheduled_push_reminders():
             )
 
             if not medications:
+                continue
+
+            if not bool(user_settings.get("medicationReminders", True)):
                 continue
 
             for med in medications:
@@ -3471,6 +3678,9 @@ async def update_me(
     if payload.email_reminders_enabled is not None:
         current_user.email_reminders_enabled = payload.email_reminders_enabled
 
+    if payload.notification_settings_json is not None:
+        current_user.notification_settings_json = payload.notification_settings_json
+
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
@@ -4165,6 +4375,7 @@ async def upload_document(
     date: str | None = Form(None),
     center: str | None = Form(""),
     notes: str | None = Form(""),
+    send_email_backup: bool = Form(False),
     file: UploadFile = File(...),
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -4221,6 +4432,19 @@ async def upload_document(
                 "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
                 "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
             },
+        )
+    if send_email_backup and current_user.email:
+        background_tasks.add_task(
+            _send_document_backup_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "document_type": str(doc.doc_type.value if hasattr(doc.doc_type, "value") else doc.doc_type),
+                "center": doc.center or "",
+                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            },
+            doc.filename or original_filename,
+            file_content,
         )
     if background_tasks is not None:
         background_tasks.add_task(_run_document_ocr, doc.id)

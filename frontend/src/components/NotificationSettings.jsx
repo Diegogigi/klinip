@@ -8,6 +8,7 @@ import {
 } from "../services/notificationManager";
 import { ensurePushSubscription, removePushSubscription } from "../services/pwa";
 import { getAppointments, getMedications, getPushStatus, sendTestPush } from "../services/httpApi";
+import { getMe, updateMe } from "../api";
 import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose, embedded = false }) {
@@ -116,13 +117,25 @@ export default function NotificationSettings({ onClose, embedded = false }) {
     }
   };
 
-  const loadSettings = () => {
+  const loadSettings = async () => {
+    try {
+      const me = await getMe();
+      const raw = me?.notification_settings_json;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSettings(parsed);
+        localStorage.setItem("klinip_notification_settings", JSON.stringify(parsed));
+        return;
+      }
+    } catch (err) {
+      console.warn("No se pudo cargar configuracion desde backend, usando localStorage.", err);
+    }
     const saved = localStorage.getItem("klinip_notification_settings");
     if (saved) {
       try {
         setSettings(JSON.parse(saved));
       } catch (e) {
-        console.error("Error cargando configuración:", e);
+        console.error("Error cargando configuracion local:", e);
       }
     }
   };
@@ -130,6 +143,11 @@ export default function NotificationSettings({ onClose, embedded = false }) {
   const saveSettings = (newSettings) => {
     localStorage.setItem("klinip_notification_settings", JSON.stringify(newSettings));
     setSettings(newSettings);
+    updateMe({
+      notification_settings_json: JSON.stringify(newSettings),
+    }).catch((err) => {
+      console.error("No se pudo guardar configuracion de notificaciones en backend:", err);
+    });
   };
 
   const updateStats = () => {
@@ -568,4 +586,6 @@ export default function NotificationSettings({ onClose, embedded = false }) {
     </div>
   );
 }
+
+
 

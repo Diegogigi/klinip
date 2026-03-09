@@ -55,6 +55,7 @@ class User(Base):
     primary_care_center = Column(String, default="")
     reminder_preferred_time = Column(String, default="08:00")
     email_reminders_enabled = Column(Boolean, default=False)
+    notification_settings_json = Column(Text, default="")
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
