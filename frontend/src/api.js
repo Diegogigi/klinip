@@ -10,6 +10,12 @@ export const forgotPassword = api.forgotPassword;
 export const resetPassword = api.resetPassword;
 export const getMe = api.getMe;
 export const updateMe = api.updateMe;
+export const getMyPlan = api.getMyPlan;
+export const getHealthProfiles = api.getHealthProfiles;
+export const getActiveHealthProfile = api.getActiveHealthProfile;
+export const createHealthProfile = api.createHealthProfile;
+export const updateHealthProfile = api.updateHealthProfile;
+export const setActiveHealthProfile = api.setActiveHealthProfile;
 
 export const getAppointments = api.getAppointments;
 export const createAppointment = api.createAppointment;

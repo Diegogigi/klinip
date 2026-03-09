@@ -5,6 +5,11 @@ import {
   updateMe,
   getAppointments,
   getDocuments,
+  getMyPlan,
+  getHealthProfiles,
+  getActiveHealthProfile,
+  createHealthProfile,
+  setActiveHealthProfile,
   revokeDataConsent,
   deleteAccount as deleteAccountApi,
   submitPrivacyRequest,
@@ -13,7 +18,6 @@ import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../ut
 
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
   const profile = user || {};
-  const plan = "Backend activo";
   const navigate = useNavigate();
   const [exporting, setExporting] = useState(false);
   const [consentRevoked, setConsentRevoked] = useState(() => {
@@ -32,6 +36,17 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     typeof window !== "undefined" ? window.innerWidth <= 640 : false
   );
   const [mobileSectionOpen, setMobileSectionOpen] = useState(false);
+  const [planInfo, setPlanInfo] = useState(null);
+  const [familyProfiles, setFamilyProfiles] = useState([]);
+  const [activeFamilyProfileId, setActiveFamilyProfileId] = useState(null);
+  const [familyStatus, setFamilyStatus] = useState("");
+  const [familyLoading, setFamilyLoading] = useState(false);
+  const [newFamilyProfile, setNewFamilyProfile] = useState({
+    full_name: "",
+    relation_with_owner: "",
+    gender: "",
+  });
+  const plan = planInfo?.plan_type || "basico";
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -93,6 +108,34 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    const loadFamilyContext = async () => {
+      if (!profile?.id) return;
+      setFamilyLoading(true);
+      try {
+        const [plan, profiles, active] = await Promise.all([
+          getMyPlan(),
+          getHealthProfiles(),
+          getActiveHealthProfile(),
+        ]);
+        if (!mounted) return;
+        setPlanInfo(plan || null);
+        setFamilyProfiles(Array.isArray(profiles) ? profiles : []);
+        setActiveFamilyProfileId(active?.id || null);
+      } catch (err) {
+        if (!mounted) return;
+        console.error("No se pudo cargar contexto familiar:", err);
+      } finally {
+        if (mounted) setFamilyLoading(false);
+      }
+    };
+    loadFamilyContext();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.id]);
+
   const handleSectionSelect = (section) => {
     setActiveSection(section);
     if (isMobileSettings) {
@@ -102,6 +145,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
   const activeSectionLabel = {
     perfil: "Perfil",
+    familia: "Mi familia",
     privacidad: "Privacidad",
     notificaciones: "Notificaciones",
     datos: "Exportar",
@@ -337,6 +381,50 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const handleSetActiveProfile = async (profileId) => {
+    const nextId = Number(profileId || 0);
+    if (!nextId || Number.isNaN(nextId)) return;
+    setFamilyStatus("");
+    setActiveFamilyProfileId(nextId);
+    try {
+      const active = await setActiveHealthProfile(nextId);
+      setActiveFamilyProfileId(active?.id || nextId);
+      setFamilyStatus(`Perfil activo: ${active?.full_name || "actualizado"}`);
+    } catch (err) {
+      console.error("No se pudo cambiar perfil activo:", err);
+      setFamilyStatus("No se pudo cambiar el perfil activo");
+    }
+  };
+
+  const handleCreateFamilyProfile = async () => {
+    const cleanName = (newFamilyProfile.full_name || "").trim();
+    if (!cleanName) {
+      setFamilyStatus("Debes ingresar nombre completo para el perfil");
+      return;
+    }
+    setFamilyStatus("");
+    try {
+      const created = await createHealthProfile({
+        full_name: cleanName,
+        relation_with_owner: (newFamilyProfile.relation_with_owner || "").trim(),
+        gender: (newFamilyProfile.gender || "").trim(),
+      });
+      setFamilyProfiles((prev) => [...prev, created]);
+      setNewFamilyProfile({
+        full_name: "",
+        relation_with_owner: "",
+        gender: "",
+      });
+      const plan = await getMyPlan();
+      setPlanInfo(plan || null);
+      setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo crear el perfil");
+      console.error("Error creando perfil asistido:", err);
+    }
+  };
+
   const handleToggleEmailReminders = async (enabled) => {
     const previous = emailRemindersEnabled;
     setEmailReminderStatus("");
@@ -384,6 +472,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               onClick={() => handleSectionSelect("perfil")}
             >
               Perfil
+            </button>
+            <button
+              className={`settings-nav-btn ${activeSection === "familia" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("familia")}
+            >
+              Mi familia
             </button>
             <button
               className={`settings-nav-btn ${activeSection === "privacidad" ? "is-active" : ""}`}
@@ -461,6 +556,28 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       {activeSection === "perfil" && (
       <div className="settings-section">
         <h2 className="card-title profile-section-title">Perfil</h2>
+        <div className="family-active-banner">
+          <div>
+            <p className="family-active-label">Perfil de salud activo</p>
+            <p className="muted">
+              Cambia rapidamente el contexto para evitar errores al gestionar datos.
+            </p>
+          </div>
+          <select
+            className="select-field"
+            value={activeFamilyProfileId || ""}
+            onChange={(e) => handleSetActiveProfile(e.target.value)}
+          >
+            <option value="" disabled>
+              Seleccionar perfil
+            </option>
+            {familyProfiles.map((item) => (
+              <option value={item.id} key={item.id}>
+                {item.full_name} {item.relation_with_owner ? `(${item.relation_with_owner})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Informacion basica de tu cuenta. Proximamente podras activar recordatorios por correo. Ya existen plantillas base de correo configuradas para su lanzamiento.
         </p>
@@ -568,6 +685,100 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         </div>
         {healthProfileStatus && <p className="muted">{healthProfileStatus}</p>}
 
+      </div>
+      )}
+
+      {activeSection === "familia" && (
+      <div className="settings-section">
+        <h2 className="card-title">Mi familia</h2>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Gestiona perfiles de salud vinculados segun tu plan actual.
+        </p>
+
+        <div className="family-plan-card">
+          <p><strong>Plan:</strong> {planInfo?.plan_type || "basico"}</p>
+          <p><strong>Perfiles usados:</strong> {planInfo?.current_profiles ?? familyProfiles.length} / {planInfo?.max_profiles ?? 1}</p>
+          <p><strong>Colaboracion:</strong> {planInfo?.collaboration_enabled ? "Habilitada" : "No disponible en este plan"}</p>
+        </div>
+
+        {planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
+          <div className="family-create-card">
+            <h4>Agregar perfil asistido</h4>
+            <div className="form-row">
+              <div className="input-group">
+                <label className="input-label">Nombre completo</label>
+                <input
+                  className="input-field"
+                  value={newFamilyProfile.full_name}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, full_name: e.target.value }))
+                  }
+                  placeholder="Ej: Maria Gonzalez"
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Relacion</label>
+                <input
+                  className="input-field"
+                  value={newFamilyProfile.relation_with_owner}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, relation_with_owner: e.target.value }))
+                  }
+                  placeholder="Ej: Madre, Padre, Hijo/a"
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Sexo/Genero (opcional)</label>
+                <input
+                  className="input-field"
+                  value={newFamilyProfile.gender}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, gender: e.target.value }))
+                  }
+                  placeholder="Ej: Femenino"
+                />
+              </div>
+            </div>
+            <button className="secondary-btn" type="button" onClick={handleCreateFamilyProfile}>
+              Crear perfil
+            </button>
+          </div>
+        ) : (
+          <p className="muted">
+            Alcanzaste el limite de perfiles de tu plan. Para agregar mas, sube de plan.
+          </p>
+        )}
+
+        <div className="family-list">
+          {familyLoading ? (
+            <p className="muted">Cargando perfiles...</p>
+          ) : familyProfiles.length ? (
+            familyProfiles.map((item) => (
+              <article
+                className={`family-item ${item.id === activeFamilyProfileId ? "is-active" : ""}`}
+                key={item.id}
+              >
+                <div>
+                  <p className="family-name">{item.full_name}</p>
+                  <p className="muted">
+                    {item.relation_with_owner || "Sin relacion"} - Rol: {item.access_role || "admin"}
+                  </p>
+                </div>
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => handleSetActiveProfile(item.id)}
+                >
+                  {item.id === activeFamilyProfileId ? "Activo" : "Activar"}
+                </button>
+              </article>
+            ))
+          ) : (
+            <p className="muted">Aun no tienes perfiles de salud vinculados.</p>
+          )}
+        </div>
+
+        {familyStatus && <p className="muted" style={{ marginTop: "0.75rem" }}>{familyStatus}</p>}
       </div>
       )}
 

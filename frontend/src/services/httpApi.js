@@ -71,6 +71,36 @@ export async function updateMe(payload) {
   return res.data;
 }
 
+export async function getMyPlan() {
+  const res = await api.get("/plans/me");
+  return res.data;
+}
+
+export async function getHealthProfiles() {
+  const res = await api.get("/health-profiles");
+  return res.data;
+}
+
+export async function getActiveHealthProfile() {
+  const res = await api.get("/health-profiles/active");
+  return res.data;
+}
+
+export async function createHealthProfile(payload) {
+  const res = await api.post("/health-profiles", payload);
+  return res.data;
+}
+
+export async function updateHealthProfile(id, payload) {
+  const res = await api.put(`/health-profiles/${id}`, payload);
+  return res.data;
+}
+
+export async function setActiveHealthProfile(id) {
+  const res = await api.post(`/health-profiles/${id}/set-active`);
+  return res.data;
+}
+
 // Privacy
 export async function revokeDataConsent() {
   const res = await api.post("/privacy/revoke-consent");

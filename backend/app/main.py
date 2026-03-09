@@ -261,6 +261,28 @@ def ensure_user_schema():
                 )
             added_columns.append("notification_settings_json")
 
+        if "plan_type" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_type VARCHAR DEFAULT 'basico'"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN plan_type VARCHAR DEFAULT 'basico'"
+                )
+            added_columns.append("plan_type")
+
+        if "active_health_profile_id" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_health_profile_id INTEGER"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN active_health_profile_id INTEGER"
+                )
+            added_columns.append("active_health_profile_id")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -319,6 +341,160 @@ def ensure_medication_schema():
 
 
 ensure_medication_schema()
+
+PLAN_RULES = {
+    "basico": {
+        "max_profiles": 1,
+        "collaboration_enabled": False,
+        "family_panel_enabled": False,
+    },
+    "plus": {
+        "max_profiles": 3,
+        "collaboration_enabled": False,
+        "family_panel_enabled": False,
+    },
+    "familiar": {
+        "max_profiles": 5,
+        "collaboration_enabled": True,
+        "family_panel_enabled": True,
+    },
+}
+
+ROLE_LEVELS = {
+    "viewer": 1,
+    "visualizador": 1,
+    "caregiver": 2,
+    "cuidador": 2,
+    "admin": 3,
+    "administrador": 3,
+}
+
+
+def _normalize_plan_type(value: str | None) -> str:
+    raw = (value or "basico").strip().lower()
+    if raw in PLAN_RULES:
+        return raw
+    aliases = {
+        "basic": "basico",
+        "pro": "plus",
+        "plus_individual": "plus",
+        "family": "familiar",
+    }
+    return aliases.get(raw, "basico")
+
+
+def _plan_features(plan_type: str | None) -> dict:
+    normalized = _normalize_plan_type(plan_type)
+    return PLAN_RULES.get(normalized, PLAN_RULES["basico"])
+
+
+def _count_owned_profiles(db: Session, user_id: int) -> int:
+    return (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == user_id,
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .count()
+    )
+
+
+def _create_primary_health_profile_if_missing(db: Session, user: models.User) -> models.HealthProfile:
+    profile = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == user.id,
+            models.HealthProfile.is_primary_profile.is_(True),
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .first()
+    )
+    if profile:
+        return profile
+
+    profile = models.HealthProfile(
+        owner_user_id=user.id,
+        full_name=(user.name or user.email or "Perfil principal").strip(),
+        birth_date=None,
+        gender="",
+        relation_with_owner="propio",
+        avatar_url="",
+        base_medical_data="",
+        is_primary_profile=True,
+        is_archived=False,
+        created_by_user_id=user.id,
+    )
+    db.add(profile)
+    db.flush()
+    return profile
+
+
+def _ensure_profile_link(
+    db: Session,
+    profile_id: int,
+    user_id: int,
+    role: str = "admin",
+    relationship_type: str = "self",
+):
+    link = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id == profile_id,
+            models.ProfileRelationship.user_id == user_id,
+        )
+        .first()
+    )
+    if link:
+        return link
+    now = datetime.utcnow()
+    link = models.ProfileRelationship(
+        profile_id=profile_id,
+        user_id=user_id,
+        role=role,
+        relationship_type=relationship_type,
+        status="accepted",
+        invited_at=now,
+        accepted_at=now,
+    )
+    db.add(link)
+    db.flush()
+    return link
+
+
+def ensure_family_schema_data():
+    """
+    Backfill seguro:
+    - plan_type por defecto
+    - perfil principal por usuario
+    - relacion admin del titular con su perfil principal
+    - perfil activo inicial
+    """
+    db = SessionLocal()
+    try:
+        users = db.query(models.User).all()
+        for user in users:
+            user.plan_type = _normalize_plan_type(getattr(user, "plan_type", None))
+            primary = _create_primary_health_profile_if_missing(db, user)
+            _ensure_profile_link(
+                db,
+                profile_id=primary.id,
+                user_id=user.id,
+                role="admin",
+                relationship_type="self",
+            )
+            if not getattr(user, "active_health_profile_id", None):
+                user.active_health_profile_id = primary.id
+            db.add(user)
+        db.commit()
+        print("DEBUG ensure_family_schema_data: perfiles principales verificados")
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING ensure_family_schema_data: no se pudo completar: {exc}")
+    finally:
+        db.close()
+
+
+ensure_family_schema_data()
 
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
@@ -3510,6 +3686,106 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+def _build_plan_info(user: models.User, db: Session) -> dict:
+    plan_type = _normalize_plan_type(getattr(user, "plan_type", None))
+    features = _plan_features(plan_type)
+    return {
+        "plan_type": plan_type,
+        "max_profiles": int(features.get("max_profiles", 1)),
+        "collaboration_enabled": bool(features.get("collaboration_enabled", False)),
+        "family_panel_enabled": bool(features.get("family_panel_enabled", False)),
+        "current_profiles": _count_owned_profiles(db, user.id),
+    }
+
+
+def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship | None = None):
+    return schemas.HealthProfileOut(
+        id=profile.id,
+        owner_user_id=profile.owner_user_id,
+        full_name=profile.full_name,
+        birth_date=profile.birth_date,
+        gender=profile.gender or "",
+        relation_with_owner=profile.relation_with_owner or "",
+        avatar_url=profile.avatar_url or "",
+        base_medical_data=profile.base_medical_data or "",
+        is_primary_profile=bool(profile.is_primary_profile),
+        is_archived=bool(profile.is_archived),
+        created_by_user_id=profile.created_by_user_id,
+        created_at=profile.created_at,
+        access_role=(link.role if link else None),
+        access_status=(link.status if link else None),
+        relationship_type=(link.relationship_type if link else None),
+    )
+
+
+def _get_profile_access_or_404(
+    db: Session,
+    current_user: models.User,
+    profile_id: int,
+) -> tuple[models.HealthProfile, models.ProfileRelationship]:
+    link = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id == profile_id,
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Perfil de salud no encontrado")
+
+    profile = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.id == profile_id,
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .first()
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil de salud no encontrado")
+
+    return profile, link
+
+
+def _require_role(link: models.ProfileRelationship, min_role: str = "admin"):
+    got = ROLE_LEVELS.get((link.role or "").strip().lower(), 0)
+    needed = ROLE_LEVELS.get(min_role.strip().lower(), 3)
+    if got < needed:
+        raise HTTPException(status_code=403, detail="No tienes permisos para esta accion")
+
+
+def _assert_profile_creation_allowed(db: Session, current_user: models.User):
+    plan_info = _build_plan_info(current_user, db)
+    if plan_info["current_profiles"] >= plan_info["max_profiles"]:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Tu plan {plan_info['plan_type']} permite hasta "
+                f"{plan_info['max_profiles']} perfiles de salud"
+            ),
+        )
+
+
+def _log_profile_activity(
+    db: Session,
+    profile_id: int,
+    actor_user_id: int,
+    action_type: str,
+    description: str,
+    metadata_json: dict | None = None,
+):
+    log = models.ProfileActivityLog(
+        profile_id=profile_id,
+        performed_by_user_id=actor_user_id,
+        action_type=action_type,
+        description=description,
+        metadata_json=metadata_json or {},
+    )
+    db.add(log)
+
+
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
 def register(
@@ -3527,6 +3803,18 @@ def register(
             password_hash=auth.get_password_hash(user_in.password),
             name=user_in.name,
         )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        primary = _create_primary_health_profile_if_missing(db, user)
+        _ensure_profile_link(
+            db,
+            profile_id=primary.id,
+            user_id=user.id,
+            role="admin",
+            relationship_type="self",
+        )
+        user.active_health_profile_id = primary.id
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -3685,6 +3973,205 @@ async def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@app.get("/plans/me", response_model=schemas.PlanInfoOut)
+async def read_my_plan(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    return _build_plan_info(current_user, db)
+
+
+@app.get("/health-profiles", response_model=List[schemas.HealthProfileOut])
+async def list_health_profiles(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    links = (
+        db.query(models.ProfileRelationship)
+        .join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(
+            models.HealthProfile.is_primary_profile.desc(),
+            models.HealthProfile.full_name.asc(),
+        )
+        .all()
+    )
+    return [_profile_out(link.profile, link) for link in links if link.profile]
+
+
+@app.get("/health-profiles/active", response_model=schemas.HealthProfileOut)
+async def get_active_health_profile(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    active_id = getattr(current_user, "active_health_profile_id", None)
+    if active_id:
+        profile, link = _get_profile_access_or_404(db, current_user, int(active_id))
+        return _profile_out(profile, link)
+
+    links = (
+        db.query(models.ProfileRelationship)
+        .join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(
+            models.HealthProfile.is_primary_profile.desc(),
+            models.HealthProfile.created_at.asc(),
+        )
+        .all()
+    )
+    if not links:
+        raise HTTPException(status_code=404, detail="No tienes perfiles de salud disponibles")
+
+    active_link = links[0]
+    current_user.active_health_profile_id = active_link.profile_id
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return _profile_out(active_link.profile, active_link)
+
+
+@app.post("/health-profiles", response_model=schemas.HealthProfileOut)
+async def create_health_profile(
+    payload: schemas.HealthProfileCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_profile_creation_allowed(db, current_user)
+
+    profile = models.HealthProfile(
+        owner_user_id=current_user.id,
+        full_name=(payload.full_name or "").strip(),
+        birth_date=payload.birth_date,
+        gender=(payload.gender or "").strip(),
+        relation_with_owner=(payload.relation_with_owner or "").strip(),
+        avatar_url=(payload.avatar_url or "").strip(),
+        base_medical_data=(payload.base_medical_data or "").strip(),
+        is_primary_profile=False,
+        is_archived=False,
+        created_by_user_id=current_user.id,
+    )
+    if not profile.full_name:
+        raise HTTPException(status_code=400, detail="Nombre del perfil es obligatorio")
+
+    db.add(profile)
+    db.flush()
+    link = _ensure_profile_link(
+        db,
+        profile_id=profile.id,
+        user_id=current_user.id,
+        role="admin",
+        relationship_type=payload.relation_with_owner or "asistido",
+    )
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="profile_created",
+        description=f"{current_user.name or current_user.email} creo el perfil {profile.full_name}",
+        metadata_json={"full_name": profile.full_name},
+    )
+
+    db.commit()
+    db.refresh(profile)
+    return _profile_out(profile, link)
+
+
+@app.get("/health-profiles/{profile_id}", response_model=schemas.HealthProfileOut)
+async def get_health_profile(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    return _profile_out(profile, link)
+
+
+@app.put("/health-profiles/{profile_id}", response_model=schemas.HealthProfileOut)
+async def update_health_profile(
+    profile_id: int,
+    payload: schemas.HealthProfileUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "admin")
+
+    for field, value in payload.dict(exclude_unset=True).items():
+        setattr(profile, field, value)
+
+    if not (profile.full_name or "").strip():
+        raise HTTPException(status_code=400, detail="Nombre del perfil es obligatorio")
+
+    profile.full_name = profile.full_name.strip()
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="profile_updated",
+        description=f"{current_user.name or current_user.email} actualizo el perfil {profile.full_name}",
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+    return _profile_out(profile, link)
+
+
+@app.post("/health-profiles/{profile_id}/set-active", response_model=schemas.HealthProfileOut)
+async def set_active_health_profile(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    current_user.active_health_profile_id = profile.id
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return _profile_out(profile, link)
+
+
+@app.get("/health-profiles/{profile_id}/activity")
+async def get_health_profile_activity(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    logs = (
+        db.query(models.ProfileActivityLog)
+        .filter(models.ProfileActivityLog.profile_id == profile_id)
+        .order_by(models.ProfileActivityLog.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    return [
+        {
+            "id": item.id,
+            "profile_id": item.profile_id,
+            "performed_by_user_id": item.performed_by_user_id,
+            "action_type": item.action_type,
+            "description": item.description,
+            "metadata": item.metadata_json or {},
+            "created_at": item.created_at.strftime("%Y-%m-%dT%H:%M:%S") if item.created_at else None,
+        }
+        for item in logs
+    ]
 
 
 # Appointments

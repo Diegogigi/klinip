@@ -10,6 +10,7 @@ from sqlalchemy import (
     JSON,
     LargeBinary,
     Boolean,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -56,12 +57,31 @@ class User(Base):
     reminder_preferred_time = Column(String, default="08:00")
     email_reminders_enabled = Column(Boolean, default=False)
     notification_settings_json = Column(Text, default="")
+    plan_type = Column(String, default="basico")
+    active_health_profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True)
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
     )
     documents = relationship(
         "Document", back_populates="user", cascade="all, delete-orphan"
+    )
+    health_profiles_owned = relationship(
+        "HealthProfile",
+        back_populates="owner_user",
+        foreign_keys="HealthProfile.owner_user_id",
+        cascade="all, delete-orphan",
+    )
+    health_profile_links = relationship(
+        "ProfileRelationship",
+        back_populates="user",
+        foreign_keys="ProfileRelationship.user_id",
+        cascade="all, delete-orphan",
+    )
+    active_health_profile = relationship(
+        "HealthProfile",
+        foreign_keys=[active_health_profile_id],
+        uselist=False,
     )
 
 
@@ -202,3 +222,67 @@ class PrivacyExportLog(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")
+
+
+class HealthProfile(Base):
+    __tablename__ = "health_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    full_name = Column(String, nullable=False)
+    birth_date = Column(DateTime, nullable=True)
+    gender = Column(String, default="")
+    relation_with_owner = Column(String, default="")
+    avatar_url = Column(String, default="")
+    base_medical_data = Column(Text, nullable=True)
+    is_primary_profile = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    owner_user = relationship("User", foreign_keys=[owner_user_id], back_populates="health_profiles_owned")
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    relationships = relationship(
+        "ProfileRelationship",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+        foreign_keys="ProfileRelationship.profile_id",
+    )
+    activity_logs = relationship(
+        "ProfileActivityLog",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+    )
+
+
+class ProfileRelationship(Base):
+    __tablename__ = "profile_relationships"
+    __table_args__ = (UniqueConstraint("profile_id", "user_id", name="uq_profile_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    relationship_type = Column(String, default="")
+    role = Column(String, default="admin")
+    status = Column(String, default="accepted")
+    invited_at = Column(DateTime, nullable=True)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    profile = relationship("HealthProfile", back_populates="relationships", foreign_keys=[profile_id])
+    user = relationship("User", back_populates="health_profile_links", foreign_keys=[user_id])
+
+
+class ProfileActivityLog(Base):
+    __tablename__ = "profile_activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    performed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    action_type = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+
+    profile = relationship("HealthProfile", back_populates="activity_logs")
+    performed_by_user = relationship("User")

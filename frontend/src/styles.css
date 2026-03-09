@@ -322,6 +322,19 @@ body.theme-dark .settings-email-reminder-sub {
   color: #94a3b8;
 }
 
+body.theme-dark .family-active-banner,
+body.theme-dark .family-plan-card,
+body.theme-dark .family-create-card,
+body.theme-dark .family-item {
+  background: #0b1224;
+  border-color: #1e293b;
+}
+
+body.theme-dark .family-active-label,
+body.theme-dark .family-name {
+  color: #e2e8f0;
+}
+
 body.theme-dark .settings-nav-btn {
   background: transparent;
   border-color: transparent;
@@ -2271,6 +2284,76 @@ body.theme-dark .primary-btn {
   padding-bottom: 0.75rem;
 }
 
+.family-active-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.family-active-label {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.family-plan-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.family-plan-card p {
+  margin: 0.2rem 0;
+}
+
+.family-create-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.family-create-card h4 {
+  margin: 0 0 0.6rem;
+}
+
+.family-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.family-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  background: #ffffff;
+}
+
+.family-item.is-active {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.15);
+}
+
+.family-name {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .export-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2563,6 +2646,16 @@ body.theme-dark .primary-btn {
 
   .settings-email-reminder-sub {
     font-size: 0.78rem;
+  }
+
+  .family-active-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .family-item {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .profile-section-title {

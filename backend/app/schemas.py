@@ -24,6 +24,8 @@ class UserOut(BaseModel):
     reminder_preferred_time: str | None = None
     email_reminders_enabled: bool | None = None
     notification_settings_json: str | None = None
+    plan_type: str | None = None
+    active_health_profile_id: int | None = None
     created_at: datetime
 
     @field_serializer('created_at', 'notifications_last_prompt')
@@ -50,6 +52,60 @@ class UserUpdate(BaseModel):
     reminder_preferred_time: Optional[str] = None
     email_reminders_enabled: Optional[bool] = None
     notification_settings_json: Optional[str] = None
+
+
+class PlanInfoOut(BaseModel):
+    plan_type: str
+    max_profiles: int
+    collaboration_enabled: bool
+    family_panel_enabled: bool
+    current_profiles: int
+
+
+class HealthProfileCreate(BaseModel):
+    full_name: str
+    birth_date: Optional[datetime] = None
+    gender: Optional[str] = ""
+    relation_with_owner: Optional[str] = ""
+    avatar_url: Optional[str] = ""
+    base_medical_data: Optional[str] = ""
+
+
+class HealthProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    birth_date: Optional[datetime] = None
+    gender: Optional[str] = None
+    relation_with_owner: Optional[str] = None
+    avatar_url: Optional[str] = None
+    base_medical_data: Optional[str] = None
+    is_archived: Optional[bool] = None
+
+
+class HealthProfileOut(BaseModel):
+    id: int
+    owner_user_id: int
+    full_name: str
+    birth_date: Optional[datetime] = None
+    gender: Optional[str] = ""
+    relation_with_owner: Optional[str] = ""
+    avatar_url: Optional[str] = ""
+    base_medical_data: Optional[str] = ""
+    is_primary_profile: bool = False
+    is_archived: bool = False
+    created_by_user_id: int
+    created_at: datetime
+    access_role: Optional[str] = None
+    access_status: Optional[str] = None
+    relationship_type: Optional[str] = None
+
+    @field_serializer('birth_date', 'created_at')
+    def serialize_profile_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
 
 class Token(BaseModel):
     access_token: str
