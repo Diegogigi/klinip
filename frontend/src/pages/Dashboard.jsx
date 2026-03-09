@@ -284,14 +284,14 @@ export default function Dashboard({ user }) {
   }, [appointments, documents]);
 
   const alert = useMemo(() => {
-    if (!upcoming.length) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
+    if (!upcoming.length) return { label: "Sin actividades próximas", tone: "neutral", dot: "gray" };
     const first = parseDate(upcoming[0].date_time);
-    if (!first) return { label: "Sin actividades próximas", color: "#6b7280", dot: "gray" };
+    if (!first) return { label: "Sin actividades próximas", tone: "neutral", dot: "gray" };
     const now = new Date();
     const diffDays = (first - now) / (1000 * 60 * 60 * 24);
-    if (diffDays <= 2) return { label: "Atención: actividad muy próxima", color: "#b91c1c", dot: "red" };
-    if (diffDays <= 7) return { label: "Tienes actividades en la próxima semana", color: "#f59e0b", dot: "yellow" };
-    return { label: "Próximas actividades programadas", color: "#16a34a", dot: "green" };
+    if (diffDays <= 2) return { label: "Atención: actividad muy próxima", tone: "danger", dot: "red" };
+    if (diffDays <= 7) return { label: "Tienes actividades en la próxima semana", tone: "warning", dot: "yellow" };
+    return { label: "Próximas actividades programadas", tone: "success", dot: "green" };
   }, [upcoming]);
 
   const reminders = useMemo(() => {
@@ -619,7 +619,7 @@ export default function Dashboard({ user }) {
           </div>
           <div className="traffic">
             <span className={`dot ${alert.dot}`} />
-            <span style={{ color: alert.color }}>{alert.label}</span>
+            <span className={`traffic-text traffic-text-${alert.tone || "neutral"}`}>{alert.label}</span>
           </div>
         </div>
         {upcoming.length === 0 ? (

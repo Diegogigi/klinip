@@ -340,6 +340,12 @@ body.theme-dark .family-panel-name {
   color: #e2e8f0;
 }
 
+body.theme-dark .family-section-title,
+body.theme-dark .family-collab-card h4,
+body.theme-dark .family-create-card h4 {
+  color: #e2e8f0;
+}
+
 body.theme-dark .family-report-totals p {
   background: #0b1224;
   border-color: #1e293b;
@@ -1128,6 +1134,64 @@ body.theme-dark .primary-btn {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
     z-index: 20;
+  }
+
+  .sidebar-profile-mobile {
+    grid-column: 1 / -1;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #f8fafc;
+    padding: 0.45rem 0.5rem;
+    margin-bottom: 0.15rem;
+  }
+
+  .sidebar-profile-mobile-head {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .sidebar-profile-mobile-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    color: #0ea5e9;
+    background: #e0f2fe;
+    border: 1px solid #bae6fd;
+  }
+
+  .sidebar-profile-mobile-icon svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  .sidebar-profile-mobile-plan {
+    font-size: 0.67rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #0ea5e9;
+  }
+
+  .sidebar-profile-mobile-select {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #0f172a;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .sidebar-profile-mobile-current {
+    margin: 0;
+    font-size: 0.79rem;
+    font-weight: 700;
+    color: #0f172a;
   }
 
   .sidebar-more-menu.open {
@@ -2826,6 +2890,31 @@ body.theme-dark .primary-btn {
   body.theme-dark .settings-mobile-backbar span {
     color: #e2e8f0;
   }
+
+  body.theme-dark .sidebar-profile-mobile {
+    background: #0f172a;
+    border-color: rgba(148, 163, 184, 0.2);
+  }
+
+  body.theme-dark .sidebar-profile-mobile-icon {
+    background: rgba(14, 165, 233, 0.16);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+  }
+
+  body.theme-dark .sidebar-profile-mobile-plan {
+    color: #38bdf8;
+  }
+
+  body.theme-dark .sidebar-profile-mobile-select {
+    background: #111827;
+    border-color: #334155;
+    color: #e2e8f0;
+  }
+
+  body.theme-dark .sidebar-profile-mobile-current {
+    color: #e2e8f0;
+  }
 }
 
 .profile-tile {
@@ -2927,6 +3016,85 @@ body.theme-dark .primary-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.topbar-profile-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 200px;
+  max-width: 230px;
+  padding: 0.38rem 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.topbar-profile-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+}
+
+.topbar-profile-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: #0ea5e9;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+}
+
+.topbar-profile-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.topbar-profile-plan {
+  margin: 0;
+  font-size: 0.67rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #0ea5e9;
+}
+
+.topbar-profile-switcher-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topbar-profile-switcher-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.topbar-profile-select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.28rem 0.42rem;
+}
+
+.topbar-profile-select:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.topbar-profile-current {
+  font-size: 0.85rem;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .topbar-notifications {
@@ -4991,6 +5159,26 @@ body.theme-dark .notifications-empty {
   gap: 0.4rem;
 }
 
+.traffic-text {
+  font-weight: 600;
+}
+
+.traffic-text-danger {
+  color: #b91c1c;
+}
+
+.traffic-text-warning {
+  color: #b45309;
+}
+
+.traffic-text-success {
+  color: #15803d;
+}
+
+.traffic-text-neutral {
+  color: #64748b;
+}
+
 .dot {
   width: 12px;
   height: 12px;
@@ -5368,6 +5556,22 @@ body.theme-dark .alert-info p {
 
 body.theme-dark .alert-info strong {
   color: #fff;
+}
+
+body.theme-dark .traffic-text-danger {
+  color: #fca5a5;
+}
+
+body.theme-dark .traffic-text-warning {
+  color: #fcd34d;
+}
+
+body.theme-dark .traffic-text-success {
+  color: #86efac;
+}
+
+body.theme-dark .traffic-text-neutral {
+  color: #94a3b8;
 }
 
 .med-intake-toast {
@@ -6223,6 +6427,33 @@ body.theme-dark .med-intake-toast.is-success {
   justify-content: flex-start;
 }
 
+body.theme-dark .legal-page {
+  background: linear-gradient(180deg, #0b1120 0%, #0f172a 100%);
+}
+
+body.theme-dark .legal-card {
+  background: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.45);
+}
+
+body.theme-dark .legal-kicker {
+  color: #7dd3fc;
+}
+
+body.theme-dark .legal-title,
+body.theme-dark .legal-section h2 {
+  color: #e2e8f0;
+}
+
+body.theme-dark .legal-meta,
+body.theme-dark .legal-section p,
+body.theme-dark .legal-list,
+body.theme-dark .legal-list li,
+body.theme-dark .legal-note {
+  color: #94a3b8;
+}
+
 .consent-backdrop {
   position: fixed;
   inset: 0;
@@ -6468,6 +6699,60 @@ body.theme-dark .topbar-user-menu-item {
 body.theme-dark .topbar-user-menu-item:hover {
   background: #111827;
   color: #38bdf8;
+}
+
+body.theme-dark .topbar-profile-switcher {
+  background: #0b1224;
+  border-color: #1e293b;
+}
+
+body.theme-dark .topbar-profile-plan {
+  color: #38bdf8;
+}
+
+body.theme-dark .topbar-profile-icon {
+  background: rgba(14, 165, 233, 0.18);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+body.theme-dark .topbar-profile-switcher-label {
+  color: #94a3b8;
+}
+
+body.theme-dark .topbar-profile-select {
+  background: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.theme-dark .topbar-profile-current {
+  color: #e2e8f0;
+}
+
+body.theme-dark .sidebar-profile-mobile {
+  background: #0f172a;
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+body.theme-dark .sidebar-profile-mobile-icon {
+  background: rgba(14, 165, 233, 0.16);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #38bdf8;
+}
+
+body.theme-dark .sidebar-profile-mobile-plan {
+  color: #38bdf8;
+}
+
+body.theme-dark .sidebar-profile-mobile-select {
+  background: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.theme-dark .sidebar-profile-mobile-current {
+  color: #e2e8f0;
 }
 
 body.theme-dark .landing-chip {

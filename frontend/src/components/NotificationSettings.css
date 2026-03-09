@@ -191,7 +191,7 @@
 
 .help-text {
   font-size: 0.875rem;
-  color: #666;
+  color: #64748b;
   margin: 0.5rem 0 1rem 0;
   line-height: 1.5;
 }
@@ -309,9 +309,22 @@ body.theme-dark .notification-settings-panel {
   box-shadow: 0 25px 60px rgba(2, 6, 23, 0.5);
 }
 
+body.theme-dark .notification-settings-overlay {
+  background: rgba(2, 6, 23, 0.72);
+}
+
 body.theme-dark .settings-header {
   border-bottom-color: rgba(15, 23, 42, 0.2);
   color: #0b1120;
+}
+
+body.theme-dark .close-btn {
+  background: rgba(2, 6, 23, 0.35);
+  color: #0b1120;
+}
+
+body.theme-dark .close-btn:hover {
+  background: rgba(2, 6, 23, 0.5);
 }
 
 body.theme-dark .settings-section h3 {
@@ -361,6 +374,17 @@ body.theme-dark .help-text {
 
 body.theme-dark .actions {
   border-top-color: #1e293b;
+}
+
+body.theme-dark .secondary-btn {
+  background: #111827;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+body.theme-dark .secondary-btn:hover {
+  border-color: #38bdf8;
+  color: #7dd3fc;
 }
 
 

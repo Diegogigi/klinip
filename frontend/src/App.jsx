@@ -17,7 +17,16 @@ import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
 import LegalNotifications from "./pages/LegalNotifications";
-import { getMe, getMedications, updateMe, logout as apiLogout } from "./api";
+import {
+  getMe,
+  getMedications,
+  updateMe,
+  logout as apiLogout,
+  getMyPlan,
+  getHealthProfiles,
+  getActiveHealthProfile,
+  setActiveHealthProfile,
+} from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
 const icons = {
@@ -89,7 +98,17 @@ const icons = {
   ),
 };
 
-function Sidebar({ user, theme, onToggleTheme, notifications }) {
+function Sidebar({
+  user,
+  theme,
+  onToggleTheme,
+  notifications,
+  planInfo,
+  healthProfiles,
+  activeProfileId,
+  onSwitchProfile,
+  switchingProfile,
+}) {
   const location = useLocation();
   const isPublicAuthRoute =
     location.pathname === "/login" ||
@@ -132,6 +151,19 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
   ];
   const mobilePrimaryLinks = [links[0], links[1], links[2], links[4]];
   const mobileOverflowLinks = [links[3], links[5], links[6], links[7]];
+  const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
+  const canSwitchProfilesMobile =
+    normalizedPlan !== "basico" && Array.isArray(healthProfiles) && healthProfiles.length > 1;
+  const activeProfileMobile =
+    (healthProfiles || []).find((item) => Number(item.id) === Number(activeProfileId)) ||
+    (healthProfiles || [])[0] ||
+    null;
+  const planLabelMobile =
+    normalizedPlan === "familiar"
+      ? "Plan Familiar"
+      : normalizedPlan === "plus"
+      ? "Plan Plus"
+      : "Plan Basico";
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -192,6 +224,36 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
               id="sidebar-more-menu"
               className={`sidebar-more-menu ${showMobileMenu ? "open" : ""}`}
             >
+              <div className="sidebar-profile-mobile">
+                <div className="sidebar-profile-mobile-head">
+                  <span className="sidebar-profile-mobile-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                      <circle cx="12" cy="8" r="3.2" />
+                      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                    </svg>
+                  </span>
+                  <span className="sidebar-profile-mobile-plan">{planLabelMobile}</span>
+                </div>
+                {canSwitchProfilesMobile ? (
+                  <select
+                    className="sidebar-profile-mobile-select"
+                    value={activeProfileId || ""}
+                    onChange={(e) => onSwitchProfile?.(e.target.value)}
+                    disabled={!!switchingProfile}
+                  >
+                    {(healthProfiles || []).map((item) => (
+                      <option value={item.id} key={item.id}>
+                        {item.full_name}
+                        {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="sidebar-profile-mobile-current">
+                    {activeProfileMobile?.full_name || user?.name || "Perfil personal"}
+                  </p>
+                )}
+              </div>
               {mobileOverflowLinks.map((link) => (
                 <Link
                   key={link.to}
@@ -247,7 +309,18 @@ function Sidebar({ user, theme, onToggleTheme, notifications }) {
   );
 }
 
-function Topbar({ user, notifications, onClearNotifications, onOpenNotification, onLogout }) {
+function Topbar({
+  user,
+  notifications,
+  onClearNotifications,
+  onOpenNotification,
+  onLogout,
+  planInfo,
+  healthProfiles,
+  activeProfileId,
+  onSwitchProfile,
+  switchingProfile,
+}) {
   const location = useLocation();
 
   const isAuthRoute =
@@ -302,6 +375,20 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification,
     };
   }, []);
 
+  const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
+  const canSwitchProfiles =
+    normalizedPlan !== "basico" && Array.isArray(healthProfiles) && healthProfiles.length > 1;
+  const activeProfile =
+    (healthProfiles || []).find((item) => Number(item.id) === Number(activeProfileId)) ||
+    (healthProfiles || [])[0] ||
+    null;
+  const planLabel =
+    normalizedPlan === "familiar"
+      ? "Plan Familiar"
+      : normalizedPlan === "plus"
+      ? "Plan Plus"
+      : "Plan Basico";
+
   if (isAuthRoute || (!user && location.pathname === "/")) return null;
 
   return (
@@ -314,6 +401,42 @@ function Topbar({ user, notifications, onClearNotifications, onOpenNotification,
         </div>
       </div>
       <div className="topbar-actions">
+        <div className="topbar-profile-switcher">
+          <div className="topbar-profile-head">
+            <span className="topbar-profile-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+                <circle cx="12" cy="8" r="3.2" />
+                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <p className="topbar-profile-plan">{planLabel}</p>
+          </div>
+          {canSwitchProfiles ? (
+            <div className="topbar-profile-switcher-row">
+              <label className="topbar-profile-switcher-label" htmlFor="active-profile-select">
+                Perfil activo
+              </label>
+              <select
+                id="active-profile-select"
+                className="topbar-profile-select"
+                value={activeProfileId || ""}
+                onChange={(e) => onSwitchProfile?.(e.target.value)}
+                disabled={!!switchingProfile}
+              >
+                {(healthProfiles || []).map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.full_name}
+                    {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="topbar-profile-current">
+              {activeProfile?.full_name || user?.name || "Perfil personal"}
+            </div>
+          )}
+        </div>
         <div className="topbar-notifications">
           <button
             className="topbar-quick"
@@ -518,6 +641,10 @@ export default function App() {
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingNotifLoading, setOnboardingNotifLoading] = useState(false);
   const [onboardingNotifMessage, setOnboardingNotifMessage] = useState("");
+  const [planInfo, setPlanInfo] = useState(null);
+  const [healthProfiles, setHealthProfiles] = useState([]);
+  const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
+  const [switchingProfile, setSwitchingProfile] = useState(false);
   const [onboardingData, setOnboardingData] = useState({
     notificationsConsent: "",
     timezone: "America/Santiago",
@@ -557,6 +684,64 @@ export default function App() {
     }
     bootstrap();
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadFamilyContext = async () => {
+      if (!user?.id) {
+        if (!mounted) return;
+        setPlanInfo(null);
+        setHealthProfiles([]);
+        setActiveHealthProfileId(null);
+        return;
+      }
+      try {
+        const [plan, profiles, active] = await Promise.all([
+          getMyPlan(),
+          getHealthProfiles(),
+          getActiveHealthProfile(),
+        ]);
+        if (!mounted) return;
+        setPlanInfo(plan || null);
+        const list = Array.isArray(profiles) ? profiles : [];
+        setHealthProfiles(list);
+        setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
+      } catch (err) {
+        if (!mounted) return;
+        console.error("No se pudo cargar contexto familiar para header:", err);
+        setPlanInfo(null);
+        setHealthProfiles([]);
+        setActiveHealthProfileId(null);
+      }
+    };
+    loadFamilyContext();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    const refreshOnRoute = async () => {
+      try {
+        const [profiles, active] = await Promise.all([
+          getHealthProfiles(),
+          getActiveHealthProfile(),
+        ]);
+        if (cancelled) return;
+        const list = Array.isArray(profiles) ? profiles : [];
+        setHealthProfiles(list);
+        setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
+      } catch (_) {
+        // noop: evitar ruido en cada cambio de ruta
+      }
+    };
+    refreshOnRoute();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname, user?.id]);
 
   useEffect(() => {
     if (!user || booting) return undefined;
@@ -1190,6 +1375,24 @@ export default function App() {
     }
   };
 
+  const handleSwitchActiveProfile = async (profileId) => {
+    const nextId = Number(profileId || 0);
+    if (!nextId || Number.isNaN(nextId)) return;
+    setSwitchingProfile(true);
+    try {
+      const active = await setActiveHealthProfile(nextId);
+      setActiveHealthProfileId(active?.id || nextId);
+      const profiles = await getHealthProfiles().catch(() => []);
+      if (Array.isArray(profiles)) {
+        setHealthProfiles(profiles);
+      }
+    } catch (err) {
+      console.error("No se pudo cambiar el perfil activo en header:", err);
+    } finally {
+      setSwitchingProfile(false);
+    }
+  };
+
   const handleCompleteOnboarding = async () => {
     if (!user?.id) return;
     setOnboardingSaving(true);
@@ -1527,6 +1730,11 @@ export default function App() {
           theme={theme}
           onToggleTheme={handleToggleTheme}
           notifications={notifications}
+          planInfo={planInfo}
+          healthProfiles={healthProfiles}
+          activeProfileId={activeHealthProfileId}
+          onSwitchProfile={handleSwitchActiveProfile}
+          switchingProfile={switchingProfile}
         />
         <div className={`main-area ${isPublicLanding ? "main-area-public" : ""}`}>
           <Topbar
@@ -1535,6 +1743,11 @@ export default function App() {
             onClearNotifications={handleClearNotifications}
             onOpenNotification={handleOpenNotification}
             onLogout={handleLogout}
+            planInfo={planInfo}
+            healthProfiles={healthProfiles}
+            activeProfileId={activeHealthProfileId}
+            onSwitchProfile={handleSwitchActiveProfile}
+            switchingProfile={switchingProfile}
           />
           {updateAvailable && (
             <div className="update-banner" role="status" aria-live="polite">
