@@ -56,6 +56,8 @@ export default function Medications() {
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState(null);
   const [notifyQueue, setNotifyQueue] = useState([]);
   const [notifyPromptKey, setNotifyPromptKey] = useState("");
   const [notifyTriggeredAt, setNotifyTriggeredAt] = useState(null);
@@ -288,6 +290,16 @@ export default function Medications() {
       console.error(err);
       alert("No se pudo marcar como realizado");
     }
+  };
+
+  const handleOpenDetail = (med) => {
+    setDetailTarget(med);
+    setDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+    setDetailTarget(null);
   };
 
   const closeNotifyModal = () => {
@@ -654,6 +666,96 @@ export default function Medications() {
         </div>
       )}
 
+      {detailOpen && detailTarget && (
+        <div className="modal-backdrop" onClick={handleCloseDetail}>
+          <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="detail-modal-header">
+              <h3>Detalle del medicamento</h3>
+              <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+            <div className="detail-modal-content">
+              <div className="detail-highlight">
+                <span className="detail-chip detail-chip-type medicamento">
+                  {detailTarget.name || "Medicamento"}
+                </span>
+                <span className={`detail-chip detail-chip-status ${detailTarget.completed ? "realizada" : "pendiente"}`}>
+                  {detailTarget.completed ? "Realizado" : "Activo"}
+                </span>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>💊</span>
+                  <div>
+                    <span className="detail-label">Dosis</span>
+                    <p>{detailTarget.dose || "Sin dosis"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>⏱️</span>
+                  <div>
+                    <span className="detail-label">Frecuencia</span>
+                    <p>{detailTarget.frequency || "Sin frecuencia"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🕒</span>
+                  <div>
+                    <span className="detail-label">Horario</span>
+                    <p>{detailTarget.schedule_time || "Sin horario"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📆</span>
+                  <div>
+                    <span className="detail-label">Duración</span>
+                    <p>{detailTarget.duration || "Sin duración"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🏁</span>
+                  <div>
+                    <span className="detail-label">Fecha término</span>
+                    <p>{detailTarget.end_date ? toLocaleDateOrEmpty(detailTarget.end_date) : "Sin término"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📝</span>
+                  <div>
+                    <span className="detail-label">Notas</span>
+                    <p>{detailTarget.notes || "Sin notas"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  handleEdit(detailTarget);
+                  handleCloseDetail();
+                }}
+              >
+                Editar
+              </button>
+              {!detailTarget.completed && (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleRecordIntake(detailTarget).finally(handleCloseDetail);
+                  }}
+                >
+                  Marcar toma
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h3 className="card-title">Tratamientos activos</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
@@ -684,7 +786,19 @@ export default function Medications() {
               </thead>
               <tbody>
                 {meds.map((m) => (
-                  <tr key={m.id}>
+                  <tr
+                    key={m.id}
+                    className="table-row-clickable"
+                    onClick={() => handleOpenDetail(m)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleOpenDetail(m);
+                      }
+                    }}
+                  >
                     <td>{m.name}</td>
                     <td>{m.dose}</td>
                     <td>{m.frequency}</td>
@@ -709,7 +823,7 @@ export default function Medications() {
                         return "0%";
                       })()}
                     </td>
-                    <td>
+                    <td onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu
                         items={[
                           {

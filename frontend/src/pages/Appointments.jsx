@@ -33,6 +33,8 @@ export default function Appointments() {
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -179,6 +181,16 @@ export default function Appointments() {
       console.error(err);
       alert("No se pudo marcar como realizada");
     }
+  };
+
+  const handleOpenDetail = (appt) => {
+    setDetailTarget(appt);
+    setDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+    setDetailTarget(null);
   };
 
   const getAppointmentLabel = (appt) => {
@@ -329,6 +341,86 @@ export default function Appointments() {
               >
                 Marcar realizada
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailOpen && detailTarget && (
+        <div className="modal-backdrop" onClick={handleCloseDetail}>
+          <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="detail-modal-header">
+              <h3>Detalle de la actividad</h3>
+              <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+            <div className="detail-modal-content">
+              <div className="detail-highlight">
+                <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
+                  {typeLabels[detailTarget.type] || detailTarget.type}
+                </span>
+                <span className={`detail-chip detail-chip-status ${detailTarget.status}`}>
+                  {statusLabels[detailTarget.status] || detailTarget.status}
+                </span>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🩺</span>
+                  <div>
+                    <span className="detail-label">Especialidad</span>
+                    <p>{detailTarget.specialty || "Sin especialidad"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📍</span>
+                  <div>
+                    <span className="detail-label">Centro</span>
+                    <p>{detailTarget.center || "Sin centro"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🗓️</span>
+                  <div>
+                    <span className="detail-label">Fecha y hora</span>
+                    <p>
+                      {detailTarget.date_time
+                        ? toLocaleDateTimeOrEmpty(detailTarget.date_time)
+                        : "Por agendar"}
+                    </p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📝</span>
+                  <div>
+                    <span className="detail-label">Notas</span>
+                    <p>{detailTarget.notes || "Sin notas"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={() => {
+                  handleEdit(detailTarget);
+                  handleCloseDetail();
+                }}
+              >
+                Editar
+              </button>
+              {detailTarget.status !== "realizada" && (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleMarkCompleted(detailTarget).finally(handleCloseDetail);
+                  }}
+                >
+                  Marcar realizada
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -501,7 +593,19 @@ export default function Appointments() {
               </thead>
               <tbody>
                 {filteredAppointments.map((a) => (
-                  <tr key={a.id}>
+                  <tr
+                    key={a.id}
+                    className="table-row-clickable"
+                    onClick={() => handleOpenDetail(a)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleOpenDetail(a);
+                      }
+                    }}
+                  >
                     <td>
                       <span className={`chip ${a.type}`}>
                         {typeLabels[a.type] || a.type}
@@ -519,7 +623,7 @@ export default function Appointments() {
                         {statusLabels[a.status] || a.status}
                       </span>
                     </td>
-                    <td>
+                    <td onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu
                         items={[
                           a.status !== "realizada"

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Acceso removido - Klinip</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe3ef;">
+            <tr>
+              <td style="padding:18px 22px;background:linear-gradient(90deg,#dc2626,#f59e0b);color:#ffffff;">
+                <img src="{{ logo_url }}" alt="{{ app_name }}" width="36" height="36" style="display:block;border-radius:8px;margin-bottom:10px;" />
+                <h1 style="margin:0;font-size:27px;line-height:1.1;">Acceso removido</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px;">
+                <p style="margin:0 0 12px 0;font-size:16px;">Hola,</p>
+                <p style="margin:0 0 14px 0;font-size:16px;">
+                  Se removio tu acceso al perfil de salud <strong>{{ profile_name }}</strong> en {{ app_name }}.
+                </p>
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;">
+                  <tr>
+                    <td style="padding:12px 14px;">
+                      <p style="margin:0 0 6px 0;font-size:14px;"><strong>Correo:</strong> {{ removed_email }}</p>
+                      <p style="margin:0;font-size:14px;"><strong>Gestionado por:</strong> {{ removed_by_name }}</p>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px 0;font-size:15px;">
+                  Desde este momento ya no podras visualizar ni editar la informacion de ese perfil.
+                </p>
+                <p style="margin:0;font-size:13px;color:#64748b;">
+                  Si consideras que esto es un error, contacta al administrador del perfil.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:14px 22px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;">
+                Equipo {{ app_name }} - {{ year }}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

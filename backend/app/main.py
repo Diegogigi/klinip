@@ -575,6 +575,22 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         return False
 
 
+def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
+    subscriptions = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == user_id)
+        .order_by(models.PushSubscription.created_at.desc())
+        .all()
+    )
+    if not subscriptions:
+        return 0
+    sent = 0
+    for sub in subscriptions:
+        if send_web_push(sub, payload):
+            sent += 1
+    return sent
+
+
 def _hash_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
@@ -1465,6 +1481,28 @@ def _send_profile_invitation_email_safe(
         )
     except Exception as exc:
         print(f"ERROR sending profile invitation email async: {exc}")
+
+
+def _send_profile_access_removed_email_safe(
+    to_email: str,
+    removed_by_name: str,
+    profile_name: str,
+):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Acceso removido en Klinip",
+            template_name="profile_access_removed.html",
+            context={
+                "removed_email": to_email,
+                "removed_by_name": removed_by_name or "Administrador",
+                "profile_name": profile_name or "Perfil de salud",
+                "year": datetime.utcnow().year,
+            },
+            from_security=True,
+        )
+    except Exception as exc:
+        print(f"ERROR sending profile access removed email async: {exc}")
 
 
 
@@ -4148,6 +4186,47 @@ def _get_profile_access_or_404(
     return profile, link
 
 
+def _get_active_profile_context(
+    db: Session,
+    current_user: models.User,
+    require_write: bool = False,
+):
+    """
+    Resuelve el perfil activo y devuelve (profile, link, owner_user_id).
+    owner_user_id corresponde al dueño real de los datos clínicos.
+    """
+    active_id = getattr(current_user, "active_health_profile_id", None)
+    if active_id:
+        profile, link = _get_profile_access_or_404(db, current_user, int(active_id))
+    else:
+        links = (
+            db.query(models.ProfileRelationship)
+            .join(models.HealthProfile, models.HealthProfile.id == models.ProfileRelationship.profile_id)
+            .filter(
+                models.ProfileRelationship.user_id == current_user.id,
+                models.ProfileRelationship.status == "accepted",
+                models.HealthProfile.is_archived.is_(False),
+            )
+            .order_by(
+                models.HealthProfile.is_primary_profile.desc(),
+                models.ProfileRelationship.created_at.asc(),
+            )
+            .all()
+        )
+        if not links:
+            raise HTTPException(status_code=404, detail="No tienes perfiles activos")
+        link = links[0]
+        profile = link.profile
+        current_user.active_health_profile_id = profile.id
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+
+    if require_write:
+        _require_role(link, "caregiver")
+    return profile, link, profile.owner_user_id
+
+
 def _require_role(link: models.ProfileRelationship, min_role: str = "admin"):
     got = ROLE_LEVELS.get((link.role or "").strip().lower(), 0)
     needed = ROLE_LEVELS.get(min_role.strip().lower(), 3)
@@ -4700,20 +4779,12 @@ async def create_profile_invitation(
     now = datetime.utcnow()
 
     if existing_user:
-        invitee_primary = (
-            db.query(models.HealthProfile)
-            .filter(
-                models.HealthProfile.owner_user_id == existing_user.id,
-                models.HealthProfile.is_primary_profile.is_(True),
-                models.HealthProfile.is_archived.is_(False),
-            )
-            .first()
-        )
+        # Verifica si el invitado ya tiene acceso al perfil que se esta compartiendo.
         existing_link = (
             db.query(models.ProfileRelationship)
             .filter(
-                models.ProfileRelationship.profile_id == (invitee_primary.id if invitee_primary else -1),
-                models.ProfileRelationship.user_id == current_user.id,
+                models.ProfileRelationship.profile_id == profile_id,
+                models.ProfileRelationship.user_id == existing_user.id,
                 models.ProfileRelationship.status == "accepted",
             )
             .first()
@@ -4747,6 +4818,28 @@ async def create_profile_invitation(
             payload.relationship_type or "",
             pending.token,
         )
+        if existing_user:
+            sent = _send_push_to_user(
+                db,
+                existing_user.id,
+                {
+                    "title": "Nueva invitacion familiar",
+                    "body": (
+                        f"{current_user.name or current_user.email} te invito al perfil "
+                        f"{profile.full_name or 'de salud'} con rol {role}."
+                    ),
+                    "url": "/family",
+                    "priority": "high",
+                    "sound": "default",
+                    "kind": "family-invitation",
+                    "profileId": profile_id,
+                },
+            )
+            if sent:
+                print(
+                    "DEBUG family invitation push: enviado",
+                    {"to_user_id": existing_user.id, "sent": sent, "profile_id": profile_id},
+                )
         return pending
 
     invitation = models.ProfileInvitation(
@@ -4779,6 +4872,28 @@ async def create_profile_invitation(
         payload.relationship_type or "",
         invitation.token,
     )
+    if existing_user:
+        sent = _send_push_to_user(
+            db,
+            existing_user.id,
+            {
+                "title": "Nueva invitacion familiar",
+                "body": (
+                    f"{current_user.name or current_user.email} te invito al perfil "
+                    f"{profile.full_name or 'de salud'} con rol {role}."
+                ),
+                "url": "/family",
+                "priority": "high",
+                "sound": "default",
+                "kind": "family-invitation",
+                "profileId": profile_id,
+            },
+        )
+        if sent:
+            print(
+                "DEBUG family invitation push: enviado",
+                {"to_user_id": existing_user.id, "sent": sent, "profile_id": profile_id},
+            )
     return invitation
 
 
@@ -4875,12 +4990,22 @@ async def accept_profile_invitation(
     if not inviter_user:
         raise HTTPException(status_code=404, detail="Usuario que invita no disponible")
 
-    invitee_primary_profile = _create_primary_health_profile_if_missing(db, current_user)
+    invited_profile = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.id == invitation.profile_id,
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .first()
+    )
+    if not invited_profile:
+        raise HTTPException(status_code=404, detail="Perfil de salud no disponible")
+
     link = (
         db.query(models.ProfileRelationship)
         .filter(
-            models.ProfileRelationship.profile_id == invitee_primary_profile.id,
-            models.ProfileRelationship.user_id == inviter_user.id,
+            models.ProfileRelationship.profile_id == invited_profile.id,
+            models.ProfileRelationship.user_id == current_user.id,
         )
         .first()
     )
@@ -4892,8 +5017,8 @@ async def accept_profile_invitation(
         link.invited_at = link.invited_at or invitation.invited_at or now
     else:
         link = models.ProfileRelationship(
-            profile_id=invitee_primary_profile.id,
-            user_id=inviter_user.id,
+            profile_id=invited_profile.id,
+            user_id=current_user.id,
             relationship_type=invitation.relationship_type or "",
             role=role,
             status="accepted",
@@ -4909,14 +5034,61 @@ async def accept_profile_invitation(
     db.add(invitation)
     _log_profile_activity(
         db,
-        profile_id=invitee_primary_profile.id,
+        profile_id=invited_profile.id,
         actor_user_id=current_user.id,
         action_type="invitation_accepted",
-        description=f"{current_user.name or current_user.email} acepto invitacion para compartir su perfil con {inviter_user.name or inviter_user.email}",
+        description=f"{current_user.name or current_user.email} acepto invitacion para colaborar en el perfil de {inviter_user.name or inviter_user.email}",
         metadata_json={"role": role, "email": current_user.email, "inviter_user_id": inviter_user.id},
     )
     db.commit()
     db.refresh(link)
+
+    invited_role = _normalize_role(link.role)
+    invited_profile_name = invited_profile.full_name or "Perfil de salud"
+    inviter_display = inviter_user.name or inviter_user.email or "Usuario Klinip"
+    invitee_display = current_user.name or current_user.email or "Usuario Klinip"
+
+    sent_invitee = _send_push_to_user(
+        db,
+        current_user.id,
+        {
+            "title": "Invitacion aceptada",
+            "body": f"Ya puedes colaborar en {invited_profile_name} con rol {invited_role}.",
+            "url": "/family",
+            "priority": "high",
+            "sound": "default",
+            "kind": "family-invitation-accepted",
+            "profileId": invited_profile.id,
+            "role": invited_role,
+        },
+    )
+    sent_inviter = _send_push_to_user(
+        db,
+        inviter_user.id,
+        {
+            "title": "Invitacion aceptada",
+            "body": (
+                f"{invitee_display} acepto tu invitacion y ya esta vinculado a "
+                f"{invited_profile_name} con rol {invited_role}."
+            ),
+            "url": "/family",
+            "priority": "high",
+            "sound": "default",
+            "kind": "family-invitation-accepted",
+            "profileId": invited_profile.id,
+            "role": invited_role,
+        },
+    )
+    if sent_invitee or sent_inviter:
+        print(
+            "DEBUG family invitation accepted push: enviado",
+            {
+                "profile_id": invited_profile.id,
+                "sent_invitee": sent_invitee,
+                "sent_inviter": sent_inviter,
+                "inviter": inviter_display,
+            },
+        )
     return _relationship_out(link)
 
 
@@ -4968,6 +5140,7 @@ async def update_profile_relationship(
 async def remove_profile_relationship(
     profile_id: int,
     relationship_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -4989,6 +5162,9 @@ async def remove_profile_relationship(
         raise HTTPException(status_code=400, detail="No puedes eliminar tu propio acceso administrador")
 
     email = link.user.email if link.user else ""
+    removed_user_id = link.user_id
+    removed_profile_name = link.profile.full_name if link.profile else f"Perfil #{profile_id}"
+    remover_name = current_user.name or current_user.email or "Administrador"
     db.delete(link)
     _log_profile_activity(
         db,
@@ -4999,6 +5175,34 @@ async def remove_profile_relationship(
         metadata_json={"relationship_id": relationship_id, "email": email},
     )
     db.commit()
+    if email:
+        background_tasks.add_task(
+            _send_profile_access_removed_email_safe,
+            email,
+            remover_name,
+            removed_profile_name,
+        )
+    sent = _send_push_to_user(
+        db,
+        removed_user_id,
+        {
+            "title": "Acceso removido",
+            "body": (
+                f"{remover_name} te quito del perfil {removed_profile_name}. "
+                "Ya no podras ver ni editar su informacion."
+            ),
+            "url": "/family",
+            "priority": "high",
+            "sound": "default",
+            "kind": "family-access-removed",
+            "profileId": profile_id,
+        },
+    )
+    if sent:
+        print(
+            "DEBUG family access removed push: enviado",
+            {"removed_user_id": removed_user_id, "profile_id": profile_id, "sent": sent},
+        )
     return {"ok": True}
 
 
@@ -5006,6 +5210,7 @@ async def remove_profile_relationship(
 async def revoke_profile_invitation(
     profile_id: int,
     invitation_id: int,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -5024,29 +5229,22 @@ async def revoke_profile_invitation(
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitacion no encontrada")
 
-    invitee_user = (
-        db.query(models.User)
-        .filter(func.lower(models.User.email) == (invitation.invitee_email or "").strip().lower())
-        .first()
-    )
-    invitee_primary = None
-    if invitee_user:
-        invitee_primary = (
-            db.query(models.HealthProfile)
-            .filter(
-                models.HealthProfile.owner_user_id == invitee_user.id,
-                models.HealthProfile.is_primary_profile.is_(True),
-                models.HealthProfile.is_archived.is_(False),
-            )
+    removed_user_id = None
+    if invitation.status == "accepted":
+        invitee_user = (
+            db.query(models.User)
+            .filter(func.lower(models.User.email) == (invitation.invitee_email or "").strip().lower())
             .first()
         )
-
-    if invitation.status == "accepted" and invitee_primary:
+        invitee_user_id = invitee_user.id if invitee_user else invitation.accepted_by_user_id
+        removed_user_id = invitee_user_id
+        if not invitee_user_id:
+            raise HTTPException(status_code=400, detail="No se pudo resolver el usuario invitado")
         granted_link = (
             db.query(models.ProfileRelationship)
             .filter(
-                models.ProfileRelationship.profile_id == invitee_primary.id,
-                models.ProfileRelationship.user_id == invitation.inviter_user_id,
+                models.ProfileRelationship.profile_id == profile_id,
+                models.ProfileRelationship.user_id == invitee_user_id,
             )
             .first()
         )
@@ -5068,6 +5266,37 @@ async def revoke_profile_invitation(
     )
     db.commit()
     db.refresh(invitation)
+    profile_name = invitation.profile.full_name if invitation.profile else f"Perfil #{profile_id}"
+    remover_name = current_user.name or current_user.email or "Administrador"
+    if invitation.status == "revoked" and removed_user_id:
+        if invitation.invitee_email:
+            background_tasks.add_task(
+                _send_profile_access_removed_email_safe,
+                invitation.invitee_email,
+                remover_name,
+                profile_name,
+            )
+        sent = _send_push_to_user(
+            db,
+            removed_user_id,
+            {
+                "title": "Acceso removido",
+                "body": (
+                    f"{remover_name} revoco tu acceso al perfil {profile_name}. "
+                    "Ya no podras ver ni editar su informacion."
+                ),
+                "url": "/family",
+                "priority": "high",
+                "sound": "default",
+                "kind": "family-access-removed",
+                "profileId": profile_id,
+            },
+        )
+        if sent:
+            print(
+                "DEBUG family invitation revoked push: enviado",
+                {"removed_user_id": removed_user_id, "profile_id": profile_id, "sent": sent},
+            )
     return {"ok": True}
 
 
@@ -5274,9 +5503,10 @@ async def list_appointments(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user)
     return (
         db.query(models.Appointment)
-        .filter(models.Appointment.user_id == current_user.id)
+        .filter(models.Appointment.user_id == target_user_id)
         .order_by(models.Appointment.date_time)
         .all()
     )
@@ -5289,8 +5519,9 @@ async def create_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = models.Appointment(
-        user_id=current_user.id,
+        user_id=target_user_id,
         type=appt_in.type,
         specialty=appt_in.specialty,
         center=appt_in.center,
@@ -5324,11 +5555,12 @@ async def update_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = (
         db.query(models.Appointment)
         .filter(
             models.Appointment.id == appointment_id,
-            models.Appointment.user_id == current_user.id,
+            models.Appointment.user_id == target_user_id,
         )
         .first()
     )
@@ -5349,11 +5581,12 @@ async def delete_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = (
         db.query(models.Appointment)
         .filter(
             models.Appointment.id == appointment_id,
-            models.Appointment.user_id == current_user.id,
+            models.Appointment.user_id == target_user_id,
         )
         .first()
     )
@@ -5370,9 +5603,10 @@ async def list_medications(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user)
     medications = (
         db.query(models.Medication)
-        .filter(models.Medication.user_id == current_user.id)
+        .filter(models.Medication.user_id == target_user_id)
         .order_by(models.Medication.created_at.desc())
         .all()
     )
@@ -5386,8 +5620,9 @@ async def create_medication(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     try:
+        _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
         med = models.Medication(
-            user_id=current_user.id,
+            user_id=target_user_id,
             name=med_in.name,
             dose=med_in.dose or "",
             frequency=med_in.frequency or "",
@@ -5418,11 +5653,12 @@ async def update_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
             models.Medication.id == medication_id,
-            models.Medication.user_id == current_user.id,
+            models.Medication.user_id == target_user_id,
         )
         .first()
     )
@@ -5444,11 +5680,12 @@ async def record_medication_intake(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
             models.Medication.id == medication_id,
-            models.Medication.user_id == current_user.id,
+            models.Medication.user_id == target_user_id,
         )
         .first()
     )
@@ -5456,7 +5693,7 @@ async def record_medication_intake(
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
     intake = models.MedicationIntake(
-        user_id=current_user.id,
+        user_id=target_user_id,
         medication_id=medication_id,
     )
     db.add(intake)
@@ -5471,11 +5708,12 @@ async def delete_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
             models.Medication.id == medication_id,
-            models.Medication.user_id == current_user.id,
+            models.Medication.user_id == target_user_id,
         )
         .first()
     )
@@ -5483,7 +5721,7 @@ async def delete_medication(
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
     db.query(models.MedicationIntake).filter(
         models.MedicationIntake.medication_id == medication_id,
-        models.MedicationIntake.user_id == current_user.id,
+        models.MedicationIntake.user_id == target_user_id,
     ).delete()
     db.delete(med)
     db.commit()
@@ -5939,9 +6177,10 @@ async def list_documents(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user)
     docs = (
         db.query(models.Document)
-        .filter(models.Document.user_id == current_user.id)
+        .filter(models.Document.user_id == target_user_id)
         .order_by(models.Document.created_at.desc())
         .all()
     )
@@ -5961,6 +6200,7 @@ async def upload_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     # Leer el contenido del archivo
     file_content = await file.read()
     if len(file_content) > MAX_UPLOAD_BYTES:
@@ -5986,7 +6226,7 @@ async def upload_document(
         ""  # Compatibilidad con esquemas antiguos donde file_path es NOT NULL
     )
     doc = models.Document(
-        user_id=current_user.id,
+        user_id=target_user_id,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
         file_data=file_content,  # Guardar datos del archivo en la BD
@@ -6038,11 +6278,12 @@ async def delete_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     doc = (
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == current_user.id,
+            models.Document.user_id == target_user_id,
         )
         .first()
     )
@@ -6065,11 +6306,12 @@ async def update_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     doc = (
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == current_user.id,
+            models.Document.user_id == target_user_id,
         )
         .first()
     )
@@ -6090,6 +6332,7 @@ async def get_document_file(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _, _, target_user_id = _get_active_profile_context(db, current_user)
     """Sirve un archivo de documento solo si el usuario tiene acceso"""
     print(
         f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}"
@@ -6099,7 +6342,7 @@ async def get_document_file(
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == current_user.id,
+            models.Document.user_id == target_user_id,
         )
         .first()
     )

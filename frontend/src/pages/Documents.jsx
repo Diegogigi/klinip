@@ -24,6 +24,8 @@ export default function Documents() {
   const navigate = useNavigate();
   const [docs, setDocs] = useState([]);
   const [showForm, setShowForm] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTarget, setDetailTarget] = useState(null);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [form, setForm] = useState({
@@ -187,6 +189,16 @@ export default function Documents() {
     }
   };
 
+  const handleOpenDetail = (doc) => {
+    setDetailTarget(doc);
+    setDetailOpen(true);
+  };
+
+  const handleCloseDetail = () => {
+    setDetailOpen(false);
+    setDetailTarget(null);
+  };
+
   const filteredDocs = docs.filter((d) => {
     const matchesSearch =
       !search ||
@@ -323,6 +335,72 @@ export default function Documents() {
         </div>
       )}
 
+      {detailOpen && detailTarget && (
+        <div className="modal-backdrop" onClick={handleCloseDetail}>
+          <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
+            <div className="detail-modal-header">
+              <h3>Detalle del documento</h3>
+              <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+            <div className="detail-modal-content">
+              <div className="detail-highlight">
+                <span className="detail-chip detail-chip-type resultado">
+                  {docLabels[detailTarget.doc_type] || detailTarget.doc_type}
+                </span>
+                <span className="detail-chip detail-chip-muted">
+                  {ocrLabels[detailTarget.ocr_status] ||
+                    (detailTarget.ocr_status ? "OCR con error" : "Sin OCR")}
+                </span>
+              </div>
+              <div className="detail-grid">
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📄</span>
+                  <div>
+                    <span className="detail-label">Nombre archivo</span>
+                    <p>{detailTarget.filename || `documento-${detailTarget.id}`}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🏥</span>
+                  <div>
+                    <span className="detail-label">Centro médico</span>
+                    <p>{detailTarget.center || "Sin centro"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🗓️</span>
+                  <div>
+                    <span className="detail-label">Fecha documento</span>
+                    <p>
+                      {detailTarget.date
+                        ? toLocaleDateOrEmpty(detailTarget.date)
+                        : toLocaleDateOrEmpty(detailTarget.created_at)}
+                    </p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📝</span>
+                  <div>
+                    <span className="detail-label">Notas</span>
+                    <p>{detailTarget.notes || "Sin notas"}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-btn" type="button" onClick={() => handleView(detailTarget)}>
+                Ver documento
+              </button>
+              <button className="primary-btn" type="button" onClick={() => handleDownload(detailTarget)}>
+                Descargar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h3 className="card-title">Documentos guardados</h3>
         <div className="form-row" style={{ marginBottom: "0.75rem" }}>
@@ -368,7 +446,19 @@ export default function Documents() {
               </thead>
               <tbody>
                 {filteredDocs.map((d) => (
-                  <tr key={d.id}>
+                  <tr
+                    key={d.id}
+                    className="table-row-clickable"
+                    onClick={() => handleOpenDetail(d)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleOpenDetail(d);
+                      }
+                    }}
+                  >
                     <td>
                       <span className="badge">
                         {docLabels[d.doc_type] || d.doc_type}
@@ -389,7 +479,7 @@ export default function Documents() {
                     <td style={{ maxWidth: "240px" }}>
                       <span style={{ fontSize: "0.85rem" }}>{d.notes}</span>
                     </td>
-                    <td>
+                    <td onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu
                         items={[
                           {

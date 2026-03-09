@@ -76,6 +76,14 @@ const icons = {
       <path d="M6 19.5a6 6 0 0 1 12 0" />
     </svg>
   ),
+  family: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="9" r="2.5" />
+      <circle cx="16" cy="9" r="2.5" />
+      <path d="M3.5 19a4.5 4.5 0 0 1 9 0" />
+      <path d="M11.5 19a4.5 4.5 0 0 1 9 0" />
+    </svg>
+  ),
   calendar: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <rect x="4" y="6" width="16" height="14" rx="2" />
@@ -145,7 +153,7 @@ function Sidebar({
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
-    { to: "/family", label: "Mi familia", icon: icons.user },
+    { to: "/family", label: "Mi familia", icon: icons.family },
   ];
   const mobilePrimaryLinks = links.filter((item) =>
     ["/", "/appointments", "/calendar", "/timeline"].includes(item.to)
@@ -166,6 +174,14 @@ function Sidebar({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Basico";
+  const getProfileAccessLabelMobile = (item) => {
+    if (!item) return "";
+    const isOwner = Number(item.owner_user_id) === Number(user?.id);
+    if (isOwner) return "propio";
+    const role = (item.access_role || "").toLowerCase();
+    if (role === "admin") return "admin";
+    return "invitado";
+  };
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -246,7 +262,7 @@ function Sidebar({
                     {(healthProfiles || []).map((item) => (
                       <option value={item.id} key={item.id}>
                         {item.full_name}
-                        {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                        {` (${getProfileAccessLabelMobile(item)})`}
                       </option>
                     ))}
                   </select>
@@ -378,6 +394,14 @@ function Topbar({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Basico";
+  const getProfileAccessLabel = (item) => {
+    if (!item) return "";
+    const isOwner = Number(item.owner_user_id) === Number(user?.id);
+    if (isOwner) return "propio";
+    const role = (item.access_role || "").toLowerCase();
+    if (role === "admin") return "admin";
+    return "invitado";
+  };
 
   if (isAuthRoute || (!user && location.pathname === "/")) return null;
 
@@ -479,7 +503,9 @@ function Topbar({
                   <span className="topbar-user-menu-plan">{planLabel}</span>
                 </div>
                 <p className="topbar-user-menu-profile-name">
-                  {activeProfile?.full_name || user?.name || "Perfil personal"}
+                  {activeProfile
+                    ? `${activeProfile.full_name} (${getProfileAccessLabel(activeProfile)})`
+                    : user?.name || "Perfil personal"}
                 </p>
                 {canSwitchProfiles ? (
                   <select
@@ -491,7 +517,7 @@ function Topbar({
                     {(healthProfiles || []).map((item) => (
                       <option value={item.id} key={item.id}>
                         {item.full_name}
-                        {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                        {` (${getProfileAccessLabel(item)})`}
                       </option>
                     ))}
                   </select>
