@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import {
   updateMe,
@@ -14,6 +14,8 @@ import {
   getProfileCaregivers,
   inviteProfileCaregiver,
   getProfileInvitations,
+  getMyPendingProfileInvitations,
+  acceptProfileInvitation,
   updateProfileRelationship,
   removeProfileRelationship,
   revokeProfileInvitation,
@@ -34,6 +36,7 @@ import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../ut
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate }) {
   const profile = user || {};
   const navigate = useNavigate();
+  const location = useLocation();
   const [exporting, setExporting] = useState(false);
   const [consentRevoked, setConsentRevoked] = useState(() => {
     return localStorage.getItem("klinip_consent_revoked") === "true";
@@ -64,6 +67,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [familyPanelCards, setFamilyPanelCards] = useState([]);
   const [caregivers, setCaregivers] = useState([]);
   const [invitations, setInvitations] = useState([]);
+  const [myPendingInvitations, setMyPendingInvitations] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
   const [familyAlerts, setFamilyAlerts] = useState([]);
   const [familyReport, setFamilyReport] = useState(null);
@@ -178,18 +182,21 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     const loadFamilyDetails = async () => {
       if (!profile?.id) return;
       try {
-        const [cards, alerts, report] = await Promise.all([
+        const [cards, alerts, report, pendingForMe] = await Promise.all([
           getFamilyPanel(),
           getFamilyAlerts().catch(() => []),
           getFamilyReportSummary(30).catch(() => null),
+          getMyPendingProfileInvitations().catch(() => []),
         ]);
         if (mounted) setFamilyPanelCards(Array.isArray(cards) ? cards : []);
         if (mounted) setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
         if (mounted) setFamilyReport(report || null);
+        if (mounted) setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
       } catch (err) {
         if (mounted) setFamilyPanelCards([]);
         if (mounted) setFamilyAlerts([]);
         if (mounted) setFamilyReport(null);
+        if (mounted) setMyPendingInvitations([]);
         console.error("No se pudo cargar panel familiar:", err);
       }
 
@@ -556,6 +563,50 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       console.error("Error invitando colaborador:", err);
     }
   };
+
+  const handleAcceptInvitation = async (token) => {
+    const cleanToken = (token || "").trim();
+    if (!cleanToken) return;
+    setFamilyStatus("");
+    try {
+      await acceptProfileInvitation(cleanToken);
+      const [profiles, active, cards, pendingForMe] = await Promise.all([
+        getHealthProfiles().catch(() => []),
+        getActiveHealthProfile().catch(() => null),
+        getFamilyPanel().catch(() => []),
+        getMyPendingProfileInvitations().catch(() => []),
+      ]);
+      setFamilyProfiles(Array.isArray(profiles) ? profiles : []);
+      setActiveFamilyProfileId(active?.id || activeFamilyProfileId);
+      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
+      setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
+      setFamilyStatus("Invitacion aceptada correctamente");
+      setActiveSection("familia");
+      if (isMobileSettings) {
+        setMobileSectionOpen(true);
+      }
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo aceptar la invitacion");
+      console.error("Error aceptando invitacion:", err);
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search || "");
+    const token = (params.get("family_invite_token") || "").trim();
+    if (!token || !profile?.id) return;
+    handleAcceptInvitation(token).finally(() => {
+      const nextParams = new URLSearchParams(location.search || "");
+      nextParams.delete("family_invite_token");
+      const nextSearch = nextParams.toString();
+      navigate(
+        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+        { replace: true }
+      );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, profile?.id]);
 
   const handleRoleChange = async (relationshipId, nextRole) => {
     if (!activeFamilyProfileId) return;
@@ -946,6 +997,33 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Gestiona perfiles de salud vinculados segun tu plan actual.
         </p>
+
+        <div className="family-collab-card">
+          <h4>Invitaciones pendientes para ti</h4>
+          <div className="family-table">
+            {myPendingInvitations.length ? (
+              myPendingInvitations.map((inv) => (
+                <div className="family-table-row" key={inv.id}>
+                  <div>
+                    <p className="family-name">{inv.profile_name}</p>
+                    <p className="muted">
+                      Invitado por {inv.inviter_name || `Usuario #${inv.inviter_user_id}`} - Rol: {inv.role}
+                    </p>
+                  </div>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() => handleAcceptInvitation(inv.token)}
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              ))
+            ) : (
+              <p className="muted">No tienes invitaciones pendientes.</p>
+            )}
+          </div>
+        </div>
 
         <div className="family-plan-card">
           <p><strong>Plan:</strong> {planInfo?.plan_type || "basico"}</p>

@@ -121,6 +121,11 @@ export async function getProfileInvitations(profileId) {
   return res.data;
 }
 
+export async function getMyPendingProfileInvitations() {
+  const res = await api.get("/health-profiles/invitations/my-pending");
+  return res.data;
+}
+
 export async function acceptProfileInvitation(token) {
   const res = await api.post("/health-profiles/invitations/accept", { token });
   return res.data;

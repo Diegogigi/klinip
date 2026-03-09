@@ -155,6 +155,26 @@ class ProfileInvitationOut(BaseModel):
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
 
+class PendingProfileInvitationOut(BaseModel):
+    id: int
+    profile_id: int
+    profile_name: str
+    inviter_user_id: int
+    inviter_name: Optional[str] = ""
+    invitee_email: EmailStr
+    role: str
+    relationship_type: Optional[str] = ""
+    status: str
+    token: str
+    invited_at: datetime
+
+    @field_serializer('invited_at')
+    def serialize_pending_invitation_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class ProfileInvitationAcceptIn(BaseModel):
     token: str
 

@@ -36,6 +36,7 @@ import time
 from zoneinfo import ZoneInfo
 from urllib import request as urlrequest
 from urllib import error as urlerror
+from urllib.parse import quote_plus
 
 try:
     from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -1432,6 +1433,38 @@ def _send_family_report_email_safe(
         )
     except Exception as exc:
         print(f"ERROR sending family report email async: {exc}")
+
+
+def _build_family_invite_url(token: str) -> str:
+    base = (os.getenv("FRONTEND_BASE_URL") or "https://www.klinip.cl").strip().rstrip("/")
+    return f"{base}/settings?family_invite_token={quote_plus(token)}"
+
+
+def _send_profile_invitation_email_safe(
+    to_email: str,
+    inviter_name: str,
+    profile_name: str,
+    role: str,
+    relationship_type: str,
+    token: str,
+):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject=f"Invitacion de {inviter_name} para colaborar en Klinip",
+            template_name="profile_invitation.html",
+            context={
+                "invitee_email": to_email,
+                "inviter_name": inviter_name or "Usuario Klinip",
+                "profile_name": profile_name or "Perfil de salud",
+                "role": role or "viewer",
+                "relationship_type": relationship_type or "",
+                "accept_url": _build_family_invite_url(token),
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending profile invitation email async: {exc}")
 
 
 
@@ -4644,6 +4677,7 @@ async def list_profile_caregivers(
 async def create_profile_invitation(
     profile_id: int,
     payload: schemas.ProfileInvitationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -4675,53 +4709,6 @@ async def create_profile_invitation(
         if existing_link and existing_link.status == "accepted":
             raise HTTPException(status_code=409, detail="Ese usuario ya tiene acceso al perfil")
 
-        if existing_link:
-            existing_link.status = "accepted"
-            existing_link.role = role
-            existing_link.relationship_type = payload.relationship_type or existing_link.relationship_type
-            existing_link.accepted_at = now
-            existing_link.invited_at = existing_link.invited_at or now
-            db.add(existing_link)
-            relationship_id = existing_link.id
-        else:
-            link = models.ProfileRelationship(
-                profile_id=profile_id,
-                user_id=existing_user.id,
-                relationship_type=payload.relationship_type or "",
-                role=role,
-                status="accepted",
-                invited_at=now,
-                accepted_at=now,
-            )
-            db.add(link)
-            db.flush()
-            relationship_id = link.id
-
-        invitation = models.ProfileInvitation(
-            profile_id=profile_id,
-            inviter_user_id=current_user.id,
-            invitee_email=invitee_email,
-            role=role,
-            relationship_type=payload.relationship_type or "",
-            status="accepted",
-            token=secrets.token_urlsafe(24),
-            accepted_by_user_id=existing_user.id,
-            invited_at=now,
-            accepted_at=now,
-        )
-        db.add(invitation)
-        _log_profile_activity(
-            db,
-            profile_id=profile_id,
-            actor_user_id=current_user.id,
-            action_type="caregiver_added",
-            description=f"{current_user.name or current_user.email} agrego colaborador {invitee_email} como {role}",
-            metadata_json={"role": role, "email": invitee_email, "relationship_id": relationship_id},
-        )
-        db.commit()
-        db.refresh(invitation)
-        return invitation
-
     pending = (
         db.query(models.ProfileInvitation)
         .filter(
@@ -4732,6 +4719,22 @@ async def create_profile_invitation(
         .first()
     )
     if pending:
+        pending.role = role
+        pending.relationship_type = payload.relationship_type or pending.relationship_type
+        pending.token = pending.token or secrets.token_urlsafe(24)
+        pending.invited_at = now
+        db.add(pending)
+        db.commit()
+        db.refresh(pending)
+        background_tasks.add_task(
+            _send_profile_invitation_email_safe,
+            invitee_email,
+            current_user.name or current_user.email or "Usuario Klinip",
+            profile.full_name or "Perfil de salud",
+            role,
+            payload.relationship_type or "",
+            pending.token,
+        )
         return pending
 
     invitation = models.ProfileInvitation(
@@ -4755,6 +4758,15 @@ async def create_profile_invitation(
     )
     db.commit()
     db.refresh(invitation)
+    background_tasks.add_task(
+        _send_profile_invitation_email_safe,
+        invitee_email,
+        current_user.name or current_user.email or "Usuario Klinip",
+        profile.full_name or "Perfil de salud",
+        role,
+        payload.relationship_type or "",
+        invitation.token,
+    )
     return invitation
 
 
@@ -4774,6 +4786,48 @@ async def list_profile_invitations(
         .all()
     )
     return invitations
+
+
+@app.get("/health-profiles/invitations/my-pending", response_model=List[schemas.PendingProfileInvitationOut])
+async def list_my_pending_profile_invitations(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    email = (current_user.email or "").strip().lower()
+    if not email:
+        return []
+
+    invitations = (
+        db.query(models.ProfileInvitation)
+        .join(models.HealthProfile, models.HealthProfile.id == models.ProfileInvitation.profile_id)
+        .outerjoin(models.User, models.User.id == models.ProfileInvitation.inviter_user_id)
+        .filter(
+            func.lower(models.ProfileInvitation.invitee_email) == email,
+            models.ProfileInvitation.status == "pending",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(models.ProfileInvitation.invited_at.desc())
+        .all()
+    )
+
+    output = []
+    for inv in invitations:
+        output.append(
+            schemas.PendingProfileInvitationOut(
+                id=inv.id,
+                profile_id=inv.profile_id,
+                profile_name=(inv.profile.full_name if inv.profile else f"Perfil #{inv.profile_id}"),
+                inviter_user_id=inv.inviter_user_id,
+                inviter_name=(inv.inviter_user.name if inv.inviter_user else ""),
+                invitee_email=inv.invitee_email,
+                role=inv.role or "viewer",
+                relationship_type=inv.relationship_type or "",
+                status=inv.status or "pending",
+                token=inv.token,
+                invited_at=inv.invited_at or datetime.utcnow(),
+            )
+        )
+    return output
 
 
 @app.post("/health-profiles/invitations/accept", response_model=schemas.ProfileRelationshipOut)

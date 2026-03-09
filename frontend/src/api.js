@@ -20,6 +20,7 @@ export const getFamilyPanel = api.getFamilyPanel;
 export const getProfileCaregivers = api.getProfileCaregivers;
 export const inviteProfileCaregiver = api.inviteProfileCaregiver;
 export const getProfileInvitations = api.getProfileInvitations;
+export const getMyPendingProfileInvitations = api.getMyPendingProfileInvitations;
 export const acceptProfileInvitation = api.acceptProfileInvitation;
 export const updateProfileRelationship = api.updateProfileRelationship;
 export const removeProfileRelationship = api.removeProfileRelationship;
