@@ -325,13 +325,18 @@ body.theme-dark .settings-email-reminder-sub {
 body.theme-dark .family-active-banner,
 body.theme-dark .family-plan-card,
 body.theme-dark .family-create-card,
-body.theme-dark .family-item {
+body.theme-dark .family-item,
+body.theme-dark .family-panel-card,
+body.theme-dark .family-collab-card,
+body.theme-dark .family-table-row,
+body.theme-dark .family-activity-item {
   background: #0b1224;
   border-color: #1e293b;
 }
 
 body.theme-dark .family-active-label,
-body.theme-dark .family-name {
+body.theme-dark .family-name,
+body.theme-dark .family-panel-name {
   color: #e2e8f0;
 }
 
@@ -2354,6 +2359,80 @@ body.theme-dark .primary-btn {
   color: #0f172a;
 }
 
+.family-section-title {
+  margin: 0.8rem 0 0.45rem;
+}
+
+.family-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+}
+
+.family-panel-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.75rem 0.85rem;
+}
+
+.family-panel-name {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.family-collab-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.85rem;
+  margin-top: 0.75rem;
+}
+
+.family-collab-card h4 {
+  margin: 0 0 0.6rem;
+}
+
+.family-table {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.family-table-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  background: #f8fafc;
+}
+
+.family-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.family-row-actions .select-field {
+  min-width: 130px;
+}
+
+.family-activity-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.family-activity-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.6rem 0.7rem;
+}
+
 .export-layout {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2656,6 +2735,22 @@ body.theme-dark .primary-btn {
   .family-item {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .family-table-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .family-row-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .family-row-actions .select-field {
+    min-width: 0;
+    width: 100%;
   }
 
   .profile-section-title {

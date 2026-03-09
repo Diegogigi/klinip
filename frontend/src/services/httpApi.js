@@ -101,6 +101,51 @@ export async function setActiveHealthProfile(id) {
   return res.data;
 }
 
+export async function getFamilyPanel() {
+  const res = await api.get("/family/panel");
+  return res.data;
+}
+
+export async function getProfileCaregivers(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/caregivers`);
+  return res.data;
+}
+
+export async function inviteProfileCaregiver(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/invitations`, payload);
+  return res.data;
+}
+
+export async function getProfileInvitations(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/invitations`);
+  return res.data;
+}
+
+export async function acceptProfileInvitation(token) {
+  const res = await api.post("/health-profiles/invitations/accept", { token });
+  return res.data;
+}
+
+export async function updateProfileRelationship(profileId, relationshipId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/relationships/${relationshipId}`, payload);
+  return res.data;
+}
+
+export async function removeProfileRelationship(profileId, relationshipId) {
+  const res = await api.delete(`/health-profiles/${profileId}/relationships/${relationshipId}`);
+  return res.data;
+}
+
+export async function revokeProfileInvitation(profileId, invitationId) {
+  const res = await api.delete(`/health-profiles/${profileId}/invitations/${invitationId}`);
+  return res.data;
+}
+
+export async function getHealthProfileActivity(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/activity`);
+  return res.data;
+}
+
 // Privacy
 export async function revokeDataConsent() {
   const res = await api.post("/privacy/revoke-consent");

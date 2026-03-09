@@ -107,6 +107,81 @@ class HealthProfileOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class ProfileRelationshipOut(BaseModel):
+    id: int
+    profile_id: int
+    user_id: int
+    user_name: Optional[str] = ""
+    user_email: Optional[str] = ""
+    relationship_type: Optional[str] = ""
+    role: str
+    status: str
+    invited_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+    created_at: datetime
+
+    @field_serializer('invited_at', 'accepted_at', 'created_at')
+    def serialize_relation_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class ProfileInvitationCreate(BaseModel):
+    email: EmailStr
+    role: str = "viewer"
+    relationship_type: Optional[str] = ""
+
+
+class ProfileInvitationOut(BaseModel):
+    id: int
+    profile_id: int
+    inviter_user_id: int
+    invitee_email: EmailStr
+    role: str
+    relationship_type: Optional[str] = ""
+    status: str
+    token: str
+    accepted_by_user_id: Optional[int] = None
+    invited_at: datetime
+    accepted_at: Optional[datetime] = None
+    revoked_at: Optional[datetime] = None
+
+    @field_serializer('invited_at', 'accepted_at', 'revoked_at')
+    def serialize_invitation_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class ProfileInvitationAcceptIn(BaseModel):
+    token: str
+
+
+class ProfileRoleUpdateIn(BaseModel):
+    role: str
+    relationship_type: Optional[str] = None
+
+
+class FamilyPanelCardOut(BaseModel):
+    profile_id: int
+    name: str
+    relationship: Optional[str] = ""
+    age_years: Optional[int] = None
+    medications_active: int = 0
+    next_appointment_at: Optional[datetime] = None
+    next_appointment_center: Optional[str] = ""
+    reminders_pending: int = 0
+    caregivers_count: int = 0
+    access_role: Optional[str] = ""
+
+    @field_serializer('next_appointment_at')
+    def serialize_panel_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

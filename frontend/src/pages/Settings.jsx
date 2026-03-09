@@ -10,6 +10,14 @@ import {
   getActiveHealthProfile,
   createHealthProfile,
   setActiveHealthProfile,
+  getFamilyPanel,
+  getProfileCaregivers,
+  inviteProfileCaregiver,
+  getProfileInvitations,
+  updateProfileRelationship,
+  removeProfileRelationship,
+  revokeProfileInvitation,
+  getHealthProfileActivity,
   revokeDataConsent,
   deleteAccount as deleteAccountApi,
   submitPrivacyRequest,
@@ -45,6 +53,15 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     full_name: "",
     relation_with_owner: "",
     gender: "",
+  });
+  const [familyPanelCards, setFamilyPanelCards] = useState([]);
+  const [caregivers, setCaregivers] = useState([]);
+  const [invitations, setInvitations] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    role: "viewer",
+    relationship_type: "",
   });
   const plan = planInfo?.plan_type || "basico";
 
@@ -135,6 +152,51 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       mounted = false;
     };
   }, [profile?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadFamilyDetails = async () => {
+      if (!profile?.id) return;
+      try {
+        const cards = await getFamilyPanel();
+        if (mounted) setFamilyPanelCards(Array.isArray(cards) ? cards : []);
+      } catch (err) {
+        if (mounted) setFamilyPanelCards([]);
+        console.error("No se pudo cargar panel familiar:", err);
+      }
+
+      if (!activeFamilyProfileId) {
+        if (mounted) {
+          setCaregivers([]);
+          setInvitations([]);
+          setActivityLog([]);
+        }
+        return;
+      }
+
+      try {
+        const [careList, invList, actList] = await Promise.all([
+          getProfileCaregivers(activeFamilyProfileId),
+          getProfileInvitations(activeFamilyProfileId).catch(() => []),
+          getHealthProfileActivity(activeFamilyProfileId),
+        ]);
+        if (!mounted) return;
+        setCaregivers(Array.isArray(careList) ? careList : []);
+        setInvitations(Array.isArray(invList) ? invList : []);
+        setActivityLog(Array.isArray(actList) ? actList : []);
+      } catch (err) {
+        if (!mounted) return;
+        setCaregivers([]);
+        setInvitations([]);
+        setActivityLog([]);
+        console.error("No se pudieron cargar detalles de colaboracion:", err);
+      }
+    };
+    loadFamilyDetails();
+    return () => {
+      mounted = false;
+    };
+  }, [profile?.id, activeFamilyProfileId, planInfo?.plan_type]);
 
   const handleSectionSelect = (section) => {
     setActiveSection(section);
@@ -416,12 +478,103 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         gender: "",
       });
       const plan = await getMyPlan();
+      const cards = await getFamilyPanel().catch(() => []);
       setPlanInfo(plan || null);
+      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
       setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo crear el perfil");
       console.error("Error creando perfil asistido:", err);
+    }
+  };
+
+  const handleInviteCaregiver = async () => {
+    if (!activeFamilyProfileId) {
+      setFamilyStatus("Selecciona un perfil activo para invitar");
+      return;
+    }
+    const email = (inviteForm.email || "").trim().toLowerCase();
+    if (!email) {
+      setFamilyStatus("Debes ingresar un correo para la invitacion");
+      return;
+    }
+    setFamilyStatus("");
+    try {
+      await inviteProfileCaregiver(activeFamilyProfileId, {
+        email,
+        role: inviteForm.role,
+        relationship_type: inviteForm.relationship_type,
+      });
+      const [careList, invList, actList] = await Promise.all([
+        getProfileCaregivers(activeFamilyProfileId),
+        getProfileInvitations(activeFamilyProfileId).catch(() => []),
+        getHealthProfileActivity(activeFamilyProfileId),
+      ]);
+      setCaregivers(Array.isArray(careList) ? careList : []);
+      setInvitations(Array.isArray(invList) ? invList : []);
+      setActivityLog(Array.isArray(actList) ? actList : []);
+      setInviteForm({ email: "", role: "viewer", relationship_type: "" });
+      setFamilyStatus("Invitacion/provision de acceso creada correctamente");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo crear la invitacion");
+      console.error("Error invitando colaborador:", err);
+    }
+  };
+
+  const handleRoleChange = async (relationshipId, nextRole) => {
+    if (!activeFamilyProfileId) return;
+    try {
+      await updateProfileRelationship(activeFamilyProfileId, relationshipId, { role: nextRole });
+      const [careList, actList] = await Promise.all([
+        getProfileCaregivers(activeFamilyProfileId),
+        getHealthProfileActivity(activeFamilyProfileId),
+      ]);
+      setCaregivers(Array.isArray(careList) ? careList : []);
+      setActivityLog(Array.isArray(actList) ? actList : []);
+      setFamilyStatus("Rol actualizado");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo actualizar el rol");
+      console.error("Error actualizando rol:", err);
+    }
+  };
+
+  const handleRemoveCaregiver = async (relationshipId) => {
+    if (!activeFamilyProfileId) return;
+    if (!window.confirm("Deseas quitar este colaborador del perfil?")) return;
+    try {
+      await removeProfileRelationship(activeFamilyProfileId, relationshipId);
+      const [careList, actList] = await Promise.all([
+        getProfileCaregivers(activeFamilyProfileId),
+        getHealthProfileActivity(activeFamilyProfileId),
+      ]);
+      setCaregivers(Array.isArray(careList) ? careList : []);
+      setActivityLog(Array.isArray(actList) ? actList : []);
+      setFamilyStatus("Colaborador removido");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo remover colaborador");
+      console.error("Error removiendo colaborador:", err);
+    }
+  };
+
+  const handleRevokeInvitation = async (invitationId) => {
+    if (!activeFamilyProfileId) return;
+    try {
+      await revokeProfileInvitation(activeFamilyProfileId, invitationId);
+      const [invList, actList] = await Promise.all([
+        getProfileInvitations(activeFamilyProfileId).catch(() => []),
+        getHealthProfileActivity(activeFamilyProfileId),
+      ]);
+      setInvitations(Array.isArray(invList) ? invList : []);
+      setActivityLog(Array.isArray(actList) ? actList : []);
+      setFamilyStatus("Invitacion revocada");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo revocar la invitacion");
+      console.error("Error revocando invitacion:", err);
     }
   };
 
@@ -701,6 +854,24 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <p><strong>Colaboracion:</strong> {planInfo?.collaboration_enabled ? "Habilitada" : "No disponible en este plan"}</p>
         </div>
 
+        <h4 className="family-section-title">Panel familiar</h4>
+        <div className="family-panel-grid">
+          {familyPanelCards.length ? (
+            familyPanelCards.map((card) => (
+              <article className="family-panel-card" key={card.profile_id}>
+                <p className="family-panel-name">{card.name}</p>
+                <p className="muted">{card.relationship || "Sin relacion"} {typeof card.age_years === "number" ? `- ${card.age_years} años` : ""}</p>
+                <p className="muted">Medicamentos activos: {card.medications_active}</p>
+                <p className="muted">Recordatorios pendientes: {card.reminders_pending}</p>
+                <p className="muted">Proxima cita: {card.next_appointment_at ? toLocaleDateTimeOrEmpty(card.next_appointment_at) : "Sin cita"}</p>
+                <p className="muted">Cuidadores: {card.caregivers_count}</p>
+              </article>
+            ))
+          ) : (
+            <p className="muted">No hay datos de panel familiar disponibles aun.</p>
+          )}
+        </div>
+
         {planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
           <div className="family-create-card">
             <h4>Agregar perfil asistido</h4>
@@ -777,6 +948,137 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <p className="muted">Aun no tienes perfiles de salud vinculados.</p>
           )}
         </div>
+
+        {planInfo?.collaboration_enabled && !!activeFamilyProfileId && (
+          <>
+            <div className="family-collab-card">
+              <h4>Invitar familiar o cuidador</h4>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Correo</label>
+                  <input
+                    className="input-field"
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="correo@ejemplo.com"
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Rol</label>
+                  <select
+                    className="select-field"
+                    value={inviteForm.role}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value }))}
+                  >
+                    <option value="admin">Administrador</option>
+                    <option value="caregiver">Cuidador</option>
+                    <option value="viewer">Visualizador</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Relacion</label>
+                  <input
+                    className="input-field"
+                    value={inviteForm.relationship_type}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, relationship_type: e.target.value }))}
+                    placeholder="Ej: Hijo, Hermana, Cuidador"
+                  />
+                </div>
+              </div>
+              <button className="secondary-btn" type="button" onClick={handleInviteCaregiver}>
+                Enviar invitacion
+              </button>
+            </div>
+
+            <div className="family-collab-card">
+              <h4>Roles y accesos</h4>
+              <div className="family-table">
+                {caregivers.length ? (
+                  caregivers.map((row) => (
+                    <div className="family-table-row" key={row.id}>
+                      <div>
+                        <p className="family-name">{row.user_name || row.user_email || `Usuario #${row.user_id}`}</p>
+                        <p className="muted">{row.user_email || ""} - {row.relationship_type || "Sin relacion"}</p>
+                      </div>
+                      <div className="family-row-actions">
+                        <select
+                          className="select-field"
+                          value={row.role || "viewer"}
+                          onChange={(e) => handleRoleChange(row.id, e.target.value)}
+                        >
+                          <option value="admin">Administrador</option>
+                          <option value="caregiver">Cuidador</option>
+                          <option value="viewer">Visualizador</option>
+                        </select>
+                        {row.user_id !== profile.id && (
+                          <button
+                            className="secondary-btn danger"
+                            type="button"
+                            onClick={() => handleRemoveCaregiver(row.id)}
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="muted">Aun no hay cuidadores adicionales en este perfil.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="family-collab-card">
+              <h4>Invitaciones</h4>
+              <div className="family-table">
+                {invitations.length ? (
+                  invitations.map((inv) => (
+                    <div className="family-table-row" key={inv.id}>
+                      <div>
+                        <p className="family-name">{inv.invitee_email}</p>
+                        <p className="muted">Rol: {inv.role} - Estado: {inv.status}</p>
+                      </div>
+                      {inv.status === "pending" ? (
+                        <button
+                          className="secondary-btn danger"
+                          type="button"
+                          onClick={() => handleRevokeInvitation(inv.id)}
+                        >
+                          Revocar
+                        </button>
+                      ) : (
+                        <span className="muted">Sin acciones</span>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="muted">No hay invitaciones registradas para este perfil.</p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {!!activeFamilyProfileId && (
+          <div className="family-collab-card">
+            <h4>Actividad reciente</h4>
+            <div className="family-activity-list">
+              {activityLog.length ? (
+                activityLog.map((entry) => (
+                  <article className="family-activity-item" key={entry.id}>
+                    <p className="family-name">{entry.description}</p>
+                    <p className="muted">
+                      {entry.action_type} - {entry.created_at ? toLocaleDateTimeOrEmpty(entry.created_at) : ""}
+                    </p>
+                  </article>
+                ))
+              ) : (
+                <p className="muted">Aun no hay actividad en este perfil.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {familyStatus && <p className="muted" style={{ marginTop: "0.75rem" }}>{familyStatus}</p>}
       </div>

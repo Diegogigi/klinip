@@ -286,3 +286,24 @@ class ProfileActivityLog(Base):
 
     profile = relationship("HealthProfile", back_populates="activity_logs")
     performed_by_user = relationship("User")
+
+
+class ProfileInvitation(Base):
+    __tablename__ = "profile_invitations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    inviter_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    invitee_email = Column(String, nullable=False, index=True)
+    role = Column(String, default="viewer")
+    relationship_type = Column(String, default="")
+    status = Column(String, default="pending")
+    token = Column(String, unique=True, nullable=False, index=True)
+    accepted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    invited_at = Column(DateTime, default=datetime.now)
+    accepted_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    profile = relationship("HealthProfile")
+    inviter_user = relationship("User", foreign_keys=[inviter_user_id])
+    accepted_by_user = relationship("User", foreign_keys=[accepted_by_user_id])

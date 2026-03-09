@@ -370,6 +370,20 @@ ROLE_LEVELS = {
 }
 
 
+def _normalize_role(value: str | None) -> str:
+    raw = (value or "viewer").strip().lower()
+    aliases = {
+        "visualizador": "viewer",
+        "viewer": "viewer",
+        "cuidador": "caregiver",
+        "caregiver": "caregiver",
+        "administrador": "admin",
+        "admin": "admin",
+    }
+    role = aliases.get(raw, "viewer")
+    return role
+
+
 def _normalize_plan_type(value: str | None) -> str:
     raw = (value or "basico").strip().lower()
     if raw in PLAN_RULES:
@@ -3698,6 +3712,15 @@ def _build_plan_info(user: models.User, db: Session) -> dict:
     }
 
 
+def _assert_collaboration_enabled(current_user: models.User):
+    info = _plan_features(getattr(current_user, "plan_type", None))
+    if not bool(info.get("collaboration_enabled", False)):
+        raise HTTPException(
+            status_code=403,
+            detail="La colaboracion familiar esta disponible solo en el plan familiar",
+        )
+
+
 def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship | None = None):
     return schemas.HealthProfileOut(
         id=profile.id,
@@ -3715,6 +3738,23 @@ def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship
         access_role=(link.role if link else None),
         access_status=(link.status if link else None),
         relationship_type=(link.relationship_type if link else None),
+    )
+
+
+def _relationship_out(link: models.ProfileRelationship):
+    user = link.user
+    return schemas.ProfileRelationshipOut(
+        id=link.id,
+        profile_id=link.profile_id,
+        user_id=link.user_id,
+        user_name=(user.name if user else ""),
+        user_email=(user.email if user else ""),
+        relationship_type=link.relationship_type or "",
+        role=link.role or "viewer",
+        status=link.status or "accepted",
+        invited_at=link.invited_at,
+        accepted_at=link.accepted_at,
+        created_at=link.created_at,
     )
 
 
@@ -4172,6 +4212,448 @@ async def get_health_profile_activity(
         }
         for item in logs
     ]
+
+
+@app.get("/family/panel", response_model=List[schemas.FamilyPanelCardOut])
+async def family_panel(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    links = (
+        db.query(models.ProfileRelationship)
+        .join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(
+            models.HealthProfile.is_primary_profile.desc(),
+            models.HealthProfile.full_name.asc(),
+        )
+        .all()
+    )
+
+    now = datetime.now()
+    cards: list[schemas.FamilyPanelCardOut] = []
+    for link in links:
+        profile = link.profile
+        if not profile:
+            continue
+        age_years = None
+        if profile.birth_date:
+            age_years = max(0, (now.date() - profile.birth_date.date()).days // 365)
+
+        caregivers_count = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == profile.id,
+                models.ProfileRelationship.status == "accepted",
+            )
+            .count()
+        )
+
+        medications_active = 0
+        reminders_pending = 0
+        next_appointment = None
+        # Compatibilidad Fase 1/2: mientras citas/meds sigan por user_id, se usa el perfil principal.
+        if profile.is_primary_profile:
+            medications_active = (
+                db.query(models.Medication)
+                .filter(
+                    models.Medication.user_id == profile.owner_user_id,
+                    models.Medication.completed.is_(False),
+                )
+                .count()
+            )
+            reminders_pending = medications_active
+            next_appointment = (
+                db.query(models.Appointment)
+                .filter(
+                    models.Appointment.user_id == profile.owner_user_id,
+                    models.Appointment.date_time.isnot(None),
+                    models.Appointment.date_time >= now,
+                )
+                .order_by(models.Appointment.date_time.asc())
+                .first()
+            )
+
+        cards.append(
+            schemas.FamilyPanelCardOut(
+                profile_id=profile.id,
+                name=profile.full_name,
+                relationship=profile.relation_with_owner or link.relationship_type or "",
+                age_years=age_years,
+                medications_active=medications_active,
+                next_appointment_at=(next_appointment.date_time if next_appointment else None),
+                next_appointment_center=(next_appointment.center if next_appointment else ""),
+                reminders_pending=reminders_pending,
+                caregivers_count=caregivers_count,
+                access_role=link.role or "",
+            )
+        )
+    return cards
+
+
+@app.get("/health-profiles/{profile_id}/caregivers", response_model=List[schemas.ProfileRelationshipOut])
+async def list_profile_caregivers(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    links = (
+        db.query(models.ProfileRelationship)
+        .filter(models.ProfileRelationship.profile_id == profile_id)
+        .order_by(models.ProfileRelationship.created_at.asc())
+        .all()
+    )
+    return [_relationship_out(link) for link in links]
+
+
+@app.post("/health-profiles/{profile_id}/invitations", response_model=schemas.ProfileInvitationOut)
+async def create_profile_invitation(
+    profile_id: int,
+    payload: schemas.ProfileInvitationCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_collaboration_enabled(current_user)
+    profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(access_link, "admin")
+
+    role = _normalize_role(payload.role)
+    invitee_email = payload.email.lower().strip()
+    if not invitee_email:
+        raise HTTPException(status_code=400, detail="Email de invitacion es obligatorio")
+
+    existing_user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == invitee_email)
+        .first()
+    )
+    now = datetime.utcnow()
+
+    if existing_user:
+        existing_link = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == profile_id,
+                models.ProfileRelationship.user_id == existing_user.id,
+            )
+            .first()
+        )
+        if existing_link and existing_link.status == "accepted":
+            raise HTTPException(status_code=409, detail="Ese usuario ya tiene acceso al perfil")
+
+        if existing_link:
+            existing_link.status = "accepted"
+            existing_link.role = role
+            existing_link.relationship_type = payload.relationship_type or existing_link.relationship_type
+            existing_link.accepted_at = now
+            existing_link.invited_at = existing_link.invited_at or now
+            db.add(existing_link)
+            relationship_id = existing_link.id
+        else:
+            link = models.ProfileRelationship(
+                profile_id=profile_id,
+                user_id=existing_user.id,
+                relationship_type=payload.relationship_type or "",
+                role=role,
+                status="accepted",
+                invited_at=now,
+                accepted_at=now,
+            )
+            db.add(link)
+            db.flush()
+            relationship_id = link.id
+
+        invitation = models.ProfileInvitation(
+            profile_id=profile_id,
+            inviter_user_id=current_user.id,
+            invitee_email=invitee_email,
+            role=role,
+            relationship_type=payload.relationship_type or "",
+            status="accepted",
+            token=secrets.token_urlsafe(24),
+            accepted_by_user_id=existing_user.id,
+            invited_at=now,
+            accepted_at=now,
+        )
+        db.add(invitation)
+        _log_profile_activity(
+            db,
+            profile_id=profile_id,
+            actor_user_id=current_user.id,
+            action_type="caregiver_added",
+            description=f"{current_user.name or current_user.email} agrego colaborador {invitee_email} como {role}",
+            metadata_json={"role": role, "email": invitee_email, "relationship_id": relationship_id},
+        )
+        db.commit()
+        db.refresh(invitation)
+        return invitation
+
+    pending = (
+        db.query(models.ProfileInvitation)
+        .filter(
+            models.ProfileInvitation.profile_id == profile_id,
+            models.ProfileInvitation.invitee_email == invitee_email,
+            models.ProfileInvitation.status == "pending",
+        )
+        .first()
+    )
+    if pending:
+        return pending
+
+    invitation = models.ProfileInvitation(
+        profile_id=profile_id,
+        inviter_user_id=current_user.id,
+        invitee_email=invitee_email,
+        role=role,
+        relationship_type=payload.relationship_type or "",
+        status="pending",
+        token=secrets.token_urlsafe(24),
+        invited_at=now,
+    )
+    db.add(invitation)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="invitation_created",
+        description=f"{current_user.name or current_user.email} invito a {invitee_email} como {role}",
+        metadata_json={"role": role, "email": invitee_email},
+    )
+    db.commit()
+    db.refresh(invitation)
+    return invitation
+
+
+@app.get("/health-profiles/{profile_id}/invitations", response_model=List[schemas.ProfileInvitationOut])
+async def list_profile_invitations(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_collaboration_enabled(current_user)
+    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(access_link, "admin")
+    invitations = (
+        db.query(models.ProfileInvitation)
+        .filter(models.ProfileInvitation.profile_id == profile_id)
+        .order_by(models.ProfileInvitation.invited_at.desc())
+        .all()
+    )
+    return invitations
+
+
+@app.post("/health-profiles/invitations/accept", response_model=schemas.ProfileRelationshipOut)
+async def accept_profile_invitation(
+    payload: schemas.ProfileInvitationAcceptIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    token = (payload.token or "").strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token de invitacion requerido")
+
+    invitation = (
+        db.query(models.ProfileInvitation)
+        .filter(models.ProfileInvitation.token == token)
+        .first()
+    )
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitacion no encontrada")
+    if invitation.status != "pending":
+        raise HTTPException(status_code=400, detail="Invitacion ya no esta disponible")
+
+    if (current_user.email or "").strip().lower() != (invitation.invitee_email or "").strip().lower():
+        raise HTTPException(status_code=403, detail="Esta invitacion no corresponde a tu cuenta")
+
+    profile = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.id == invitation.profile_id,
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .first()
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil de salud no disponible")
+
+    role = _normalize_role(invitation.role)
+    now = datetime.utcnow()
+    link = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id == invitation.profile_id,
+            models.ProfileRelationship.user_id == current_user.id,
+        )
+        .first()
+    )
+    if link:
+        link.status = "accepted"
+        link.role = role
+        link.relationship_type = invitation.relationship_type or link.relationship_type
+        link.accepted_at = now
+        link.invited_at = link.invited_at or invitation.invited_at or now
+    else:
+        link = models.ProfileRelationship(
+            profile_id=invitation.profile_id,
+            user_id=current_user.id,
+            relationship_type=invitation.relationship_type or "",
+            role=role,
+            status="accepted",
+            invited_at=invitation.invited_at or now,
+            accepted_at=now,
+        )
+        db.add(link)
+        db.flush()
+
+    invitation.status = "accepted"
+    invitation.accepted_by_user_id = current_user.id
+    invitation.accepted_at = now
+    db.add(invitation)
+
+    if not getattr(current_user, "active_health_profile_id", None):
+        current_user.active_health_profile_id = invitation.profile_id
+    db.add(current_user)
+    _log_profile_activity(
+        db,
+        profile_id=invitation.profile_id,
+        actor_user_id=current_user.id,
+        action_type="invitation_accepted",
+        description=f"{current_user.name or current_user.email} acepto invitacion como {role}",
+        metadata_json={"role": role, "email": current_user.email},
+    )
+    db.commit()
+    db.refresh(link)
+    return _relationship_out(link)
+
+
+@app.put("/health-profiles/{profile_id}/relationships/{relationship_id}", response_model=schemas.ProfileRelationshipOut)
+async def update_profile_relationship(
+    profile_id: int,
+    relationship_id: int,
+    payload: schemas.ProfileRoleUpdateIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_collaboration_enabled(current_user)
+    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(access_link, "admin")
+
+    link = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.id == relationship_id,
+            models.ProfileRelationship.profile_id == profile_id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Relacion no encontrada")
+
+    if link.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes cambiar tu propio rol desde esta accion")
+
+    role = _normalize_role(payload.role)
+    link.role = role
+    if payload.relationship_type is not None:
+        link.relationship_type = payload.relationship_type
+    db.add(link)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="caregiver_role_updated",
+        description=f"{current_user.name or current_user.email} actualizo rol de colaborador a {role}",
+        metadata_json={"relationship_id": relationship_id, "role": role},
+    )
+    db.commit()
+    db.refresh(link)
+    return _relationship_out(link)
+
+
+@app.delete("/health-profiles/{profile_id}/relationships/{relationship_id}")
+async def remove_profile_relationship(
+    profile_id: int,
+    relationship_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_collaboration_enabled(current_user)
+    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(access_link, "admin")
+
+    link = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.id == relationship_id,
+            models.ProfileRelationship.profile_id == profile_id,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="Relacion no encontrada")
+    if link.user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propio acceso administrador")
+
+    email = link.user.email if link.user else ""
+    db.delete(link)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="caregiver_removed",
+        description=f"{current_user.name or current_user.email} removio colaborador {email or link.user_id}",
+        metadata_json={"relationship_id": relationship_id, "email": email},
+    )
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/health-profiles/{profile_id}/invitations/{invitation_id}")
+async def revoke_profile_invitation(
+    profile_id: int,
+    invitation_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _assert_collaboration_enabled(current_user)
+    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(access_link, "admin")
+
+    invitation = (
+        db.query(models.ProfileInvitation)
+        .filter(
+            models.ProfileInvitation.id == invitation_id,
+            models.ProfileInvitation.profile_id == profile_id,
+        )
+        .first()
+    )
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitacion no encontrada")
+    if invitation.status != "pending":
+        raise HTTPException(status_code=400, detail="Solo invitaciones pendientes pueden revocarse")
+
+    invitation.status = "revoked"
+    invitation.revoked_at = datetime.utcnow()
+    db.add(invitation)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="invitation_revoked",
+        description=f"{current_user.name or current_user.email} revoco invitacion a {invitation.invitee_email}",
+        metadata_json={"invitation_id": invitation_id, "email": invitation.invitee_email},
+    )
+    db.commit()
+    db.refresh(invitation)
+    return {"ok": True}
 
 
 # Appointments

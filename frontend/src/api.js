@@ -16,6 +16,15 @@ export const getActiveHealthProfile = api.getActiveHealthProfile;
 export const createHealthProfile = api.createHealthProfile;
 export const updateHealthProfile = api.updateHealthProfile;
 export const setActiveHealthProfile = api.setActiveHealthProfile;
+export const getFamilyPanel = api.getFamilyPanel;
+export const getProfileCaregivers = api.getProfileCaregivers;
+export const inviteProfileCaregiver = api.inviteProfileCaregiver;
+export const getProfileInvitations = api.getProfileInvitations;
+export const acceptProfileInvitation = api.acceptProfileInvitation;
+export const updateProfileRelationship = api.updateProfileRelationship;
+export const removeProfileRelationship = api.removeProfileRelationship;
+export const revokeProfileInvitation = api.revokeProfileInvitation;
+export const getHealthProfileActivity = api.getHealthProfileActivity;
 
 export const getAppointments = api.getAppointments;
 export const createAppointment = api.createAppointment;
