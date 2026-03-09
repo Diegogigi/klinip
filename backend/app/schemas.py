@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     chronic_condition: str | None = None
     primary_care_center: str | None = None
     reminder_preferred_time: str | None = None
+    email_reminders_enabled: bool | None = None
     created_at: datetime
 
     @field_serializer('created_at', 'notifications_last_prompt')
@@ -46,6 +47,7 @@ class UserUpdate(BaseModel):
     chronic_condition: Optional[str] = None
     primary_care_center: Optional[str] = None
     reminder_preferred_time: Optional[str] = None
+    email_reminders_enabled: Optional[bool] = None
 
 class Token(BaseModel):
     access_token: str

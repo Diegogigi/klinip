@@ -309,6 +309,19 @@ body.theme-dark .summary-label {
   color: #94a3b8;
 }
 
+body.theme-dark .settings-email-reminder-row {
+  background: #0b1224;
+  border-color: #1e293b;
+}
+
+body.theme-dark .settings-email-reminder-title {
+  color: #e2e8f0;
+}
+
+body.theme-dark .settings-email-reminder-sub {
+  color: #94a3b8;
+}
+
 body.theme-dark .settings-nav-btn {
   background: transparent;
   border-color: transparent;
@@ -2540,6 +2553,18 @@ body.theme-dark .primary-btn {
     color: #0f172a;
   }
 
+  .settings-email-reminder-row {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .settings-email-reminder-title {
+    font-size: 0.88rem;
+  }
+
+  .settings-email-reminder-sub {
+    font-size: 0.78rem;
+  }
+
   .profile-section-title {
     display: none;
   }
@@ -2611,6 +2636,35 @@ body.theme-dark .primary-btn {
   margin: 0.15rem 0 0;
   font-weight: 700;
   color: var(--slate);
+}
+
+.settings-email-reminder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.55rem;
+}
+
+.settings-email-reminder-copy {
+  min-width: 0;
+}
+
+.settings-email-reminder-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.settings-email-reminder-sub {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: #64748b;
 }
 
 .topbar {

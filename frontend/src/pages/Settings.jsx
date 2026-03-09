@@ -42,6 +42,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [chronicCondition, setChronicCondition] = useState(profile.chronic_condition || "");
   const [primaryCareCenter, setPrimaryCareCenter] = useState(profile.primary_care_center || "");
   const [healthProfileStatus, setHealthProfileStatus] = useState("");
+  const [emailRemindersEnabled, setEmailRemindersEnabled] = useState(() => {
+    if (typeof profile.email_reminders_enabled === "boolean") {
+      return profile.email_reminders_enabled;
+    }
+    return localStorage.getItem("klinip_email_reminders_enabled") === "true";
+  });
+  const [emailReminderStatus, setEmailReminderStatus] = useState("");
   const profileDisplayName = profile.name || "Usuario Klinip";
   const profileDisplayEmail = profile.email || "sin-correo";
   const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
@@ -64,7 +71,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setReminderPreferredTime(profile.reminder_preferred_time || "08:00");
     setChronicCondition(profile.chronic_condition || "");
     setPrimaryCareCenter(profile.primary_care_center || "");
-  }, [profile.id, profile.timezone, profile.reminder_preferred_time, profile.chronic_condition, profile.primary_care_center, detectedTimezone]);
+    if (typeof profile.email_reminders_enabled === "boolean") {
+      setEmailRemindersEnabled(profile.email_reminders_enabled);
+      localStorage.setItem(
+        "klinip_email_reminders_enabled",
+        profile.email_reminders_enabled ? "true" : "false"
+      );
+    }
+  }, [profile.id, profile.timezone, profile.reminder_preferred_time, profile.chronic_condition, profile.primary_care_center, profile.email_reminders_enabled, detectedTimezone]);
 
   useEffect(() => {
     const onResize = () => {
@@ -323,6 +337,25 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const handleToggleEmailReminders = async (enabled) => {
+    const previous = emailRemindersEnabled;
+    setEmailReminderStatus("");
+    setEmailRemindersEnabled(enabled);
+    localStorage.setItem("klinip_email_reminders_enabled", enabled ? "true" : "false");
+    try {
+      const updated = await updateMe({
+        email_reminders_enabled: enabled,
+      });
+      onUserUpdate?.(updated);
+      setEmailReminderStatus(enabled ? "Recordatorios por correo activados" : "Recordatorios por correo desactivados");
+    } catch (err) {
+      setEmailRemindersEnabled(previous);
+      localStorage.setItem("klinip_email_reminders_enabled", previous ? "true" : "false");
+      setEmailReminderStatus("No se pudo actualizar la preferencia de correo");
+      console.error("Error actualizando recordatorios por correo:", err);
+    }
+  };
+
   return (
     <>
       <div
@@ -429,9 +462,28 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       <div className="settings-section">
         <h2 className="card-title profile-section-title">Perfil</h2>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Información básica de tu cuenta. Próximamente podrás activar recordatorios por correo y agregar
-          perfiles de familia.
+          Informacion basica de tu cuenta. Proximamente podras activar recordatorios por correo. Ya existen plantillas base de correo configuradas para su lanzamiento.
         </p>
+        <div className="settings-email-reminder-row">
+          <div className="settings-email-reminder-copy">
+            <p className="settings-email-reminder-title">Recordatorios por correo</p>
+            <p className="settings-email-reminder-sub">
+              Activa o desactiva la recepcion de recordatorios por email.
+            </p>
+          </div>
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={emailRemindersEnabled}
+              onChange={(e) => handleToggleEmailReminders(e.target.checked)}
+            />
+            <span className="switch-slider" />
+          </label>
+        </div>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Estado actual: {emailRemindersEnabled ? "Activados" : "Desactivados"}
+        </p>
+        {emailReminderStatus && <p className="muted">{emailReminderStatus}</p>}
 
         <div className="profile-grid">
           <div className="profile-tile">
@@ -769,6 +821,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     </>
   );
 }
+
 
 
 

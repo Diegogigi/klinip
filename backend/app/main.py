@@ -238,6 +238,17 @@ def ensure_user_schema():
                 )
             added_columns.append("reminder_preferred_time")
 
+        if "email_reminders_enabled" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_reminders_enabled BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN email_reminders_enabled BOOLEAN DEFAULT 0"
+                )
+            added_columns.append("email_reminders_enabled")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -1399,6 +1410,7 @@ def _send_scheduled_push_reminders():
                             if (
                                 user
                                 and user.email
+                                and bool(getattr(user, "email_reminders_enabled", False))
                                 and not _notification_already_sent(db, email_tag)
                             ):
                                 time_label = trigger_exact.strftime("%H:%M hrs")
@@ -3455,6 +3467,9 @@ async def update_me(
 
     if payload.reminder_preferred_time is not None:
         current_user.reminder_preferred_time = payload.reminder_preferred_time
+
+    if payload.email_reminders_enabled is not None:
+        current_user.email_reminders_enabled = payload.email_reminders_enabled
 
     db.add(current_user)
     db.commit()
