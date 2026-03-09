@@ -32,6 +32,18 @@
   animation: slideUp 0.3s ease-out;
 }
 
+.notification-settings-embedded .notification-settings-panel {
+  max-width: none;
+  max-height: none;
+  border-radius: 14px;
+  box-shadow: none;
+  animation: none;
+}
+
+.notification-settings-embedded .settings-content {
+  padding: 1rem;
+}
+
 @keyframes slideUp {
   from {
     transform: translateY(50px);

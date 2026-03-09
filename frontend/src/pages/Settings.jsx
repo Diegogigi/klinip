@@ -15,7 +15,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const profile = user || {};
   const plan = "Backend activo";
   const navigate = useNavigate();
-  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [consentRevoked, setConsentRevoked] = useState(() => {
     return localStorage.getItem("klinip_consent_revoked") === "true";
@@ -28,6 +27,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [privacySuccessMessage, setPrivacySuccessMessage] = useState("");
   const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [activeSection, setActiveSection] = useState("perfil");
+  const [isMobileSettings, setIsMobileSettings] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth <= 640 : false
+  );
+  const [mobileSectionOpen, setMobileSectionOpen] = useState(false);
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -38,6 +42,9 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [chronicCondition, setChronicCondition] = useState(profile.chronic_condition || "");
   const [primaryCareCenter, setPrimaryCareCenter] = useState(profile.primary_care_center || "");
   const [healthProfileStatus, setHealthProfileStatus] = useState("");
+  const profileDisplayName = profile.name || "Usuario Klinip";
+  const profileDisplayEmail = profile.email || "sin-correo";
+  const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
 
   const timezoneOptions = [
     "America/Santiago",
@@ -58,6 +65,34 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setChronicCondition(profile.chronic_condition || "");
     setPrimaryCareCenter(profile.primary_care_center || "");
   }, [profile.id, profile.timezone, profile.reminder_preferred_time, profile.chronic_condition, profile.primary_care_center, detectedTimezone]);
+
+  useEffect(() => {
+    const onResize = () => {
+      const isMobile = window.innerWidth <= 640;
+      setIsMobileSettings(isMobile);
+      if (!isMobile) {
+        setMobileSectionOpen(false);
+      }
+    };
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const handleSectionSelect = (section) => {
+    setActiveSection(section);
+    if (isMobileSettings) {
+      setMobileSectionOpen(true);
+    }
+  };
+
+  const activeSectionLabel = {
+    perfil: "Perfil",
+    privacidad: "Privacidad",
+    notificaciones: "Notificaciones",
+    datos: "Exportar",
+    legal: "Legal",
+  }[activeSection] || "Perfil";
 
   const handleSaveTimezone = async () => {
     setTimezoneStatus("");
@@ -290,8 +325,109 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
   return (
     <>
-      <div className="card">
-        <h2 className="card-title">Perfil</h2>
+      <div
+        className={`card settings-shell ${
+          isMobileSettings && mobileSectionOpen ? "is-mobile-section-open" : ""
+        }`}
+      >
+        <aside className="settings-sidebar">
+          <h2 className="card-title">Mi perfil</h2>
+          <div className="settings-mobile-hero">
+            <div className="settings-mobile-avatar">{profileInitial}</div>
+            <h3>{profileDisplayName}</h3>
+            <p>{profileDisplayEmail}</p>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={() => handleSectionSelect("perfil")}
+            >
+              Editar perfil
+            </button>
+          </div>
+          <div className="settings-nav">
+            <button
+              className={`settings-nav-btn ${activeSection === "perfil" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("perfil")}
+            >
+              Perfil
+            </button>
+            <button
+              className={`settings-nav-btn ${activeSection === "privacidad" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("privacidad")}
+            >
+              Privacidad
+            </button>
+            <button
+              className={`settings-nav-btn ${activeSection === "notificaciones" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("notificaciones")}
+            >
+              Notificaciones
+            </button>
+            <button
+              className={`settings-nav-btn ${activeSection === "datos" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("datos")}
+            >
+              Exportar
+            </button>
+            <button
+              className={`settings-nav-btn ${activeSection === "legal" ? "is-active" : ""}`}
+              type="button"
+              onClick={() => handleSectionSelect("legal")}
+            >
+              Legal
+            </button>
+          </div>
+          <div className="settings-theme-box">
+            <p className="settings-theme-label">Apariencia</p>
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={onToggleTheme}
+              role="switch"
+              aria-checked={theme === "dark"}
+            >
+              <span className="theme-toggle-label">
+                {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+              </span>
+              <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
+                <span className="theme-switch-thumb" />
+              </span>
+            </button>
+          </div>
+          <button
+            className="settings-logout-btn"
+            type="button"
+            onClick={() => {
+              if (window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
+                onLogout?.();
+              }
+            }}
+          >
+            Cerrar sesión
+          </button>
+        </aside>
+
+        <div className="settings-main">
+      {isMobileSettings && mobileSectionOpen && (
+        <div className="settings-mobile-backbar">
+          <button
+            className="secondary-btn"
+            type="button"
+            onClick={() => setMobileSectionOpen(false)}
+          >
+            Volver
+          </button>
+          <span>{activeSectionLabel}</span>
+        </div>
+      )}
+
+      {activeSection === "perfil" && (
+      <div className="settings-section">
+        <h2 className="card-title profile-section-title">Perfil</h2>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Información básica de tu cuenta. Próximamente podrás activar recordatorios por correo y agregar
           perfiles de familia.
@@ -381,70 +517,71 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         {healthProfileStatus && <p className="muted">{healthProfileStatus}</p>}
 
       </div>
+      )}
 
-      <div className="card">
-        <div className="card-header" style={{ alignItems: "center" }}>
-          <div>
-            <h2 className="card-title">Exportar y compartir</h2>
-            <p className="muted">Lleva tus citas y documentos a PDF/CSV o comparte un link temporal.</p>
+      {activeSection === "datos" && (
+      <div className="settings-section">
+        <h2 className="card-title">Exportar y compartir</h2>
+        <p className="muted" style={{ marginBottom: "0.75rem" }}>
+          Descarga tus datos en CSV/PDF o genera un enlace temporal para compartir.
+        </p>
+        <div className="export-layout">
+          <div className="export-card">
+            <h4>Descargar archivos</h4>
+            <p className="muted">
+              Exporta tus citas y documentos para respaldo o revisión externa.
+            </p>
+            <div className="export-actions">
+              <button className="secondary-btn" type="button" onClick={exportCsv}>
+                Descargar CSV de citas
+              </button>
+              <button className="secondary-btn" type="button" onClick={exportPdf}>
+                Descargar PDF resumen
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button className="secondary-btn" type="button" onClick={exportCsv}>
-              CSV citas
-            </button>
-            <button className="secondary-btn" type="button" onClick={exportPdf}>
-              PDF resumen
-            </button>
+
+          <div className="export-card">
+            <h4>Compartir por enlace</h4>
+            <p className="muted">
+              Crea un enlace temporal con tus datos actuales y cópialo al portapapeles.
+            </p>
+            <div className="export-actions">
+              <button className="secondary-btn" type="button" onClick={shareLink} disabled={exporting}>
+                {exporting ? "Generando enlace..." : "Generar y copiar enlace"}
+              </button>
+            </div>
+            <p className="muted export-note">
+              El enlace se genera con la información disponible al momento de crearlo.
+            </p>
+          </div>
+        </div>
+        <div className="export-footer">
+          <div className="export-footer-tip">
+            Recomendación: usa PDF para lectura y CSV para análisis o importación.
+          </div>
+          <div>
             <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
-              {exporting ? "Generando..." : "Compartir link"}
+              {exporting ? "Generando..." : "Compartir link rápido"}
             </button>
           </div>
         </div>
       </div>
+      )}
 
-      <div className="card">
-        <h3 className="card-title">Apariencia</h3>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Personaliza el modo de color de Klinip.
-        </p>
-        <button
-          className="theme-toggle"
-          type="button"
-          onClick={onToggleTheme}
-          role="switch"
-          aria-checked={theme === "dark"}
-          style={{ maxWidth: "260px" }}
-        >
-          <span className="theme-toggle-label">
-            {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-          </span>
-          <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
-            <span className="theme-switch-thumb" />
-          </span>
-        </button>
-      </div>
-
-      <div className="card">
+      {activeSection === "notificaciones" && (
+      <div className="settings-section">
         <h3 className="card-title">🔔 Notificaciones y Recordatorios</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Configura tus preferencias de notificaciones, recordatorios de citas y medicamentos. 
           Personaliza cuándo quieres recibir alertas.
         </p>
-        <button
-          className="primary-btn"
-          type="button"
-          onClick={() => setShowNotificationSettings(true)}
-          style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem" }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "20px", height: "20px" }}>
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          Configurar Notificaciones
-        </button>
+        <NotificationSettings embedded />
       </div>
+      )}
 
-      <div className="card">
+      {activeSection === "legal" && (
+      <div className="settings-section">
         <h3 className="card-title">Legal</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Revisa los documentos legales y administra tu consentimiento.
@@ -475,19 +612,47 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           )}
         </div>
       </div>
+      )}
 
-      <div className="card">
+      {activeSection === "privacidad" && (
+      <div className="settings-section">
         <h3 className="card-title">Privacidad y seguridad</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Administra tus datos, consentimiento y solicitudes de privacidad.
         </p>
-        <div className="privacy-grid">
-          <div className="privacy-tile">
-            <h4>Exportar datos</h4>
+        <div className="privacy-layout">
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <h4>Consentimiento y cuenta</h4>
+              <span className={`privacy-status-pill ${consentRevoked ? "is-off" : "is-on"}`}>
+                {consentRevoked ? "Revocado" : "Activo"}
+              </span>
+            </div>
             <p className="muted">
-              Descarga un resumen de tus citas y documentos cuando lo necesites.
+              Gestiona el permiso para datos de salud y las acciones críticas de tu cuenta.
             </p>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <div className="privacy-actions">
+              {consentRevoked ? (
+                <button className="secondary-btn" type="button" onClick={handleRestoreConsent}>
+                  Restaurar consentimiento
+                </button>
+              ) : (
+                <button className="secondary-btn" type="button" onClick={handleRevokeConsent}>
+                  Revocar consentimiento
+                </button>
+              )}
+              <button className="secondary-btn danger" type="button" onClick={() => setShowDeleteConfirm(true)}>
+                Eliminar mi cuenta
+              </button>
+            </div>
+          </div>
+
+          <div className="privacy-card">
+            <h4>Exportar y limpieza</h4>
+            <p className="muted">
+              Descarga tus datos o limpia información local del navegador.
+            </p>
+            <div className="privacy-actions">
               <button className="secondary-btn" type="button" onClick={exportCsv}>
                 CSV citas
               </button>
@@ -500,27 +665,12 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             </div>
           </div>
 
-          <div className="privacy-tile">
-            <h4>Control de cuenta y consentimiento</h4>
-            <p className="muted">
-              Revoca el consentimiento de datos de salud o elimina tu cuenta de forma definitiva.
-            </p>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <button className="secondary-btn" type="button" onClick={handleRevokeConsent}>
-                Revocar consentimiento
-              </button>
-              <button className="secondary-btn" type="button" onClick={() => setShowDeleteConfirm(true)}>
-                Eliminar mi cuenta
-              </button>
-            </div>
-          </div>
-
-          <div className="privacy-tile">
+          <div className="privacy-card privacy-support-card">
             <h4>Soporte de privacidad</h4>
             <p className="muted">
-              Si necesitas acceso, rectificacion o eliminacion, dejanos tu solicitud.
+              Si necesitas acceso, rectificación o eliminación de datos, envía tu solicitud aquí.
             </p>
-            <div className="form-row">
+            <div className="privacy-form-grid">
               <div className="input-group">
                 <label className="input-label">Motivo</label>
                 <select
@@ -529,20 +679,20 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   onChange={(e) => setPrivacyReason(e.target.value)}
                 >
                   <option value="acceso">Acceso a mis datos</option>
-                  <option value="rectificacion">Rectificacion</option>
-                  <option value="eliminacion">Eliminacion</option>
+                  <option value="rectificacion">Rectificación</option>
+                  <option value="eliminacion">Eliminación</option>
                   <option value="otra">Otra consulta</option>
                 </select>
               </div>
-            </div>
-            <div className="input-group">
-              <label className="input-label">Mensaje</label>
-              <textarea
-                className="textarea-field"
-                value={privacyMessage}
-                onChange={(e) => setPrivacyMessage(e.target.value)}
-                placeholder="Escribe tu solicitud..."
-              />
+              <div className="input-group">
+                <label className="input-label">Mensaje</label>
+                <textarea
+                  className="textarea-field"
+                  value={privacyMessage}
+                  onChange={(e) => setPrivacyMessage(e.target.value)}
+                  placeholder="Escribe tu solicitud..."
+                />
+              </div>
             </div>
             <label className="auth-consent-label" style={{ marginBottom: "0.75rem" }}>
               <input
@@ -550,16 +700,18 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 checked={privacyIncludeTech}
                 onChange={(e) => setPrivacyIncludeTech(e.target.checked)}
               />
-              <span>Adjuntar informacion tecnica basica</span>
+              <span>Adjuntar información técnica básica</span>
             </label>
-            <button
-              className="primary-btn"
-              type="button"
-              onClick={handleSendPrivacyRequest}
-              disabled={privacySending || !privacyMessage.trim()}
-            >
-              {privacySending ? "Enviando..." : "Enviar solicitud"}
-            </button>
+            <div className="privacy-form-actions">
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={handleSendPrivacyRequest}
+                disabled={privacySending || !privacyMessage.trim()}
+              >
+                {privacySending ? "Enviando..." : "Enviar solicitud"}
+              </button>
+            </div>
           </div>
         </div>
         {privacyNotice && (
@@ -568,29 +720,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </p>
         )}
       </div>
-
-      <div className="card">
-        <h3 className="card-title">Sesión</h3>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Cierra tu sesión para salir de forma segura de tu cuenta.
-        </p>
-        <button 
-          className="primary-btn" 
-          type="button" 
-          onClick={() => {
-            if (window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
-              onLogout?.();
-            }
-          }}
-          style={{ width: "100%" }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: "20px", height: "20px" }}>
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          Cerrar sesión
-        </button>
+      )}
+        </div>
       </div>
 
       {showDeleteConfirm && (
@@ -635,10 +766,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
         </div>
       )}
-
-      {showNotificationSettings && (
-        <NotificationSettings onClose={() => setShowNotificationSettings(false)} />
-      )}
     </>
   );
 }
+
+
+
+
+
+
+
+

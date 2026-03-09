@@ -10,7 +10,7 @@ import { ensurePushSubscription, removePushSubscription } from "../services/pwa"
 import { getAppointments, getMedications, getPushStatus, sendTestPush } from "../services/httpApi";
 import "./NotificationSettings.css";
 
-export default function NotificationSettings({ onClose }) {
+export default function NotificationSettings({ onClose, embedded = false }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const pushSupported = "serviceWorker" in navigator && "PushManager" in window;
   // Cargar estado inicial de push desde localStorage
@@ -335,15 +335,18 @@ export default function NotificationSettings({ onClose }) {
     saveSettings(newSettings);
   };
 
-  return (
-    <div className="notification-settings-overlay" onClick={onClose}>
-      <div className="notification-settings-panel" onClick={(e) => e.stopPropagation()}>
+  const panelContent = (
+    <div className="notification-settings-panel" onClick={(e) => !embedded && e.stopPropagation()}>
+      {!embedded && (
         <div className="settings-header">
           <h2>Configuracion de notificaciones</h2>
-          <button className="close-btn" onClick={onClose} aria-label="Cerrar">?</button>
+          <button className="close-btn" onClick={onClose} aria-label="Cerrar">
+            ?
+          </button>
         </div>
+      )}
 
-        <div className="settings-content">
+      <div className="settings-content">
           {/* Estado actual */}
           <section className="settings-section">
             <h3>Estado actual</h3>
@@ -551,8 +554,17 @@ export default function NotificationSettings({ onClose }) {
               📊 Actualizar estadísticas
             </button>
           </section>
-        </div>
       </div>
+    </div>
+  );
+
+  if (embedded) {
+    return <div className="notification-settings-embedded">{panelContent}</div>;
+  }
+
+  return (
+    <div className="notification-settings-overlay" onClick={onClose}>
+      {panelContent}
     </div>
   );
 }
