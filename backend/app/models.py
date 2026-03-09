@@ -235,6 +235,7 @@ class HealthProfile(Base):
     relation_with_owner = Column(String, default="")
     avatar_url = Column(String, default="")
     base_medical_data = Column(Text, nullable=True)
+    automation_settings_json = Column(Text, default="")
     is_primary_profile = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
@@ -250,6 +251,11 @@ class HealthProfile(Base):
     )
     activity_logs = relationship(
         "ProfileActivityLog",
+        back_populates="profile",
+        cascade="all, delete-orphan",
+    )
+    notes = relationship(
+        "ProfileNote",
         back_populates="profile",
         cascade="all, delete-orphan",
     )
@@ -307,3 +313,18 @@ class ProfileInvitation(Base):
     profile = relationship("HealthProfile")
     inviter_user = relationship("User", foreign_keys=[inviter_user_id])
     accepted_by_user = relationship("User", foreign_keys=[accepted_by_user_id])
+
+
+class ProfileNote(Base):
+    __tablename__ = "profile_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    note = Column(Text, nullable=False)
+    visibility = Column(String, default="shared")
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile", back_populates="notes")
+    created_by_user = relationship("User")

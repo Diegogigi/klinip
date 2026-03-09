@@ -146,6 +146,43 @@ export async function getHealthProfileActivity(profileId) {
   return res.data;
 }
 
+export async function getFamilyAlerts() {
+  const res = await api.get("/family/alerts");
+  return res.data;
+}
+
+export async function getFamilyReportSummary(days = 30) {
+  const res = await api.get("/family/reports/summary", { params: { days } });
+  return res.data;
+}
+
+export async function runFamilyAutomations(sendEmail = false) {
+  const res = await api.post("/family/automations/run", null, {
+    params: { send_email: !!sendEmail },
+  });
+  return res.data;
+}
+
+export async function getProfileAutomation(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/automation`);
+  return res.data;
+}
+
+export async function updateProfileAutomation(profileId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/automation`, payload);
+  return res.data;
+}
+
+export async function getProfileNotes(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/notes`);
+  return res.data;
+}
+
+export async function createProfileNote(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/notes`, payload);
+  return res.data;
+}
+
 // Privacy
 export async function revokeDataConsent() {
   const res = await api.post("/privacy/revoke-consent");

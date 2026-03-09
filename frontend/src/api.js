@@ -25,6 +25,13 @@ export const updateProfileRelationship = api.updateProfileRelationship;
 export const removeProfileRelationship = api.removeProfileRelationship;
 export const revokeProfileInvitation = api.revokeProfileInvitation;
 export const getHealthProfileActivity = api.getHealthProfileActivity;
+export const getFamilyAlerts = api.getFamilyAlerts;
+export const getFamilyReportSummary = api.getFamilyReportSummary;
+export const runFamilyAutomations = api.runFamilyAutomations;
+export const getProfileAutomation = api.getProfileAutomation;
+export const updateProfileAutomation = api.updateProfileAutomation;
+export const getProfileNotes = api.getProfileNotes;
+export const createProfileNote = api.createProfileNote;
 
 export const getAppointments = api.getAppointments;
 export const createAppointment = api.createAppointment;

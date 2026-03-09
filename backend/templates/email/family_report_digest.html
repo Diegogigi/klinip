@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reporte familiar</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#2563eb,#22c55e);padding:16px 20px;color:#ffffff;">
+                <h1 style="margin:0;font-size:24px;">{{ app_name }} · Reporte familiar</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 20px;">
+                <p style="margin:0 0 12px;">Hola {{ user_name }},</p>
+                <p style="margin:0 0 12px;">
+                  Este es tu resumen de salud familiar de los ultimos <strong>{{ period_days }}</strong> dias.
+                </p>
+                <div style="padding:12px;border:1px solid #dbeafe;border-radius:10px;background:#eff6ff;margin-bottom:14px;">
+                  <p style="margin:0 0 6px;"><strong>Perfiles:</strong> {{ totals.profiles or 0 }}</p>
+                  <p style="margin:0 0 6px;"><strong>Medicamentos activos:</strong> {{ totals.medications_active or 0 }}</p>
+                  <p style="margin:0 0 6px;"><strong>Citas totales:</strong> {{ totals.appointments_total or 0 }}</p>
+                  <p style="margin:0;"><strong>Documentos cargados:</strong> {{ totals.documents_uploaded or 0 }}</p>
+                </div>
+                <h2 style="margin:0 0 10px;font-size:18px;">Detalle por perfil</h2>
+                {% if profiles %}
+                  {% for p in profiles %}
+                  <div style="border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:10px;background:#f8fafc;">
+                    <p style="margin:0 0 6px;"><strong>{{ p.profile_name }}</strong></p>
+                    <p style="margin:0 0 4px;">Medicamentos activos: {{ p.medications_active or 0 }}</p>
+                    <p style="margin:0 0 4px;">Citas proximas: {{ p.appointments_upcoming or 0 }}</p>
+                    <p style="margin:0 0 4px;">Documentos subidos: {{ p.documents_uploaded or 0 }}</p>
+                    <p style="margin:0;">Adherencia: {{ p.adherence_rate if p.adherence_rate is not none else '-' }}%</p>
+                  </div>
+                  {% endfor %}
+                {% else %}
+                  <p style="margin:0;">No hay perfiles disponibles para este periodo.</p>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:12px 20px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;">
+                Este correo fue generado automaticamente por {{ app_name }}.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

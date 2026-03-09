@@ -182,6 +182,90 @@ class FamilyPanelCardOut(BaseModel):
             return None
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
+
+class ProfileAutomationSettingsOut(BaseModel):
+    smart_alerts_enabled: bool = True
+    medication_overdue_alerts: bool = True
+    upcoming_appointment_alerts: bool = True
+    inactivity_alerts: bool = True
+    weekly_family_report_enabled: bool = False
+    auto_email_caregivers: bool = False
+
+
+class ProfileAutomationSettingsIn(BaseModel):
+    smart_alerts_enabled: Optional[bool] = None
+    medication_overdue_alerts: Optional[bool] = None
+    upcoming_appointment_alerts: Optional[bool] = None
+    inactivity_alerts: Optional[bool] = None
+    weekly_family_report_enabled: Optional[bool] = None
+    auto_email_caregivers: Optional[bool] = None
+
+
+class FamilyAlertOut(BaseModel):
+    id: str
+    profile_id: int
+    profile_name: str
+    severity: str
+    category: str
+    title: str
+    message: str
+    suggested_action: Optional[str] = ""
+    generated_at: datetime
+
+    @field_serializer('generated_at')
+    def serialize_alert_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class FamilyReportProfileOut(BaseModel):
+    profile_id: int
+    profile_name: str
+    medications_active: int = 0
+    medications_completed: int = 0
+    intakes_recorded: int = 0
+    appointments_total: int = 0
+    appointments_completed: int = 0
+    appointments_upcoming: int = 0
+    documents_uploaded: int = 0
+    adherence_rate: Optional[float] = None
+
+
+class FamilyReportOut(BaseModel):
+    generated_at: datetime
+    period_days: int
+    totals: dict
+    profiles: list[FamilyReportProfileOut]
+
+    @field_serializer('generated_at')
+    def serialize_report_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class ProfileNoteCreate(BaseModel):
+    note: str
+    visibility: Optional[str] = "shared"
+
+
+class ProfileNoteOut(BaseModel):
+    id: int
+    profile_id: int
+    created_by_user_id: int
+    created_by_name: Optional[str] = ""
+    note: str
+    visibility: str
+    created_at: datetime
+    updated_at: datetime
+
+    @field_serializer('created_at', 'updated_at')
+    def serialize_note_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"

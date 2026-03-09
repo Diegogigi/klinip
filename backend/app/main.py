@@ -298,6 +298,45 @@ def ensure_user_schema():
 
 ensure_user_schema()
 
+
+def ensure_health_profile_schema():
+    """
+    Garantiza columnas nuevas de health_profiles para Fase 3.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("health_profiles")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        if "automation_settings_json" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS automation_settings_json TEXT DEFAULT ''"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN automation_settings_json TEXT DEFAULT ''"
+                )
+            added_columns.append("automation_settings_json")
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                "DEBUG ensure_health_profile_schema: columnas agregadas a health_profiles: "
+                + ", ".join(added_columns)
+            )
+        else:
+            print("DEBUG ensure_health_profile_schema: tabla health_profiles ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_health_profile_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_health_profile_schema()
+
 def ensure_medication_schema():
     """
     Garantiza que la tabla medications tenga columnas nuevas usadas por la app.
@@ -1371,6 +1410,28 @@ def _send_health_alert_email_safe(to_email: str, user_name: str, payload: dict):
         )
     except Exception as exc:
         print(f"ERROR sending health alert email async: {exc}")
+
+
+def _send_family_report_email_safe(
+    to_email: str,
+    user_name: str,
+    report_payload: dict,
+):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Reporte familiar de salud - Klinip",
+            template_name="family_report_digest.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "period_days": report_payload.get("period_days") or 7,
+                "totals": report_payload.get("totals") or {},
+                "profiles": report_payload.get("profiles") or [],
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending family report email async: {exc}")
 
 
 
@@ -3721,6 +3782,257 @@ def _assert_collaboration_enabled(current_user: models.User):
         )
 
 
+_DEFAULT_PROFILE_AUTOMATION_SETTINGS = {
+    "smart_alerts_enabled": True,
+    "medication_overdue_alerts": True,
+    "upcoming_appointment_alerts": True,
+    "inactivity_alerts": True,
+    "weekly_family_report_enabled": False,
+    "auto_email_caregivers": False,
+}
+
+
+def _profile_automation_settings(profile: models.HealthProfile) -> dict:
+    raw = getattr(profile, "automation_settings_json", "") or ""
+    if not raw:
+        return dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
+    except Exception:
+        return dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
+    settings = dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
+    for key in settings.keys():
+        if key in parsed:
+            settings[key] = bool(parsed.get(key))
+    return settings
+
+
+def _serialize_profile_automation_settings(settings: dict) -> str:
+    normalized = dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
+    for key in normalized.keys():
+        if key in settings:
+            normalized[key] = bool(settings.get(key))
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def _build_profile_report(
+    db: Session,
+    profile: models.HealthProfile,
+    period_days: int,
+) -> schemas.FamilyReportProfileOut:
+    now = datetime.now()
+    since = now - timedelta(days=period_days)
+    meds_active = 0
+    meds_completed = 0
+    intakes = 0
+    appts_total = 0
+    appts_completed = 0
+    appts_upcoming = 0
+    docs_uploaded = 0
+    adherence_rate = None
+
+    # Compatibilidad actual: los registros clinicos siguen ligados al user_id.
+    # Solo perfil primario tiene metricas completas hasta migrar entidades por profile_id.
+    if profile.is_primary_profile:
+        user_id = profile.owner_user_id
+        meds_active = (
+            db.query(models.Medication)
+            .filter(
+                models.Medication.user_id == user_id,
+                models.Medication.completed.is_(False),
+            )
+            .count()
+        )
+        meds_completed = (
+            db.query(models.Medication)
+            .filter(
+                models.Medication.user_id == user_id,
+                models.Medication.completed.is_(True),
+            )
+            .count()
+        )
+        intakes = (
+            db.query(models.MedicationIntake)
+            .filter(
+                models.MedicationIntake.user_id == user_id,
+                models.MedicationIntake.taken_at >= since,
+            )
+            .count()
+        )
+        appts_total = (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.user_id == user_id,
+                models.Appointment.created_at >= since,
+            )
+            .count()
+        )
+        appts_completed = (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.user_id == user_id,
+                models.Appointment.status == models.AppointmentStatus.realizada,
+            )
+            .count()
+        )
+        appts_upcoming = (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.user_id == user_id,
+                models.Appointment.date_time.isnot(None),
+                models.Appointment.date_time >= now,
+                models.Appointment.status != models.AppointmentStatus.realizada,
+            )
+            .count()
+        )
+        docs_uploaded = (
+            db.query(models.Document)
+            .filter(
+                models.Document.user_id == user_id,
+                models.Document.created_at >= since,
+            )
+            .count()
+        )
+
+        all_meds = db.query(models.Medication).filter(models.Medication.user_id == user_id).all()
+        if all_meds:
+            _attach_medication_adherence(db, all_meds, models.User(id=user_id))
+            valid_rates = [float(m.adherence_rate) for m in all_meds if m.adherence_rate is not None]
+            if valid_rates:
+                adherence_rate = round(sum(valid_rates) / len(valid_rates), 1)
+
+    return schemas.FamilyReportProfileOut(
+        profile_id=profile.id,
+        profile_name=profile.full_name,
+        medications_active=meds_active,
+        medications_completed=meds_completed,
+        intakes_recorded=intakes,
+        appointments_total=appts_total,
+        appointments_completed=appts_completed,
+        appointments_upcoming=appts_upcoming,
+        documents_uploaded=docs_uploaded,
+        adherence_rate=adherence_rate,
+    )
+
+
+def _generate_smart_alerts_for_profile(
+    db: Session,
+    profile: models.HealthProfile,
+    viewer_user: models.User,
+) -> list[schemas.FamilyAlertOut]:
+    settings = _profile_automation_settings(profile)
+    if not settings.get("smart_alerts_enabled", True):
+        return []
+
+    alerts: list[schemas.FamilyAlertOut] = []
+    now = datetime.now()
+    base_id = f"profile-{profile.id}-{int(now.timestamp())}"
+
+    if not profile.is_primary_profile:
+        alerts.append(
+            schemas.FamilyAlertOut(
+                id=f"{base_id}-migration",
+                profile_id=profile.id,
+                profile_name=profile.full_name,
+                severity="info",
+                category="coverage",
+                title="Cobertura clinica parcial",
+                message="Este perfil aun no tiene citas/medicamentos/documentos dedicados por profile_id.",
+                suggested_action="Migrar registros clinicos a perfil familiar en una siguiente fase",
+                generated_at=now,
+            )
+        )
+        return alerts
+
+    user_id = profile.owner_user_id
+    if settings.get("upcoming_appointment_alerts", True):
+        upcoming = (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.user_id == user_id,
+                models.Appointment.date_time.isnot(None),
+                models.Appointment.date_time >= now,
+                models.Appointment.date_time <= (now + timedelta(hours=24)),
+                models.Appointment.status != models.AppointmentStatus.realizada,
+            )
+            .order_by(models.Appointment.date_time.asc())
+            .first()
+        )
+        if upcoming:
+            alerts.append(
+                schemas.FamilyAlertOut(
+                    id=f"{base_id}-appt-{upcoming.id}",
+                    profile_id=profile.id,
+                    profile_name=profile.full_name,
+                    severity="high",
+                    category="appointment",
+                    title="Cita proxima en menos de 24 horas",
+                    message=(
+                        f"{upcoming.specialty or 'Atencion medica'} en "
+                        f"{upcoming.center or 'Centro de salud'}"
+                    ),
+                    suggested_action="Confirmar asistencia y documentos necesarios",
+                    generated_at=now,
+                )
+            )
+
+    if settings.get("medication_overdue_alerts", True):
+        meds = (
+            db.query(models.Medication)
+            .filter(
+                models.Medication.user_id == user_id,
+                models.Medication.completed.is_(False),
+            )
+            .all()
+        )
+        meds = _attach_medication_adherence(db, meds, viewer_user)
+        risky = [m for m in meds if (getattr(m, "adherence_rate", 100) or 100) < 80]
+        if risky:
+            top = sorted(risky, key=lambda m: (m.adherence_rate or 0))[0]
+            alerts.append(
+                schemas.FamilyAlertOut(
+                    id=f"{base_id}-med-{top.id}",
+                    profile_id=profile.id,
+                    profile_name=profile.full_name,
+                    severity="medium",
+                    category="medication",
+                    title="Adherencia baja en medicamentos",
+                    message=(
+                        f"{top.name}: adherencia {top.adherence_rate or 0}% "
+                        f"(faltantes: {getattr(top, 'missed_doses', 0)})"
+                    ),
+                    suggested_action="Contactar al paciente y ajustar recordatorios",
+                    generated_at=now,
+                )
+            )
+
+    if settings.get("inactivity_alerts", True):
+        last_doc = (
+            db.query(models.Document)
+            .filter(models.Document.user_id == user_id)
+            .order_by(models.Document.created_at.desc())
+            .first()
+        )
+        if not last_doc or ((now - (last_doc.created_at or now)).days >= 45):
+            alerts.append(
+                schemas.FamilyAlertOut(
+                    id=f"{base_id}-inactive-docs",
+                    profile_id=profile.id,
+                    profile_name=profile.full_name,
+                    severity="low",
+                    category="inactivity",
+                    title="Sin actualizacion de documentos reciente",
+                    message="No se registran documentos recientes para este perfil.",
+                    suggested_action="Subir ordenes, recetas o resultados nuevos",
+                    generated_at=now,
+                )
+            )
+
+    return alerts
+
+
 def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship | None = None):
     return schemas.HealthProfileOut(
         id=profile.id,
@@ -3755,6 +4067,20 @@ def _relationship_out(link: models.ProfileRelationship):
         invited_at=link.invited_at,
         accepted_at=link.accepted_at,
         created_at=link.created_at,
+    )
+
+
+def _profile_note_out(item: models.ProfileNote):
+    author = item.created_by_user
+    return schemas.ProfileNoteOut(
+        id=item.id,
+        profile_id=item.profile_id,
+        created_by_user_id=item.created_by_user_id,
+        created_by_name=(author.name if author else ""),
+        note=item.note,
+        visibility=item.visibility or "shared",
+        created_at=item.created_at,
+        updated_at=item.updated_at,
     )
 
 
@@ -4654,6 +4980,203 @@ async def revoke_profile_invitation(
     db.commit()
     db.refresh(invitation)
     return {"ok": True}
+
+
+@app.get("/family/alerts", response_model=List[schemas.FamilyAlertOut])
+async def family_smart_alerts(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    links = (
+        db.query(models.ProfileRelationship)
+        .join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .all()
+    )
+    result: list[schemas.FamilyAlertOut] = []
+    for link in links:
+        profile = link.profile
+        if not profile:
+            continue
+        result.extend(_generate_smart_alerts_for_profile(db, profile, current_user))
+
+    # Ordenar por severidad y fecha
+    priority = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+    result.sort(key=lambda x: (priority.get(x.severity, 99), x.generated_at), reverse=False)
+    return result
+
+
+@app.get("/family/reports/summary", response_model=schemas.FamilyReportOut)
+async def family_report_summary(
+    days: int = 30,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    period_days = max(1, min(int(days or 30), 365))
+    links = (
+        db.query(models.ProfileRelationship)
+        .join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .all()
+    )
+    profiles_report = []
+    for link in links:
+        profile = link.profile
+        if not profile:
+            continue
+        profiles_report.append(_build_profile_report(db, profile, period_days))
+
+    totals = {
+        "profiles": len(profiles_report),
+        "medications_active": sum(int(p.medications_active or 0) for p in profiles_report),
+        "appointments_total": sum(int(p.appointments_total or 0) for p in profiles_report),
+        "appointments_upcoming": sum(int(p.appointments_upcoming or 0) for p in profiles_report),
+        "documents_uploaded": sum(int(p.documents_uploaded or 0) for p in profiles_report),
+    }
+    return schemas.FamilyReportOut(
+        generated_at=datetime.utcnow(),
+        period_days=period_days,
+        totals=totals,
+        profiles=profiles_report,
+    )
+
+
+@app.get("/health-profiles/{profile_id}/automation", response_model=schemas.ProfileAutomationSettingsOut)
+async def get_profile_automation_settings(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    settings = _profile_automation_settings(profile)
+    return schemas.ProfileAutomationSettingsOut(**settings)
+
+
+@app.put("/health-profiles/{profile_id}/automation", response_model=schemas.ProfileAutomationSettingsOut)
+async def update_profile_automation_settings(
+    profile_id: int,
+    payload: schemas.ProfileAutomationSettingsIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    current = _profile_automation_settings(profile)
+    for key, value in payload.dict(exclude_unset=True).items():
+        if value is not None:
+            current[key] = bool(value)
+
+    profile.automation_settings_json = _serialize_profile_automation_settings(current)
+    db.add(profile)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="automation_updated",
+        description=f"{current_user.name or current_user.email} actualizo automatizaciones del perfil",
+        metadata_json=current,
+    )
+    db.commit()
+    db.refresh(profile)
+    return schemas.ProfileAutomationSettingsOut(**_profile_automation_settings(profile))
+
+
+@app.post("/family/automations/run")
+async def run_family_automations(
+    send_email: bool = False,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    alerts = await family_smart_alerts(db=db, current_user=current_user)
+    report = await family_report_summary(days=7, db=db, current_user=current_user)
+    executed = {
+        "alerts_generated": len(alerts),
+        "report_profiles": len(report.profiles),
+        "emails_sent": 0,
+    }
+
+    if send_email and current_user.email:
+        can_send = bool(getattr(current_user, "email_reminders_enabled", False))
+        if can_send:
+            _send_family_report_email_safe(
+                current_user.email,
+                current_user.name or "",
+                {
+                    "period_days": report.period_days,
+                    "totals": report.totals,
+                    "profiles": [p.model_dump() for p in report.profiles],
+                },
+            )
+            executed["emails_sent"] = 1
+    return {
+        "ok": True,
+        "executed": executed,
+        "alerts_preview": [a.model_dump() for a in alerts[:10]],
+    }
+
+
+@app.get("/health-profiles/{profile_id}/notes", response_model=List[schemas.ProfileNoteOut])
+async def list_profile_notes(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    notes = (
+        db.query(models.ProfileNote)
+        .filter(models.ProfileNote.profile_id == profile_id)
+        .order_by(models.ProfileNote.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [_profile_note_out(item) for item in notes]
+
+
+@app.post("/health-profiles/{profile_id}/notes", response_model=schemas.ProfileNoteOut)
+async def create_profile_note(
+    profile_id: int,
+    payload: schemas.ProfileNoteCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    note_text = (payload.note or "").strip()
+    if not note_text:
+        raise HTTPException(status_code=400, detail="La nota no puede estar vacia")
+
+    item = models.ProfileNote(
+        profile_id=profile_id,
+        created_by_user_id=current_user.id,
+        note=note_text,
+        visibility=(payload.visibility or "shared").strip() or "shared",
+    )
+    db.add(item)
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="note_added",
+        description=f"{current_user.name or current_user.email} agrego una nota colaborativa",
+        metadata_json={"visibility": item.visibility},
+    )
+    db.commit()
+    db.refresh(item)
+    return _profile_note_out(item)
 
 
 # Appointments

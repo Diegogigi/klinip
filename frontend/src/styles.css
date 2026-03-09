@@ -340,6 +340,12 @@ body.theme-dark .family-panel-name {
   color: #e2e8f0;
 }
 
+body.theme-dark .family-report-totals p {
+  background: #0b1224;
+  border-color: #1e293b;
+  color: #e2e8f0;
+}
+
 body.theme-dark .settings-nav-btn {
   background: transparent;
   border-color: transparent;
@@ -2381,6 +2387,21 @@ body.theme-dark .primary-btn {
   margin: 0;
   font-weight: 700;
   color: #0f172a;
+}
+
+.family-report-totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.7rem;
+}
+
+.family-report-totals p {
+  margin: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.55rem 0.65rem;
 }
 
 .family-collab-card {

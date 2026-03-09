@@ -18,6 +18,13 @@ import {
   removeProfileRelationship,
   revokeProfileInvitation,
   getHealthProfileActivity,
+  getFamilyAlerts,
+  getFamilyReportSummary,
+  runFamilyAutomations,
+  getProfileAutomation,
+  updateProfileAutomation,
+  getProfileNotes,
+  createProfileNote,
   revokeDataConsent,
   deleteAccount as deleteAccountApi,
   submitPrivacyRequest,
@@ -58,6 +65,19 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [caregivers, setCaregivers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
+  const [familyAlerts, setFamilyAlerts] = useState([]);
+  const [familyReport, setFamilyReport] = useState(null);
+  const [automationStatus, setAutomationStatus] = useState("");
+  const [automationSettings, setAutomationSettings] = useState({
+    smart_alerts_enabled: true,
+    medication_overdue_alerts: true,
+    upcoming_appointment_alerts: true,
+    inactivity_alerts: true,
+    weekly_family_report_enabled: false,
+    auto_email_caregivers: false,
+  });
+  const [profileNotes, setProfileNotes] = useState([]);
+  const [newProfileNote, setNewProfileNote] = useState("");
   const [inviteForm, setInviteForm] = useState({
     email: "",
     role: "viewer",
@@ -158,10 +178,18 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     const loadFamilyDetails = async () => {
       if (!profile?.id) return;
       try {
-        const cards = await getFamilyPanel();
+        const [cards, alerts, report] = await Promise.all([
+          getFamilyPanel(),
+          getFamilyAlerts().catch(() => []),
+          getFamilyReportSummary(30).catch(() => null),
+        ]);
         if (mounted) setFamilyPanelCards(Array.isArray(cards) ? cards : []);
+        if (mounted) setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+        if (mounted) setFamilyReport(report || null);
       } catch (err) {
         if (mounted) setFamilyPanelCards([]);
+        if (mounted) setFamilyAlerts([]);
+        if (mounted) setFamilyReport(null);
         console.error("No se pudo cargar panel familiar:", err);
       }
 
@@ -170,25 +198,31 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           setCaregivers([]);
           setInvitations([]);
           setActivityLog([]);
+          setProfileNotes([]);
         }
         return;
       }
 
       try {
-        const [careList, invList, actList] = await Promise.all([
+        const [careList, invList, actList, autoCfg, notesList] = await Promise.all([
           getProfileCaregivers(activeFamilyProfileId),
           getProfileInvitations(activeFamilyProfileId).catch(() => []),
           getHealthProfileActivity(activeFamilyProfileId),
+          getProfileAutomation(activeFamilyProfileId).catch(() => null),
+          getProfileNotes(activeFamilyProfileId).catch(() => []),
         ]);
         if (!mounted) return;
         setCaregivers(Array.isArray(careList) ? careList : []);
         setInvitations(Array.isArray(invList) ? invList : []);
         setActivityLog(Array.isArray(actList) ? actList : []);
+        if (autoCfg) setAutomationSettings(autoCfg);
+        setProfileNotes(Array.isArray(notesList) ? notesList : []);
       } catch (err) {
         if (!mounted) return;
         setCaregivers([]);
         setInvitations([]);
         setActivityLog([]);
+        setProfileNotes([]);
         console.error("No se pudieron cargar detalles de colaboracion:", err);
       }
     };
@@ -578,6 +612,71 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const handleToggleAutomationSetting = (key, value) => {
+    setAutomationSettings((prev) => ({ ...prev, [key]: !!value }));
+  };
+
+  const handleSaveAutomationSettings = async () => {
+    if (!activeFamilyProfileId) return;
+    setAutomationStatus("");
+    try {
+      const updated = await updateProfileAutomation(activeFamilyProfileId, automationSettings);
+      setAutomationSettings(updated || automationSettings);
+      setAutomationStatus("Automatizaciones actualizadas");
+      const alerts = await getFamilyAlerts().catch(() => []);
+      setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setAutomationStatus(detail || "No se pudo actualizar automatizaciones");
+      console.error("Error guardando automatizaciones:", err);
+    }
+  };
+
+  const handleRunAutomations = async () => {
+    setAutomationStatus("");
+    try {
+      const result = await runFamilyAutomations(true);
+      const executed = result?.executed || {};
+      setAutomationStatus(
+        `Automatizaciones ejecutadas. Alertas: ${executed.alerts_generated || 0}, correo: ${executed.emails_sent || 0}`
+      );
+      const [alerts, report] = await Promise.all([
+        getFamilyAlerts().catch(() => []),
+        getFamilyReportSummary(30).catch(() => null),
+      ]);
+      setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+      setFamilyReport(report || null);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setAutomationStatus(detail || "No se pudieron ejecutar automatizaciones");
+      console.error("Error ejecutando automatizaciones:", err);
+    }
+  };
+
+  const handleCreateProfileNote = async () => {
+    if (!activeFamilyProfileId) return;
+    const note = (newProfileNote || "").trim();
+    if (!note) {
+      setFamilyStatus("La nota no puede estar vacia");
+      return;
+    }
+    try {
+      await createProfileNote(activeFamilyProfileId, { note, visibility: "shared" });
+      const [notesList, actList] = await Promise.all([
+        getProfileNotes(activeFamilyProfileId).catch(() => []),
+        getHealthProfileActivity(activeFamilyProfileId),
+      ]);
+      setProfileNotes(Array.isArray(notesList) ? notesList : []);
+      setActivityLog(Array.isArray(actList) ? actList : []);
+      setNewProfileNote("");
+      setFamilyStatus("Nota colaborativa guardada");
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFamilyStatus(detail || "No se pudo guardar la nota");
+      console.error("Error guardando nota:", err);
+    }
+  };
+
   const handleToggleEmailReminders = async (enabled) => {
     const previous = emailRemindersEnabled;
     setEmailReminderStatus("");
@@ -872,6 +971,55 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           )}
         </div>
 
+        <div className="family-collab-card">
+          <h4>Alertas inteligentes</h4>
+          <div className="family-activity-list">
+            {familyAlerts.length ? (
+              familyAlerts.map((alert) => (
+                <article className="family-activity-item" key={alert.id}>
+                  <p className="family-name">
+                    [{alert.severity}] {alert.profile_name}: {alert.title}
+                  </p>
+                  <p className="muted">{alert.message}</p>
+                  {alert.suggested_action ? (
+                    <p className="muted">Sugerencia: {alert.suggested_action}</p>
+                  ) : null}
+                </article>
+              ))
+            ) : (
+              <p className="muted">No hay alertas activas por ahora.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="family-collab-card">
+          <h4>Reporte familiar (30 dias)</h4>
+          {familyReport ? (
+            <>
+              <div className="family-report-totals">
+                <p><strong>Perfiles:</strong> {familyReport?.totals?.profiles ?? 0}</p>
+                <p><strong>Medicamentos activos:</strong> {familyReport?.totals?.medications_active ?? 0}</p>
+                <p><strong>Citas totales:</strong> {familyReport?.totals?.appointments_total ?? 0}</p>
+                <p><strong>Documentos:</strong> {familyReport?.totals?.documents_uploaded ?? 0}</p>
+              </div>
+              <div className="family-table">
+                {(familyReport?.profiles || []).map((rp) => (
+                  <div className="family-table-row" key={rp.profile_id}>
+                    <div>
+                      <p className="family-name">{rp.profile_name}</p>
+                      <p className="muted">
+                        Citas proximas: {rp.appointments_upcoming} | Adherencia: {rp.adherence_rate ?? "-"}%
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="muted">Sin datos de reporte aun.</p>
+          )}
+        </div>
+
         {planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
           <div className="family-create-card">
             <h4>Agregar perfil asistido</h4>
@@ -952,6 +1100,41 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         {planInfo?.collaboration_enabled && !!activeFamilyProfileId && (
           <>
             <div className="family-collab-card">
+              <h4>Automatizaciones</h4>
+              <div className="family-table">
+                {[
+                  ["smart_alerts_enabled", "Alertas inteligentes"],
+                  ["medication_overdue_alerts", "Alertas de adherencia de medicamentos"],
+                  ["upcoming_appointment_alerts", "Alertas de citas proximas"],
+                  ["inactivity_alerts", "Alertas por inactividad clinica"],
+                  ["weekly_family_report_enabled", "Reporte familiar semanal"],
+                  ["auto_email_caregivers", "Enviar reporte por correo al ejecutar"],
+                ].map(([key, label]) => (
+                  <div className="family-table-row" key={key}>
+                    <p className="family-name">{label}</p>
+                    <label className="switch">
+                      <input
+                        type="checkbox"
+                        checked={!!automationSettings[key]}
+                        onChange={(e) => handleToggleAutomationSetting(key, e.target.checked)}
+                      />
+                      <span className="switch-slider" />
+                    </label>
+                  </div>
+                ))}
+              </div>
+              <div className="family-row-actions" style={{ marginTop: "0.7rem" }}>
+                <button className="secondary-btn" type="button" onClick={handleSaveAutomationSettings}>
+                  Guardar automatizaciones
+                </button>
+                <button className="secondary-btn" type="button" onClick={handleRunAutomations}>
+                  Ejecutar automatizaciones ahora
+                </button>
+              </div>
+              {automationStatus ? <p className="muted" style={{ marginTop: "0.6rem" }}>{automationStatus}</p> : null}
+            </div>
+
+            <div className="family-collab-card">
               <h4>Invitar familiar o cuidador</h4>
               <div className="form-row">
                 <div className="input-group">
@@ -1011,7 +1194,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                           <option value="caregiver">Cuidador</option>
                           <option value="viewer">Visualizador</option>
                         </select>
-                        {row.user_id !== profile.id && (
+                        {row.user_id !== profile?.id && (
                           <button
                             className="secondary-btn danger"
                             type="button"
@@ -1058,6 +1241,37 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </div>
             </div>
           </>
+        )}
+
+        {!!activeFamilyProfileId && (
+          <div className="family-collab-card">
+            <h4>Notas colaborativas</h4>
+            <div className="input-group">
+              <label className="input-label">Nueva nota</label>
+              <textarea
+                className="textarea-field"
+                value={newProfileNote}
+                onChange={(e) => setNewProfileNote(e.target.value)}
+                placeholder="Ej: Paciente reporta mejor respuesta al tratamiento..."
+              />
+            </div>
+            <button className="secondary-btn" type="button" onClick={handleCreateProfileNote}>
+              Guardar nota
+            </button>
+            <div className="family-activity-list" style={{ marginTop: "0.7rem" }}>
+              {profileNotes.length ? (
+                profileNotes.map((note) => (
+                  <article className="family-activity-item" key={note.id}>
+                    <p className="family-name">{note.created_by_name || `Usuario #${note.created_by_user_id}`}</p>
+                    <p className="muted">{note.note}</p>
+                    <p className="muted">{toLocaleDateTimeOrEmpty(note.created_at)}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="muted">Sin notas colaborativas todavia.</p>
+              )}
+            </div>
+          </div>
         )}
 
         {!!activeFamilyProfileId && (
