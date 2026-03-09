@@ -1300,13 +1300,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                         <p className="family-name">{inv.invitee_email}</p>
                         <p className="muted">Rol: {inv.role} - Estado: {inv.status}</p>
                       </div>
-                      {inv.status === "pending" ? (
+                      {inv.status === "pending" || inv.status === "accepted" ? (
                         <button
                           className="secondary-btn danger"
                           type="button"
                           onClick={() => handleRevokeInvitation(inv.id)}
                         >
-                          Revocar
+                          Quitar
                         </button>
                       ) : (
                         <span className="muted">Sin acciones</span>

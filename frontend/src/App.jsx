@@ -153,7 +153,7 @@ function Sidebar({
   const mobileOverflowLinks = [links[3], links[5], links[6], links[7]];
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
-    normalizedPlan !== "basico" && Array.isArray(healthProfiles) && healthProfiles.length > 1;
+    Array.isArray(healthProfiles) && healthProfiles.length > 1;
   const activeProfileMobile =
     (healthProfiles || []).find((item) => Number(item.id) === Number(activeProfileId)) ||
     (healthProfiles || [])[0] ||
@@ -377,7 +377,7 @@ function Topbar({
 
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfiles =
-    normalizedPlan !== "basico" && Array.isArray(healthProfiles) && healthProfiles.length > 1;
+    Array.isArray(healthProfiles) && healthProfiles.length > 1;
   const activeProfile =
     (healthProfiles || []).find((item) => Number(item.id) === Number(activeProfileId)) ||
     (healthProfiles || [])[0] ||
@@ -412,25 +412,30 @@ function Topbar({
             <p className="topbar-profile-plan">{planLabel}</p>
           </div>
           {canSwitchProfiles ? (
-            <div className="topbar-profile-switcher-row">
-              <label className="topbar-profile-switcher-label" htmlFor="active-profile-select">
-                Perfil activo
-              </label>
-              <select
-                id="active-profile-select"
-                className="topbar-profile-select"
-                value={activeProfileId || ""}
-                onChange={(e) => onSwitchProfile?.(e.target.value)}
-                disabled={!!switchingProfile}
-              >
-                {(healthProfiles || []).map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.full_name}
-                    {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="topbar-profile-switcher-row">
+                <label className="topbar-profile-switcher-label" htmlFor="active-profile-select">
+                  Perfil activo
+                </label>
+                <select
+                  id="active-profile-select"
+                  className="topbar-profile-select"
+                  value={activeProfileId || ""}
+                  onChange={(e) => onSwitchProfile?.(e.target.value)}
+                  disabled={!!switchingProfile}
+                >
+                  {(healthProfiles || []).map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.full_name}
+                      {item.relation_with_owner ? ` (${item.relation_with_owner})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="topbar-profile-current">
+                {activeProfile?.full_name || user?.name || "Perfil personal"}
+              </div>
+            </>
           ) : (
             <div className="topbar-profile-current">
               {activeProfile?.full_name || user?.name || "Perfil personal"}
@@ -1802,7 +1807,7 @@ export default function App() {
                 element={
                   user ? (
                     <ProtectedRoute user={user}>
-                      <Dashboard user={user} />
+                      <Dashboard key={`dashboard-${activeHealthProfileId || "none"}`} user={user} />
                     </ProtectedRoute>
                   ) : (
                     <Landing />
@@ -1813,7 +1818,7 @@ export default function App() {
                 path="/appointments"
                 element={
                   <ProtectedRoute user={user}>
-                    <Appointments />
+                    <Appointments key={`appointments-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1821,7 +1826,7 @@ export default function App() {
                 path="/documents"
                 element={
                   <ProtectedRoute user={user}>
-                    <Documents />
+                    <Documents key={`documents-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1829,7 +1834,7 @@ export default function App() {
                 path="/medications"
                 element={
                   <ProtectedRoute user={user}>
-                    <Medications />
+                    <Medications key={`medications-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1837,7 +1842,7 @@ export default function App() {
                 path="/calendar"
                 element={
                   <ProtectedRoute user={user}>
-                    <Calendar />
+                    <Calendar key={`calendar-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1845,7 +1850,7 @@ export default function App() {
                 path="/timeline"
                 element={
                   <ProtectedRoute user={user}>
-                    <Timeline />
+                    <Timeline key={`timeline-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1853,7 +1858,7 @@ export default function App() {
                 path="/stats"
                 element={
                   <ProtectedRoute user={user}>
-                    <Stats />
+                    <Stats key={`stats-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />
@@ -1862,6 +1867,7 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <Settings
+                      key={`settings-${activeHealthProfileId || "none"}`}
                       user={user}
                       onLogout={handleLogout}
                       theme={theme}

@@ -4689,6 +4689,8 @@ async def create_profile_invitation(
     invitee_email = payload.email.lower().strip()
     if not invitee_email:
         raise HTTPException(status_code=400, detail="Email de invitacion es obligatorio")
+    if invitee_email == (current_user.email or "").strip().lower():
+        raise HTTPException(status_code=400, detail="No puedes invitar tu propio correo")
 
     existing_user = (
         db.query(models.User)
@@ -4698,15 +4700,25 @@ async def create_profile_invitation(
     now = datetime.utcnow()
 
     if existing_user:
-        existing_link = (
-            db.query(models.ProfileRelationship)
+        invitee_primary = (
+            db.query(models.HealthProfile)
             .filter(
-                models.ProfileRelationship.profile_id == profile_id,
-                models.ProfileRelationship.user_id == existing_user.id,
+                models.HealthProfile.owner_user_id == existing_user.id,
+                models.HealthProfile.is_primary_profile.is_(True),
+                models.HealthProfile.is_archived.is_(False),
             )
             .first()
         )
-        if existing_link and existing_link.status == "accepted":
+        existing_link = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == (invitee_primary.id if invitee_primary else -1),
+                models.ProfileRelationship.user_id == current_user.id,
+                models.ProfileRelationship.status == "accepted",
+            )
+            .first()
+        )
+        if existing_link:
             raise HTTPException(status_code=409, detail="Ese usuario ya tiene acceso al perfil")
 
     pending = (
@@ -4853,24 +4865,22 @@ async def accept_profile_invitation(
     if (current_user.email or "").strip().lower() != (invitation.invitee_email or "").strip().lower():
         raise HTTPException(status_code=403, detail="Esta invitacion no corresponde a tu cuenta")
 
-    profile = (
-        db.query(models.HealthProfile)
-        .filter(
-            models.HealthProfile.id == invitation.profile_id,
-            models.HealthProfile.is_archived.is_(False),
-        )
-        .first()
-    )
-    if not profile:
-        raise HTTPException(status_code=404, detail="Perfil de salud no disponible")
-
     role = _normalize_role(invitation.role)
     now = datetime.utcnow()
+    inviter_user = (
+        db.query(models.User)
+        .filter(models.User.id == invitation.inviter_user_id)
+        .first()
+    )
+    if not inviter_user:
+        raise HTTPException(status_code=404, detail="Usuario que invita no disponible")
+
+    invitee_primary_profile = _create_primary_health_profile_if_missing(db, current_user)
     link = (
         db.query(models.ProfileRelationship)
         .filter(
-            models.ProfileRelationship.profile_id == invitation.profile_id,
-            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.profile_id == invitee_primary_profile.id,
+            models.ProfileRelationship.user_id == inviter_user.id,
         )
         .first()
     )
@@ -4882,8 +4892,8 @@ async def accept_profile_invitation(
         link.invited_at = link.invited_at or invitation.invited_at or now
     else:
         link = models.ProfileRelationship(
-            profile_id=invitation.profile_id,
-            user_id=current_user.id,
+            profile_id=invitee_primary_profile.id,
+            user_id=inviter_user.id,
             relationship_type=invitation.relationship_type or "",
             role=role,
             status="accepted",
@@ -4897,17 +4907,13 @@ async def accept_profile_invitation(
     invitation.accepted_by_user_id = current_user.id
     invitation.accepted_at = now
     db.add(invitation)
-
-    if not getattr(current_user, "active_health_profile_id", None):
-        current_user.active_health_profile_id = invitation.profile_id
-    db.add(current_user)
     _log_profile_activity(
         db,
-        profile_id=invitation.profile_id,
+        profile_id=invitee_primary_profile.id,
         actor_user_id=current_user.id,
         action_type="invitation_accepted",
-        description=f"{current_user.name or current_user.email} acepto invitacion como {role}",
-        metadata_json={"role": role, "email": current_user.email},
+        description=f"{current_user.name or current_user.email} acepto invitacion para compartir su perfil con {inviter_user.name or inviter_user.email}",
+        metadata_json={"role": role, "email": current_user.email, "inviter_user_id": inviter_user.id},
     )
     db.commit()
     db.refresh(link)
@@ -5017,8 +5023,37 @@ async def revoke_profile_invitation(
     )
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitacion no encontrada")
-    if invitation.status != "pending":
-        raise HTTPException(status_code=400, detail="Solo invitaciones pendientes pueden revocarse")
+
+    invitee_user = (
+        db.query(models.User)
+        .filter(func.lower(models.User.email) == (invitation.invitee_email or "").strip().lower())
+        .first()
+    )
+    invitee_primary = None
+    if invitee_user:
+        invitee_primary = (
+            db.query(models.HealthProfile)
+            .filter(
+                models.HealthProfile.owner_user_id == invitee_user.id,
+                models.HealthProfile.is_primary_profile.is_(True),
+                models.HealthProfile.is_archived.is_(False),
+            )
+            .first()
+        )
+
+    if invitation.status == "accepted" and invitee_primary:
+        granted_link = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == invitee_primary.id,
+                models.ProfileRelationship.user_id == invitation.inviter_user_id,
+            )
+            .first()
+        )
+        if granted_link:
+            db.delete(granted_link)
+    elif invitation.status not in ("pending",):
+        raise HTTPException(status_code=400, detail="Esta invitacion ya no puede modificarse")
 
     invitation.status = "revoked"
     invitation.revoked_at = datetime.utcnow()
