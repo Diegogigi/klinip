@@ -58,6 +58,8 @@ export default function Medications() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [notifyQueue, setNotifyQueue] = useState([]);
   const [notifyPromptKey, setNotifyPromptKey] = useState("");
   const [notifyTriggeredAt, setNotifyTriggeredAt] = useState(null);
@@ -413,6 +415,21 @@ export default function Medications() {
     adherenceTotals.expected > 0
       ? Math.round((adherenceTotals.taken / adherenceTotals.expected) * 100)
       : null;
+  const filteredMeds = (meds || []).filter((med) => {
+    const term = search.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      (med.name || "").toLowerCase().includes(term) ||
+      (med.dose || "").toLowerCase().includes(term) ||
+      (med.frequency || "").toLowerCase().includes(term) ||
+      (med.notes || "").toLowerCase().includes(term);
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && !med.completed) ||
+      (statusFilter === "completed" && Boolean(med.completed)) ||
+      (statusFilter === "scheduled" && Boolean(med.schedule_time));
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <>
@@ -756,7 +773,35 @@ export default function Medications() {
         </div>
       )}
 
-      <div className="card">
+      <div className="card medications-filters-card">
+        <h3 className="card-title">Filtros</h3>
+        <div className="form-row medications-filters-row" style={{ marginBottom: "0.35rem" }}>
+          <div className="input-group">
+            <label className="input-label">Búsqueda</label>
+            <input
+              className="input-field medications-filter-field"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Nombre, dosis o notas"
+            />
+          </div>
+          <div className="input-group">
+            <label className="input-label">Estado</label>
+            <select
+              className="select-field medications-filter-field"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="active">Activos</option>
+              <option value="completed">Realizados</option>
+              <option value="scheduled">Con horario</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="card medications-list-card">
         <h3 className="card-title">Tratamientos activos</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Adherencia global:{" "}
@@ -767,6 +812,8 @@ export default function Medications() {
         </p>
         {meds.length === 0 ? (
           <p className="muted">Aún no has registrado medicamentos.</p>
+        ) : filteredMeds.length === 0 ? (
+          <p className="muted">No hay medicamentos que coincidan con los filtros.</p>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="table">
@@ -785,7 +832,7 @@ export default function Medications() {
                 </tr>
               </thead>
               <tbody>
-                {meds.map((m) => (
+                {filteredMeds.map((m) => (
                   <tr
                     key={m.id}
                     className="table-row-clickable"

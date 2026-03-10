@@ -220,7 +220,7 @@ export default function Timeline() {
 
   return (
     <>
-      <div className="card">
+      <div className="card timeline-overview-card">
         <h2 className="card-title">Mi Historia Clinica</h2>
         <p className="muted">
           Línea de tiempo cronológica completa de tus citas, exámenes, documentos y medicamentos. 
@@ -257,47 +257,42 @@ export default function Timeline() {
       </div>
 
       {/* Filtros y búsqueda */}
-      <div className="card">
-        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+      <div className="card timeline-filters-card">
+        <div className="timeline-filters-shell">
           {/* Búsqueda */}
           <div>
             <input
               type="text"
-              className="input-field"
+              className="input-field timeline-search-input"
               placeholder="🔍 Buscar en tu historia clínica..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: "100%" }}
             />
           </div>
 
           {/* Filtros */}
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          <div className="timeline-filter-row">
             <button
-              className={filter === "all" ? "primary-btn" : "secondary-btn"}
+              className={`${filter === "all" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`}
               onClick={() => setFilter("all")}
-              style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
             >
               Todos ({appointments.filter(a => a.date_time).length + documents.length + medications.length})
             </button>
             <button
-              className={filter === "appointments" ? "primary-btn" : "secondary-btn"}
+              className={`${filter === "appointments" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`}
               onClick={() => setFilter("appointments")}
-              style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
             >
               📅 Citas ({appointments.filter(a => a.date_time).length})
             </button>
             <button
-              className={filter === "documents" ? "primary-btn" : "secondary-btn"}
+              className={`${filter === "documents" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`}
               onClick={() => setFilter("documents")}
-              style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
             >
               📄 Documentos ({documents.length})
             </button>
             <button
-              className={filter === "medications" ? "primary-btn" : "secondary-btn"}
+              className={`${filter === "medications" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`}
               onClick={() => setFilter("medications")}
-              style={{ padding: "0.5rem 1rem", fontSize: "0.875rem" }}
             >
               💊 Medicamentos ({medications.length})
             </button>
@@ -306,7 +301,7 @@ export default function Timeline() {
       </div>
 
       {/* Timeline */}
-      <div className="card">
+      <div className="card timeline-list-card">
         {items.length === 0 ? (
           <div style={{ textAlign: "center", padding: "2rem" }}>
             <p className="muted" style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>

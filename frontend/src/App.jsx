@@ -13,6 +13,7 @@ import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
 import Stats from "./pages/Stats";
 import Landing from "./pages/Landing";
+import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
@@ -124,6 +125,8 @@ function Sidebar({
   const isAuthRoute =
     isPublicAuthRoute ||
     (!user && location.pathname === "/");
+  const isPlansRoute =
+    location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -187,7 +190,7 @@ function Sidebar({
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
 
-  if (isAuthRoute) return null;
+  if (isAuthRoute || isPlansRoute) return null;
 
   return (
     <aside
@@ -198,7 +201,7 @@ function Sidebar({
       <div className="sidebar-brand">
         <div className="brand-avatar">
           <img
-            src="/icons/new_log.png"
+            src="/icons/img_sin_fondo.png"
             alt="Klinip"
             className="brand-avatar-img"
           />
@@ -242,36 +245,6 @@ function Sidebar({
               id="sidebar-more-menu"
               className={`sidebar-more-menu ${showMobileMenu ? "open" : ""}`}
             >
-              <div className="sidebar-profile-mobile">
-                <div className="sidebar-profile-mobile-head">
-                  <span className="sidebar-profile-mobile-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
-                      <circle cx="12" cy="8" r="3.2" />
-                      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-                    </svg>
-                  </span>
-                  <span className="sidebar-profile-mobile-plan">{planLabelMobile}</span>
-                </div>
-                {canSwitchProfilesMobile ? (
-                  <select
-                    className="sidebar-profile-mobile-select"
-                    value={activeProfileId || ""}
-                    onChange={(e) => onSwitchProfile?.(e.target.value)}
-                    disabled={!!switchingProfile}
-                  >
-                    {(healthProfiles || []).map((item) => (
-                      <option value={item.id} key={item.id}>
-                        {item.full_name}
-                        {` (${getProfileAccessLabelMobile(item)})`}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <p className="sidebar-profile-mobile-current">
-                    {activeProfileMobile?.full_name || user?.name || "Perfil personal"}
-                  </p>
-                )}
-              </div>
               {mobileOverflowLinks.map((link) => (
                 <Link
                   key={link.to}
@@ -333,6 +306,8 @@ function Topbar({
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
+  const isPlansRoute =
+    location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",
@@ -403,7 +378,7 @@ function Topbar({
     return "invitado";
   };
 
-  if (isAuthRoute || (!user && location.pathname === "/")) return null;
+  if (isAuthRoute || isPlansRoute || (!user && location.pathname === "/")) return null;
 
   return (
     <header className="topbar">
@@ -1508,7 +1483,10 @@ export default function App() {
     );
   }
 
+  const isPlansRoute =
+    location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isPublicLanding = !user && location.pathname === "/";
+  const isPublicMarketingRoute = isPublicLanding || isPlansRoute;
 
   return (
     <div className="app-shell">
@@ -1800,7 +1778,7 @@ export default function App() {
           onSwitchProfile={handleSwitchActiveProfile}
           switchingProfile={switchingProfile}
         />
-        <div className={`main-area ${isPublicLanding ? "main-area-public" : ""}`}>
+        <div className={`main-area ${isPublicMarketingRoute ? "main-area-public" : ""}`}>
           <Topbar
             user={user}
             notifications={notifications}
@@ -1837,7 +1815,7 @@ export default function App() {
               </div>
             </div>
           )}
-          <main className={`main-content ${isPublicLanding ? "main-content-landing" : ""}`}>
+          <main className={`main-content ${isPublicMarketingRoute ? "main-content-landing" : ""}`}>
             <Routes>
               <Route
                 path="/login"
@@ -1863,6 +1841,8 @@ export default function App() {
               <Route path="/legal/terms" element={<LegalTerms />} />
               <Route path="/legal/consent" element={<LegalConsent />} />
               <Route path="/legal/notificaciones" element={<LegalNotifications />} />
+              <Route path="/planes" element={<Plans user={user} />} />
+              <Route path="/planes/:planSlug" element={<Plans user={user} />} />
               <Route
                 path="/"
                 element={

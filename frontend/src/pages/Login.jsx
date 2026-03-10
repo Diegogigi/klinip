@@ -88,7 +88,7 @@ export default function Login({ onAuthenticated }) {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon"><img src="/icons/new_log.png" alt="Klinip" className="auth-logo-image" /></div>
+              <div className="auth-logo-icon"><img src="/icons/img_sin_fondo.png" alt="Klinip" className="auth-logo-image" /></div>
               <h1 className="auth-logo-text">Klinip</h1>
             </div>
             <h2 className="auth-welcome">¡Bienvenido de nuevo!</h2>

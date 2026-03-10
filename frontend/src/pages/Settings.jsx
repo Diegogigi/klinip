@@ -455,7 +455,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
 
   const handleClearLocal = () => {
-    if (!window.confirm("Â¿Borrar los datos locales de Klinip en este navegador?")) return;
+    if (!window.confirm("¿Borrar los datos locales de Klinip en este navegador?")) return;
     const keys = [
       "klinip_users",
       "klinip_session",
@@ -466,13 +466,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       "klinip_onboarding_completed_v1",
     ];
     keys.forEach((k) => localStorage.removeItem(k));
-    alert("Datos locales borrados. Vuelve a iniciar sesiÃ³n para continuar.");
+    alert("Datos locales borrados. Vuelve a iniciar sesión para continuar.");
     window.location.reload();
   };
 
   const handleRevokeConsent = () => {
     setPrivacyNotice("");
-    if (!window.confirm("Â¿Deseas revocar tu consentimiento de datos de salud?")) return;
+    if (!window.confirm("¿Deseas revocar tu consentimiento de datos de salud?")) return;
     revokeDataConsent()
       .then(() => {
         localStorage.setItem("klinip_consent_revoked", "true");
@@ -660,7 +660,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
     const email = (inviteForm.email || "").trim().toLowerCase();
     if (!email) {
-      setFamilyStatus("Debes ingresar un correo para la invitacion");
+      setFamilyStatus("Debes ingresar un correo para la invitación");
       return;
     }
     setFamilyStatus("");
@@ -682,7 +682,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setFamilyStatus("Invitacion/provision de acceso creada correctamente");
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setFamilyStatus(detail || "No se pudo crear la invitacion");
+      setFamilyStatus(detail || "No se pudo crear la invitación");
       console.error("Error invitando colaborador:", err);
     }
   };
@@ -711,8 +711,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       }
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setFamilyStatus(detail || "No se pudo aceptar la invitacion");
-      console.error("Error aceptando invitacion:", err);
+      setFamilyStatus(detail || "No se pudo aceptar la invitación");
+      console.error("Error aceptando invitación:", err);
     }
   };
 
@@ -782,8 +782,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setFamilyStatus("Invitacion revocada");
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      setFamilyStatus(detail || "No se pudo revocar la invitacion");
-      console.error("Error revocando invitacion:", err);
+      setFamilyStatus(detail || "No se pudo revocar la invitación");
+      console.error("Error revocando invitación:", err);
     }
   };
 
@@ -951,12 +951,12 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             className="settings-logout-btn"
             type="button"
             onClick={() => {
-              if (window.confirm("Â¿EstÃ¡s seguro de que deseas cerrar sesiÃ³n?")) {
+              if (window.confirm("¿Estás seguro de que deseas cerrar sesión?")) {
                 onLogout?.();
               }
             }}
           >
-            Cerrar sesiÃ³n
+            Cerrar sesión
           </button>
         </aside>
         )}
@@ -1127,7 +1127,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 className="input-field"
                 value={chronicCondition}
                 onChange={(e) => setChronicCondition(e.target.value)}
-                placeholder="Ej: Hipertension, diabetes, asma"
+                placeholder="Ej: hipertensión, diabetes, asma"
               />
             </div>
             <div className="input-group">
@@ -1169,7 +1169,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <>
             <h2 className="card-title">Mi familia</h2>
             <p className="muted" style={{ marginBottom: "0.75rem" }}>
-              Gestiona perfiles de salud vinculados segun tu plan actual.
+              Gestiona perfiles de salud vinculados según tu plan actual.
             </p>
           </>
         )}
@@ -1185,7 +1185,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               <p className="family-summary-value">{planInfo?.current_profiles ?? familyProfiles.length} / {planInfo?.max_profiles ?? 1}</p>
             </div>
             <div className="family-summary-metric">
-              <p className="family-summary-label">Colaboracion</p>
+              <p className="family-summary-label">Colaboración</p>
               <p className="family-summary-value">{planInfo?.collaboration_enabled ? "Habilitada" : "No disponible"}</p>
             </div>
             <div className="family-summary-metric">
@@ -1271,7 +1271,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 familyPanelCards.map((card) => (
                   <article className="family-panel-card" key={card.profile_id}>
                     <p className="family-panel-name">{card.name}</p>
-                    <p className="muted">{card.relationship || "Sin relacion"} {typeof card.age_years === "number" ? `- ${card.age_years} aÃ±os` : ""}</p>
+                    <p className="muted">{card.relationship || "Sin relación"} {typeof card.age_years === "number" ? `- ${card.age_years} años` : ""}</p>
                     <p className="muted">Medicamentos activos: {card.medications_active}</p>
                     <p className="muted">Recordatorios pendientes: {card.reminders_pending}</p>
                     <p className="muted">Proxima cita: {card.next_appointment_at ? toLocaleDateTimeOrEmpty(card.next_appointment_at) : "Sin cita"}</p>
@@ -1306,7 +1306,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
 
           <div className="family-collab-card">
-            <h4>Reporte familiar (30 dias)</h4>
+            <h4>Reporte familiar (30 días)</h4>
             {familyReport ? (
               <>
                 <div className="family-report-totals">
@@ -1321,7 +1321,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                       <div>
                         <p className="family-name">{rp.profile_name}</p>
                         <p className="muted">
-                          Citas proximas: {rp.appointments_upcoming} | Adherencia: {rp.adherence_rate ?? "-"}%
+                          Citas próximas: {rp.appointments_upcoming} | Adherencia: {rp.adherence_rate ?? "-"}%
                         </p>
                       </div>
                     </div>
@@ -1351,7 +1351,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 />
               </div>
               <div className="input-group">
-                <label className="input-label">Relacion</label>
+                <label className="input-label">Relación</label>
                 <input
                   className="input-field"
                   value={newFamilyProfile.relation_with_owner}
@@ -1420,7 +1420,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 {[
                   ["smart_alerts_enabled", "Alertas inteligentes"],
                   ["medication_overdue_alerts", "Alertas de adherencia de medicamentos"],
-                  ["upcoming_appointment_alerts", "Alertas de citas proximas"],
+                  ["upcoming_appointment_alerts", "Alertas de citas próximas"],
                   ["inactivity_alerts", "Alertas por inactividad clinica"],
                   ["weekly_family_report_enabled", "Reporte familiar semanal"],
                   ["auto_email_caregivers", "Enviar reporte por correo al ejecutar"],
@@ -1475,7 +1475,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   </select>
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Relacion</label>
+                <label className="input-label">Relación</label>
                   <input
                     className="input-field"
                     value={inviteForm.relationship_type}
@@ -1485,7 +1485,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 </div>
               </div>
               <button className="secondary-btn" type="button" onClick={handleInviteCaregiver}>
-                Enviar invitacion
+                Enviar invitación
               </button>
             </div>
 
@@ -1497,7 +1497,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                     <div className="family-table-row" key={row.id}>
                       <div>
                         <p className="family-name">{row.user_name || row.user_email || `Usuario #${row.user_id}`}</p>
-                        <p className="muted">{row.user_email || ""} - {row.relationship_type || "Sin relacion"}</p>
+                        <p className="muted">{row.user_email || ""} - {row.relationship_type || "Sin relación"}</p>
                       </div>
                       <div className="family-row-actions">
                         <select
@@ -1632,7 +1632,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="export-card">
             <h4>Descargar archivos</h4>
             <p className="muted">
-              Exporta tus citas y documentos para respaldo o revisiÃ³n externa.
+              Exporta tus citas y documentos para respaldo o revisión externa.
             </p>
             <div className="export-actions">
               <button className="secondary-btn" type="button" onClick={exportCsv}>
@@ -1647,7 +1647,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="export-card">
             <h4>Compartir por enlace</h4>
             <p className="muted">
-              Crea un enlace temporal con tus datos actuales y cÃ³pialo al portapapeles.
+              Crea un enlace temporal con tus datos actuales y cópialo al portapapeles.
             </p>
             <div className="export-actions">
               <button className="secondary-btn" type="button" onClick={shareLink} disabled={exporting}>
@@ -1655,17 +1655,17 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </button>
             </div>
             <p className="muted export-note">
-              El enlace se genera con la informaciÃ³n disponible al momento de crearlo.
+              El enlace se genera con la información disponible al momento de crearlo.
             </p>
           </div>
         </div>
         <div className="export-footer">
           <div className="export-footer-tip">
-            RecomendaciÃ³n: usa PDF para lectura y CSV para anÃ¡lisis o importaciÃ³n.
+            Recomendación: usa PDF para lectura y CSV para análisis o importación.
           </div>
           <div>
             <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
-              {exporting ? "Generando..." : "Compartir link rÃ¡pido"}
+              {exporting ? "Generando..." : "Compartir link rápido"}
             </button>
           </div>
         </div>
@@ -1677,7 +1677,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         <h3 className="card-title">ðŸ”” Notificaciones y Recordatorios</h3>
         <p className="muted" style={{ marginBottom: "0.75rem" }}>
           Configura tus preferencias de notificaciones, recordatorios de citas y medicamentos. 
-          Personaliza cuÃ¡ndo quieres recibir alertas.
+          Personaliza cuándo quieres recibir alertas.
         </p>
         <NotificationSettings embedded />
       </div>
@@ -1732,7 +1732,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </span>
             </div>
             <p className="muted">
-              Gestiona el permiso para datos de salud y las acciones crÃ­ticas de tu cuenta.
+              Gestiona el permiso para datos de salud y las acciones críticas de tu cuenta.
             </p>
             <div className="privacy-actions">
               {consentRevoked ? (
@@ -1753,7 +1753,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="privacy-card">
             <h4>Exportar y limpieza</h4>
             <p className="muted">
-              Descarga tus datos o limpia informaciÃ³n local del navegador.
+              Descarga tus datos o limpia información local del navegador.
             </p>
             <div className="privacy-actions">
               <button className="secondary-btn" type="button" onClick={exportCsv}>
@@ -1771,7 +1771,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="privacy-card privacy-support-card">
             <h4>Soporte de privacidad</h4>
             <p className="muted">
-              Si necesitas acceso, rectificaciÃ³n o eliminaciÃ³n de datos, envÃ­a tu solicitud aquÃ­.
+              Si necesitas acceso, rectificación o eliminación de datos, envía tu solicitud aquí.
             </p>
             <div className="privacy-form-grid">
               <div className="input-group">
@@ -1782,8 +1782,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   onChange={(e) => setPrivacyReason(e.target.value)}
                 >
                   <option value="acceso">Acceso a mis datos</option>
-                  <option value="rectificacion">RectificaciÃ³n</option>
-                  <option value="eliminacion">EliminaciÃ³n</option>
+                  <option value="rectificacion">Rectificación</option>
+                  <option value="eliminacion">Eliminación</option>
                   <option value="otra">Otra consulta</option>
                 </select>
               </div>
@@ -1803,7 +1803,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 checked={privacyIncludeTech}
                 onChange={(e) => setPrivacyIncludeTech(e.target.checked)}
               />
-              <span>Adjuntar informaciÃ³n tÃ©cnica bÃ¡sica</span>
+              <span>Adjuntar información técnica básica</span>
             </label>
             <div className="privacy-form-actions">
               <button
@@ -1833,7 +1833,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <h3>Eliminar mi cuenta y todos mis datos</h3>
             <p className="muted">
               Esta accion es permanente. Se eliminaran tus datos de citas,
-              medicamentos y documentos. No podras deshacer este cambio.
+              medicamentos y documentos. No podrás deshacer este cambio.
             </p>
             <p className="muted">
               ?Estas seguro de que deseas eliminar tu cuenta y todos tus datos de Klinip?

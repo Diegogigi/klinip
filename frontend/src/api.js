@@ -11,6 +11,7 @@ export const resetPassword = api.resetPassword;
 export const getMe = api.getMe;
 export const updateMe = api.updateMe;
 export const getMyPlan = api.getMyPlan;
+export const getPublicPlans = api.getPublicPlans;
 export const getHealthProfiles = api.getHealthProfiles;
 export const getActiveHealthProfile = api.getActiveHealthProfile;
 export const createHealthProfile = api.createHealthProfile;

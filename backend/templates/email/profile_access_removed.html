@@ -3,44 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Acceso removido - Klinip</title>
+    <title>Acceso removido</title>
   </head>
-  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:24px 12px;">
+  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbe3ef;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
             <tr>
-              <td style="padding:18px 22px;background:linear-gradient(90deg,#dc2626,#f59e0b);color:#ffffff;">
-                <img src="{{ logo_url }}" alt="{{ app_name }}" width="36" height="36" style="display:block;border-radius:8px;margin-bottom:10px;" />
-                <h1 style="margin:0;font-size:27px;line-height:1.1;">Acceso removido</h1>
+              <td style="padding:28px 32px;background:linear-gradient(180deg,#7f1d1d 0%,#dc2626 100%);color:#ffffff;">
+                <img src="{{ logo_url }}" alt="{{ app_name }} logo" width="42" height="42" style="display:block;border-radius:10px;margin-bottom:14px;" />
+                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Gestion de accesos</div>
+                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Acceso removido</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:22px;">
-                <p style="margin:0 0 12px 0;font-size:16px;">Hola,</p>
-                <p style="margin:0 0 14px 0;font-size:16px;">
+              <td style="padding:32px;">
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola,</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
                   Se removio tu acceso al perfil de salud <strong>{{ profile_name }}</strong> en {{ app_name }}.
                 </p>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;">
-                  <tr>
-                    <td style="padding:12px 14px;">
-                      <p style="margin:0 0 6px 0;font-size:14px;"><strong>Correo:</strong> {{ removed_email }}</p>
-                      <p style="margin:0;font-size:14px;"><strong>Gestionado por:</strong> {{ removed_by_name }}</p>
-                    </td>
-                  </tr>
-                </table>
-                <p style="margin:0 0 12px 0;font-size:15px;">
+                <div style="padding:18px 20px;border:1px solid #fed7aa;border-radius:16px;background:#fff7ed;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Correo:</strong> {{ removed_email }}</p>
+                  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Gestionado por:</strong> {{ removed_by_name }}</p>
+                </div>
+                <p style="margin:18px 0 0;font-size:14px;line-height:1.8;color:#475569;">
                   Desde este momento ya no podras visualizar ni editar la informacion de ese perfil.
                 </p>
-                <p style="margin:0;font-size:13px;color:#64748b;">
+                <p style="margin:10px 0 0;font-size:14px;line-height:1.8;color:#64748b;">
                   Si consideras que esto es un error, contacta al administrador del perfil.
                 </p>
               </td>
             </tr>
             <tr>
-              <td style="padding:14px 22px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;">
-                Equipo {{ app_name }} - {{ year }}
+              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
+                  Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                  {{ app_name }} | Gestion segura de perfiles | {{ year }}
+                </p>
               </td>
             </tr>
           </table>

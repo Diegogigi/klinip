@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getLandingStats } from "../api";
+import { getLandingStats, getPublicPlans } from "../api";
+import { PLAN_CATALOG } from "../data/plans";
 
 const fallbackStats = {
   users: 1200,
@@ -82,57 +83,10 @@ const modules = [
   },
 ];
 
-const plans = [
-  {
-    name: "Básico",
-    priceMonthly: "Gratis",
-    priceYearly: "Gratis",
-    note: "Salud personal",
-    recommended: false,
-    features: [
-      "1 perfil de salud",
-      "Medicamentos, citas y calendario",
-      "Documentos medicos + OCR basico",
-      "Recordatorios esenciales",
-      "Acceso movil y escritorio",
-    ],
-    cta: "Empezar",
-  },
-  {
-    name: "Plus",
-    priceMonthly: "$3.990 / mes",
-    priceYearly: "$39.990 / año",
-    note: "Individual ampliado",
-    recommended: true,
-    features: [
-      "Hasta 3 perfiles de salud",
-      "OCR mejorado",
-      "Historial completo y reportes",
-      "Recordatorios avanzados",
-      "Gestion personal y de dependientes",
-    ],
-    cta: "Probar Plus",
-  },
-  {
-    name: "Familiar",
-    priceMonthly: "$6.990 / mes",
-    priceYearly: "$69.990 / año",
-    note: "Ecosistema colaborativo",
-    recommended: false,
-    features: [
-      "Hasta 5 perfiles de salud",
-      "Panel familiar y calendarios compartidos",
-      "Recordatorios por perfil",
-      "Roles por cuidador y colaboracion multiusuario",
-      "Historial y actividad por persona",
-    ],
-    cta: "Elegir Familiar",
-  },
-];
-
 export default function Landing() {
   const [stats, setStats] = useState(fallbackStats);
   const [billing, setBilling] = useState("monthly");
+  const [plans, setPlans] = useState(PLAN_CATALOG);
 
   useEffect(() => {
     let mounted = true;
@@ -152,6 +106,19 @@ export default function Landing() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    getPublicPlans()
+      .then((data) => {
+        if (!mounted || !Array.isArray(data) || data.length === 0) return;
+        setPlans(data);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const statItems = [
     { value: formatCount(stats.users), label: "Usuarios registrados" },
     { value: formatCount(stats.appointments), label: "Citas gestionadas" },
@@ -163,10 +130,13 @@ export default function Landing() {
     <div className="landing">
       <header className="landing-nav">
         <div className="landing-logo">
-          <div className="landing-logo-mark"><img src="/icons/new_log.png" alt="Klinip" className="landing-logo-mark-img" /></div>
+          <div className="landing-logo-mark"><img src="/icons/img_sin_fondo.png" alt="Klinip" className="landing-logo-mark-img" /></div>
           <span>Klinip</span>
         </div>
         <div className="landing-nav-actions">
+          <Link to="/planes" className="landing-btn-ghost">
+            Ver planes
+          </Link>
           <Link to="/login" className="landing-btn-ghost">
             Iniciar sesión
           </Link>
@@ -310,7 +280,7 @@ export default function Landing() {
         <div className="landing-plan-grid">
           {plans.map((plan) => (
             <div
-              key={plan.name}
+              key={plan.slug}
               className={`landing-plan-card ${plan.recommended ? "is-recommended" : ""}`}
             >
               {plan.recommended ? (
@@ -328,7 +298,10 @@ export default function Landing() {
                   <li key={feature}>{feature}</li>
                 ))}
               </ul>
-              <Link className="landing-btn-primary" to="/register">
+              <Link className="landing-btn-primary" to={`/planes/${plan.slug}`}>
+                Ver detalle
+              </Link>
+              <Link className="landing-btn-secondary" to="/register">
                 {plan.cta}
               </Link>
             </div>
@@ -355,7 +328,7 @@ export default function Landing() {
         <div className="landing-footer-content">
           <div className="landing-footer-brand">
             <div className="landing-logo">
-              <div className="landing-logo-mark"><img src="/icons/new_log.png" alt="Klinip" className="landing-logo-mark-img" /></div>
+              <div className="landing-logo-mark"><img src="/icons/img_sin_fondo.png" alt="Klinip" className="landing-logo-mark-img" /></div>
               <span>Klinip</span>
             </div>
             <p>Tu ruta de salud, simplificada</p>

@@ -1,26 +1,41 @@
 <!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 0;">
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orden médica procesada</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
       <tr>
         <td align="center">
-          <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
             <tr>
-              <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
-                <img src="{{ logo_url }}" alt="{{ app_name }} logo" width="36" height="36" style="display:block;margin-bottom:10px;border-radius:8px;">
-                <h2 style="margin:0;font-size:22px;">Orden médica procesada</h2>
+              <td style="padding:28px 32px;background:linear-gradient(180deg,#0f172a 0%,#1d4ed8 100%);color:#ffffff;">
+                <img src="{{ logo_url }}" alt="{{ app_name }} logo" width="42" height="42" style="display:block;border-radius:10px;margin-bottom:14px;" />
+                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Gestión documental</div>
+                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Orden médica procesada</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:18px 22px;">
-                <p style="margin:0 0 12px;">Hola {{ user_name }},</p>
-                <p style="margin:0 0 12px;">Tu {{ document_type }} fue cargada correctamente.</p>
-                <p style="margin:0;">Fecha de carga: <strong>{{ uploaded_at }}</strong>.</p>
+              <td style="padding:32px;">
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
+                  Tu {{ document_type }} fue cargada correctamente y ya se encuentra disponible en tu cuenta.
+                </p>
+                <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
+                  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Fecha de carga:</strong> {{ uploaded_at }}</p>
+                </div>
               </td>
             </tr>
             <tr>
-              <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
-                {{ app_name }} · Tu salud organizada en un solo lugar · {{ year }}
+              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
+                  Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                  {{ app_name }} | Documentos clinicos | {{ year }}
+                </p>
               </td>
             </tr>
           </table>

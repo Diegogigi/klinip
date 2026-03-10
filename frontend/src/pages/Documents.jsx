@@ -401,13 +401,13 @@ export default function Documents() {
         </div>
       )}
 
-      <div className="card">
+      <div className="card documents-list-card documents-filters-card">
         <h3 className="card-title">Documentos guardados</h3>
-        <div className="form-row" style={{ marginBottom: "0.75rem" }}>
+        <div className="form-row documents-filters-row" style={{ marginBottom: "0.75rem" }}>
           <div className="input-group">
             <label className="input-label">Búsqueda</label>
             <input
-              className="input-field"
+              className="input-field documents-filter-field"
               placeholder="Centro, notas o nombre de archivo"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -416,7 +416,7 @@ export default function Documents() {
           <div className="input-group">
             <label className="input-label">Tipo</label>
             <select
-              className="select-field"
+              className="select-field documents-filter-field"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
             >

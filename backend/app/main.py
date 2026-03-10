@@ -382,23 +382,159 @@ def ensure_medication_schema():
 
 ensure_medication_schema()
 
-PLAN_RULES = {
+PLAN_DEFINITIONS = {
     "basico": {
-        "max_profiles": 1,
-        "collaboration_enabled": False,
-        "family_panel_enabled": False,
+        "limits": {
+            "max_profiles": 1,
+            "collaboration_enabled": False,
+            "family_panel_enabled": False,
+        },
+        "public": {
+            "slug": "basico",
+            "name": "Básico",
+            "price_monthly": "Gratis",
+            "price_yearly": "Gratis",
+            "yearly_equivalent": "Sin costo",
+            "note": "Salud personal",
+            "summary": "Para organizar tu propia salud con lo esencial desde el primer día.",
+            "recommended": False,
+            "cta": "Empezar gratis",
+            "features": [
+                "1 perfil de salud",
+                "Medicamentos, citas y calendario",
+                "Documentos médicos con OCR básico",
+                "Recordatorios esenciales",
+                "Acceso móvil y escritorio",
+            ],
+            "detail_sections": [
+                {
+                    "title": "Ideal para",
+                    "items": [
+                        "Personas que quieren centralizar su información médica",
+                        "Usuarios que necesitan recordatorios y documentos en un solo lugar",
+                    ],
+                },
+                {
+                    "title": "Incluye",
+                    "items": [
+                        "Gestión de citas, medicamentos y documentos",
+                        "Historial básico de salud",
+                        "Panel individual simple y rápido",
+                    ],
+                },
+            ],
+            "metrics": [
+                {"label": "Perfiles", "value": "1"},
+                {"label": "Colaboración", "value": "No"},
+                {"label": "Panel familiar", "value": "No"},
+            ],
+        },
     },
     "plus": {
-        "max_profiles": 3,
-        "collaboration_enabled": False,
-        "family_panel_enabled": False,
+        "limits": {
+            "max_profiles": 3,
+            "collaboration_enabled": False,
+            "family_panel_enabled": False,
+        },
+        "public": {
+            "slug": "plus",
+            "name": "Plus",
+            "price_monthly": "$3.990 / mes",
+            "price_yearly": "$39.990 / año",
+            "yearly_equivalent": "$3.332 / mes",
+            "note": "Individual ampliado",
+            "summary": "Más capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
+            "recommended": True,
+            "cta": "Probar Plus",
+            "features": [
+                "Hasta 3 perfiles de salud",
+                "OCR mejorado",
+                "Historial completo y reportes",
+                "Recordatorios avanzados",
+                "Gestión personal y de dependientes",
+            ],
+            "detail_sections": [
+                {
+                    "title": "Ideal para",
+                    "items": [
+                        "Usuarios que manejan su salud y la de hijos o adultos mayores",
+                        "Personas que necesitan más trazabilidad y reportes",
+                    ],
+                },
+                {
+                    "title": "Incluye",
+                    "items": [
+                        "Más perfiles para centralizar seguimiento",
+                        "Mayor profundidad en historial y documentos",
+                        "Automatización de recordatorios con más contexto",
+                    ],
+                },
+            ],
+            "metrics": [
+                {"label": "Perfiles", "value": "3"},
+                {"label": "Colaboración", "value": "Parcial"},
+                {"label": "Panel familiar", "value": "No"},
+            ],
+        },
     },
     "familiar": {
-        "max_profiles": 5,
-        "collaboration_enabled": True,
-        "family_panel_enabled": True,
+        "limits": {
+            "max_profiles": 5,
+            "collaboration_enabled": True,
+            "family_panel_enabled": True,
+        },
+        "public": {
+            "slug": "familiar",
+            "name": "Familiar",
+            "price_monthly": "$6.990 / mes",
+            "price_yearly": "$69.990 / año",
+            "yearly_equivalent": "$5.832 / mes",
+            "note": "Ecosistema colaborativo",
+            "summary": "Pensado para familias y cuidadores que coordinan la salud de varias personas.",
+            "recommended": False,
+            "cta": "Elegir Familiar",
+            "features": [
+                "Hasta 5 perfiles de salud",
+                "Panel familiar y calendarios compartidos",
+                "Recordatorios por perfil",
+                "Roles por cuidador y colaboración multiusuario",
+                "Historial y actividad por persona",
+            ],
+            "detail_sections": [
+                {
+                    "title": "Ideal para",
+                    "items": [
+                        "Familias que coordinan citas, medicamentos y documentos",
+                        "Cuidadores que necesitan visibilidad compartida",
+                    ],
+                },
+                {
+                    "title": "Incluye",
+                    "items": [
+                        "Panel familiar con contexto por integrante",
+                        "Colaboración entre cuidadores y responsables",
+                        "Seguimiento diferenciado por perfil y actividad",
+                    ],
+                },
+            ],
+            "metrics": [
+                {"label": "Perfiles", "value": "5"},
+                {"label": "Colaboración", "value": "Sí"},
+                {"label": "Panel familiar", "value": "Sí"},
+            ],
+        },
     },
 }
+
+PLAN_RULES = {
+    slug: dict(definition.get("limits", {}))
+    for slug, definition in PLAN_DEFINITIONS.items()
+}
+
+PUBLIC_PLAN_CATALOG = [
+    dict(definition.get("public", {}))
+    for definition in PLAN_DEFINITIONS.values()
+]
 
 ROLE_LEVELS = {
     "viewer": 1,
@@ -4459,6 +4595,11 @@ async def read_my_plan(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     return _build_plan_info(current_user, db)
+
+
+@app.get("/public/plans", response_model=List[schemas.PublicPlanOut])
+async def read_public_plans():
+    return PUBLIC_PLAN_CATALOG
 
 
 @app.get("/health-profiles", response_model=List[schemas.HealthProfileOut])

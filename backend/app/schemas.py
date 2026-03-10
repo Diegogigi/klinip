@@ -62,6 +62,31 @@ class PlanInfoOut(BaseModel):
     current_profiles: int
 
 
+class PlanMetricOut(BaseModel):
+    label: str
+    value: str
+
+
+class PlanDetailSectionOut(BaseModel):
+    title: str
+    items: list[str]
+
+
+class PublicPlanOut(BaseModel):
+    slug: str
+    name: str
+    price_monthly: str
+    price_yearly: str
+    yearly_equivalent: str
+    note: str
+    summary: str
+    recommended: bool
+    cta: str
+    features: list[str]
+    detail_sections: list[PlanDetailSectionOut]
+    metrics: list[PlanMetricOut]
+
+
 class HealthProfileCreate(BaseModel):
     full_name: str
     birth_date: Optional[datetime] = None

@@ -76,6 +76,36 @@ export async function getMyPlan() {
   return res.data;
 }
 
+export async function getPublicPlans() {
+  const res = await api.get("/public/plans");
+  return Array.isArray(res.data)
+    ? res.data.map((plan) => ({
+        slug: plan.slug,
+        name: plan.name,
+        priceMonthly: plan.price_monthly,
+        priceYearly: plan.price_yearly,
+        yearlyEquivalent: plan.yearly_equivalent,
+        note: plan.note,
+        summary: plan.summary,
+        recommended: !!plan.recommended,
+        cta: plan.cta,
+        features: Array.isArray(plan.features) ? plan.features : [],
+        detailSections: Array.isArray(plan.detail_sections)
+          ? plan.detail_sections.map((section) => ({
+              title: section.title,
+              items: Array.isArray(section.items) ? section.items : [],
+            }))
+          : [],
+        metrics: Array.isArray(plan.metrics)
+          ? plan.metrics.map((metric) => ({
+              label: metric.label,
+              value: metric.value,
+            }))
+          : [],
+      }))
+    : [];
+}
+
 export async function getHealthProfiles() {
   const res = await api.get("/health-profiles");
   return res.data;

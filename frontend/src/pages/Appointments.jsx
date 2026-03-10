@@ -537,9 +537,9 @@ export default function Appointments() {
         </div>
       )}
 
-      <div className="card">
+      <div className="card appointments-filters-card">
         <h3 className="card-title">Listado de actividades</h3>
-        <div className="form-row" style={{ marginBottom: "0.75rem" }}>
+        <div className="form-row appointments-filters-row" style={{ marginBottom: "0.75rem" }}>
           <div className="input-group">
             <label className="input-label">Búsqueda</label>
             <input
