@@ -4450,6 +4450,287 @@ def _safe_iso(dt: datetime | None) -> str:
         return str(dt)
 
 
+def _ai_dt_in_tz(value: datetime | None, tz_name: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        tz = ZoneInfo((tz_name or "").strip() or DEFAULT_TZ_NAME)
+    except Exception:
+        tz = ZoneInfo(DEFAULT_TZ_NAME)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=tz)
+    return value.astimezone(tz)
+
+
+def _safe_iso_local(dt: datetime | None, tz_name: str | None) -> str:
+    localized = _ai_dt_in_tz(dt, tz_name)
+    if not localized:
+        return ""
+    try:
+        return localized.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(localized)
+
+
+def _safe_iso_client(dt: datetime | None, tz_name: str | None = None) -> str:
+    localized = _ai_dt_in_tz(dt, tz_name) if tz_name else dt
+    if not localized:
+        return ""
+    try:
+        return localized.strftime("%Y-%m-%dT%H:%M:%S")
+    except Exception:
+        return str(localized)
+
+
+def _appointment_status_key(value) -> str:
+    return str(getattr(value, "value", value) or "").strip().lower()
+
+
+def _appointment_type_key(value) -> str:
+    return str(getattr(value, "value", value) or "").strip().lower()
+
+
+def _appointment_to_ai_dict(item: models.Appointment | None, tz_name: str) -> dict | None:
+    if not item:
+        return None
+    return {
+        "type": _appointment_type_key(item.type),
+        "specialty": item.specialty or "",
+        "center": item.center or "",
+        "status": _appointment_status_key(item.status),
+        "date_time": _safe_iso_local(item.date_time, tz_name),
+        "created_at": _safe_iso_local(item.created_at, tz_name),
+        "notes": _clip_text(item.notes or "", 180),
+    }
+
+
+def _appointment_insights(appointments: list[models.Appointment], tz_name: str) -> dict:
+    if not appointments:
+        return {
+            "last_created": None,
+            "last_scheduled_created": None,
+            "latest_by_date": None,
+            "next_upcoming": None,
+            "counts_by_status": {"pendiente": 0, "agendada": 0, "realizada": 0},
+        }
+
+    try:
+        safe_tz = ZoneInfo((tz_name or "").strip() or DEFAULT_TZ_NAME)
+    except Exception:
+        safe_tz = ZoneInfo(DEFAULT_TZ_NAME)
+    now_dt = datetime.now(safe_tz)
+    now_ts = now_dt.timestamp()
+
+    def _ts(value: datetime | None) -> float:
+        localized = _ai_dt_in_tz(value, tz_name)
+        return localized.timestamp() if localized else float("-inf")
+
+    counts_by_status = {"pendiente": 0, "agendada": 0, "realizada": 0}
+    for appt in appointments:
+        status = _appointment_status_key(appt.status)
+        if status in counts_by_status:
+            counts_by_status[status] += 1
+
+    with_created = [item for item in appointments if item.created_at]
+    with_date = [item for item in appointments if item.date_time]
+    scheduled = [item for item in appointments if _appointment_status_key(item.status) == "agendada"]
+    non_done_with_date = [
+        item
+        for item in appointments
+        if item.date_time and _appointment_status_key(item.status) != "realizada"
+    ]
+    future_non_done = [item for item in non_done_with_date if _ts(item.date_time) >= now_ts]
+
+    last_created = max(with_created, key=lambda item: _ts(item.created_at), default=None)
+    last_scheduled_created = max(
+        [item for item in scheduled if item.created_at],
+        key=lambda item: _ts(item.created_at),
+        default=None,
+    )
+    latest_by_date = max(with_date, key=lambda item: _ts(item.date_time), default=None)
+    next_upcoming = min(future_non_done, key=lambda item: _ts(item.date_time), default=None)
+    if not next_upcoming:
+        next_upcoming = min(non_done_with_date, key=lambda item: abs(_ts(item.date_time) - now_ts), default=None)
+
+    return {
+        "last_created": _appointment_to_ai_dict(last_created, tz_name),
+        "last_scheduled_created": _appointment_to_ai_dict(last_scheduled_created, tz_name),
+        "latest_by_date": _appointment_to_ai_dict(latest_by_date, tz_name),
+        "next_upcoming": _appointment_to_ai_dict(next_upcoming, tz_name),
+        "counts_by_status": counts_by_status,
+    }
+
+
+def _document_type_key(value) -> str:
+    return str(getattr(value, "value", value) or "").strip().lower()
+
+
+def _document_file_format(doc: models.Document | None) -> str:
+    if not doc:
+        return "desconocido"
+    name = (getattr(doc, "filename", None) or "").strip().lower()
+    if not name:
+        name = (getattr(doc, "file_path", None) or "").strip().lower()
+    ext = Path(name).suffix.lower()
+    if ext == ".pdf":
+        return "pdf"
+    if ext in {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff", ".heic"}:
+        return "imagen"
+    return "otro"
+
+
+def _infer_document_type(doc: models.Document | None) -> str:
+    declared = _document_type_key(getattr(doc, "doc_type", None))
+    if not doc:
+        return declared or "otro"
+    raw = " ".join(
+        [
+            getattr(doc, "filename", "") or "",
+            getattr(doc, "notes", "") or "",
+            getattr(doc, "ocr_text", "") or "",
+        ]
+    )
+    norm = _normalize_text(raw)
+    if not norm:
+        return declared or "otro"
+
+    keyword_map = {
+        "receta": ["receta", "prescripcion", "farmaco", "medicamento", "dosis", "administrar"],
+        "orden": ["orden", "solicitud", "examen", "citacion", "toma de muestra", "interconsulta"],
+        "resultado": ["resultado", "valores de referencia", "laboratorio", "parametro", "hemoglobina", "glucosa"],
+        "informe": ["informe", "epicrisis", "conclusion", "impresion diagnostica", "alta medica", "evolucion"],
+    }
+    best_type = declared or "otro"
+    best_score = 0
+    for doc_type, keywords in keyword_map.items():
+        score = sum(1 for kw in keywords if kw in norm)
+        if score > best_score:
+            best_score = score
+            best_type = doc_type
+    if best_score == 0:
+        return declared or "otro"
+    return best_type
+
+
+def _document_to_ai_dict(item: models.Document | None, tz_name: str) -> dict | None:
+    if not item:
+        return None
+    return {
+        "doc_type": _document_type_key(item.doc_type),
+        "detected_doc_type": _infer_document_type(item),
+        "file_format": _document_file_format(item),
+        "filename": item.filename or "",
+        "date": _safe_iso_local(item.date, tz_name),
+        "created_at": _safe_iso_local(item.created_at, tz_name),
+        "center": item.center or "",
+        "ocr_status": item.ocr_status or "",
+        "notes": _clip_text(item.notes or "", 180),
+        "ocr_excerpt": _clip_text(item.ocr_text or "", 240),
+    }
+
+
+def _document_insights(documents: list[models.Document], tz_name: str) -> dict:
+    type_keys = ["receta", "orden", "resultado", "informe", "otro"]
+    format_keys = ["pdf", "imagen", "otro", "desconocido"]
+    if not documents:
+        return {
+            "last_created": None,
+            "last_with_ocr": None,
+            "counts_by_type": {key: 0 for key in type_keys},
+            "counts_by_format": {key: 0 for key in format_keys},
+        }
+
+    def _ts(value: datetime | None) -> float:
+        localized = _ai_dt_in_tz(value, tz_name)
+        return localized.timestamp() if localized else float("-inf")
+
+    counts_by_type = {key: 0 for key in type_keys}
+    counts_by_format = {key: 0 for key in format_keys}
+    for doc in documents:
+        doc_type = _infer_document_type(doc)
+        if doc_type in counts_by_type:
+            counts_by_type[doc_type] += 1
+        else:
+            counts_by_type["otro"] += 1
+        fmt = _document_file_format(doc)
+        counts_by_format[fmt if fmt in counts_by_format else "otro"] += 1
+
+    with_created = [item for item in documents if item.created_at]
+    with_ocr = [item for item in documents if (item.ocr_text or "").strip()]
+    last_created = max(with_created, key=lambda item: _ts(item.created_at), default=None)
+    last_with_ocr = max(with_ocr, key=lambda item: _ts(item.created_at), default=None)
+    return {
+        "last_created": _document_to_ai_dict(last_created, tz_name),
+        "last_with_ocr": _document_to_ai_dict(last_with_ocr, tz_name),
+        "counts_by_type": counts_by_type,
+        "counts_by_format": counts_by_format,
+    }
+
+
+def _medication_to_ai_dict(item: models.Medication | None, tz_name: str) -> dict | None:
+    if not item:
+        return None
+    return {
+        "name": item.name or "Medicamento",
+        "dose": item.dose or "",
+        "frequency": item.frequency or "",
+        "schedule_time": item.schedule_time or "",
+        "completed": bool(item.completed),
+        "status": "realizada" if bool(item.completed) else "activa",
+        "end_date": _safe_iso_local(item.end_date, tz_name),
+        "created_at": _safe_iso_local(item.created_at, tz_name),
+        "notes": _clip_text(item.notes or "", 160),
+        "adherence_rate": getattr(item, "adherence_rate", None),
+    }
+
+
+def _medication_insights(medications: list[models.Medication], tz_name: str) -> dict:
+    if not medications:
+        return {
+            "last_created": None,
+            "last_active_created": None,
+            "counts_by_status": {"activa": 0, "realizada": 0},
+            "counts_by_schedule": {"con_horario": 0, "sin_horario": 0},
+            "counts_by_frequency": {"con_frecuencia": 0, "sin_frecuencia": 0},
+        }
+
+    def _ts(value: datetime | None) -> float:
+        localized = _ai_dt_in_tz(value, tz_name)
+        return localized.timestamp() if localized else float("-inf")
+
+    counts_by_status = {"activa": 0, "realizada": 0}
+    counts_by_schedule = {"con_horario": 0, "sin_horario": 0}
+    counts_by_frequency = {"con_frecuencia": 0, "sin_frecuencia": 0}
+    for med in medications:
+        is_completed = bool(med.completed)
+        counts_by_status["realizada" if is_completed else "activa"] += 1
+        has_schedule = bool((med.schedule_time or "").strip())
+        counts_by_schedule["con_horario" if has_schedule else "sin_horario"] += 1
+        has_frequency = bool((med.frequency or "").strip())
+        counts_by_frequency["con_frecuencia" if has_frequency else "sin_frecuencia"] += 1
+
+    with_created = [item for item in medications if item.created_at]
+    active_items = [item for item in medications if not bool(item.completed) and item.created_at]
+    last_created = max(with_created, key=lambda item: _ts(item.created_at), default=None)
+    last_active_created = max(active_items, key=lambda item: _ts(item.created_at), default=None)
+    return {
+        "last_created": _medication_to_ai_dict(last_created, tz_name),
+        "last_active_created": _medication_to_ai_dict(last_active_created, tz_name),
+        "counts_by_status": counts_by_status,
+        "counts_by_schedule": counts_by_schedule,
+        "counts_by_frequency": counts_by_frequency,
+    }
+
+
+def _sanitize_ai_reply(text: str) -> str:
+    if not text:
+        return ""
+    cleaned = (text or "").replace("**", "").replace("__", "")
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
 def _clip_text(value: str | None, limit: int = 420) -> str:
     text_value = (value or "").strip()
     if len(text_value) <= limit:
@@ -4709,14 +4990,14 @@ def _refresh_profile_ai_learning_memory(db: Session, user_id: int):
 def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
     profile, link, target_user_id = _get_active_profile_context(db, current_user)
     plan_info = _build_plan_info(current_user, db)
+    timezone_name = _resolve_user_tz(current_user).key
 
     appointments = (
         db.query(models.Appointment)
         .filter(models.Appointment.user_id == target_user_id)
         .order_by(
-            models.Appointment.date_time.is_(None),
-            models.Appointment.date_time.asc(),
             models.Appointment.created_at.desc(),
+            models.Appointment.date_time.desc(),
         )
         .all()
     )
@@ -4752,14 +5033,30 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
             .all()
         )
 
-    upcoming = [
+    upcoming = sorted(
+        [
+            appt
+            for appt in appointments
+            if appt.date_time and appt.status != models.AppointmentStatus.realizada
+        ],
+        key=lambda appt: _ai_dt_in_tz(appt.date_time, timezone_name) or datetime.max.replace(
+            tzinfo=ZoneInfo(DEFAULT_TZ_NAME)
+        ),
+    )
+    future_upcoming = [
         appt
-        for appt in appointments
-        if appt.date_time and appt.status != models.AppointmentStatus.realizada
+        for appt in upcoming
+        if (_ai_dt_in_tz(appt.date_time, timezone_name) or datetime.min.replace(tzinfo=ZoneInfo(DEFAULT_TZ_NAME)))
+        >= datetime.now(ZoneInfo((timezone_name or "").strip() or DEFAULT_TZ_NAME))
     ]
+    if future_upcoming:
+        upcoming = future_upcoming
     active_medications = [med for med in medications if not bool(med.completed)]
     latest_document = documents[0] if documents else None
     latest_document_text = _clip_text(getattr(latest_document, "ocr_text", "") or "", 2400)
+    appointment_insights = _appointment_insights(appointments, timezone_name)
+    document_insights = _document_insights(documents, timezone_name)
+    medication_insights = _medication_insights(medications, timezone_name)
     ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
     user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
     runtime_memory = _build_ai_profile_memory(
@@ -4807,10 +5104,14 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         },
         "plan": plan_info,
         "sources": sources,
+        "timezone_name": timezone_name,
         "appointments": appointments,
         "documents": documents,
         "medications": medications,
         "upcoming": upcoming,
+        "appointment_insights": appointment_insights,
+        "document_insights": document_insights,
+        "medication_insights": medication_insights,
         "active_medications": active_medications,
         "latest_document": latest_document,
         "latest_document_text": latest_document_text,
@@ -4821,21 +5122,27 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
 
 
 def _serialize_ai_context(context: dict) -> dict:
+    timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
     return {
         "profile": context["profile"],
         "learned_profile_context": context.get("learned_profile_context") or "",
+        "timezone": timezone_name,
         "plan": {
             "plan_type": context["plan"].get("plan_type"),
             "max_profiles": context["plan"].get("max_profiles"),
             "collaboration_enabled": context["plan"].get("collaboration_enabled"),
             "family_panel_enabled": context["plan"].get("family_panel_enabled"),
         },
+        "appointment_insights": context.get("appointment_insights") or {},
+        "document_insights": context.get("document_insights") or {},
+        "medication_insights": context.get("medication_insights") or {},
         "appointments": [
             {
                 "type": str(getattr(item.type, "value", item.type)),
                 "specialty": item.specialty or "",
                 "center": item.center or "",
-                "date_time": _safe_iso(item.date_time),
+                "date_time": _safe_iso_local(item.date_time, timezone_name),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
                 "status": str(getattr(item.status, "value", item.status)),
                 "notes": _clip_text(item.notes or "", 180),
             }
@@ -4844,12 +5151,15 @@ def _serialize_ai_context(context: dict) -> dict:
         "documents": [
             {
                 "doc_type": str(getattr(item.doc_type, "value", item.doc_type)),
-                "date": _safe_iso(item.date),
+                "detected_doc_type": _infer_document_type(item),
+                "date": _safe_iso_local(item.date, timezone_name),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
                 "center": item.center or "",
                 "notes": _clip_text(item.notes or "", 180),
                 "ocr_status": item.ocr_status or "",
                 "ocr_excerpt": _clip_text(item.ocr_text or "", 900 if index == 0 else 260),
                 "filename": item.filename or "",
+                "file_format": _document_file_format(item),
             }
             for index, item in enumerate(context["documents"][:6])
         ],
@@ -4861,7 +5171,8 @@ def _serialize_ai_context(context: dict) -> dict:
                 "duration": item.duration or "",
                 "schedule_time": item.schedule_time or "",
                 "completed": bool(item.completed),
-                "end_date": _safe_iso(item.end_date),
+                "end_date": _safe_iso_local(item.end_date, timezone_name),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
                 "notes": _clip_text(item.notes or "", 160),
                 "adherence_rate": getattr(item, "adherence_rate", None),
                 "expected_doses": getattr(item, "expected_doses", 0),
@@ -4903,6 +5214,12 @@ def _ai_system_prompt(context: dict) -> str:
         "9. Prioriza utilidad: entrega recomendaciones accionables sin alarmismo.\n"
         "10. Si aplica, pide una aclaracion puntual para mejorar la recomendacion.\n"
         "11. Si hay memoria clinica del perfil, usala para personalizar la respuesta.\n"
+        "12. No uses formato Markdown ni asteriscos dobles; responde en texto plano.\n"
+        "13. Si preguntan por 'ultima cita agendada', usa appointment_insights.last_scheduled_created (ultima agendada por creacion).\n"
+        "14. Distingue correctamente estados de citas: pendiente, agendada, realizada.\n"
+        "15. Para documentos, reconoce tipo clinico (receta, orden, resultado, informe, otro) y tipo de archivo (pdf o imagen).\n"
+        "16. Si el usuario pide resumen de documentos o medicamentos, responde ordenado por secciones cortas y en texto claro.\n"
+        "17. Para medicamentos, distingue estado activa vs realizada usando medication_insights.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
@@ -4990,6 +5307,61 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     documents = context.get("documents") or []
     medications = context.get("medications") or []
     learned_context = _clip_text(context.get("learned_profile_context") or "", 220)
+    appointment_insights = context.get("appointment_insights") or {}
+    document_insights = context.get("document_insights") or {}
+    medication_insights = context.get("medication_insights") or {}
+
+    if "ultima" in normalized and "cita" in normalized:
+        pick = appointment_insights.get("last_scheduled_created") if "agendada" in normalized else appointment_insights.get("last_created")
+        if not pick:
+            return "No encuentro una ultima cita registrada que coincida con ese criterio."
+        status = pick.get("status") or "sin estado"
+        detail = (
+            f"La ultima cita {'agendada ' if 'agendada' in normalized else ''}registrada fue "
+            f"{pick.get('date_time') or 'sin fecha'}"
+        )
+        if pick.get("specialty"):
+            detail += f", especialidad {pick.get('specialty')}"
+        if pick.get("center"):
+            detail += f", en {pick.get('center')}"
+        detail += f". Estado: {status}."
+        return detail
+
+    if any(token in normalized for token in ["documentos", "tipos de documento", "tipo de documento", "archivo pdf", "archivo imagen"]):
+        counts_type = (document_insights.get("counts_by_type") or {})
+        counts_format = (document_insights.get("counts_by_format") or {})
+        last_doc = document_insights.get("last_created") or {}
+        parts = [
+            f"Documentos registrados: {len(documents)}.",
+            (
+                "Tipos: receta "
+                f"{counts_type.get('receta', 0)}, orden {counts_type.get('orden', 0)}, "
+                f"resultado {counts_type.get('resultado', 0)}, informe {counts_type.get('informe', 0)}, "
+                f"otro {counts_type.get('otro', 0)}."
+            ),
+            (
+                "Formato de archivo: pdf "
+                f"{counts_format.get('pdf', 0)}, imagen {counts_format.get('imagen', 0)}, "
+                f"otro {counts_format.get('otro', 0)}."
+            ),
+        ]
+        if last_doc:
+            detail = (
+                f"Ultimo documento: {last_doc.get('detected_doc_type') or last_doc.get('doc_type') or 'otro'} "
+                f"({last_doc.get('file_format') or 'desconocido'})"
+            )
+            if last_doc.get("date"):
+                detail += f", fecha {last_doc.get('date')}"
+            elif last_doc.get("created_at"):
+                detail += f", cargado {last_doc.get('created_at')}"
+            if last_doc.get("center"):
+                detail += f", centro {last_doc.get('center')}"
+            parts.append(detail + ".")
+        ocr_doc = document_insights.get("last_with_ocr") or {}
+        if ocr_doc.get("ocr_excerpt"):
+            parts.append("Resumen OCR orientativo: " + _clip_text(ocr_doc.get("ocr_excerpt"), 260))
+            parts.append("La lectura OCR puede contener errores y conviene validarla con el archivo original.")
+        return " ".join(parts)
 
     if any(token in normalized for token in ["ultimo documento", "explicame mi ultimo documento", "documento", "ocr"]):
         if not latest_document:
@@ -4998,7 +5370,9 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
                 "Si subes un documento, podre ayudarte a resumirlo."
             )
         doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
-        parts = [f"El ultimo documento registrado es de tipo {doc_type}."]
+        detected_type = _infer_document_type(latest_document)
+        file_format = _document_file_format(latest_document)
+        parts = [f"El ultimo documento registrado es de tipo {doc_type} (detectado: {detected_type}) en formato {file_format}."]
         if latest_document.date:
             parts.append(f"Fecha registrada: {_safe_iso(latest_document.date)}.")
         if latest_document.center:
@@ -5010,6 +5384,28 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
         else:
             parts.append("Todavia no hay texto OCR disponible para ese documento.")
+        return " ".join(parts)
+
+    if any(token in normalized for token in ["resumen de medicamentos", "mis medicamentos", "estado de medicamentos"]):
+        status_counts = medication_insights.get("counts_by_status") or {}
+        schedule_counts = medication_insights.get("counts_by_schedule") or {}
+        frequency_counts = medication_insights.get("counts_by_frequency") or {}
+        last_active = medication_insights.get("last_active_created") or {}
+        parts = [
+            f"Medicamentos registrados: {len(medications)}.",
+            f"Estado: activos {status_counts.get('activa', 0)}, realizados {status_counts.get('realizada', 0)}.",
+            f"Horario: con horario {schedule_counts.get('con_horario', 0)}, sin horario {schedule_counts.get('sin_horario', 0)}.",
+            f"Frecuencia: con frecuencia {frequency_counts.get('con_frecuencia', 0)}, sin frecuencia {frequency_counts.get('sin_frecuencia', 0)}.",
+        ]
+        if last_active:
+            detail = f"Ultimo medicamento activo agregado: {last_active.get('name') or 'Medicamento'}"
+            if last_active.get("dose"):
+                detail += f" ({last_active.get('dose')})"
+            if last_active.get("frequency"):
+                detail += f", frecuencia {last_active.get('frequency')}"
+            if last_active.get("schedule_time"):
+                detail += f", horario {last_active.get('schedule_time')}"
+            parts.append(detail + ".")
         return " ".join(parts)
 
     if any(token in normalized for token in ["medicamento", "medicamentos", "que medicamentos estoy tomando", "que estoy tomando"]):
@@ -5078,16 +5474,31 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     latest_document = context.get("latest_document")
     active_medications = context.get("active_medications") or []
     upcoming = context.get("upcoming") or []
+    document_insights = context.get("document_insights") or {}
+    medication_insights = context.get("medication_insights") or {}
 
     if latest_document and any(
         token in normalized for token in ["documento", "ocr", "ultimo documento", "explicame mi ultimo documento"]
     ):
-        doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
+        doc_type = _infer_document_type(latest_document)
         refs.append(
             {
                 "kind": "document",
                 "label": f"Documento {latest_document.filename or f'#{latest_document.id}'}",
-                "detail": f"{doc_type} · {latest_document.center or 'Sin centro'}",
+                "detail": f"{doc_type} | {_document_file_format(latest_document)} | {latest_document.center or 'Sin centro'}",
+            }
+        )
+
+    if document_insights and any(token in normalized for token in ["documentos", "tipos", "pdf", "imagen"]):
+        counts = document_insights.get("counts_by_type") or {}
+        refs.append(
+            {
+                "kind": "document-summary",
+                "label": "Resumen de tipos de documento",
+                "detail": (
+                    f"Receta {counts.get('receta', 0)} | Orden {counts.get('orden', 0)} | "
+                    f"Resultado {counts.get('resultado', 0)} | Informe {counts.get('informe', 0)}"
+                ),
             }
         )
 
@@ -5102,6 +5513,16 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                     "detail": ", ".join([value for value in [med.dose or "", med.frequency or ""] if value]),
                 }
             )
+
+    if medication_insights and any(token in normalized for token in ["medicamentos", "estado", "adherencia"]):
+        status_counts = medication_insights.get("counts_by_status") or {}
+        refs.append(
+            {
+                "kind": "medication-summary",
+                "label": "Resumen de estado de medicamentos",
+                "detail": f"Activos {status_counts.get('activa', 0)} | Realizados {status_counts.get('realizada', 0)}",
+            }
+        )
 
     if upcoming and any(token in normalized for token in ["cita", "proxima", "actividad", "agenda"]):
         item = next((appt for appt in upcoming if appt.date_time), None)
@@ -5157,8 +5578,8 @@ def _build_ai_reply(message: str, history: list[dict], context: dict) -> tuple[s
     provider_reply = _call_openai_ai(system_prompt, history, message)
     if provider_reply:
         text_reply, model = provider_reply
-        return text_reply, model, "openai", references
-    return _fallback_ai_reply(message, context), "context-fallback", "fallback", references
+        return _sanitize_ai_reply(text_reply), model, "openai", references
+    return _sanitize_ai_reply(_fallback_ai_reply(message, context)), "context-fallback", "fallback", references
 
 
 def _persist_ai_message(
@@ -6432,6 +6853,7 @@ async def ai_chat(
         raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
 
     context = _ai_context_bundle(db, current_user)
+    timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
     history = [
         {"role": item.role, "content": item.content}
         for item in (payload.history or [])
@@ -6439,7 +6861,7 @@ async def ai_chat(
     ]
     reply, model_name, mode, references = _build_ai_reply(message, history, context)
     profile_id = int(context["profile"]["id"])
-    _persist_ai_message(
+    user_item = _persist_ai_message(
         db,
         profile_id=profile_id,
         user_id=current_user.id,
@@ -6447,7 +6869,7 @@ async def ai_chat(
         content=message,
         metadata_json={"mode": "input"},
     )
-    _persist_ai_message(
+    assistant_item = _persist_ai_message(
         db,
         profile_id=profile_id,
         user_id=current_user.id,
@@ -6464,6 +6886,8 @@ async def ai_chat(
         "active_profile_name": context["profile"]["name"],
         "sources": context["sources"],
         "references": references,
+        "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
+        "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
     }
 
 

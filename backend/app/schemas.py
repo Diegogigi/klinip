@@ -521,6 +521,8 @@ class AiChatResponse(BaseModel):
     active_profile_name: str = ""
     sources: list[AiContextSourceOut] = []
     references: list[AiReferenceOut] = []
+    user_message_created_at: str = ""
+    assistant_message_created_at: str = ""
 
 
 class AiConversationMessageOut(BaseModel):

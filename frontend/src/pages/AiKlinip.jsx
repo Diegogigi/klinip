@@ -27,6 +27,10 @@ const INITIAL_MESSAGE = {
   createdAt: null,
 };
 
+function cleanAssistantText(value) {
+  return String(value || "").replace(/\*\*/g, "").replace(/__/g, "").trim();
+}
+
 function formatMessageTime(value) {
   const parsed = parseDate(value);
   if (!parsed) return "Ahora";
@@ -284,8 +288,9 @@ export default function AiKlinip() {
     const attachmentName = attachedFile?.name || "";
     const finalPrompt = attachmentName ? `${prompt}\n\nReferencia local preparada: ${attachmentName}.` : prompt;
 
+    const userMessageId = `user-${Date.now()}`;
     const nextUserMessage = {
-      id: `user-${Date.now()}`,
+      id: userMessageId,
       role: "user",
       content: prompt,
       references: [],
@@ -313,13 +318,17 @@ export default function AiKlinip() {
         sources: Array.isArray(response?.sources) ? response.sources : prev.sources,
       }));
       setMessages((prev) => [
-        ...prev,
+        ...prev.map((item) => (
+          item.id === userMessageId && response?.user_message_created_at
+            ? { ...item, createdAt: response.user_message_created_at }
+            : item
+        )),
         {
           id: `assistant-${Date.now()}`,
           role: "assistant",
-          content: response?.reply || "No pude generar una respuesta en este momento. Intenta reformular tu consulta.",
+          content: cleanAssistantText(response?.reply || "No pude generar una respuesta en este momento. Intenta reformular tu consulta."),
           references: Array.isArray(response?.references) ? response.references : [],
-          createdAt: new Date().toISOString(),
+          createdAt: response?.assistant_message_created_at || new Date().toISOString(),
         },
       ]);
       const [profile, appointments, documents, medications] = await Promise.all([
@@ -458,7 +467,7 @@ export default function AiKlinip() {
                       <div className={`ai-message-avatar ${message.role === "user" ? "is-user" : "is-ai"}`}>{message.role === "user" ? "TU" : "KI"}</div>
                       <div className="ai-message-column">
                         <div className={`ai-message-bubble ${message.role === "user" ? "is-user" : "is-ai"}`}>
-                          <p>{message.content}</p>
+                          <p>{message.role === "assistant" ? cleanAssistantText(message.content) : message.content}</p>
                           {message.attachmentName ? <div className="ai-inline-attachment">{message.attachmentName}</div> : null}
                           {message.role === "assistant" && Array.isArray(message.references) && message.references.length > 0 ? (
                             <div className="ai-reference-list">
