@@ -39,6 +39,11 @@ from urllib import error as urlerror
 from urllib.parse import quote_plus
 
 try:
+    from openai import OpenAI
+except Exception:
+    OpenAI = None
+
+try:
     from jinja2 import Environment, FileSystemLoader, select_autoescape
 except Exception:
     Environment = None
@@ -3716,6 +3721,10 @@ def _run_document_ocr(document_id: int):
 
                 # Eliminar el documento para mantenerlo solo como medicamento
                 db.delete(doc)
+                try:
+                    _refresh_profile_ai_learning_memory(db, medication.user_id)
+                except Exception as exc:
+                    print(f"WARNING ai memory refresh (medication conversion) failed: {exc}")
                 db.commit()
                 user = db.query(models.User).filter(models.User.id == medication.user_id).first()
                 if user and user.email:
@@ -3766,6 +3775,10 @@ def _run_document_ocr(document_id: int):
                 doc.appointment_id = appointment.id
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+        try:
+            _refresh_profile_ai_learning_memory(db, doc.user_id)
+        except Exception as exc:
+            print(f"WARNING ai memory refresh failed: {exc}")
         db.commit()
         if user and user.email and detected_meds_for_email:
             _send_medications_detected_email_safe(
@@ -4407,7 +4420,25 @@ AI_KLINIP_DISCLAIMER = (
 
 
 def _ai_model_name() -> str:
-    return (os.getenv("OPENAI_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
+    return (os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
+
+
+def _ai_temperature() -> float:
+    raw = (os.getenv("OPENAI_TEMPERATURE") or "0.2").strip()
+    try:
+        value = float(raw)
+    except Exception:
+        return 0.2
+    return max(0.0, min(1.0, value))
+
+
+def _ai_max_output_tokens() -> int:
+    raw = (os.getenv("OPENAI_MAX_OUTPUT_TOKENS") or "400").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 400
+    return max(80, min(1200, value))
 
 
 def _safe_iso(dt: datetime | None) -> str:
@@ -4424,6 +4455,255 @@ def _clip_text(value: str | None, limit: int = 420) -> str:
     if len(text_value) <= limit:
         return text_value
     return f"{text_value[:limit].rstrip()}..."
+
+
+AI_MEMORY_START = "[[KLINIP_AI_MEMORY_START]]"
+AI_MEMORY_END = "[[/KLINIP_AI_MEMORY_END]]"
+
+
+def _strip_ai_memory_block(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    pattern = re.compile(
+        rf"{re.escape(AI_MEMORY_START)}.*?{re.escape(AI_MEMORY_END)}",
+        flags=re.DOTALL,
+    )
+    cleaned = re.sub(pattern, "", raw).strip()
+    return cleaned
+
+
+def _extract_ai_memory_block(value: str | None) -> str:
+    raw = value or ""
+    pattern = re.compile(
+        rf"{re.escape(AI_MEMORY_START)}(.*?){re.escape(AI_MEMORY_END)}",
+        flags=re.DOTALL,
+    )
+    match = pattern.search(raw)
+    if not match:
+        return ""
+    return (match.group(1) or "").strip()
+
+
+def _merge_ai_memory_block(base_text: str | None, memory_text: str) -> str:
+    clean_base = _strip_ai_memory_block(base_text)
+    clean_memory = (memory_text or "").strip()
+    if not clean_memory:
+        return clean_base
+    memory_block = f"{AI_MEMORY_START}\n{clean_memory}\n{AI_MEMORY_END}"
+    if not clean_base:
+        return memory_block
+    return f"{clean_base}\n\n{memory_block}"
+
+
+def _extract_clinical_signals_from_text(text: str | None) -> dict:
+    raw = _clip_text(text or "", 16000)
+    normalized = _normalize_text(raw)
+    if not raw.strip():
+        return {"conditions": [], "allergies": [], "metrics": [], "findings": []}
+
+    condition_terms = [
+        "diabetes",
+        "hipertension",
+        "hipotiroidismo",
+        "asma",
+        "epoc",
+        "dislipidemia",
+        "anemia",
+        "insuficiencia renal",
+        "cardiopatia",
+        "arritmia",
+        "cancer",
+        "artritis",
+        "depresion",
+        "ansiedad",
+    ]
+    conditions = [term for term in condition_terms if term in normalized]
+
+    allergies = []
+    for m in re.finditer(r"alerg(?:ia|ias)\s*(?:a|:)?\s*([^\n\.;]{3,120})", raw, re.IGNORECASE):
+        value = _clip_text((m.group(1) or "").strip(), 70)
+        if value:
+            allergies.append(value)
+
+    metric_keywords = [
+        "glucosa",
+        "hemoglobina glicosilada",
+        "hba1c",
+        "colesterol total",
+        "ldl",
+        "hdl",
+        "trigliceridos",
+        "creatinina",
+        "tsh",
+        "t4",
+        "hemoglobina",
+    ]
+    metrics = []
+    metric_pattern = re.compile(
+        r"(?P<label>[A-Za-zÁÉÍÓÚáéíóúñÑ0-9\s]+?)\s*[:=]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>%|mg/?dl|g/?dl|ui/?ml|m?mol/?l)?",
+        re.IGNORECASE,
+    )
+    for match in metric_pattern.finditer(raw):
+        label = (match.group("label") or "").strip()
+        value = (match.group("value") or "").strip()
+        unit = (match.group("unit") or "").strip()
+        norm_label = _normalize_text(label)
+        if not any(keyword in norm_label for keyword in metric_keywords):
+            continue
+        metric_text = f"{label}: {value}{(' ' + unit) if unit else ''}".strip()
+        metrics.append(_clip_text(metric_text, 60))
+        if len(metrics) >= 6:
+            break
+
+    findings = []
+    finding_keywords = (
+        "diagnostico",
+        "impresion",
+        "conclusion",
+        "hallazgo",
+        "indicacion",
+        "plan",
+        "tratamiento",
+    )
+    for line in raw.splitlines():
+        line_clean = line.strip(" -:\t")
+        if len(line_clean) < 8:
+            continue
+        line_norm = _normalize_text(line_clean)
+        if any(keyword in line_norm for keyword in finding_keywords):
+            findings.append(_clip_text(line_clean, 120))
+        if len(findings) >= 6:
+            break
+
+    return {
+        "conditions": list(dict.fromkeys(conditions))[:6],
+        "allergies": list(dict.fromkeys(allergies))[:5],
+        "metrics": list(dict.fromkeys(metrics))[:6],
+        "findings": list(dict.fromkeys(findings))[:6],
+    }
+
+
+def _build_ai_profile_memory(
+    *,
+    profile: models.HealthProfile,
+    documents: list[models.Document],
+    medications: list[models.Medication],
+    upcoming: list[models.Appointment],
+) -> str:
+    recent_docs = [doc for doc in (documents or []) if (doc.ocr_text or "").strip()][:4]
+    aggregated_signals = {"conditions": [], "allergies": [], "metrics": [], "findings": []}
+    for doc in recent_docs:
+        signals = _extract_clinical_signals_from_text(doc.ocr_text or "")
+        for key in aggregated_signals.keys():
+            aggregated_signals[key].extend(signals.get(key) or [])
+
+    for key in aggregated_signals.keys():
+        aggregated_signals[key] = list(dict.fromkeys(aggregated_signals[key]))[:8]
+
+    active_meds = [med for med in (medications or []) if not bool(getattr(med, "completed", False))]
+    active_med_names = []
+    for med in active_meds[:8]:
+        detail = (med.name or "").strip() or "Medicamento"
+        if med.dose:
+            detail += f" ({med.dose})"
+        active_med_names.append(detail)
+
+    next_appointments = []
+    for item in (upcoming or [])[:4]:
+        if not item.date_time:
+            continue
+        label = _safe_iso(item.date_time)
+        if item.specialty:
+            label = f"{label} · {item.specialty}"
+        if item.center:
+            label = f"{label} · {item.center}"
+        next_appointments.append(_clip_text(label, 120))
+
+    lines = [
+        f"Resumen automatico IA ({datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC).",
+        f"Perfil: {profile.full_name}.",
+    ]
+    if aggregated_signals["conditions"]:
+        lines.append("Condiciones detectadas en documentos: " + ", ".join(aggregated_signals["conditions"][:6]) + ".")
+    if aggregated_signals["allergies"]:
+        lines.append("Alergias mencionadas: " + ", ".join(aggregated_signals["allergies"][:5]) + ".")
+    if active_med_names:
+        lines.append("Medicacion activa estimada: " + "; ".join(active_med_names[:6]) + ".")
+    if next_appointments:
+        lines.append("Proximas citas: " + " | ".join(next_appointments[:3]) + ".")
+    if aggregated_signals["metrics"]:
+        lines.append("Metricas clinicas OCR: " + "; ".join(aggregated_signals["metrics"][:6]) + ".")
+    if aggregated_signals["findings"]:
+        lines.append("Hallazgos clave OCR: " + " | ".join(aggregated_signals["findings"][:4]) + ".")
+
+    return "\n".join(lines).strip()
+
+
+def _resolve_profile_for_user_learning(db: Session, user_id: int) -> models.HealthProfile | None:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user and getattr(user, "active_health_profile_id", None):
+        profile = (
+            db.query(models.HealthProfile)
+            .filter(
+                models.HealthProfile.id == int(user.active_health_profile_id),
+                models.HealthProfile.owner_user_id == user_id,
+                models.HealthProfile.is_archived.is_(False),
+            )
+            .first()
+        )
+        if profile:
+            return profile
+    profile = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == user_id,
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(models.HealthProfile.is_primary_profile.desc(), models.HealthProfile.created_at.asc())
+        .first()
+    )
+    return profile
+
+
+def _refresh_profile_ai_learning_memory(db: Session, user_id: int):
+    profile = _resolve_profile_for_user_learning(db, user_id)
+    if not profile:
+        return
+
+    documents = (
+        db.query(models.Document)
+        .filter(models.Document.user_id == user_id)
+        .order_by(models.Document.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.user_id == user_id)
+        .order_by(models.Medication.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    upcoming = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.user_id == user_id,
+            models.Appointment.date_time.isnot(None),
+            models.Appointment.status != models.AppointmentStatus.realizada,
+        )
+        .order_by(models.Appointment.date_time.asc())
+        .limit(8)
+        .all()
+    )
+    memory_text = _build_ai_profile_memory(
+        profile=profile,
+        documents=documents,
+        medications=medications,
+        upcoming=upcoming,
+    )
+    profile.base_medical_data = _merge_ai_memory_block(profile.base_medical_data or "", memory_text)
+    db.add(profile)
 
 
 def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
@@ -4480,6 +4760,14 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
     active_medications = [med for med in medications if not bool(med.completed)]
     latest_document = documents[0] if documents else None
     latest_document_text = _clip_text(getattr(latest_document, "ocr_text", "") or "", 2400)
+    ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
+    user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
+    runtime_memory = _build_ai_profile_memory(
+        profile=profile,
+        documents=documents,
+        medications=medications,
+        upcoming=upcoming,
+    )
 
     sources = [
         {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": True},
@@ -4512,7 +4800,8 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
             "owner_user_id": target_user_id,
             "relation_with_owner": profile.relation_with_owner or "",
             "gender": profile.gender or "",
-            "base_medical_data": _clip_text(profile.base_medical_data or "", 320),
+            "base_medical_data": _clip_text(user_profile_notes_text, 700),
+            "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1800),
             "access_role": (link.role or "").lower(),
             "is_primary": bool(profile.is_primary_profile),
         },
@@ -4525,6 +4814,7 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         "active_medications": active_medications,
         "latest_document": latest_document,
         "latest_document_text": latest_document_text,
+        "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1800),
         "profile_notes": profile_notes,
         "activity_log": activity_log,
     }
@@ -4533,6 +4823,7 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
 def _serialize_ai_context(context: dict) -> dict:
     return {
         "profile": context["profile"],
+        "learned_profile_context": context.get("learned_profile_context") or "",
         "plan": {
             "plan_type": context["plan"].get("plan_type"),
             "max_profiles": context["plan"].get("max_profiles"),
@@ -4606,20 +4897,27 @@ def _ai_system_prompt(context: dict) -> str:
         "3. No diagnostiques ni reemplaces a un profesional.\n"
         "4. No indiques suspender o iniciar medicamentos por cuenta propia.\n"
         "5. Si el usuario describe urgencia, deriva a atencion profesional.\n"
-        "6. Explica en espanol claro, con tono sobrio y facil de leer.\n"
+        "6. Explica en espanol claro, con tono cercano, humano y respetuoso.\n"
         "7. Si resumes documentos OCR, aclara que la lectura puede contener errores.\n"
+        "8. Responde con estructura practica: resumen breve + acciones concretas + cierre corto.\n"
+        "9. Prioriza utilidad: entrega recomendaciones accionables sin alarmismo.\n"
+        "10. Si aplica, pide una aclaracion puntual para mejorar la recomendacion.\n"
+        "11. Si hay memoria clinica del perfil, usala para personalizar la respuesta.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
+        f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
         f"Disclaimer obligatorio: {AI_KLINIP_DISCLAIMER}"
     )
 
 
 def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tuple[str, str] | None:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-    if not api_key:
+    if not api_key or OpenAI is None:
         return None
 
     model = _ai_model_name()
+    temperature = _ai_temperature()
+    max_output_tokens = _ai_max_output_tokens()
     messages = [{"role": "system", "content": system_prompt}]
     for item in history[-8:]:
         role = "assistant" if (item.get("role") or "") == "assistant" else "user"
@@ -4628,34 +4926,58 @@ def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tu
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": message})
 
-    payload = json.dumps(
-        {
-            "model": model,
-            "messages": messages,
-            "temperature": 0.2,
-        }
-    ).encode("utf-8")
-    req = urlrequest.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}",
-        },
-        method="POST",
-    )
+    client = OpenAI(api_key=api_key, timeout=25.0)
+
+    responses_input = []
+    for item in messages:
+        responses_input.append(
+            {
+                "role": item["role"],
+                "content": [{"type": "input_text", "text": item["content"]}],
+            }
+        )
+
     try:
-        with urlrequest.urlopen(req, timeout=25) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        choices = data.get("choices") or []
-        if not choices:
-            return None
-        content = (((choices[0] or {}).get("message") or {}).get("content") or "").strip()
+        response = client.responses.create(
+            model=model,
+            input=responses_input,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+        )
+        content = (getattr(response, "output_text", "") or "").strip()
+        if not content:
+            # Fallback compatible con algunos modelos/parsers
+            for output_item in getattr(response, "output", []) or []:
+                for output_content in getattr(output_item, "content", []) or []:
+                    text_value = getattr(output_content, "text", "") or ""
+                    if text_value.strip():
+                        content = text_value.strip()
+                        break
+                if content:
+                    break
         if not content:
             return None
         return content, model
     except Exception as exc:
-        print(f"WARNING ai openai provider failed: {exc}")
+        print(f"WARNING ai openai responses provider failed: {exc}")
+
+    # Fallback con chat.completions del SDK oficial
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_output_tokens,
+        )
+        choices = getattr(completion, "choices", None) or []
+        if not choices:
+            return None
+        content = (getattr(choices[0].message, "content", "") or "").strip()
+        if not content:
+            return None
+        return content, model
+    except Exception as exc:
+        print(f"WARNING ai openai chat-completions provider failed: {exc}")
         return None
 
 
@@ -4667,6 +4989,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     appointments = context.get("appointments") or []
     documents = context.get("documents") or []
     medications = context.get("medications") or []
+    learned_context = _clip_text(context.get("learned_profile_context") or "", 220)
 
     if any(token in normalized for token in ["ultimo documento", "explicame mi ultimo documento", "documento", "ocr"]):
         if not latest_document:
@@ -4740,10 +5063,12 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         )
 
     return (
-        f"Puedo ayudarte con el perfil activo {context['profile']['name']} usando sus documentos, medicamentos, "
-        "citas, historial y recordatorios registrados. Prueba con preguntas como: "
-        "'Explicame mi ultimo documento', 'Que medicamentos estoy tomando', "
-        "'Cuando es mi proxima cita' o 'Resume mi historial clinico'."
+        f"Claro, te ayudo con el perfil activo {context['profile']['name']}. "
+        + (f"Contexto relevante detectado: {learned_context}. " if learned_context else "")
+        + "Puedo revisar documentos, medicamentos, citas, historial y recordatorios. "
+        + "Si quieres, partimos con una de estas: "
+        + "'Explicame mi ultimo documento', 'Que medicamentos estoy tomando', "
+        + "'Cuando es mi proxima cita' o 'Resume mi historial clinico'."
     )
 
 
@@ -4798,6 +5123,17 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                 "kind": "profile",
                 "label": f"Perfil activo: {context['profile']['name']}",
                 "detail": f"Plan {context['plan'].get('plan_type')}",
+            }
+        )
+    if context.get("learned_profile_context") and any(
+        token in normalized
+        for token in ["perfil", "contexto", "historial", "documento", "resumen", "condicion", "alergia"]
+    ):
+        refs.append(
+            {
+                "kind": "memory",
+                "label": "Memoria clinica IA",
+                "detail": _clip_text(context.get("learned_profile_context") or "", 120),
             }
         )
 

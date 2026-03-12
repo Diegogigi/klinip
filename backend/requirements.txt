@@ -15,3 +15,4 @@ pytesseract
 Pillow
 pdf2image
 jinja2
+openai>=1.40.0

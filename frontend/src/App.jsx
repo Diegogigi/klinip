@@ -65,11 +65,9 @@ const icons = {
   ),
   extras: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <path d="M8 14h3l2-4 2 8 2-5h3" />
-      <circle cx="6" cy="14" r="1" />
-      <circle cx="13" cy="10" r="1" />
-      <circle cx="15" cy="18" r="1" />
-      <circle cx="19" cy="13" r="1" />
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
     </svg>
   ),
   user: (
@@ -113,6 +111,7 @@ const icons = {
       <path d="M12 3v2M4 12H2M22 12h-2M18.5 5.5 17 7M5.5 5.5 7 7" />
     </svg>
   ),
+  aiMobile: <span className="icon-k" aria-hidden="true">K</span>,
 };
 
 function Sidebar({
@@ -166,11 +165,11 @@ function Sidebar({
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
   ];
-  const mobilePrimaryLinks = links.filter((item) =>
-    ["/", "/appointments", "/ai", "/calendar", "/timeline"].includes(item.to)
-  );
+  const mobilePrimaryLinks = ["/", "/appointments", "/ai", "/calendar"]
+    .map((path) => links.find((item) => item.to === path))
+    .filter(Boolean);
   const mobileOverflowLinks = links.filter((item) =>
-    ["/stats", "/medications", "/documents", "/family"].includes(item.to)
+    ["/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
   );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
@@ -224,7 +223,9 @@ function Sidebar({
                   }`}
                   onClick={() => setShowMobileMenu(false)}
                 >
-                <span className="sidebar-icon">{link.icon}</span>
+                <span className="sidebar-icon">
+                  {link.to === "/ai" ? icons.aiMobile : link.icon}
+                </span>
                 {link.badge > 0 && (
                   <span className="sidebar-badge">{link.badge}</span>
                 )}
