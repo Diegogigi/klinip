@@ -218,6 +218,21 @@ export async function createProfileNote(profileId, payload) {
   return res.data;
 }
 
+export async function sendAiChat(payload) {
+  const res = await api.post("/ai/chat", payload);
+  return res.data;
+}
+
+export async function getAiHistory() {
+  const res = await api.get("/ai/history");
+  return res.data;
+}
+
+export async function clearAiHistory() {
+  const res = await api.delete("/ai/history");
+  return res.data;
+}
+
 // Privacy
 export async function revokeDataConsent() {
   const res = await api.post("/privacy/revoke-consent");

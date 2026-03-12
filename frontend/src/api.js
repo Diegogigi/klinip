@@ -34,6 +34,9 @@ export const getProfileAutomation = api.getProfileAutomation;
 export const updateProfileAutomation = api.updateProfileAutomation;
 export const getProfileNotes = api.getProfileNotes;
 export const createProfileNote = api.createProfileNote;
+export const sendAiChat = api.sendAiChat;
+export const getAiHistory = api.getAiHistory;
+export const clearAiHistory = api.clearAiHistory;
 
 export const getAppointments = api.getAppointments;
 export const createAppointment = api.createAppointment;

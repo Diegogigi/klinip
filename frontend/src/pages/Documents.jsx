@@ -211,14 +211,14 @@ export default function Documents() {
 
   return (
     <>
-      <div className="card">
+      <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
           Guarda fotos o PDFs de recetas, ordenes, resultados e informes. Se almacenan seguros en el backend.
         </p>
       </div>
 
-      <div className="card">
+      <div className="card documents-surface-free documents-create">
         <button
           className="primary-btn"
           type="button"
@@ -401,7 +401,7 @@ export default function Documents() {
         </div>
       )}
 
-      <div className="card documents-list-card documents-filters-card">
+      <div className="card documents-surface-free documents-list-card documents-filters-card">
         <h3 className="card-title">Documentos guardados</h3>
         <div className="form-row documents-filters-row" style={{ marginBottom: "0.75rem" }}>
           <div className="input-group">
@@ -432,7 +432,7 @@ export default function Documents() {
         {docs.length === 0 ? (
           <p className="muted">Aún no has guardado documentos.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
             <table className="table">
               <thead>
                 <tr>

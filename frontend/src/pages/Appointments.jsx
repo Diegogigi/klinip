@@ -227,7 +227,7 @@ export default function Appointments() {
 
   return (
     <>
-      <div className="card">
+      <div className="card appointments-surface-free appointments-intro">
         <h2 className="card-title">Citas, exámenes y trámites</h2>
         <p className="muted">
           Organiza tus citas, examenes y tramites. Todo queda guardado.
@@ -291,7 +291,7 @@ export default function Appointments() {
         </div>
       )}
 
-      <div className="card">
+      <div className="card appointments-surface-free appointments-create">
         <button
           className="primary-btn"
           type="button"
@@ -537,7 +537,7 @@ export default function Appointments() {
         </div>
       )}
 
-      <div className="card appointments-filters-card">
+      <div className="card appointments-surface-free appointments-filters-card">
         <h3 className="card-title">Listado de actividades</h3>
         <div className="form-row appointments-filters-row" style={{ marginBottom: "0.75rem" }}>
           <div className="input-group">
@@ -579,7 +579,7 @@ export default function Appointments() {
         {appointments.length === 0 ? (
           <p className="muted">Aún no has registrado actividades.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
             <table className="table">
               <thead>
                 <tr>

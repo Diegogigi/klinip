@@ -445,14 +445,14 @@ export default function Medications() {
           {intakeFeedback.replace(/^(success:|info:)/, "")}
         </div>
       )}
-      <div className="card">
+      <div className="card medications-surface-free medications-intro">
         <h2 className="card-title">Medicamentos y tratamientos</h2>
         <p className="muted">
           Registra fármacos, dosis y frecuencia. Añade duración y notas para no perder la trazabilidad.
         </p>
       </div>
 
-      <div className="card">
+      <div className="card medications-surface-free medications-create">
         <button
           className="primary-btn"
           type="button"
@@ -773,7 +773,7 @@ export default function Medications() {
         </div>
       )}
 
-      <div className="card medications-filters-card">
+      <div className="card medications-surface-free medications-filters-card">
         <h3 className="card-title">Filtros</h3>
         <div className="form-row medications-filters-row" style={{ marginBottom: "0.35rem" }}>
           <div className="input-group">
@@ -801,21 +801,13 @@ export default function Medications() {
         </div>
       </div>
 
-      <div className="card medications-list-card">
-        <h3 className="card-title">Tratamientos activos</h3>
-        <p className="muted" style={{ marginBottom: "0.75rem" }}>
-          Adherencia global:{" "}
-          <strong>
-            {globalAdherence === null ? "Sin datos suficientes" : `${globalAdherence}%`}
-          </strong>{" "}
-          ({adherenceTotals.taken}/{adherenceTotals.expected} tomas)
-        </p>
+      <div className="card medications-surface-free medications-list-card">
         {meds.length === 0 ? (
           <p className="muted">Aún no has registrado medicamentos.</p>
         ) : filteredMeds.length === 0 ? (
           <p className="muted">No hay medicamentos que coincidan con los filtros.</p>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
             <table className="table">
               <thead>
                 <tr>

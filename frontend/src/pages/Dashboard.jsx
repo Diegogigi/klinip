@@ -1,838 +1,689 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
+  getActiveHealthProfile,
   getAppointments,
   getDocuments,
+  getHealthProfiles,
   getMedications,
-  uploadDocument,
-  updateDocument,
-  deleteDocument,
 } from "../api";
-import {
-  requestNotificationPermission,
-  scheduleReminderNotifications,
-  scheduleMedicationNotifications,
-  sendEmailReminder,
-  clearScheduledNotifications,
-} from "../services/notifications";
-import {
-  parseDate,
-  toIsoOrNull,
-  toLocaleDateTimeOrEmpty,
-} from "../utils/dates";
+import { parseDate } from "../utils/dates";
 
 const typeLabels = {
-  cita: "Cita médica",
+  cita: "Cita",
   examen: "Examen",
-  tramite: "Trámite",
+  tramite: "Tramite",
 };
 
-const statusLabels = {
-  pendiente: "Pendiente",
-  agendada: "Agendada",
-  realizada: "Realizada",
+const kindToneMap = {
+  appointment: "blue",
+  document: "teal",
+  medication: "amber",
 };
 
-const AI_ANALYSIS_ENABLED = false;
+function toDayLabel(date) {
+  if (!date) return "";
+  return date.toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function toTimeLabel(date) {
+  if (!date) return "";
+  return date.toLocaleTimeString("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function toRelativeDayLabel(date) {
+  if (!date) return "";
+  const now = new Date();
+  const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round((startDate - startNow) / 86400000);
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Manana";
+  if (diffDays > 1) return `En ${diffDays} dias`;
+  return "Reciente";
+}
+
+function profileInitials(name) {
+  return (name || "KP")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
+
+function getMedicationReminderDate(medication) {
+  if (!medication?.schedule_time) return null;
+  const [hourText, minuteText] = String(medication.schedule_time).split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText || 0);
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
+  const now = new Date();
+  const candidate = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    hour,
+    minute,
+    0,
+    0
+  );
+  if (candidate.getTime() < now.getTime() - 10 * 60 * 1000) {
+    candidate.setDate(candidate.getDate() + 1);
+  }
+  return candidate;
+}
+
+function getStatusTone(level) {
+  if (level === "alert") return "alert";
+  if (level === "warn") return "warn";
+  return "ok";
+}
+
+function getRadarToneFromAdherence(value) {
+  if (value >= 80) return "ok";
+  if (value >= 45) return "warn";
+  return "alert";
+}
+
+function renderIcon(name) {
+  switch (name) {
+    case "medication":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+        </svg>
+      );
+    case "appointment":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="18" rx="2" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      );
+    case "document":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+        </svg>
+      );
+    case "adherence":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+      );
+    case "family":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      );
+    case "upload":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+      );
+    case "plus":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+    case "ai":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2z" />
+          <path d="M12 16v-4M12 8h.01" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <polyline points="12 7 12 12 15 15" />
+        </svg>
+      );
+  }
+}
 
 export default function Dashboard({ user }) {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [medications, setMedications] = useState([]);
-  const [notificationsReady, setNotificationsReady] = useState(false);
-  const [showDocForm, setShowDocForm] = useState(false);
-  const [docForm, setDocForm] = useState({
-    doc_type: "otro",
-    date: "",
-    center: "",
-    notes: "",
-  });
-  const [docFile, setDocFile] = useState(null);
-  const [docUploading, setDocUploading] = useState(false);
-  const [docAutoFill, setDocAutoFill] = useState(true);
-  const [ocrDocId, setOcrDocId] = useState(null);
-  const [ocrStatus, setOcrStatus] = useState("");
-  const [ocrResult, setOcrResult] = useState(null);
-  const [ocrEdit, setOcrEdit] = useState(null);
-  const [ocrSaving, setOcrSaving] = useState(false);
-  const [ocrSaved, setOcrSaved] = useState(false);
-  const [ocrMessage, setOcrMessage] = useState("");
-  const [quickNoteDraft, setQuickNoteDraft] = useState("");
+  const [healthProfiles, setHealthProfiles] = useState([]);
+  const [activeProfile, setActiveProfile] = useState(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [composerOpen, setComposerOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
 
-  const quickNotesStorageKey = useMemo(() => {
-    const uid = user?.id || "anon";
-    return `klinip.quick-notes.${uid}`;
-  }, [user?.id]);
-
   useEffect(() => {
-    async function load() {
-      const [apptData, docData, medData] = await Promise.all([
-        getAppointments(),
-        getDocuments(),
-        getMedications(),
-      ]);
-      setAppointments(apptData || []);
-      setDocuments(docData || []);
-      setMedications(medData || []);
+    let cancelled = false;
+    async function loadHome() {
+      try {
+        const [
+          activeProfileResponse,
+          profilesResponse,
+          appointmentsResponse,
+          documentsResponse,
+          medicationsResponse,
+        ] = await Promise.all([
+          getActiveHealthProfile().catch(() => null),
+          getHealthProfiles().catch(() => []),
+          getAppointments().catch(() => []),
+          getDocuments().catch(() => []),
+          getMedications().catch(() => []),
+        ]);
+        if (cancelled) return;
+        setActiveProfile(activeProfileResponse || null);
+        setHealthProfiles(Array.isArray(profilesResponse) ? profilesResponse : []);
+        setAppointments(Array.isArray(appointmentsResponse) ? appointmentsResponse : []);
+        setDocuments(Array.isArray(documentsResponse) ? documentsResponse : []);
+        setMedications(Array.isArray(medicationsResponse) ? medicationsResponse : []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-    load();
+    loadHome();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  useEffect(() => {
-    if (!ocrDocId) return;
-    let attempts = 0;
-    let stopped = false;
-
-    const poll = async () => {
-      if (stopped) return;
-      attempts += 1;
-      try {
-        const docData = await getDocuments();
-        const current = (docData || []).find((d) => d.id === ocrDocId);
-        if (current) {
-          setOcrStatus(current.ocr_status || "pending");
-          if (
-            current.ocr_status === "done" ||
-            (current.ocr_status || "").startsWith("error") ||
-            current.ocr_status === "skipped_size"
-          ) {
-            setOcrResult(current);
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("No se pudo actualizar OCR", err);
-      }
-      if (attempts >= 15) return;
-      setTimeout(poll, 2000);
-    };
-
-    poll();
-    return () => {
-      stopped = true;
-    };
-  }, [ocrDocId]);
-
-  useEffect(() => {
-    if (!ocrResult) return;
-    const parsedDate = parseDate(ocrResult.date);
-    setOcrEdit({
-      doc_type: ocrResult.doc_type || "otro",
-      date: parsedDate ? parsedDate.toISOString().slice(0, 10) : "",
-      center: ocrResult.center || "",
-      notes: ocrResult.notes || "",
-    });
-  }, [ocrResult]);
-
-  useEffect(() => {
-    if (!ocrMessage) return undefined;
-    const timeoutId = setTimeout(() => {
-      setOcrMessage("");
-    }, 4000);
-    return () => clearTimeout(timeoutId);
-  }, [ocrMessage]);
+  const notesStorageKey = `klinip:home-notes:${activeProfile?.id || user?.id || "guest"}`;
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(quickNotesStorageKey);
+      const raw = localStorage.getItem(notesStorageKey);
       const parsed = raw ? JSON.parse(raw) : [];
       setQuickNotes(Array.isArray(parsed) ? parsed : []);
     } catch {
       setQuickNotes([]);
     }
-  }, [quickNotesStorageKey]);
-
-  const handleOcrSave = async () => {
-    if (!ocrDocId || !ocrEdit) return;
-    setOcrSaving(true);
-    try {
-      await updateDocument(ocrDocId, {
-        doc_type: ocrEdit.doc_type,
-        date: toIsoOrNull(ocrEdit.date),
-        center: ocrEdit.center,
-        notes: ocrEdit.notes,
-      });
-      const docData = await getDocuments();
-      setDocuments(docData || []);
-      setOcrMessage("Documento actualizado.");
-      setOcrSaved(true);
-      resetDocForm();
-      setShowDocForm(false);
-    } catch (err) {
-      console.error(err);
-      setOcrMessage("No se pudo actualizar el documento.");
-    } finally {
-      setOcrSaving(false);
-    }
-  };
-
-  const handleSaveQuickNote = () => {
-    const text = quickNoteDraft.trim();
-    if (!text) return;
-    const next = [
-      {
-        id: `${Date.now()}`,
-        text,
-        created_at: new Date().toISOString(),
-      },
-      ...quickNotes,
-    ].slice(0, 6);
-    setQuickNotes(next);
-    window.localStorage.setItem(quickNotesStorageKey, JSON.stringify(next));
-    setQuickNoteDraft("");
-  };
-
-  const resetDocForm = () => {
-    setDocForm({
-      doc_type: "otro",
-      date: "",
-      center: "",
-      notes: "",
-    });
-    setDocFile(null);
-    setDocAutoFill(true);
-    setOcrDocId(null);
-    setOcrStatus("");
-    setOcrResult(null);
-    setOcrEdit(null);
-    setOcrSaving(false);
-    setOcrSaved(false);
-    setOcrMessage("");
-  };
-
-  const handleOpenAiAnalysis = () => {
-    resetDocForm();
-    setDocAutoFill(true);
-    setShowDocForm(true);
-  };
-
-  const handleDocClose = async () => {
-    if (docUploading || ocrSaving) {
-      window.alert("Espera a que termine la subida antes de cerrar.");
-      return;
-    }
-    const hasUnsavedForm =
-      docFile ||
-      docForm.date ||
-      docForm.center.trim() ||
-      docForm.notes.trim() ||
-      docForm.doc_type !== "otro" ||
-      !docAutoFill;
-    if (hasUnsavedForm && !ocrDocId) {
-      const shouldClose = window.confirm(
-        "¿Cerrar sin guardar? Se perderán los cambios."
-      );
-      if (!shouldClose) return;
-    }
-    if (ocrDocId && !ocrSaved) {
-      const shouldDiscard = window.confirm(
-        "¿Cerrar sin guardar? Se descartará el documento subido."
-      );
-      if (!shouldDiscard) return;
-      try {
-        await deleteDocument(ocrDocId);
-      } catch (err) {
-        console.error("No se pudo descartar el documento", err);
-      }
-      const docData = await getDocuments();
-      setDocuments(docData || []);
-    }
-    resetDocForm();
-    setShowDocForm(false);
-  };
-
-  const handleDocSubmit = async (e) => {
-    e.preventDefault();
-    if (!docFile) {
-      window.alert("Debes seleccionar una foto o PDF.");
-      return;
-    }
-    setDocUploading(true);
-    setOcrSaved(false);
-    try {
-      const payload = docAutoFill
-        ? {
-            doc_type: "otro",
-            date: "",
-            center: "",
-            notes: "",
-            file: docFile,
-          }
-        : {
-            doc_type: docForm.doc_type,
-            date: toIsoOrNull(docForm.date),
-            center: docForm.center,
-            notes: docForm.notes,
-            file: docFile,
-          };
-      const uploaded = await uploadDocument({
-        ...payload,
-      });
-      if (uploaded?.id) {
-        setOcrDocId(uploaded.id);
-        setOcrStatus(uploaded.ocr_status || "pending");
-      }
-      const docData = await getDocuments();
-      setDocuments(docData || []);
-      if (!docAutoFill) {
-        resetDocForm();
-        setShowDocForm(false);
-      }
-      window.alert("Documento subido. La IA está analizando el contenido.");
-    } catch (err) {
-      console.error(err);
-      window.alert("No se pudo subir el documento.");
-    } finally {
-      setDocUploading(false);
-    }
-  };
+  }, [notesStorageKey]);
 
   useEffect(() => {
-    requestNotificationPermission().then(setNotificationsReady);
-    return () => clearScheduledNotifications();
-  }, []);
+    localStorage.setItem(notesStorageKey, JSON.stringify(quickNotes.slice(0, 6)));
+  }, [notesStorageKey, quickNotes]);
 
-  const upcoming = useMemo(() => {
-    const withDate = appointments.filter((a) => parseDate(a.date_time));
-    return withDate
-      .filter((a) => a.status !== "realizada")
-      .sort((a, b) => {
-        const aDate = parseDate(a.date_time);
-        const bDate = parseDate(b.date_time);
-        if (!aDate) return 1;
-        if (!bDate) return -1;
-        return aDate - bDate;
-      })
-      .slice(0, 5);
-  }, [appointments]);
+  const now = Date.now();
+  const validAppointments = [...appointments]
+    .filter((item) => parseDate(item.date_time))
+    .sort((a, b) => parseDate(a.date_time) - parseDate(b.date_time));
+  const openAppointments = validAppointments.filter((item) => {
+    const status = String(item.status || "").toLowerCase();
+    return status !== "realizada" && status !== "cancelada";
+  });
+  const futureAppointments = openAppointments.filter(
+    (item) => parseDate(item.date_time).getTime() >= now - 15 * 60 * 1000
+  );
+  const nextAppointment = futureAppointments[0] || openAppointments[0] || null;
 
-  const kpis = useMemo(() => {
-    const pendiente = appointments.filter((a) => a.status === "pendiente").length;
-    const agendada = appointments.filter((a) => a.status === "agendada").length;
-    return [
-      { label: "Pendientes", value: pendiente },
-      { label: "Agendadas", value: agendada },
-      { label: "Documentos", value: documents.length },
-    ];
-  }, [appointments, documents]);
+  const activeMedications = medications.filter((item) => !item.completed);
+  const adherenceTotals = activeMedications.reduce(
+    (acc, item) => {
+      acc.expected += Number(item.expected_doses || 0);
+      acc.taken += Number(item.taken_doses || 0);
+      return acc;
+    },
+    { expected: 0, taken: 0 }
+  );
+  const adherence =
+    adherenceTotals.expected > 0
+      ? Math.round((adherenceTotals.taken / adherenceTotals.expected) * 100)
+      : activeMedications.length
+      ? 100
+      : 0;
+  const pendingDocuments = documents.filter((item) => {
+    const status = String(item.ocr_status || "").toLowerCase();
+    return !status || status === "pending" || status === "processing" || status === "error";
+  }).length;
+  const linkedProfiles = Math.max((healthProfiles || []).length - 1, 0);
 
-  const alert = useMemo(() => {
-    if (!upcoming.length) return { label: "Sin actividades próximas", tone: "neutral", dot: "gray" };
-    const first = parseDate(upcoming[0].date_time);
-    if (!first) return { label: "Sin actividades próximas", tone: "neutral", dot: "gray" };
-    const now = new Date();
-    const diffDays = (first - now) / (1000 * 60 * 60 * 24);
-    if (diffDays <= 2) return { label: "Atención: actividad muy próxima", tone: "danger", dot: "red" };
-    if (diffDays <= 7) return { label: "Tienes actividades en la próxima semana", tone: "warning", dot: "yellow" };
-    return { label: "Próximas actividades programadas", tone: "success", dot: "green" };
-  }, [upcoming]);
+  const radarItems = [
+    {
+      key: "medications",
+      icon: "medication",
+      tone: activeMedications.length ? "ok" : "warn",
+      label: "Medicamentos",
+      value: activeMedications.length ? `${activeMedications.length} activos` : "sin plan activo",
+    },
+    {
+      key: "appointments",
+      icon: "appointment",
+      tone: nextAppointment ? "warn" : "alert",
+      label: "Citas",
+      value: nextAppointment
+        ? `${toRelativeDayLabel(parseDate(nextAppointment.date_time)).toLowerCase()}`
+        : "sin citas proximas",
+    },
+    {
+      key: "documents",
+      icon: "document",
+      tone: pendingDocuments > 0 ? "alert" : "ok",
+      label: "Documentos",
+      value: pendingDocuments > 0 ? `${pendingDocuments} pendientes` : "al dia",
+    },
+    {
+      key: "adherence",
+      icon: "adherence",
+      tone: getRadarToneFromAdherence(adherence),
+      label: "Adherencia",
+      value: activeMedications.length ? `${adherence}%` : "sin datos",
+    },
+    {
+      key: "family",
+      icon: "family",
+      tone: linkedProfiles > 0 ? "warn" : "ok",
+      label: "Familia",
+      value: linkedProfiles > 0 ? `${linkedProfiles} vinculados` : "sin alertas",
+    },
+  ];
 
-  const reminders = useMemo(() => {
-    const now = new Date();
-    return (appointments || [])
-      .filter((a) => parseDate(a.date_time))
-      .map((a) => {
-        const when = parseDate(a.date_time);
-        if (!when) return null;
-        const diff = (when - now) / (1000 * 60 * 60 * 24);
-        let severity = "green";
-        let label = "En orden";
-        if (diff <= 1) {
-          severity = "red";
-          label = "Hoy / Mañana (1 día)";
-        } else if (diff <= 3) {
-          severity = "yellow";
-          label = "Próximos 3 días";
-        } else if (diff <= 7) {
-          severity = "yellow";
-          label = "Próximos 7 días";
-        }
+  const upcomingEvents = [
+    ...futureAppointments.slice(0, 4).map((item) => ({
+      id: `appointment-${item.id}`,
+      date: parseDate(item.date_time),
+      kind: item.type === "examen" ? "exam" : "appointment",
+      tag: typeLabels[item.type] || "Cita",
+      title: item.specialty || typeLabels[item.type] || "Actividad",
+      meta: [item.center, item.notes].filter(Boolean).join(" - ") || "Sin detalle adicional",
+      urgent:
+        parseDate(item.date_time) &&
+        new Date(parseDate(item.date_time)).toDateString() === new Date().toDateString(),
+    })),
+    ...activeMedications
+      .map((item) => {
+        const date = getMedicationReminderDate(item);
+        if (!date) return null;
         return {
-          ...a,
-          diff,
-          severity,
-          label,
+          id: `medication-${item.id}`,
+          date,
+          kind: "medication",
+          tag: "Med.",
+          title: `${item.name || "Medicamento"}${item.dose ? ` - ${item.dose}` : ""}`,
+          meta: item.schedule_time ? `${item.schedule_time} - Recordatorio` : "Sin horario definido",
+          urgent: date.toDateString() === new Date().toDateString(),
         };
       })
-      .filter((r) => r && r.diff >= 0)
-      .sort((a, b) => a.diff - b.diff)
-      .slice(0, 8);
-  }, [appointments]);
+      .filter(Boolean),
+  ]
+    .sort((a, b) => a.date - b.date)
+    .slice(0, 3);
 
-  useEffect(() => {
-    // DESACTIVADO: Las notificaciones ahora se envían desde el servidor vía push
-    // Para evitar duplicados, solo confiamos en el sistema de push notifications
-    // Si quieres reactivar notificaciones locales, descomenta las siguientes líneas:
-    // if (!notificationsReady) return;
-    // scheduleReminderNotifications(reminders);
-    // scheduleMedicationNotifications(medications);
-  }, [notificationsReady, reminders, medications]);
+  const recentActivity = [
+    ...documents.map((item) => ({
+      id: `document-${item.id}`,
+      date: parseDate(item.date || item.created_at),
+      kind: "document",
+      title: "Documento agregado",
+      subtitle: item.center || item.type || "Documento de salud",
+      time: item.date || item.created_at,
+    })),
+    ...medications.map((item) => ({
+      id: `medication-${item.id}`,
+      date: parseDate(item.created_at || item.end_date),
+      kind: "medication",
+      title: "Medicamento registrado",
+      subtitle: `${item.name || "Medicamento"}${item.dose ? ` - ${item.dose}` : ""}`,
+      time: item.created_at || item.end_date,
+    })),
+    ...appointments.map((item) => ({
+      id: `appointment-${item.id}`,
+      date: parseDate(item.date_time),
+      kind: "appointment",
+      title: "Actividad agendada",
+      subtitle:
+        `${typeLabels[item.type] || "Actividad"}${item.specialty ? ` - ${item.specialty}` : ""}` ||
+        "Actividad",
+      time: item.date_time,
+    })),
+  ]
+    .filter((item) => item.date)
+    .sort((a, b) => b.date - a.date)
+    .slice(0, 4);
+
+  const suggestionItems = [];
+  if (!futureAppointments.length) {
+    suggestionItems.push({
+      id: "suggestion-appointment",
+      text: "No tienes citas proximas registradas. Agenda tu proximo control.",
+    });
+  }
+  if (pendingDocuments > 0) {
+    suggestionItems.push({
+      id: "suggestion-docs",
+      text: `Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisar.`,
+    });
+  }
+  if (activeMedications.some((item) => !item.schedule_time)) {
+    suggestionItems.push({
+      id: "suggestion-meds",
+      text: "Hay medicamentos sin horario definido. Completa su recordatorio para no olvidarlos.",
+    });
+  }
+
+  const quickActions = [
+    {
+      id: "medication",
+      icon: "medication",
+      label: "Agregar medicamento",
+      tone: "amber",
+      onClick: () => navigate("/medications"),
+    },
+    {
+      id: "document",
+      icon: "upload",
+      label: "Subir documento",
+      tone: "teal",
+      onClick: () => navigate("/documents"),
+    },
+    {
+      id: "appointment",
+      icon: "appointment",
+      label: "Crear cita",
+      tone: "blue",
+      onClick: () => navigate("/appointments"),
+    },
+    {
+      id: "family",
+      icon: "family",
+      label: "Agregar familiar",
+      tone: "violet",
+      onClick: () => navigate("/family"),
+    },
+    {
+      id: "ai",
+      icon: "ai",
+      label: "Preguntar a IA",
+      tone: "green",
+      onClick: () => navigate("/ai"),
+    },
+  ];
+
+  const handleSaveNote = () => {
+    const value = noteDraft.trim();
+    if (!value) return;
+    const entry = {
+      id: `${Date.now()}`,
+      text: value,
+      created_at: new Date().toISOString(),
+    };
+    setQuickNotes((prev) => [entry, ...prev].slice(0, 6));
+    setNoteDraft("");
+    setComposerOpen(false);
+  };
+
+  const userName = user?.name || activeProfile?.full_name || "tu cuenta";
+  const activeProfileName = activeProfile?.full_name || "Mi perfil";
+
   return (
-    <>
-      <div className="summary-bar">
-        <div>
-          <p className="summary-eyebrow">Resumen</p>
-          <h1 className="summary-title">Hola {user?.name || "invitado"}</h1>
-          <p className="summary-subtitle">Citas, recordatorios y documentos en un solo lugar.</p>
-        </div>
-        <div className="summary-status">
-          <span className={`dot ${alert.dot}`} />
-          <div>
-            <p className="summary-label">Radar</p>
-            <p className="summary-value">{alert.label}</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="kpi-grid">
-        {kpis.map((k) => (
-          <div key={k.label} className="card kpi">
-            <p className="kpi-label">{k.label}</p>
-            <p className="kpi-value">{k.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="card home-note-card">
-        <h2 className="card-title">Notas rápidas de salud</h2>
-        <p className="muted">
-          Guarda ideas o pendientes para no olvidar temas importantes de tu cuidado.
-        </p>
-        <div className="input-group">
-          <label className="input-label">Nueva nota</label>
-          <textarea
-            className="textarea-field"
-            value={quickNoteDraft}
-            onChange={(e) => setQuickNoteDraft(e.target.value)}
-            placeholder="Ej: Consultar dosis en próximo control o subir resultado pendiente."
-          />
-        </div>
-        <button className="secondary-btn" type="button" onClick={handleSaveQuickNote}>
-          Guardar nota
-        </button>
-        <div className="home-note-list">
-          {quickNotes.length ? (
-            quickNotes.map((note) => (
-              <article className="home-note-item" key={note.id}>
-                <p>{note.text}</p>
-                <small>{toLocaleDateTimeOrEmpty(note.created_at)}</small>
-              </article>
-            ))
-          ) : (
-            <p className="muted">Sin notas guardadas todavía.</p>
-          )}
-        </div>
-      </div>
-
-      {AI_ANALYSIS_ENABLED && (
-        <div className="ai-cta-row">
-          <button
-            className="ai-analysis-btn"
-            type="button"
-            onClick={handleOpenAiAnalysis}
-          >
-            <span className="ai-analysis-glow" aria-hidden="true" />
-            <span className="ai-analysis-label">Analisis con IA</span>
-            <span className="ai-analysis-sub">Interpretar documentos automaticamente</span>
-          </button>
-          <div className="ai-cta-message">
-            <span className="ai-cta-dot" aria-hidden="true" />
-            <div>
-              <p className="ai-cta-kicker">Asistente IA</p>
-              <p className="ai-cta-note">Klinip cuenta con un asistente de inteligencia artificial pensado para ayudarte a ahorrar tiempo y no olvidar nada importante de tus documentos medicos.</p>
+    <section className="home-editorial">
+      <div className="home-editorial-layout">
+        <div className="home-editorial-left">
+          <article className="home-greeting-card">
+            <div className="home-greeting-copy">
+              <p className="home-greeting-eyebrow">Resumen personal</p>
+              <h1 className="home-greeting-title">
+                Hola, <em>{userName}</em>
+              </h1>
+              <p className="home-greeting-subtitle">Este es tu resumen de salud para hoy.</p>
+              <p className="home-greeting-context">Perfil activo: {activeProfileName}</p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {AI_ANALYSIS_ENABLED && showDocForm && (
-        <div className="floating-form-backdrop" onClick={() => setShowDocForm(false)}>
-          <div className="floating-form-card ai-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="card-header" style={{ marginBottom: "0.75rem" }}>
-              <h3 className="card-title" style={{ marginBottom: 0 }}>
-                Nuevo documento
-              </h3>
+            <div className="home-greeting-side">
+              <div className="home-greeting-date">
+                <strong>{new Date().toLocaleDateString("es-CL", { day: "2-digit" })}</strong>
+                <span>
+                  {new Date().toLocaleDateString("es-CL", {
+                    month: "short",
+                    year: "numeric",
+                    weekday: "long",
+                  })}
+                </span>
+              </div>
               <button
-                className="secondary-btn"
                 type="button"
-                onClick={handleDocClose}
+                className="home-greeting-profile"
+                onClick={() => navigate("/settings")}
               >
-                Cerrar
+                <span className="home-greeting-profile-dot">{profileInitials(activeProfileName)}</span>
+                Cambiar perfil
               </button>
             </div>
-            {ocrDocId ? (
+          </article>
+
+          <article className="home-panel-card">
+            <div className="home-panel-head">
               <div>
-                <p className="muted" style={{ marginBottom: "0.5rem" }}>
-                  Estado OCR: {ocrStatus || "pendiente"}
-                </p>
-                {ocrResult && ocrEdit ? (
-                  <>
-                    {!ocrEdit.date ? (
-                      <p className="muted" style={{ marginBottom: "0.75rem" }}>
-                        Falta fecha u hora. Puedes agregarla manualmente en Citas.
-                      </p>
-                    ) : null}
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Tipo</label>
-                        <select
-                          className="select-field"
-                          value={ocrEdit.doc_type}
-                          onChange={(e) =>
-                            setOcrEdit({ ...ocrEdit, doc_type: e.target.value })
-                          }
-                        >
-                          <option value="receta">Receta</option>
-                          <option value="orden">Orden</option>
-                          <option value="resultado">Resultado</option>
-                          <option value="informe">Informe</option>
-                          <option value="otro">Otro</option>
-                        </select>
-                      </div>
-                      <div className="input-group">
-                        <label className="input-label">Fecha</label>
-                        <input
-                          className="input-field"
-                          type="date"
-                          value={ocrEdit.date}
-                          onChange={(e) =>
-                            setOcrEdit({ ...ocrEdit, date: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Centro de salud</label>
-                        <input
-                          className="input-field"
-                          value={ocrEdit.center}
-                          onChange={(e) =>
-                            setOcrEdit({ ...ocrEdit, center: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label">Notas</label>
-                      <textarea
-                        className="textarea-field"
-                        value={ocrEdit.notes}
-                        onChange={(e) =>
-                          setOcrEdit({ ...ocrEdit, notes: e.target.value })
-                        }
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="ai-analyzing-card">
-                    <div className="ai-analyzing-sphere" aria-hidden="true">
-                      <span className="ai-sphere-glow" />
-                    </div>
-                    <div>
-                      <p className="ai-analyzing-title">Analizando el documento</p>
-                      <p className="ai-analyzing-text">Estamos extrayendo fechas, tipo y centro medico.</p>
-                    </div>
-                  </div>
-                )}
-                {ocrMessage ? (
-                  <p className="muted" style={{ marginTop: "0.75rem" }}>
-                    {ocrMessage}
-                  </p>
-                ) : null}
-                <div className="floating-actions">
-                  {ocrResult ? (
-                    <button
-                      className="primary-btn"
-                      type="button"
-                      onClick={handleOcrSave}
-                      disabled={ocrSaving}
-                    >
-                      {ocrSaving ? "Guardando..." : "Guardar ajustes"}
-                    </button>
-                  ) : null}
-                  <button
-                    className="secondary-btn"
-                    type="button"
-                    onClick={handleDocClose}
-                  >
-                    Cerrar
-                  </button>
-                </div>
+                <h2 className="home-panel-title">Radar de salud</h2>
+                <p className="home-panel-subtitle">Estado general registrado en Klinip</p>
               </div>
-            ) : (
-              <form onSubmit={handleDocSubmit}>
-                <div className="input-group">
-                  <label className="input-label">Archivo (foto o PDF)</label>
-                <input
-                  className="input-field"
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => setDocFile(e.target.files[0] || null)}
-                />
-                  <span className="tiny-note">
-                    Puedes tomar una foto o subir un PDF. Límite recomendado: 4 MB.
-                  </span>
+              <button type="button" className="home-panel-link" onClick={() => navigate("/stats")}>
+                Ver detalle
+              </button>
+            </div>
+            <div className="home-radar-grid">
+              {radarItems.map((item) => (
+                <div key={item.key} className={`home-radar-item tone-${getStatusTone(item.tone)}`}>
+                  <div className="home-radar-icon">{renderIcon(item.icon)}</div>
+                  <div className="home-radar-label">{item.label}</div>
+                  <div className="home-radar-value">{item.value}</div>
                 </div>
+              ))}
+            </div>
+          </article>
 
-                <div className="input-group">
-                  <label className="input-label">Autocompletar con IA</label>
-                  <select
-                    className="select-field"
-                    value={docAutoFill ? "yes" : "no"}
-                    onChange={(e) => setDocAutoFill(e.target.value === "yes")}
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Actividad proxima</h2>
+                <p className="home-panel-subtitle">Lo que viene en tu agenda</p>
+              </div>
+              <button type="button" className="home-panel-link" onClick={() => navigate("/calendar")}>
+                Ver agenda
+              </button>
+            </div>
+            <div className="home-upcoming-list">
+              {upcomingEvents.length ? (
+                upcomingEvents.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`home-upcoming-item ${item.urgent ? "is-urgent" : ""}`}
+                    onClick={() =>
+                      navigate(item.kind === "medication" ? "/medications" : "/appointments")
+                    }
                   >
-                    <option value="yes">Sí, completar automáticamente</option>
-                    <option value="no">No, editar manualmente</option>
-                  </select>
-                </div>
-
-                {!docAutoFill && (
-                  <>
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Tipo de documento</label>
-                        <select
-                          className="select-field"
-                          value={docForm.doc_type}
-                          onChange={(e) =>
-                            setDocForm({ ...docForm, doc_type: e.target.value })
-                          }
-                        >
-                          <option value="receta">Receta</option>
-                          <option value="orden">Orden</option>
-                          <option value="resultado">Resultado</option>
-                          <option value="informe">Informe</option>
-                          <option value="otro">Otro</option>
-                        </select>
-                      </div>
-                      <div className="input-group">
-                        <label className="input-label">Fecha del documento</label>
-                        <input
-                          className="input-field"
-                          type="date"
-                          value={docForm.date}
-                          onChange={(e) =>
-                            setDocForm({ ...docForm, date: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Centro de salud</label>
-                        <input
-                          className="input-field"
-                          value={docForm.center}
-                          onChange={(e) =>
-                            setDocForm({ ...docForm, center: e.target.value })
-                          }
-                          placeholder="CESFAM, hospital, laboratorio..."
-                        />
-                      </div>
-                    </div>
-
-                    <div className="input-group">
-                      <label className="input-label">Notas</label>
-                      <textarea
-                        className="textarea-field"
-                        value={docForm.notes}
-                        onChange={(e) =>
-                          setDocForm({ ...docForm, notes: e.target.value })
-                        }
-                        placeholder="Ej: Receta vence en 3 meses, control con médico X."
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div className="floating-actions">
-                  <button className="primary-btn" type="submit" disabled={docUploading}>
-                    {docUploading ? "Subiendo..." : "Subir documento"}
+                    <span className="home-upcoming-date">
+                      {item.urgent ? (
+                        <span className="home-upcoming-flag">HOY</span>
+                      ) : (
+                        <span className="home-upcoming-day">{toDayLabel(item.date)}</span>
+                      )}
+                      <strong>{item.date?.getDate?.() || "--"}</strong>
+                      <small>{item.date?.toLocaleDateString("es-CL", { month: "short" }) || ""}</small>
+                    </span>
+                    <span className="home-upcoming-divider" />
+                    <span className="home-upcoming-copy">
+                      <strong>{item.title}</strong>
+                      <span>{[toTimeLabel(item.date), item.meta].filter(Boolean).join(" · ")}</span>
+                    </span>
+                    <span className={`home-upcoming-tag tone-${item.kind === "medication" ? "amber" : item.kind === "exam" ? "teal" : "blue"}`}>
+                      {item.tag}
+                    </span>
                   </button>
+                ))
+              ) : (
+                <div className="home-empty-state">Sin actividad proxima registrada.</div>
+              )}
+            </div>
+          </article>
+
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Acciones rapidas</h2>
+                <p className="home-panel-subtitle">Ejecuta tareas comunes sin navegar por menus.</p>
+              </div>
+            </div>
+            <div className="home-actions-grid">
+              {quickActions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`home-action-item tone-${item.tone}`}
+                  onClick={item.onClick}
+                >
+                  <span className="home-action-icon">{renderIcon(item.icon)}</span>
+                  <span className="home-action-label">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+        </div>
+
+        <div className="home-editorial-right">
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Notas rapidas</h2>
+                <p className="home-panel-subtitle">Pendientes e ideas de tu cuidado.</p>
+              </div>
+              <button
+                type="button"
+                className="home-panel-link"
+                onClick={() => setComposerOpen((prev) => !prev)}
+              >
+                {composerOpen ? "Cerrar" : "Nueva nota"}
+              </button>
+            </div>
+            {composerOpen && (
+              <div className="home-note-composer">
+                <textarea
+                  className="home-note-textarea"
+                  value={noteDraft}
+                  onChange={(event) => setNoteDraft(event.target.value)}
+                  placeholder="Guardar pendiente o idea clave."
+                  rows={3}
+                />
+                <div className="home-note-actions">
                   <button
                     type="button"
-                    className="secondary-btn"
-                    onClick={handleDocClose}
+                    className="home-note-secondary"
+                    onClick={() => {
+                      setComposerOpen(false);
+                      setNoteDraft("");
+                    }}
                   >
                     Cancelar
                   </button>
+                  <button type="button" className="home-note-primary" onClick={handleSaveNote}>
+                    Guardar nota
+                  </button>
                 </div>
-              </form>
+              </div>
             )}
-          </div>
-        </div>
-      )}
+            <div className="home-notes-list">
+              {quickNotes.length ? (
+                quickNotes.map((item, index) => (
+                  <button key={item.id} type="button" className="home-note-row">
+                    <span className={`home-note-dot tone-${["blue", "violet", "green", "amber"][index % 4]}`} />
+                    <span className="home-note-copy">
+                      <strong>{item.text}</strong>
+                      <small>
+                        {parseDate(item.created_at)?.toLocaleString("es-CL", {
+                          day: "2-digit",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }) || "Reciente"}
+                      </small>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <div className="home-empty-state">Todavia no guardas notas rapidas.</div>
+              )}
+            </div>
+          </article>
 
-      <div className="card upcoming-card">
-        <div className="card-header">
-          <div className="card-header-with-icon">
-            <div className="card-icon upcoming-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Actividad reciente</h2>
+                <p className="home-panel-subtitle">Ultimas acciones en la aplicacion.</p>
+              </div>
+              <button type="button" className="home-panel-link" onClick={() => navigate("/timeline")}>
+                Ver historial
+              </button>
             </div>
-            <div>
-              <h2 className="card-title">Lo próximo</h2>
-              <p className="muted">Máximo 5 actividades con fecha en tu agenda.</p>
+            <div className="home-recent-list">
+              {recentActivity.length ? (
+                recentActivity.map((item) => (
+                  <div key={item.id} className="home-recent-row">
+                    <span className={`home-recent-icon tone-${kindToneMap[item.kind] || "blue"}`}>
+                      {renderIcon(item.kind)}
+                    </span>
+                    <span className="home-recent-copy">
+                      <strong>{item.title}</strong>
+                      <small>{item.subtitle}</small>
+                    </span>
+                    <span className="home-recent-time">
+                      {parseDate(item.time)?.toLocaleDateString("es-CL", {
+                        day: "2-digit",
+                        month: "short",
+                      }) || ""}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="home-empty-state">Aun no hay actividad reciente.</div>
+              )}
             </div>
-          </div>
-          <div className="traffic">
-            <span className={`dot ${alert.dot}`} />
-            <span className={`traffic-text traffic-text-${alert.tone || "neutral"}`}>{alert.label}</span>
-          </div>
+          </article>
+
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Sugerencias</h2>
+                <p className="home-panel-subtitle">Basadas en tu actividad reciente.</p>
+              </div>
+            </div>
+            <div className="home-suggestions-list">
+              {suggestionItems.length ? (
+                suggestionItems.map((item) => (
+                  <button key={item.id} type="button" className="home-suggestion-item">
+                    <span className="home-suggestion-icon">{renderIcon("ai")}</span>
+                    <span>{item.text}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="home-empty-state">Tu resumen esta al dia por ahora.</div>
+              )}
+            </div>
+          </article>
         </div>
-        {upcoming.length === 0 ? (
-          <p className="muted">
-            Aún no registras fechas. Agrega tu próxima atención para verla aquí.
-          </p>
-        ) : (
-          <ul className="timeline">
-            {upcoming.map((a) => (
-              <li key={a.id} className="timeline-item">
-                <div className="timeline-main">
-                  <span className={`chip ${a.type}`}>{typeLabels[a.type] || a.type}</span>
-                  <span className={`chip-status-${a.status}`}>
-                    {statusLabels[a.status] || a.status}
-                  </span>
-                </div>
-                <p className="timeline-title">
-                  {a.specialty || "Sin especialidad"} · {a.center || "Centro no definido"}
-                </p>
-                <p className="timeline-meta">
-                  {a.date_time
-                    ? toLocaleDateTimeOrEmpty(a.date_time) || "Por agendar"
-                    : "Por agendar"}
-                </p>
-                {a.notes && <p className="timeline-notes">Notas: {a.notes}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
 
-      <div className="card alerts-card">
-        <div className="card-header">
-          <div className="card-header-with-icon">
-            <div className="card-icon alerts-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-            </div>
-            <div>
-              <h2 className="card-title">Recordatorios y alertas</h2>
-              <p className="muted">
-                Sistema de alertas automáticas según días de anticipación
-              </p>
-            </div>
-          </div>
-          <div className="alert-legend">
-            <div className="alert-legend-item">
-              <span className="dot red" /> <span>1 día</span>
-            </div>
-            <div className="alert-legend-item">
-              <span className="dot yellow" /> <span>3 días</span>
-            </div>
-            <div className="alert-legend-item">
-              <span className="dot green" /> <span>7+ días</span>
-            </div>
-          </div>
-        </div>
-        {reminders.length === 0 ? (
-          <div className="alert-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 11l3 3L22 4"/>
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-            </svg>
-            <p>Sin recordatorios pendientes</p>
-          </div>
-        ) : (
-          <>
-            <ul className="reminder-list">
-              {reminders.map((r) => (
-                <li key={r.id} className={`reminder-item severity-${r.severity}`}>
-                  <div className={`alert-indicator ${r.severity}`}>
-                    {r.severity === "red" && (
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M12 8v4M12 16h.01" stroke="white" strokeWidth="2"/>
-                      </svg>
-                    )}
-                    {r.severity === "yellow" && (
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2L2 22h20L12 2z"/>
-                        <path d="M12 10v4M12 18h.01" stroke="white" strokeWidth="2"/>
-                      </svg>
-                    )}
-                    {r.severity === "green" && (
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2" fill="none"/>
-                      </svg>
-                    )}
-                  </div>
-                  <div className="reminder-content">
-                    <div className={`alert-badge ${r.severity}`}>
-                      {r.label}
-                    </div>
-                    <div className="reminder-title">
-                      {typeLabels[r.type] || r.type} · {r.center || "Centro no definido"}
-                    </div>
-                    <div className="reminder-meta">
-                      {r.date_time
-                        ? toLocaleDateTimeOrEmpty(r.date_time) || "Por agendar"
-                        : "Por agendar"}
-                      {r.notes ? ` · ${r.notes}` : ""}
-                    </div>
-                  </div>
-                  <div className="reminder-actions">
-                    <button
-                      className="action-btn"
-                      type="button"
-                      onClick={() => sendEmailReminder(r)}
-                      title="Enviar recordatorio por correo"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                        <polyline points="22,6 12,13 2,6"/>
-                      </svg>
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="alert-info">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="16" x2="12" y2="12"/>
-                <line x1="12" y1="8" x2="12.01" y2="8"/>
-              </svg>
-              <p>
-                <strong>Tipos de aviso:</strong> Las alertas se activan automáticamente 
-                <strong> 1 día</strong> (urgente), <strong>3 días</strong> (próximo) y 
-                <strong> 7 días</strong> (planificado) antes de cada cita. 
-                En PWA móvil se envían notificaciones push.
-              </p>
-            </div>
-          </>
-        )}
-      </div>
-    </>
+      {loading ? <div className="home-loading">Actualizando tu resumen de salud...</div> : null}
+    </section>
   );
 }
-
-
-
-
-
-
-
-
-
-
-

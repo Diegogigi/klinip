@@ -4400,6 +4400,453 @@ def _log_profile_activity(
     db.add(log)
 
 
+AI_KLINIP_DISCLAIMER = (
+    "Klinip IA entrega informacion orientativa y no reemplaza la evaluacion "
+    "de un profesional de salud."
+)
+
+
+def _ai_model_name() -> str:
+    return (os.getenv("OPENAI_MODEL") or "gpt-5-mini").strip() or "gpt-5-mini"
+
+
+def _safe_iso(dt: datetime | None) -> str:
+    if not dt:
+        return ""
+    try:
+        return dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return str(dt)
+
+
+def _clip_text(value: str | None, limit: int = 420) -> str:
+    text_value = (value or "").strip()
+    if len(text_value) <= limit:
+        return text_value
+    return f"{text_value[:limit].rstrip()}..."
+
+
+def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
+    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    plan_info = _build_plan_info(current_user, db)
+
+    appointments = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.user_id == target_user_id)
+        .order_by(
+            models.Appointment.date_time.is_(None),
+            models.Appointment.date_time.asc(),
+            models.Appointment.created_at.desc(),
+        )
+        .all()
+    )
+    documents = (
+        db.query(models.Document)
+        .filter(models.Document.user_id == target_user_id)
+        .order_by(models.Document.created_at.desc())
+        .all()
+    )
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.user_id == target_user_id)
+        .order_by(models.Medication.created_at.desc())
+        .all()
+    )
+    medications = _attach_medication_adherence(db, medications, current_user)
+
+    profile_notes = []
+    activity_log = []
+    if plan_info.get("collaboration_enabled"):
+        profile_notes = (
+            db.query(models.ProfileNote)
+            .filter(models.ProfileNote.profile_id == profile.id)
+            .order_by(models.ProfileNote.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        activity_log = (
+            db.query(models.ProfileActivityLog)
+            .filter(models.ProfileActivityLog.profile_id == profile.id)
+            .order_by(models.ProfileActivityLog.created_at.desc())
+            .limit(5)
+            .all()
+        )
+
+    upcoming = [
+        appt
+        for appt in appointments
+        if appt.date_time and appt.status != models.AppointmentStatus.realizada
+    ]
+    active_medications = [med for med in medications if not bool(med.completed)]
+    latest_document = documents[0] if documents else None
+    latest_document_text = _clip_text(getattr(latest_document, "ocr_text", "") or "", 2400)
+
+    sources = [
+        {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": True},
+        {"key": "medications", "label": "Medicamentos", "count": len(medications), "enabled": True},
+        {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": True},
+        {
+            "key": "timeline",
+            "label": "Historial clinico",
+            "count": len(appointments) + len(documents) + len(medications),
+            "enabled": True,
+        },
+        {
+            "key": "reminders",
+            "label": "Recordatorios",
+            "count": len(upcoming) + len(active_medications),
+            "enabled": True,
+        },
+        {
+            "key": "family",
+            "label": "Perfil familiar",
+            "count": len(profile_notes) + len(activity_log),
+            "enabled": bool(plan_info.get("collaboration_enabled")),
+        },
+    ]
+
+    return {
+        "profile": {
+            "id": profile.id,
+            "name": profile.full_name,
+            "owner_user_id": target_user_id,
+            "relation_with_owner": profile.relation_with_owner or "",
+            "gender": profile.gender or "",
+            "base_medical_data": _clip_text(profile.base_medical_data or "", 320),
+            "access_role": (link.role or "").lower(),
+            "is_primary": bool(profile.is_primary_profile),
+        },
+        "plan": plan_info,
+        "sources": sources,
+        "appointments": appointments,
+        "documents": documents,
+        "medications": medications,
+        "upcoming": upcoming,
+        "active_medications": active_medications,
+        "latest_document": latest_document,
+        "latest_document_text": latest_document_text,
+        "profile_notes": profile_notes,
+        "activity_log": activity_log,
+    }
+
+
+def _serialize_ai_context(context: dict) -> dict:
+    return {
+        "profile": context["profile"],
+        "plan": {
+            "plan_type": context["plan"].get("plan_type"),
+            "max_profiles": context["plan"].get("max_profiles"),
+            "collaboration_enabled": context["plan"].get("collaboration_enabled"),
+            "family_panel_enabled": context["plan"].get("family_panel_enabled"),
+        },
+        "appointments": [
+            {
+                "type": str(getattr(item.type, "value", item.type)),
+                "specialty": item.specialty or "",
+                "center": item.center or "",
+                "date_time": _safe_iso(item.date_time),
+                "status": str(getattr(item.status, "value", item.status)),
+                "notes": _clip_text(item.notes or "", 180),
+            }
+            for item in context["appointments"][:10]
+        ],
+        "documents": [
+            {
+                "doc_type": str(getattr(item.doc_type, "value", item.doc_type)),
+                "date": _safe_iso(item.date),
+                "center": item.center or "",
+                "notes": _clip_text(item.notes or "", 180),
+                "ocr_status": item.ocr_status or "",
+                "ocr_excerpt": _clip_text(item.ocr_text or "", 900 if index == 0 else 260),
+                "filename": item.filename or "",
+            }
+            for index, item in enumerate(context["documents"][:6])
+        ],
+        "medications": [
+            {
+                "name": item.name,
+                "dose": item.dose or "",
+                "frequency": item.frequency or "",
+                "duration": item.duration or "",
+                "schedule_time": item.schedule_time or "",
+                "completed": bool(item.completed),
+                "end_date": _safe_iso(item.end_date),
+                "notes": _clip_text(item.notes or "", 160),
+                "adherence_rate": getattr(item, "adherence_rate", None),
+                "expected_doses": getattr(item, "expected_doses", 0),
+                "taken_doses": getattr(item, "taken_doses", 0),
+            }
+            for item in context["medications"][:10]
+        ],
+        "profile_notes": [
+            {
+                "note": _clip_text(item.note or "", 200),
+                "visibility": item.visibility or "",
+                "created_at": _safe_iso(item.created_at),
+            }
+            for item in context["profile_notes"][:4]
+        ],
+        "activity_log": [
+            {
+                "action_type": item.action_type,
+                "description": _clip_text(item.description or "", 180),
+                "created_at": _safe_iso(item.created_at),
+            }
+            for item in context["activity_log"][:4]
+        ],
+    }
+
+
+def _ai_system_prompt(context: dict) -> str:
+    return (
+        "Eres Klinip IA, un asistente de salud orientativo integrado en Klinip.\n"
+        "Reglas obligatorias:\n"
+        "1. Usa solo el contexto clinico entregado.\n"
+        "2. Si falta informacion, dilo claramente; no inventes.\n"
+        "3. No diagnostiques ni reemplaces a un profesional.\n"
+        "4. No indiques suspender o iniciar medicamentos por cuenta propia.\n"
+        "5. Si el usuario describe urgencia, deriva a atencion profesional.\n"
+        "6. Explica en espanol claro, con tono sobrio y facil de leer.\n"
+        "7. Si resumes documentos OCR, aclara que la lectura puede contener errores.\n"
+        f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
+        f"Plan actual: {context['plan'].get('plan_type')}.\n"
+        f"Disclaimer obligatorio: {AI_KLINIP_DISCLAIMER}"
+    )
+
+
+def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tuple[str, str] | None:
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        return None
+
+    model = _ai_model_name()
+    messages = [{"role": "system", "content": system_prompt}]
+    for item in history[-8:]:
+        role = "assistant" if (item.get("role") or "") == "assistant" else "user"
+        content = (item.get("content") or "").strip()
+        if content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": message})
+
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.2,
+        }
+    ).encode("utf-8")
+    req = urlrequest.Request(
+        "https://api.openai.com/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+        },
+        method="POST",
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        choices = data.get("choices") or []
+        if not choices:
+            return None
+        content = (((choices[0] or {}).get("message") or {}).get("content") or "").strip()
+        if not content:
+            return None
+        return content, model
+    except Exception as exc:
+        print(f"WARNING ai openai provider failed: {exc}")
+        return None
+
+
+def _fallback_ai_reply(message: str, context: dict) -> str:
+    normalized = _normalize_text(message or "")
+    latest_document = context.get("latest_document")
+    active_medications = context.get("active_medications") or []
+    upcoming = context.get("upcoming") or []
+    appointments = context.get("appointments") or []
+    documents = context.get("documents") or []
+    medications = context.get("medications") or []
+
+    if any(token in normalized for token in ["ultimo documento", "explicame mi ultimo documento", "documento", "ocr"]):
+        if not latest_document:
+            return (
+                "No encuentro documentos registrados para el perfil activo. "
+                "Si subes un documento, podre ayudarte a resumirlo."
+            )
+        doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
+        parts = [f"El ultimo documento registrado es de tipo {doc_type}."]
+        if latest_document.date:
+            parts.append(f"Fecha registrada: {_safe_iso(latest_document.date)}.")
+        if latest_document.center:
+            parts.append(f"Centro asociado: {latest_document.center}.")
+        if latest_document.notes:
+            parts.append(f"Notas guardadas: {_clip_text(latest_document.notes, 220)}.")
+        if latest_document.ocr_text:
+            parts.append(f"Resumen OCR orientativo: {_clip_text(latest_document.ocr_text, 900)}")
+            parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
+        else:
+            parts.append("Todavia no hay texto OCR disponible para ese documento.")
+        return " ".join(parts)
+
+    if any(token in normalized for token in ["medicamento", "medicamentos", "que medicamentos estoy tomando", "que estoy tomando"]):
+        if not active_medications:
+            return "No veo medicamentos activos registrados para el perfil activo."
+        items = []
+        for med in active_medications[:6]:
+            detail = med.name
+            if med.dose:
+                detail += f" ({med.dose})"
+            if med.frequency:
+                detail += f", frecuencia {med.frequency}"
+            items.append(detail)
+        return (
+            f"Actualmente aparecen {len(active_medications)} medicamento(s) activo(s): "
+            + "; ".join(items)
+            + "."
+        )
+
+    if any(token in normalized for token in ["proxima cita", "proxima actividad", "cuando es mi proxima cita", "cita proxima"]):
+        next_item = next((item for item in upcoming if item.date_time), None)
+        if not next_item:
+            return "No encuentro una cita proxima con fecha registrada para el perfil activo."
+        appt_type = str(getattr(next_item.type, "value", next_item.type))
+        status = str(getattr(next_item.status, "value", next_item.status))
+        return (
+            f"La proxima actividad registrada es una {appt_type} el {_safe_iso(next_item.date_time)}"
+            + (f" en {next_item.center}" if next_item.center else "")
+            + (f", especialidad {next_item.specialty}" if next_item.specialty else "")
+            + f". Estado actual: {status}."
+        )
+
+    if any(token in normalized for token in ["resume mi historial", "resumen de mi historial", "historial clinico", "historial"]):
+        latest_doc_text = ""
+        if latest_document:
+            latest_doc_text = (
+                f" Ultimo documento: {str(getattr(latest_document.doc_type, 'value', latest_document.doc_type))}"
+                + (f" del {_safe_iso(latest_document.date)}." if latest_document.date else ".")
+            )
+        next_item = next((item for item in upcoming if item.date_time), None)
+        next_appt_text = (
+            f" Proxima cita: {_safe_iso(next_item.date_time)}."
+            if next_item
+            else " No hay proxima cita fechada."
+        )
+        return (
+            f"Resumen del perfil activo {context['profile']['name']}: "
+            f"{len(appointments)} actividad(es), {len(documents)} documento(s) y {len(medications)} medicamento(s) registrados."
+            + latest_doc_text
+            + next_appt_text
+        )
+
+    return (
+        f"Puedo ayudarte con el perfil activo {context['profile']['name']} usando sus documentos, medicamentos, "
+        "citas, historial y recordatorios registrados. Prueba con preguntas como: "
+        "'Explicame mi ultimo documento', 'Que medicamentos estoy tomando', "
+        "'Cuando es mi proxima cita' o 'Resume mi historial clinico'."
+    )
+
+
+def _build_ai_references(message: str, context: dict) -> list[dict]:
+    normalized = _normalize_text(message or "")
+    refs: list[dict] = []
+    latest_document = context.get("latest_document")
+    active_medications = context.get("active_medications") or []
+    upcoming = context.get("upcoming") or []
+
+    if latest_document and any(
+        token in normalized for token in ["documento", "ocr", "ultimo documento", "explicame mi ultimo documento"]
+    ):
+        doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
+        refs.append(
+            {
+                "kind": "document",
+                "label": f"Documento {latest_document.filename or f'#{latest_document.id}'}",
+                "detail": f"{doc_type} · {latest_document.center or 'Sin centro'}",
+            }
+        )
+
+    if active_medications and any(
+        token in normalized for token in ["medicamento", "medicamentos", "tomando", "dosis", "frecuencia"]
+    ):
+        for med in active_medications[:3]:
+            refs.append(
+                {
+                    "kind": "medication",
+                    "label": med.name,
+                    "detail": ", ".join([value for value in [med.dose or "", med.frequency or ""] if value]),
+                }
+            )
+
+    if upcoming and any(token in normalized for token in ["cita", "proxima", "actividad", "agenda"]):
+        item = next((appt for appt in upcoming if appt.date_time), None)
+        if item:
+            appt_type = str(getattr(item.type, "value", item.type))
+            refs.append(
+                {
+                    "kind": "appointment",
+                    "label": f"{appt_type.title()} próxima",
+                    "detail": " · ".join(
+                        [value for value in [_safe_iso(item.date_time), item.specialty or "", item.center or ""] if value]
+                    ),
+                }
+            )
+
+    if any(token in normalized for token in ["historial", "perfil", "resume"]) and context.get("profile"):
+        refs.append(
+            {
+                "kind": "profile",
+                "label": f"Perfil activo: {context['profile']['name']}",
+                "detail": f"Plan {context['plan'].get('plan_type')}",
+            }
+        )
+
+    seen = set()
+    unique_refs = []
+    for ref in refs:
+        key = (ref.get("kind"), ref.get("label"), ref.get("detail"))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_refs.append(ref)
+    return unique_refs[:4]
+
+
+def _build_ai_reply(message: str, history: list[dict], context: dict) -> tuple[str, str, str, list[dict]]:
+    serialized_context = _serialize_ai_context(context)
+    system_prompt = _ai_system_prompt(context) + "\n\nContexto clinico JSON:\n" + json.dumps(
+        serialized_context, ensure_ascii=False
+    )
+    references = _build_ai_references(message, context)
+    provider_reply = _call_openai_ai(system_prompt, history, message)
+    if provider_reply:
+        text_reply, model = provider_reply
+        return text_reply, model, "openai", references
+    return _fallback_ai_reply(message, context), "context-fallback", "fallback", references
+
+
+def _persist_ai_message(
+    db: Session,
+    *,
+    profile_id: int,
+    user_id: int,
+    role: str,
+    content: str,
+    metadata_json: dict | None = None,
+):
+    item = models.AiConversationMessage(
+        profile_id=profile_id,
+        user_id=user_id,
+        role=(role or "").strip().lower() or "assistant",
+        content=(content or "").strip(),
+        metadata_json=metadata_json or {},
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
 def register(
@@ -5636,6 +6083,91 @@ async def create_profile_note(
     db.commit()
     db.refresh(item)
     return _profile_note_out(item)
+
+
+@app.post("/ai/chat", response_model=schemas.AiChatResponse)
+async def ai_chat(
+    payload: schemas.AiChatRequest,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    message = (payload.message or "").strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
+
+    context = _ai_context_bundle(db, current_user)
+    history = [
+        {"role": item.role, "content": item.content}
+        for item in (payload.history or [])
+        if (item.content or "").strip()
+    ]
+    reply, model_name, mode, references = _build_ai_reply(message, history, context)
+    profile_id = int(context["profile"]["id"])
+    _persist_ai_message(
+        db,
+        profile_id=profile_id,
+        user_id=current_user.id,
+        role="user",
+        content=message,
+        metadata_json={"mode": "input"},
+    )
+    _persist_ai_message(
+        db,
+        profile_id=profile_id,
+        user_id=current_user.id,
+        role="assistant",
+        content=reply,
+        metadata_json={"model": model_name, "mode": mode, "references": references},
+    )
+    return {
+        "reply": reply,
+        "disclaimer": AI_KLINIP_DISCLAIMER,
+        "model": model_name,
+        "mode": mode,
+        "active_profile_id": profile_id,
+        "active_profile_name": context["profile"]["name"],
+        "sources": context["sources"],
+        "references": references,
+    }
+
+
+@app.get("/ai/history", response_model=List[schemas.AiConversationMessageOut])
+async def get_ai_history(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    items = (
+        db.query(models.AiConversationMessage)
+        .filter(models.AiConversationMessage.profile_id == profile.id)
+        .order_by(models.AiConversationMessage.created_at.asc(), models.AiConversationMessage.id.asc())
+        .limit(100)
+        .all()
+    )
+    return items
+
+
+@app.delete("/ai/history")
+async def clear_ai_history(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link, _ = _get_active_profile_context(db, current_user, require_write=True)
+    deleted = (
+        db.query(models.AiConversationMessage)
+        .filter(models.AiConversationMessage.profile_id == profile.id)
+        .delete()
+    )
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="ai_history_cleared",
+        description=f"{current_user.name or current_user.email} limpio el historial de Klinip IA",
+        metadata_json={"messages_deleted": deleted, "role": link.role},
+    )
+    db.commit()
+    return {"ok": True, "deleted": deleted}
 
 
 # Appointments

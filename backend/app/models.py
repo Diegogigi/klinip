@@ -328,3 +328,18 @@ class ProfileNote(Base):
 
     profile = relationship("HealthProfile", back_populates="notes")
     created_by_user = relationship("User")
+
+
+class AiConversationMessage(Base):
+    __tablename__ = "ai_conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)
+    content = Column(Text, nullable=False)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+
+    profile = relationship("HealthProfile")
+    user = relationship("User")

@@ -12,6 +12,7 @@ import Documents from "./pages/Documents";
 import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
 import Stats from "./pages/Stats";
+import AiKlinip from "./pages/AiKlinip";
 import Landing from "./pages/Landing";
 import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
@@ -105,6 +106,13 @@ const icons = {
       <circle cx="6" cy="16" r="1.8" />
     </svg>
   ),
+  ai: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="6" width="14" height="12" rx="4" />
+      <path d="M9 12h.01M12 12h.01M15 12h.01" />
+      <path d="M12 3v2M4 12H2M22 12h-2M18.5 5.5 17 7M5.5 5.5 7 7" />
+    </svg>
+  ),
 };
 
 function Sidebar({
@@ -127,7 +135,6 @@ function Sidebar({
     (!user && location.pathname === "/");
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
-  const [expanded, setExpanded] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -153,13 +160,14 @@ function Sidebar({
     { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
     { to: "/stats", label: "Stats", icon: icons.chart },
+    { to: "/ai", label: "IA Klinip", icon: icons.ai },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
   ];
   const mobilePrimaryLinks = links.filter((item) =>
-    ["/", "/appointments", "/calendar", "/timeline"].includes(item.to)
+    ["/", "/appointments", "/ai", "/calendar", "/timeline"].includes(item.to)
   );
   const mobileOverflowLinks = links.filter((item) =>
     ["/stats", "/medications", "/documents", "/family"].includes(item.to)
@@ -193,11 +201,7 @@ function Sidebar({
   if (isAuthRoute || isPlansRoute) return null;
 
   return (
-    <aside
-      className={`sidebar ${expanded && !isMobile ? "expanded" : ""}`}
-      onMouseEnter={() => !isMobile && setExpanded(true)}
-      onMouseLeave={() => !isMobile && setExpanded(false)}
-    >
+    <aside className="sidebar">
       <div className="sidebar-brand">
         <div className="brand-avatar">
           <img
@@ -206,24 +210,20 @@ function Sidebar({
             className="brand-avatar-img"
           />
         </div>
-        {expanded && (
-          <div>
-            <div className="brand-title">Klinip</div>
-            <div className="brand-subtitle">Tu ruta de salud</div>
-          </div>
-        )}
       </div>
 
       <nav className="sidebar-nav">
         {isMobile ? (
           <>
             {mobilePrimaryLinks.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
-                onClick={() => setShowMobileMenu(false)}
-              >
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  className={`sidebar-link ${location.pathname === link.to ? "active" : ""} ${
+                    link.to === "/ai" ? "is-mobile-ai" : ""
+                  }`}
+                  onClick={() => setShowMobileMenu(false)}
+                >
                 <span className="sidebar-icon">{link.icon}</span>
                 {link.badge > 0 && (
                   <span className="sidebar-badge">{link.badge}</span>
@@ -269,12 +269,16 @@ function Sidebar({
               key={link.to}
               to={link.to}
               className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
+              aria-label={link.label}
             >
               <span className="sidebar-icon">{link.icon}</span>
               {link.badge > 0 && (
                 <span className="sidebar-badge">{link.badge}</span>
               )}
               <span className="sidebar-label">{link.label}</span>
+              <span className="sidebar-tooltip" role="presentation">
+                {link.label}
+              </span>
             </Link>
           ))
         )}
@@ -315,6 +319,7 @@ function Topbar({
     "/medications": "Medicamentos",
     "/calendar": "Calendario",
     "/stats": "Estadisticas",
+    "/ai": "IA Klinip",
     "/timeline": "Historia",
     "/family": "Mi familia",
     "/settings": "Perfil",
@@ -1487,6 +1492,9 @@ export default function App() {
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isPublicLanding = !user && location.pathname === "/";
   const isPublicMarketingRoute = isPublicLanding || isPlansRoute;
+  const isAiRoute = location.pathname === "/ai";
+  const isFamilyRoute = location.pathname === "/family";
+  const isSettingsRoute = location.pathname === "/settings";
 
   return (
     <div className="app-shell">
@@ -1815,7 +1823,13 @@ export default function App() {
               </div>
             </div>
           )}
-          <main className={`main-content ${isPublicMarketingRoute ? "main-content-landing" : ""}`}>
+          <main
+            className={`main-content ${isPublicMarketingRoute ? "main-content-landing" : ""} ${
+              isAiRoute ? "main-content-ai" : ""
+            } ${isFamilyRoute ? "main-content-family" : ""} ${
+              isSettingsRoute ? "main-content-settings" : ""
+            }`}
+          >
             <Routes>
               <Route
                 path="/login"
@@ -1900,6 +1914,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <Stats key={`stats-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/ai"
+                element={
+                  <ProtectedRoute user={user}>
+                    <AiKlinip key={`ai-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

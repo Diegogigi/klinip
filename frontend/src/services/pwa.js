@@ -16,6 +16,16 @@ function urlBase64ToUint8Array(base64String) {
 export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
   try {
+    if (import.meta.env.DEV) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((reg) => reg.unregister().catch(() => false)));
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys().catch(() => []);
+        await Promise.all(cacheKeys.map((key) => caches.delete(key).catch(() => false)));
+      }
+      return null;
+    }
+
     const reg = await navigator.serviceWorker.register("/service-worker.js");
     reg.update().catch(() => null);
 

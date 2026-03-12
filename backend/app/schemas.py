@@ -487,3 +487,56 @@ class PrivacyRequestIn(BaseModel):
     reason: str
     message: str
     include_tech: Optional[bool] = False
+
+
+class AiChatMessageIn(BaseModel):
+    role: str
+    content: str
+
+
+class AiChatRequest(BaseModel):
+    message: str
+    history: list[AiChatMessageIn] = []
+
+
+class AiContextSourceOut(BaseModel):
+    key: str
+    label: str
+    count: int = 0
+    enabled: bool = True
+
+
+class AiReferenceOut(BaseModel):
+    kind: str
+    label: str
+    detail: str = ""
+
+
+class AiChatResponse(BaseModel):
+    reply: str
+    disclaimer: str
+    model: str
+    mode: str
+    active_profile_id: int | None = None
+    active_profile_name: str = ""
+    sources: list[AiContextSourceOut] = []
+    references: list[AiReferenceOut] = []
+
+
+class AiConversationMessageOut(BaseModel):
+    id: int
+    profile_id: int
+    user_id: int
+    role: str
+    content: str
+    metadata_json: dict | None = None
+    created_at: datetime
+
+    @field_serializer('created_at')
+    def serialize_ai_message_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
