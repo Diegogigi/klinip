@@ -666,6 +666,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
+  const [activeUpdateKey, setActiveUpdateKey] = useState("");
   const [notifications, setNotifications] = useState([]);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -702,6 +703,9 @@ export default function App() {
   });
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const locationRef = useRef(location);
+  const seenUpdateKeysRef = useRef(new Set());
+  const dismissedUpdateKeyRef = useRef("");
+  const pushNotifiedUpdateKeyRef = useRef("");
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
@@ -1237,18 +1241,48 @@ export default function App() {
   useEffect(() => {
     const onUpdate = (event) => {
       const reg = event.detail?.registration || null;
+      const updateKey =
+        event.detail?.updateKey ||
+        reg?.waiting?.scriptURL ||
+        reg?.installing?.scriptURL ||
+        reg?.active?.scriptURL ||
+        reg?.scope ||
+        "klinip-sw-update";
+      const dismissedKey = dismissedUpdateKeyRef.current || "";
+      if (dismissedKey && dismissedKey === updateKey) return;
+      if (seenUpdateKeysRef.current.has(updateKey)) return;
+      seenUpdateKeysRef.current.add(updateKey);
       setUpdateRegistration(reg);
-        setUpdateAvailable(true);
-        if ("Notification" in window && Notification.permission === "granted" && reg?.showNotification) {
-          reg.showNotification("Actualizacion disponible", {
+      setActiveUpdateKey(updateKey);
+      setUpdateAvailable(true);
+      const pushNotifiedKey = pushNotifiedUpdateKeyRef.current || "";
+      if (
+        pushNotifiedKey !== updateKey &&
+        "Notification" in window &&
+        Notification.permission === "granted" &&
+        reg?.showNotification
+      ) {
+        reg
+          .showNotification("Actualizacion disponible", {
             body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
             icon: "/icons/android-chrome-192x192.png",
-          }).catch(() => null);
-        }
-      };
+          })
+          .then(() => {
+            pushNotifiedUpdateKeyRef.current = updateKey;
+          })
+          .catch(() => null);
+      }
+    };
     window.addEventListener("klinip-sw-update", onUpdate);
     return () => window.removeEventListener("klinip-sw-update", onUpdate);
   }, []);
+
+  const handleDismissUpdate = () => {
+    if (activeUpdateKey) {
+      dismissedUpdateKeyRef.current = activeUpdateKey;
+    }
+    setUpdateAvailable(false);
+  };
 
   const handleApplyUpdate = async () => {
     try {
@@ -1261,6 +1295,9 @@ export default function App() {
     } catch (err) {
       window.location.reload();
     } finally {
+      if (activeUpdateKey) {
+        dismissedUpdateKeyRef.current = "";
+      }
       setUpdateAvailable(false);
     }
   };
@@ -1817,7 +1854,7 @@ export default function App() {
                 <button
                   className="secondary-btn"
                   type="button"
-                  onClick={() => setUpdateAvailable(false)}
+                  onClick={handleDismissUpdate}
                 >
                   Despues
                 </button>
