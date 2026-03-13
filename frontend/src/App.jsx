@@ -13,6 +13,7 @@ import Settings from "./pages/Settings";
 import Timeline from "./pages/Timeline";
 import Stats from "./pages/Stats";
 import AiKlinip from "./pages/AiKlinip";
+import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
 import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
@@ -320,6 +321,7 @@ function Topbar({
     "/ai": "IA Klinip",
     "/timeline": "Historia",
     "/family": "Mi familia",
+    "/clinical-reports": "Reportes",
     "/settings": "Perfil",
   };
   const title = titles[location.pathname] || "Klinip";
@@ -1957,6 +1959,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <AiKlinip key={`ai-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/clinical-reports"
+                element={
+                  <ProtectedRoute user={user}>
+                    <ClinicalReports key={`clinical-reports-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

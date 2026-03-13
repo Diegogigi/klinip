@@ -1,4 +1,4 @@
-from fastapi import (
+﻿from fastapi import (
     FastAPI,
     Depends,
     HTTPException,
@@ -388,6 +388,65 @@ def ensure_medication_schema():
 ensure_medication_schema()
 
 
+def ensure_medication_intake_schema():
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("medication_intakes")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        def add_column(name: str, pg_stmt: str, sqlite_stmt: str):
+            if name in columns:
+                return
+            statements.append(pg_stmt if backend == "postgresql" else sqlite_stmt)
+            added_columns.append(name)
+
+        add_column(
+            "scheduled_at",
+            "ALTER TABLE medication_intakes ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP NULL",
+            "ALTER TABLE medication_intakes ADD COLUMN scheduled_at DATETIME",
+        )
+        add_column(
+            "status",
+            "ALTER TABLE medication_intakes ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'taken'",
+            "ALTER TABLE medication_intakes ADD COLUMN status VARCHAR DEFAULT 'taken'",
+        )
+        add_column(
+            "source",
+            "ALTER TABLE medication_intakes ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT 'manual'",
+            "ALTER TABLE medication_intakes ADD COLUMN source VARCHAR DEFAULT 'manual'",
+        )
+        add_column(
+            "notes",
+            "ALTER TABLE medication_intakes ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''",
+            "ALTER TABLE medication_intakes ADD COLUMN notes TEXT DEFAULT ''",
+        )
+        add_column(
+            "created_at",
+            "ALTER TABLE medication_intakes ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
+            "ALTER TABLE medication_intakes ADD COLUMN created_at DATETIME",
+        )
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+                if "created_at" in added_columns:
+                    conn.execute(text("UPDATE medication_intakes SET created_at = COALESCE(created_at, taken_at, CURRENT_TIMESTAMP)"))
+            print(
+                "DEBUG ensure_medication_intake_schema: columnas agregadas a medication_intakes: "
+                + ", ".join(added_columns)
+            )
+        else:
+            print("DEBUG ensure_medication_intake_schema: tabla medication_intakes ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_medication_intake_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_medication_intake_schema()
+
+
 def ensure_ai_conversation_schema():
     """
     Garantiza que ai_conversation_messages tenga columnas para conversaciones.
@@ -445,41 +504,41 @@ PLAN_DEFINITIONS = {
         },
         "public": {
             "slug": "basico",
-            "name": "Básico",
+            "name": "BÃ¡sico",
             "price_monthly": "Gratis",
             "price_yearly": "Gratis",
             "yearly_equivalent": "Sin costo",
             "note": "Salud personal",
-            "summary": "Para organizar tu propia salud con lo esencial desde el primer día.",
+            "summary": "Para organizar tu propia salud con lo esencial desde el primer dÃ­a.",
             "recommended": False,
             "cta": "Empezar gratis",
             "features": [
                 "1 perfil de salud",
                 "Medicamentos, citas y calendario",
-                "Documentos médicos con OCR básico",
+                "Documentos mÃ©dicos con OCR bÃ¡sico",
                 "Recordatorios esenciales",
-                "Acceso móvil y escritorio",
+                "Acceso mÃ³vil y escritorio",
             ],
             "detail_sections": [
                 {
                     "title": "Ideal para",
                     "items": [
-                        "Personas que quieren centralizar su información médica",
+                        "Personas que quieren centralizar su informaciÃ³n mÃ©dica",
                         "Usuarios que necesitan recordatorios y documentos en un solo lugar",
                     ],
                 },
                 {
                     "title": "Incluye",
                     "items": [
-                        "Gestión de citas, medicamentos y documentos",
-                        "Historial básico de salud",
-                        "Panel individual simple y rápido",
+                        "GestiÃ³n de citas, medicamentos y documentos",
+                        "Historial bÃ¡sico de salud",
+                        "Panel individual simple y rÃ¡pido",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "1"},
-                {"label": "Colaboración", "value": "No"},
+                {"label": "ColaboraciÃ³n", "value": "No"},
                 {"label": "Panel familiar", "value": "No"},
             ],
         },
@@ -494,10 +553,10 @@ PLAN_DEFINITIONS = {
             "slug": "plus",
             "name": "Plus",
             "price_monthly": "$3.990 / mes",
-            "price_yearly": "$39.990 / año",
+            "price_yearly": "$39.990 / aÃ±o",
             "yearly_equivalent": "$3.332 / mes",
             "note": "Individual ampliado",
-            "summary": "Más capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
+            "summary": "MÃ¡s capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
             "recommended": True,
             "cta": "Probar Plus",
             "features": [
@@ -505,28 +564,28 @@ PLAN_DEFINITIONS = {
                 "OCR mejorado",
                 "Historial completo y reportes",
                 "Recordatorios avanzados",
-                "Gestión personal y de dependientes",
+                "GestiÃ³n personal y de dependientes",
             ],
             "detail_sections": [
                 {
                     "title": "Ideal para",
                     "items": [
                         "Usuarios que manejan su salud y la de hijos o adultos mayores",
-                        "Personas que necesitan más trazabilidad y reportes",
+                        "Personas que necesitan mÃ¡s trazabilidad y reportes",
                     ],
                 },
                 {
                     "title": "Incluye",
                     "items": [
-                        "Más perfiles para centralizar seguimiento",
+                        "MÃ¡s perfiles para centralizar seguimiento",
                         "Mayor profundidad en historial y documentos",
-                        "Automatización de recordatorios con más contexto",
+                        "AutomatizaciÃ³n de recordatorios con mÃ¡s contexto",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "3"},
-                {"label": "Colaboración", "value": "Parcial"},
+                {"label": "ColaboraciÃ³n", "value": "Parcial"},
                 {"label": "Panel familiar", "value": "No"},
             ],
         },
@@ -541,7 +600,7 @@ PLAN_DEFINITIONS = {
             "slug": "familiar",
             "name": "Familiar",
             "price_monthly": "$6.990 / mes",
-            "price_yearly": "$69.990 / año",
+            "price_yearly": "$69.990 / aÃ±o",
             "yearly_equivalent": "$5.832 / mes",
             "note": "Ecosistema colaborativo",
             "summary": "Pensado para familias y cuidadores que coordinan la salud de varias personas.",
@@ -551,7 +610,7 @@ PLAN_DEFINITIONS = {
                 "Hasta 5 perfiles de salud",
                 "Panel familiar y calendarios compartidos",
                 "Recordatorios por perfil",
-                "Roles por cuidador y colaboración multiusuario",
+                "Roles por cuidador y colaboraciÃ³n multiusuario",
                 "Historial y actividad por persona",
             ],
             "detail_sections": [
@@ -566,15 +625,15 @@ PLAN_DEFINITIONS = {
                     "title": "Incluye",
                     "items": [
                         "Panel familiar con contexto por integrante",
-                        "Colaboración entre cuidadores y responsables",
+                        "ColaboraciÃ³n entre cuidadores y responsables",
                         "Seguimiento diferenciado por perfil y actividad",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "5"},
-                {"label": "Colaboración", "value": "Sí"},
-                {"label": "Panel familiar", "value": "Sí"},
+                {"label": "ColaboraciÃ³n", "value": "SÃ­"},
+                {"label": "Panel familiar", "value": "SÃ­"},
             ],
         },
     },
@@ -1303,7 +1362,7 @@ def _send_privacy_support_email(payload: dict):
           <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
             <tr>
               <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
-                <h2 style="margin:0;font-size:20px;">Klinip · Nueva solicitud de privacidad</h2>
+                <h2 style="margin:0;font-size:20px;">Klinip Â· Nueva solicitud de privacidad</h2>
               </td>
             </tr>
             <tr>
@@ -1323,7 +1382,7 @@ def _send_privacy_support_email(payload: dict):
             </tr>
             <tr>
               <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
-                Klinip · Canal interno de soporte de privacidad
+                Klinip Â· Canal interno de soporte de privacidad
               </td>
             </tr>
           </table>
@@ -1385,7 +1444,7 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
           <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
             <tr>
               <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
-                <h2 style="margin:0;font-size:20px;">Klinip · Solicitud recibida</h2>
+                <h2 style="margin:0;font-size:20px;">Klinip Â· Solicitud recibida</h2>
               </td>
             </tr>
             <tr>
@@ -1700,6 +1759,7 @@ def _send_profile_access_removed_email_safe(
 SCHEDULE_WINDOW_SECONDS = 60
 SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
+AI_REFRESH_INTERVAL_SECONDS = 600
 DEFAULT_TZ_NAME = "America/Santiago"
 
 
@@ -1867,6 +1927,86 @@ def _calculate_expected_doses_until(med: models.Medication, now: datetime) -> in
         day += timedelta(days=1)
 
     return expected
+
+
+def _normalize_adherence_status(value: str | None) -> str:
+    normalized = _normalize_text(value or "").lower()
+    if normalized in {"late", "atrasada", "tarde"}:
+        return "late"
+    if normalized in {"missed", "omitida", "perdida"}:
+        return "missed"
+    if normalized in {"skipped", "saltada"}:
+        return "skipped"
+    return "taken"
+
+
+def _build_medication_event_defaults(
+    med: models.Medication,
+    status: str,
+    scheduled_at: datetime | None,
+    taken_at: datetime | None,
+) -> tuple[datetime | None, datetime | None, str]:
+    now = datetime.now()
+    schedule_dt = scheduled_at
+    actual_taken_at = taken_at
+    normalized_status = _normalize_adherence_status(status)
+    if not schedule_dt:
+        slots = _medication_time_slots(med)
+        if slots:
+            hour, minute = slots[0]
+            schedule_dt = _build_med_trigger(now.replace(hour=0, minute=0, second=0, microsecond=0), hour, minute)
+    if normalized_status in {"taken", "late"} and not actual_taken_at:
+        actual_taken_at = now
+    if normalized_status == "taken" and schedule_dt and actual_taken_at:
+        if actual_taken_at > schedule_dt + timedelta(minutes=90):
+            normalized_status = "late"
+    return schedule_dt, actual_taken_at, normalized_status
+
+
+def _materialize_medication_adherence_events(db: Session, user: models.User, horizon_days: int = 2):
+    now = datetime.now(_resolve_user_tz(user))
+    meds = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.user_id == user.id,
+            models.Medication.completed.is_(False),
+        )
+        .all()
+    )
+    for med in meds:
+        start_day = (med.created_at or now) - timedelta(days=horizon_days - 1)
+        day = start_day.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        while day <= end_day:
+            for hour, minute in _medication_time_slots(med):
+                scheduled_at = _build_med_trigger(day, hour, minute)
+                if scheduled_at > now - timedelta(minutes=90):
+                    continue
+                if med.end_date and scheduled_at > med.end_date:
+                    continue
+                existing = (
+                    db.query(models.MedicationIntake)
+                    .filter(
+                        models.MedicationIntake.medication_id == med.id,
+                        models.MedicationIntake.user_id == user.id,
+                        models.MedicationIntake.scheduled_at == scheduled_at.replace(tzinfo=None),
+                    )
+                    .first()
+                )
+                if existing:
+                    continue
+                db.add(
+                    models.MedicationIntake(
+                        user_id=user.id,
+                        medication_id=med.id,
+                        scheduled_at=scheduled_at.replace(tzinfo=None),
+                        taken_at=None,
+                        status="missed",
+                        source="scheduler",
+                        notes="Evento generado automaticamente por falta de registro.",
+                    )
+                )
+            day += timedelta(days=1)
 
 
 def _attach_medication_adherence(
@@ -2156,12 +2296,68 @@ def _send_scheduled_push_reminders():
 
 
 _scheduler_started = False
+_last_ai_refresh_ts = 0.0
+
+
+def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
+    if not profile or bool(getattr(profile, "is_archived", False)):
+        return
+    owner_user_id = int(profile.owner_user_id)
+    owner_user = db.query(models.User).filter(models.User.id == owner_user_id).first()
+    if owner_user:
+        _materialize_medication_adherence_events(db, owner_user)
+    appointments = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.user_id == owner_user_id)
+        .order_by(models.Appointment.date_time.asc().nullslast())
+        .all()
+    )
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.user_id == owner_user_id)
+        .order_by(models.Medication.created_at.desc())
+        .all()
+    )
+    documents = (
+        db.query(models.Document)
+        .filter(models.Document.user_id == owner_user_id)
+        .order_by(models.Document.created_at.desc())
+        .all()
+    )
+    _build_advanced_health_context(db, profile, appointments, medications, documents)
+    _refresh_profile_ai_learning_memory(db, owner_user_id)
+    db.add(profile)
+
+
+def _run_scheduled_ai_refresh():
+    db = SessionLocal()
+    try:
+        profiles = (
+            db.query(models.HealthProfile)
+            .filter(models.HealthProfile.is_archived.is_(False))
+            .order_by(models.HealthProfile.created_at.asc())
+            .all()
+        )
+        for profile in profiles:
+            try:
+                _refresh_profile_ai_analytics(db, profile)
+                db.commit()
+            except Exception as exc:
+                db.rollback()
+                print(f"WARNING ai_refresh profile {getattr(profile, 'id', 'unknown')}: {exc}")
+    finally:
+        db.close()
 
 
 def _scheduler_loop():
+    global _last_ai_refresh_ts
     while True:
         try:
             _send_scheduled_push_reminders()
+            now_ts = time.time()
+            if now_ts - _last_ai_refresh_ts >= AI_REFRESH_INTERVAL_SECONDS:
+                _run_scheduled_ai_refresh()
+                _last_ai_refresh_ts = now_ts
         except Exception as exc:
             print(f"WARNING scheduler: {exc}")
         time.sleep(SCHEDULE_INTERVAL_SECONDS)
@@ -2282,38 +2478,38 @@ def _clean_center_line(line: str) -> str:
 
 def _extract_center_from_electronic_prescription(text: str) -> str | None:
     """
-    Extrae el centro médico de recetas electrónicas chilenas
+    Extrae el centro mÃ©dico de recetas electrÃ³nicas chilenas
     """
     if not text:
         return None
 
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # Buscar líneas con "Dirección:" en recetas electrónicas
+    # Buscar lÃ­neas con "DirecciÃ³n:" en recetas electrÃ³nicas
     for idx, line in enumerate(lines[:20]):
         normalized = _normalize_text(line)
         if "direccion" in normalized and ":" in line:
-            # La dirección suele seguir después de los dos puntos
+            # La direcciÃ³n suele seguir despuÃ©s de los dos puntos
             if idx + 1 < len(lines):
-                # La siguiente línea suele contener la dirección completa
+                # La siguiente lÃ­nea suele contener la direcciÃ³n completa
                 address_line = lines[idx + 1].strip()
-                # Limpiar la dirección
-                # Formato típico: "Pasaje El Boldo #654, Pudahuel, Santiago, Metropolitana de Santiago"
+                # Limpiar la direcciÃ³n
+                # Formato tÃ­pico: "Pasaje El Boldo #654, Pudahuel, Santiago, Metropolitana de Santiago"
                 # Queremos extraer "Pudahuel, Santiago" o similar
                 parts = address_line.split(",")
                 if len(parts) >= 2:
-                    # Tomar la comuna y región
+                    # Tomar la comuna y regiÃ³n
                     return _safe_text(
                         f"{parts[-3].strip()}, {parts[-2].strip()}"
                         if len(parts) >= 3
                         else f"{parts[0].strip()}, {parts[1].strip()}"
                     )
 
-    # Si no encuentra dirección, buscar por profesión/institución
+    # Si no encuentra direcciÃ³n, buscar por profesiÃ³n/instituciÃ³n
     for line in lines[:10]:
         normalized = _normalize_text(line)
         if "profesion" in normalized or "medico" in normalized:
-            # Buscar si menciona alguna institución
+            # Buscar si menciona alguna instituciÃ³n
             if (
                 "hospital" in normalized
                 or "clinica" in normalized
@@ -2328,7 +2524,7 @@ def _guess_center(text: str) -> str | None:
     """
     Detecta el centro de salud del documento
     """
-    # Primero verificar si es receta electrónica
+    # Primero verificar si es receta electrÃ³nica
     if _is_electronic_prescription(text):
         center = _extract_center_from_electronic_prescription(text)
         if center:
@@ -2368,7 +2564,7 @@ def _guess_center(text: str) -> str | None:
             cleaned = _clean_center_line(line)
             if cleaned:
                 return cleaned[:120]
-    # NO buscar en las primeras líneas para recetas electrónicas
+    # NO buscar en las primeras lÃ­neas para recetas electrÃ³nicas
     # porque puede capturar direcciones
     return None
 
@@ -2391,8 +2587,8 @@ def _guess_date(text: str) -> datetime | None:
                 except Exception:
                     pass
 
-    # Patrón específico para recetas electrónicas chilenas
-    # Formato: "Fecha de emisión: 2 de septiembre, 2025"
+    # PatrÃ³n especÃ­fico para recetas electrÃ³nicas chilenas
+    # Formato: "Fecha de emisiÃ³n: 2 de septiembre, 2025"
     month_names = {
         "enero": 1,
         "febrero": 2,
@@ -2425,7 +2621,7 @@ def _guess_date(text: str) -> datetime | None:
         except Exception:
             pass
 
-    # Patrones numéricos tradicionales
+    # Patrones numÃ©ricos tradicionales
     patterns = [
         r"(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})",
         r"(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})",
@@ -2456,19 +2652,19 @@ def _guess_notes(text: str) -> str | None:
     if not text:
         return None
 
-    # Si es receta electrónica, no intentar extraer notas genéricas
-    # Los medicamentos se extraerán por separado
+    # Si es receta electrÃ³nica, no intentar extraer notas genÃ©ricas
+    # Los medicamentos se extraerÃ¡n por separado
     if _is_electronic_prescription(text):
         # Buscar "Forma prescriptor" que tiene indicaciones especiales
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         for i, line in enumerate(lines):
             if "forma prescriptor" in _normalize_text(line):
-                # Las siguientes líneas pueden tener indicaciones importantes
+                # Las siguientes lÃ­neas pueden tener indicaciones importantes
                 if i + 1 < len(lines):
                     special_instructions = lines[i + 1].strip()
                     if special_instructions and len(special_instructions) > 10:
                         return f"Indicaciones especiales: {_safe_text(special_instructions)[:200]}"
-        return None  # No extraer notas genéricas para recetas electrónicas
+        return None  # No extraer notas genÃ©ricas para recetas electrÃ³nicas
 
     vaccine_notes = _extract_vaccine_notes(text)
     if vaccine_notes:
@@ -2490,7 +2686,7 @@ def _guess_notes(text: str) -> str | None:
         "laboratorio",
         "medicamento",
     )
-    # Excluir "indicacion" de keywords para evitar capturar texto genérico
+    # Excluir "indicacion" de keywords para evitar capturar texto genÃ©rico
     value_pattern = re.compile(
         r"([a-zA-Z][a-zA-Z\s]{2,})\s+(\d+(?:[.,]\d+)?)\s*(mg\/dl|mmol\/l|%|g\/l|mg\/l)",
         re.IGNORECASE,
@@ -2500,7 +2696,7 @@ def _guess_notes(text: str) -> str | None:
         "muestra",
         "corporacion municipal",
         "laboratorio clinico",
-        "indicacion de administracion",  # Ignorar este texto genérico de recetas
+        "indicacion de administracion",  # Ignorar este texto genÃ©rico de recetas
         "via de administracion",
         "metodo de administracion",
         "administrar",
@@ -2625,7 +2821,7 @@ def _extract_lab_results(text: str) -> list[str]:
     sample = ""
     sample_pattern = re.compile(r"muestra\s*[:\-]\s*(.+)", re.IGNORECASE)
     result_pattern = re.compile(
-        r"^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,})\s+[*\-]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z/%]+)\s*\[?\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*\]?",
+        r"^([A-ZÃÃ‰ÃÃ“ÃšÃ‘][A-ZÃÃ‰ÃÃ“ÃšÃ‘\s]{2,})\s+[*\-]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z/%]+)\s*\[?\s*(\d+(?:[.,]\d+)?)\s*[-â€“]\s*(\d+(?:[.,]\d+)?)\s*\]?",
         re.IGNORECASE,
     )
     for line in lines:
@@ -2823,7 +3019,7 @@ def _extract_post_sample_notes(lines: list[str]) -> list[str]:
             break
         if normalized.startswith("procedimientos relacionados"):
             break
-        cleaned = _safe_text(line.lstrip("•-").strip())
+        cleaned = _safe_text(line.lstrip("â€¢-").strip())
         if cleaned:
             notes.append(cleaned)
     return notes
@@ -2899,7 +3095,7 @@ def _extract_label_medication(text: str) -> dict | None:
     }
 
     name_candidate = ""
-    uppercase_words = re.findall(r"\b[A-ZÁÉÍÓÚÑ]{4,}\b", text)
+    uppercase_words = re.findall(r"\b[A-ZÃÃ‰ÃÃ“ÃšÃ‘]{4,}\b", text)
     for word in uppercase_words:
         if _normalize_text(word) in stop_words:
             continue
@@ -3092,13 +3288,13 @@ def _extract_order_schedule(text: str) -> dict | None:
 
 def _is_electronic_prescription(text: str) -> bool:
     """
-    Detecta si el documento es una receta electrónica chilena
+    Detecta si el documento es una receta electrÃ³nica chilena
     """
     if not text:
         return False
     normalized = _normalize_text(text)
 
-    # Indicadores de receta electrónica
+    # Indicadores de receta electrÃ³nica
     indicators = [
         "receta electronica",
         "rp prescripcion",
@@ -3110,7 +3306,7 @@ def _is_electronic_prescription(text: str) -> bool:
         "periodo de tratamiento",
     ]
 
-    # Si tiene código de barras o RUT con formato chileno
+    # Si tiene cÃ³digo de barras o RUT con formato chileno
     has_barcode = bool(re.search(r"(\d{13}|\*[A-Z0-9]+\*)", text))
     has_rut = bool(re.search(r"\d{1,2}\.\d{3}\.\d{3}[-]\d{1}[kK0-9]", text))
 
@@ -3121,26 +3317,26 @@ def _is_electronic_prescription(text: str) -> bool:
 
 def _extract_doctor_name(text: str) -> str | None:
     """
-    Extrae el nombre del profesional de la receta electrónica
+    Extrae el nombre del profesional de la receta electrÃ³nica
     """
     if not text:
         return None
 
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # Buscar nombre del profesional en las primeras 10 líneas
+    # Buscar nombre del profesional en las primeras 10 lÃ­neas
     for idx, line in enumerate(lines[:10]):
         normalized = _normalize_text(line)
 
-        # Buscar después de "profesional", "medico", "doctor", "dra", "dr"
+        # Buscar despuÃ©s de "profesional", "medico", "doctor", "dra", "dr"
         if any(
             keyword in normalized
             for keyword in ["profesional", "medico", "doctor", "dra", "dr"]
         ):
-            # El nombre suele estar en la misma línea o en las siguientes
-            # Patrón: capturar nombre propio (2-4 palabras capitalizadas)
+            # El nombre suele estar en la misma lÃ­nea o en las siguientes
+            # PatrÃ³n: capturar nombre propio (2-4 palabras capitalizadas)
             name_pattern = re.compile(
-                r"(?:dr\.?|dra\.?|doctor|doctora|profesional)?[\s:]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){1,3})",
+                r"(?:dr\.?|dra\.?|doctor|doctora|profesional)?[\s:]+([A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+(?:\s+[A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+){1,3})",
                 re.IGNORECASE,
             )
             match = name_pattern.search(line)
@@ -3150,11 +3346,11 @@ def _extract_doctor_name(text: str) -> str | None:
                 if len(name) > 5 and "administracion" not in name.lower():
                     return _safe_text(name)
 
-            # Si no se encontró en la misma línea, buscar en las siguientes 2 líneas
+            # Si no se encontrÃ³ en la misma lÃ­nea, buscar en las siguientes 2 lÃ­neas
             for next_idx in range(idx + 1, min(idx + 3, len(lines))):
                 next_line = lines[next_idx]
-                # Buscar línea con nombre propio
-                if re.search(r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ]", next_line):
+                # Buscar lÃ­nea con nombre propio
+                if re.search(r"^[A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+\s+[A-ZÃÃ‰ÃÃ“ÃšÃ‘]", next_line):
                     return _safe_text(next_line)
 
     return None
@@ -3162,7 +3358,7 @@ def _extract_doctor_name(text: str) -> str | None:
 
 def _extract_rut(text: str) -> dict:
     """
-    Extrae RUTs de médico y paciente de formato chileno
+    Extrae RUTs de mÃ©dico y paciente de formato chileno
     """
     ruts = {"patient_rut": None, "doctor_rut": None, "doctor_registry": None}
 
@@ -3171,18 +3367,18 @@ def _extract_rut(text: str) -> dict:
 
     lines = text.splitlines()
 
-    # Patrón RUT chileno: XX.XXX.XXX-X o XXXXXXXX-X
+    # PatrÃ³n RUT chileno: XX.XXX.XXX-X o XXXXXXXX-X
     rut_pattern = re.compile(r"(\d{1,2}\.?\d{3}\.?\d{3}[-]\d{1}[kK0-9])")
 
-    # Patrón para registro profesional
+    # PatrÃ³n para registro profesional
     registry_pattern = re.compile(
         r"(?:registro|rut|run)[\s:]+[\w\d\.\-/]+[\s:]+(\d[\d\.\-/]+\d)", re.IGNORECASE
     )
 
-    for idx, line in enumerate(lines[:15]):  # Buscar en primeras 15 líneas
+    for idx, line in enumerate(lines[:15]):  # Buscar en primeras 15 lÃ­neas
         normalized = _normalize_text(line)
 
-        # Buscar RUT del médico (usualmente al inicio)
+        # Buscar RUT del mÃ©dico (usualmente al inicio)
         if idx < 5:
             rut_matches = rut_pattern.findall(line)
             if rut_matches and not ruts["doctor_rut"]:
@@ -3194,11 +3390,11 @@ def _extract_rut(text: str) -> dict:
                 if reg_match:
                     ruts["doctor_registry"] = reg_match.group(1)
 
-        # Buscar RUT del paciente (después de "paciente" o "rut")
+        # Buscar RUT del paciente (despuÃ©s de "paciente" o "rut")
         if "paciente" in normalized or ("rut" in normalized and idx > 3):
             rut_matches = rut_pattern.findall(line)
             if rut_matches:
-                # El RUT del paciente suele ser diferente al del médico
+                # El RUT del paciente suele ser diferente al del mÃ©dico
                 for rut in rut_matches:
                     if rut != ruts["doctor_rut"]:
                         ruts["patient_rut"] = rut
@@ -3209,20 +3405,20 @@ def _extract_rut(text: str) -> dict:
 
 def _extract_electronic_prescription_meds(text: str) -> list[dict]:
     """
-    Extrae medicamentos de recetas electrónicas chilenas con formato específico
-    Las recetas electrónicas chilenas tienen el formato:
+    Extrae medicamentos de recetas electrÃ³nicas chilenas con formato especÃ­fico
+    Las recetas electrÃ³nicas chilenas tienen el formato:
 
     nombre_medicamento dosis forma
 
     Administrar:
     Dosis
     X comprimido
-    Vía de Administración
+    VÃ­a de AdministraciÃ³n
     oral
     Frecuencia
     Administrar cada X horas
     Periodo de Tratamiento
-    Durante X días
+    Durante X dÃ­as
     """
     if not text:
         return []
@@ -3230,10 +3426,10 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
     medications = []
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # Patrón para detectar línea de medicamento principal
+    # PatrÃ³n para detectar lÃ­nea de medicamento principal
     # Formato: "nombre dosis unidad forma"
     med_name_pattern = re.compile(
-        r"^([a-záéíóúñ\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ug|ui|%)\s+(comprimido|capsula|tableta|jarabe|suspension|solucion|gotas|crema|gel|pomada|iny)",
+        r"^([a-zÃ¡Ã©Ã­Ã³ÃºÃ±\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ug|ui|%)\s+(comprimido|capsula|tableta|jarabe|suspension|solucion|gotas|crema|gel|pomada|iny)",
         re.IGNORECASE,
     )
 
@@ -3252,14 +3448,14 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
 
             dose = f"{dose_value} {dose_unit}"
 
-            # Buscar "Administrar:" en las siguientes líneas
+            # Buscar "Administrar:" en las siguientes lÃ­neas
             admin_amount = "1"
             via = ""
             method = ""
             frequency = ""
             duration_days = None
 
-            # Buscar en las siguientes 30 líneas o hasta encontrar otro medicamento
+            # Buscar en las siguientes 30 lÃ­neas o hasta encontrar otro medicamento
             j = i + 1
             while j < min(i + 30, len(lines)):
                 current_line = lines[j]
@@ -3270,9 +3466,9 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                 if med_name_pattern.search(current_line) and j > i + 2:
                     break
 
-                # Buscar cantidad a administrar (línea después de "Dosis")
+                # Buscar cantidad a administrar (lÃ­nea despuÃ©s de "Dosis")
                 if normalized == "dosis" and next_line:
-                    # La siguiente línea tiene la cantidad
+                    # La siguiente lÃ­nea tiene la cantidad
                     dose_match = re.search(
                         r"(\d+)\s*(comprimido|capsula|tableta|ml|g)",
                         next_line,
@@ -3281,9 +3477,9 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                     if dose_match:
                         admin_amount = dose_match.group(1)
 
-                # Buscar vía de administración (línea después de "Vía de Administración" o "Vía")
+                # Buscar vÃ­a de administraciÃ³n (lÃ­nea despuÃ©s de "VÃ­a de AdministraciÃ³n" o "VÃ­a")
                 if "via" in normalized and "administracion" in normalized:
-                    # La siguiente línea tiene la vía
+                    # La siguiente lÃ­nea tiene la vÃ­a
                     if next_line:
                         via_normalized = _normalize_text(next_line)
                         if via_normalized in [
@@ -3297,7 +3493,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                         ]:
                             via = next_line.lower()
 
-                # Buscar método (línea después de "Método de Administración")
+                # Buscar mÃ©todo (lÃ­nea despuÃ©s de "MÃ©todo de AdministraciÃ³n")
                 if "metodo" in normalized and "administracion" in normalized:
                     if next_line:
                         method_normalized = _normalize_text(next_line)
@@ -3312,7 +3508,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
 
                 # Buscar frecuencia
                 if "frecuencia" in normalized:
-                    # La siguiente línea o la misma pueden tener la frecuencia
+                    # La siguiente lÃ­nea o la misma pueden tener la frecuencia
                     freq_text = current_line + " " + next_line
                     freq_match = re.search(
                         r"cada\s+(\d+)\s+horas?", freq_text, re.IGNORECASE
@@ -3325,7 +3521,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                 if "periodo" in normalized or "durante" in normalized:
                     period_text = current_line + " " + next_line
                     period_match = re.search(
-                        r"(\d+)\s+d[ií]as?", period_text, re.IGNORECASE
+                        r"(\d+)\s+d[iÃ­]as?", period_text, re.IGNORECASE
                     )
                     if period_match:
                         duration_days = int(period_match.group(1))
@@ -3335,26 +3531,26 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
             # Construir frecuencia completa
             full_frequency = f"{admin_amount} {form}"
             if via:
-                full_frequency += f", vía {via}"
+                full_frequency += f", vÃ­a {via}"
             if method:
                 full_frequency += f", {method}"
             if frequency:
                 full_frequency += f", {frequency}"
             elif not frequency and via:
-                # Si no hay frecuencia específica, al menos mencionar que es diario
-                full_frequency += f", según indicación"
+                # Si no hay frecuencia especÃ­fica, al menos mencionar que es diario
+                full_frequency += f", segÃºn indicaciÃ³n"
 
-            # Construir información detallada de administración para las notas
+            # Construir informaciÃ³n detallada de administraciÃ³n para las notas
             admin_details = []
             admin_details.append(f"Dosis: {admin_amount} {form}")
             if via:
-                admin_details.append(f"Vía: {via}")
+                admin_details.append(f"VÃ­a: {via}")
             if method:
-                admin_details.append(f"Método: {method}")
+                admin_details.append(f"MÃ©todo: {method}")
             if frequency:
                 admin_details.append(f"Frecuencia: {frequency}")
             if duration_days:
-                admin_details.append(f"Duración: {duration_days} días")
+                admin_details.append(f"DuraciÃ³n: {duration_days} dÃ­as")
 
             raw_info = f"{name} {dose}\n" + " | ".join(admin_details)
 
@@ -3387,10 +3583,10 @@ def _extract_medication_from_text(text: str) -> dict | None:
     dose_pattern = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mg|ml|cc|g|mcg|ug)", re.IGNORECASE)
     freq_pattern = re.compile(r"cada\s+(\d+)\s+horas?", re.IGNORECASE)
     per_day_pattern = re.compile(r"(\d+)\s+veces\s+al\s+dia", re.IGNORECASE)
-    duration_pattern = re.compile(r"por\s+(\d+)\s+d[ií]as?", re.IGNORECASE)
+    duration_pattern = re.compile(r"por\s+(\d+)\s+d[iÃ­]as?", re.IGNORECASE)
     weeks_pattern = re.compile(r"por\s+(\d+)\s+semanas?", re.IGNORECASE)
     route_pattern = re.compile(
-        r"(oral|sublingual|topica|t[oó]pica|intramuscular|intravenosa|subcutanea|inhalatoria)",
+        r"(oral|sublingual|topica|t[oÃ³]pica|intramuscular|intravenosa|subcutanea|inhalatoria)",
         re.IGNORECASE,
     )
 
@@ -3581,7 +3777,7 @@ def _run_document_ocr(document_id: int):
                 doc.notes = guess_notes
 
         if doc.doc_type == models.DocumentType.receta:
-            # Detectar si es receta electrónica chilena
+            # Detectar si es receta electrÃ³nica chilena
             is_electronic = _is_electronic_prescription(text)
 
             if is_electronic:
@@ -3596,7 +3792,7 @@ def _run_document_ocr(document_id: int):
                         center_parts.append(f"RUT: {ruts['doctor_rut']}")
                     doc.center = " | ".join(center_parts)
 
-                # Construir información para las notas
+                # Construir informaciÃ³n para las notas
                 if ruts["patient_rut"] or ruts["doctor_rut"]:
                     rut_info_parts = []
 
@@ -3631,11 +3827,11 @@ def _run_document_ocr(document_id: int):
             if not existing_meds:
                 medications_to_add = []
 
-                # Intentar primero con extractor de recetas electrónicas
+                # Intentar primero con extractor de recetas electrÃ³nicas
                 if is_electronic:
                     medications_to_add = _extract_electronic_prescription_meds(text)
 
-                # Si no se encontraron medicamentos o no es receta electrónica, usar método general
+                # Si no se encontraron medicamentos o no es receta electrÃ³nica, usar mÃ©todo general
                 if not medications_to_add:
                     med = _extract_medication_from_text(text)
                     if med and (
@@ -3652,7 +3848,7 @@ def _run_document_ocr(document_id: int):
                         end_date = start_date + timedelta(days=duration_days)
                     duration_label = f"{duration_days} dias" if duration_days else ""
 
-                    # Para recetas electrónicas, usar el campo "raw" que tiene todos los detalles estructurados
+                    # Para recetas electrÃ³nicas, usar el campo "raw" que tiene todos los detalles estructurados
                     # Para otras recetas, construir las notas con la info disponible
                     if is_electronic and med.get("raw"):
                         med_notes = med.get("raw")
@@ -3684,7 +3880,7 @@ def _run_document_ocr(document_id: int):
                     )
 
                     # Agregar info detallada del medicamento a las notas del documento
-                    # Para recetas electrónicas, usar el formato estructurado completo
+                    # Para recetas electrÃ³nicas, usar el formato estructurado completo
                     if is_electronic and med.get("raw"):
                         med_summary = f"Detalle medicamento: {med.get('raw')}"
                     else:
@@ -3694,7 +3890,7 @@ def _run_document_ocr(document_id: int):
                         )
 
                     if doc.notes:
-                        # Evitar duplicados verificando si el nombre del medicamento ya está
+                        # Evitar duplicados verificando si el nombre del medicamento ya estÃ¡
                         if med.get("name") not in doc.notes:
                             doc.notes = f"{doc.notes}\n\n{med_summary}"
                     else:
@@ -3825,6 +4021,7 @@ def _run_document_ocr(document_id: int):
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
         try:
+            _upsert_document_intelligence(db, doc)
             _refresh_profile_ai_learning_memory(db, doc.user_id)
         except Exception as exc:
             print(f"WARNING ai memory refresh failed: {exc}")
@@ -3840,10 +4037,10 @@ def _run_document_ocr(document_id: int):
 
 
 # Configurar CORS
-# En producción, permitir todos los orígenes (Railway puede usar diferentes dominios)
+# En producciÃ³n, permitir todos los orÃ­genes (Railway puede usar diferentes dominios)
 is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
 if is_production:
-    # En producción, permitir todos los orígenes (sin credentials para compatibilidad)
+    # En producciÃ³n, permitir todos los orÃ­genes (sin credentials para compatibilidad)
     allow_origins = ["*"]
     allow_credentials = False
 else:
@@ -3870,7 +4067,7 @@ app.add_middleware(
 @app.get("/health")
 def health_check(db: Session = Depends(auth.get_db)):
     try:
-        # Verificar conexión a la base de datos
+        # Verificar conexiÃ³n a la base de datos
         db.execute(text("SELECT 1"))
         db_status = "ok"
 
@@ -3952,10 +4149,10 @@ def public_stats(db: Session = Depends(auth.get_db)):
     }
 
 
-# Debug endpoint para verificar configuración
+# Debug endpoint para verificar configuraciÃ³n
 @app.get("/debug/config")
 def debug_config():
-    """Endpoint de debug para verificar configuración (sin exponer secretos)"""
+    """Endpoint de debug para verificar configuraciÃ³n (sin exponer secretos)"""
     secret_key_configured = auth.SECRET_KEY != "supersecretkey_change_me_in_production"
     secret_key_length = len(auth.SECRET_KEY)
     is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv(
@@ -4391,7 +4588,7 @@ def _get_active_profile_context(
 ):
     """
     Resuelve el perfil activo y devuelve (profile, link, owner_user_id).
-    owner_user_id corresponde al dueño real de los datos clínicos.
+    owner_user_id corresponde al dueÃ±o real de los datos clÃ­nicos.
     """
     active_id = getattr(current_user, "active_health_profile_id", None)
     if active_id:
@@ -4982,7 +5179,7 @@ def _extract_clinical_signals_from_text(text: str | None) -> dict:
     ]
     metrics = []
     metric_pattern = re.compile(
-        r"(?P<label>[A-Za-zÁÉÍÓÚáéíóúñÑ0-9\s]+?)\s*[:=]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>%|mg/?dl|g/?dl|ui/?ml|m?mol/?l)?",
+        r"(?P<label>[A-Za-zÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ±Ã‘0-9\s]+?)\s*[:=]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>%|mg/?dl|g/?dl|ui/?ml|m?mol/?l)?",
         re.IGNORECASE,
     )
     for match in metric_pattern.finditer(raw):
@@ -5056,9 +5253,9 @@ def _build_ai_profile_memory(
             continue
         label = _safe_iso(item.date_time)
         if item.specialty:
-            label = f"{label} · {item.specialty}"
+            label = f"{label} Â· {item.specialty}"
         if item.center:
-            label = f"{label} · {item.center}"
+            label = f"{label} Â· {item.center}"
         next_appointments.append(_clip_text(label, 120))
 
     lines = [
@@ -5147,8 +5344,1013 @@ def _refresh_profile_ai_learning_memory(db: Session, user_id: int):
     db.add(profile)
 
 
-def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
-    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+def _parse_duration_days(value: str | None) -> int | None:
+    raw = _normalize_text(value or "")
+    if not raw:
+        return None
+    number_words = {
+        "uno": 1,
+        "una": 1,
+        "dos": 2,
+        "tres": 3,
+        "cuatro": 4,
+        "cinco": 5,
+        "seis": 6,
+        "siete": 7,
+        "ocho": 8,
+        "nueve": 9,
+        "diez": 10,
+        "catorce": 14,
+        "quince": 15,
+        "veintiuno": 21,
+        "veintiocho": 28,
+        "treinta": 30,
+    }
+    for word, amount in number_words.items():
+        raw = re.sub(rf"\b{word}\b", str(amount), raw)
+    match = re.search(r"(\d{1,3})\s*(dia|dias|day|days|semana|semanas|mes|meses)", raw)
+    if not match:
+        alt = re.search(r"(por|durante|x)\s*(\d{1,3})", raw)
+        if alt:
+            return int(alt.group(2))
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2)
+    if unit.startswith("semana"):
+        return amount * 7
+    if unit.startswith("mes"):
+        return amount * 30
+    return amount
+
+
+def _estimate_daily_frequency(med: models.Medication) -> int:
+    schedule = [item.strip() for item in (med.schedule_time or "").split(",") if item.strip()]
+    if schedule:
+        return max(1, len(schedule))
+    raw = _normalize_text(" ".join([med.frequency or "", med.notes or ""]))
+    if not raw:
+        return 1
+    explicit_map = [
+        (r"\b(cada 24|una vez|1 vez|diaria|al dia)\b", 1),
+        (r"\b(cada 12|2 veces|dos veces|manana y noche)\b", 2),
+        (r"\b(cada 8|3 veces|tres veces)\b", 3),
+        (r"\b(cada 6|4 veces|cuatro veces)\b", 4),
+    ]
+    for pattern, value in explicit_map:
+        if re.search(pattern, raw):
+            return value
+    found = re.search(r"\b(\d)\s*veces\b", raw)
+    if found:
+        return max(1, int(found.group(1)))
+    return 1
+
+
+def _upsert_adherence_summaries(
+    db: Session,
+    profile: models.HealthProfile,
+    medications: list[models.Medication],
+    window_days: int = 30,
+) -> dict:
+    now = datetime.now()
+    since = now - timedelta(days=window_days)
+    summaries: list[dict] = []
+    overall_rates: list[float] = []
+    low_items: list[dict] = []
+    pattern_days: dict[str, int] = {}
+    pattern_hours: dict[str, int] = {"manana": 0, "tarde": 0, "noche": 0}
+
+    for med in medications:
+        daily_freq = _estimate_daily_frequency(med)
+        active_since = max((med.created_at or now), since)
+        active_days = max(1, (now.date() - active_since.date()).days + 1)
+        expected = max(1, daily_freq * active_days)
+        intake_rows = (
+            db.query(models.MedicationIntake)
+            .filter(
+                models.MedicationIntake.medication_id == med.id,
+                models.MedicationIntake.taken_at >= since,
+            )
+            .all()
+        )
+        explicit_rows = [row for row in intake_rows if getattr(row, "scheduled_at", None) or getattr(row, "status", "taken") != "taken"]
+        if explicit_rows:
+            expected = len(explicit_rows)
+            taken = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) in {"taken", "late"}])
+            late = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) == "late"])
+            missed = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) in {"missed", "skipped"}])
+        else:
+            taken = len(intake_rows)
+            late = 0
+            missed = max(expected - taken, 0)
+        adherence_rate = int(round(min((taken / max(expected, 1)) * 100, 100))) if expected else 0
+        overall_rates.append(adherence_rate)
+        if adherence_rate < 80 and not bool(med.completed):
+            low_items.append(
+                {
+                    "medication_id": med.id,
+                    "name": med.name or "Medicamento",
+                    "adherence_rate": adherence_rate,
+                    "missed_count": missed,
+                }
+            )
+        for intake in intake_rows:
+            event_dt = getattr(intake, "taken_at", None) or getattr(intake, "scheduled_at", None)
+            if not event_dt:
+                continue
+            pattern_days[event_dt.strftime("%A").lower()] = pattern_days.get(event_dt.strftime("%A").lower(), 0) + 1
+            hour = event_dt.hour
+            slot = "manana" if hour < 12 else "tarde" if hour < 19 else "noche"
+            pattern_hours[slot] = pattern_hours.get(slot, 0) + 1
+
+        pattern_json = {
+            "daily_frequency_estimate": daily_freq,
+            "most_recorded_day": max(pattern_days, key=pattern_days.get) if pattern_days else "",
+            "dominant_time_slot": max(pattern_hours, key=pattern_hours.get) if pattern_hours else "",
+        }
+        row = (
+            db.query(models.AdherenceSummary)
+            .filter(
+                models.AdherenceSummary.profile_id == profile.id,
+                models.AdherenceSummary.medication_id == med.id,
+                models.AdherenceSummary.window_days == window_days,
+            )
+            .first()
+        )
+        if not row:
+            row = models.AdherenceSummary(
+                profile_id=profile.id,
+                medication_id=med.id,
+                window_days=window_days,
+            )
+        row.adherence_rate = adherence_rate
+        row.missed_count = missed
+        row.late_count = late
+        row.expected_doses = expected
+        row.taken_doses = taken
+        row.pattern_json = pattern_json
+        row.updated_at = now
+        db.add(row)
+        summaries.append(
+            {
+                "medication_id": med.id,
+                "name": med.name or "Medicamento",
+                "adherence_rate": adherence_rate,
+                "expected_doses": expected,
+                "taken_doses": taken,
+                "missed_count": missed,
+                "pattern": pattern_json,
+            }
+        )
+
+    overall_rate = round(sum(overall_rates) / len(overall_rates), 1) if overall_rates else None
+    best_day = max(pattern_days, key=pattern_days.get) if pattern_days else ""
+    risk_slot = min(pattern_hours, key=pattern_hours.get) if any(pattern_hours.values()) else ""
+    return {
+        "window_days": window_days,
+        "overall_adherence_rate": overall_rate,
+        "low_adherence": bool(low_items),
+        "low_adherence_items": low_items[:6],
+        "medication_items": summaries[:12],
+        "pattern_summary": {
+            "most_consistent_day": best_day,
+            "lowest_recorded_time_slot": risk_slot,
+        },
+    }
+
+
+def _extract_document_lab_entities(text: str) -> list[dict]:
+    entities: list[dict] = []
+    if not text:
+        return entities
+    lines = [_safe_text(ln) for ln in text.splitlines() if _safe_text(ln)]
+    patterns = [
+        re.compile(
+            r"^(?P<name>[A-Za-zÃÃ‰ÃÃ“ÃšÃ‘Ã¡Ã©Ã­Ã³ÃºÃ±0-9/%().,\- ]{3,80}?)[:\s]+"
+            r"(?P<value>[<>]?\d+(?:[.,]\d+)?)"
+            r"(?:\s+(?P<unit>[A-Za-z/%Âµ0-9.-]{1,24}))?"
+            r"(?:\s+(?P<range>(?:ref\.?|rango|vr)?\s*\d+(?:[.,]\d+)?\s*[-â€“a]\s*\d+(?:[.,]\d+)?))?$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"^(?P<name>[A-Za-zÃÃ‰ÃÃ“ÃšÃ‘Ã¡Ã©Ã­Ã³ÃºÃ±0-9/%().,\- ]{3,80}?)\s+"
+            r"(?P<value>[<>]?\d+(?:[.,]\d+)?)\s*"
+            r"(?P<unit>[A-Za-z/%Âµ0-9.-]{0,24})\s+"
+            r"(?P<range>\d+(?:[.,]\d+)?\s*[-â€“a]\s*\d+(?:[.,]\d+)?)$",
+            re.IGNORECASE,
+        ),
+    ]
+    for line in lines[:120]:
+        match = None
+        for pattern in patterns:
+            match = pattern.match(line)
+            if match:
+                break
+        if not match:
+            continue
+        name = _safe_text(match.group("name"))
+        value = (match.group("value") or "").replace(",", ".")
+        unit = _safe_text(match.group("unit") or "")
+        reference_range = _safe_text(re.sub(r"^(ref\.?|rango|vr)\s*", "", match.group("range") or "", flags=re.IGNORECASE))
+        flag = "unknown"
+        try:
+            numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
+            if reference_range:
+                low_raw, high_raw = re.split(r"[-â€“a]", reference_range, maxsplit=1)
+                low_value = float(low_raw.replace(",", ".").strip())
+                high_value = float(high_raw.replace(",", ".").strip())
+                if numeric < low_value:
+                    flag = "low"
+                elif numeric > high_value:
+                    flag = "high"
+                else:
+                    flag = "normal"
+        except Exception:
+            flag = "unknown"
+        entities.append(
+            {
+                "entity_type": "lab_value",
+                "entity_name": name,
+                "entity_value": match.group("value") or "",
+                "unit": unit,
+                "reference_range": reference_range,
+                "flag": flag,
+                "confidence": 82,
+                "source_text": line[:240],
+            }
+        )
+    return entities[:24]
+
+
+def _extract_prescription_entities(text: str) -> list[dict]:
+    entities: list[dict] = []
+    if not text:
+        return entities
+    lines = [_safe_text(line) for line in text.splitlines() if _safe_text(line)]
+    generic_map = {
+        "Paracetamol": ["paracetamol", "acetaminofen", "panadol", "tapcin"],
+        "Ibuprofeno": ["ibuprofeno", "advil", "motrin"],
+        "Naproxeno": ["naproxeno", "naprosyn", "flanax"],
+        "Diclofenaco": ["diclofenaco", "voltaren", "cataflam"],
+        "Ketorolaco": ["ketorolaco", "dolten", "toradol"],
+        "Acido acetilsalicilico": ["acido acetilsalicilico", "aspirina", "aspirineta"],
+        "Omeprazol": ["omeprazol", "omeprazole", "losec", "omepral"],
+        "Esomeprazol": ["esomeprazol", "nexium"],
+        "Pantoprazol": ["pantoprazol", "pantozol", "pantoloc"],
+        "Amoxicilina": ["amoxicilina", "amox", "amoval"],
+        "Amoxicilina/Acido clavulanico": [
+            "amoxicilina/acido clavulanico",
+            "amoxicilina clavulanato",
+            "clavulin",
+            "augmentin",
+        ],
+        "Azitromicina": ["azitromicina", "azitro", "zithromax"],
+        "Cefalexina": ["cefalexina", "keflex"],
+        "Ciprofloxacino": ["ciprofloxacino", "cipro", "ciprobay"],
+        "Claritromicina": ["claritromicina", "klaricid"],
+        "Metformina": ["metformina", "glafornil", "glucophage"],
+        "Losartan": ["losartan", "cozaar", "losacor"],
+        "Valsartan": ["valsartan", "diovan"],
+        "Enalapril": ["enalapril", "renitec"],
+        "Amlodipino": ["amlodipino", "norvasc"],
+        "Hidroclorotiazida": ["hidroclorotiazida", "hctz", "esidrex"],
+        "Carvedilol": ["carvedilol", "dilatrend"],
+        "Bisoprolol": ["bisoprolol", "concor"],
+        "Furosemida": ["furosemida", "lasix"],
+        "Levotiroxina": ["levotiroxina", "eutirox", "t4"],
+        "Atorvastatina": ["atorvastatina", "lipitor"],
+        "Rosuvastatina": ["rosuvastatina", "crestor"],
+        "Sertralina": ["sertralina", "serlift", "zoloft"],
+        "Fluoxetina": ["fluoxetina", "prozac"],
+        "Escitalopram": ["escitalopram", "lexapro", "cipralex"],
+        "Clonazepam": ["clonazepam", "ravotril", "clonex"],
+        "Alprazolam": ["alprazolam", "xanax"],
+        "Quetiapina": ["quetiapina", "seroquel"],
+        "Salbutamol": ["salbutamol", "ventolin"],
+        "Budesonida": ["budesonida", "symbicort", "pulmicort"],
+        "Montelukast": ["montelukast", "singulair"],
+        "Insulina glargina": ["insulina glargina", "lantus"],
+        "Insulina lispro": ["insulina lispro", "humalog"],
+        "Loratadina": ["loratadina", "clarityne"],
+        "Cetirizina": ["cetirizina", "zyrtec"],
+        "Desloratadina": ["desloratadina", "aerius"],
+        "Prednisona": ["prednisona", "meticorten"],
+        "Pregabalina": ["pregabalina", "lyrica"],
+        "Tramadol": ["tramadol", "tradol"],
+    }
+    alias_lookup: list[tuple[str, str]] = []
+    for canonical_name, aliases in generic_map.items():
+        for alias in aliases:
+            alias_lookup.append((alias.lower(), canonical_name))
+    alias_lookup.sort(key=lambda item: len(item[0]), reverse=True)
+    dose_pattern = re.compile(
+        r"(?P<dose>\d+(?:[.,]\d+)?(?:/\d+(?:[.,]\d+)?)?\s*(?:mg|mcg|ug|g|gr|ml|ui|ui/ml|meq|%"
+        r"|comp(?:rimidos?)?|caps?(?:ulas?)?|gotas?|sobres?|puffs?|sprays?|ampollas?|tabletas?))",
+        re.IGNORECASE,
+    )
+    frequency_pattern = re.compile(
+        r"(?P<frequency>"
+        r"(?:cada|c\/)\s*\d+\s*(?:h|hr|hrs|hora|horas|d[iÃi]a|d[iÃi]as)"
+        r"|(?:una|dos|tres|cuatro|\d+)\s+veces\s+al\s+d[iÃi]a"
+        r"|1-0-1|1-1-1|1-0-0|0-0-1|0-1-0|1-1-0|0-1-1"
+        r"|en la manana|en la noche|manana y noche|desayuno|almuerzo|cena|al acostarse"
+        r"|si es necesario|sos|prn|segun dolor)"
+        r"",
+        re.IGNORECASE,
+    )
+    duration_pattern = re.compile(
+        r"(?P<duration>"
+        r"(?:por|durante|x)\s*\d+\s*(?:d[iÃi]as?|semanas?|mes(?:es)?)"
+        r"|x\s*\d+"
+        r"|hasta terminar"
+        r"|tratamiento cronico"
+        r"|uso cronico"
+        r"|continuo"
+        r"|permanente"
+        r"|por\s+\d+\s+cajas?)",
+        re.IGNORECASE,
+    )
+    skip_tokens = (
+        "rut",
+        "diagnostico",
+        "diagnóstico",
+        "firma",
+        "dr.",
+        "dra.",
+        "indicacion de administracion",
+        "indicaciones",
+        "prescripcion",
+        "receta electronica",
+    )
+    for line in lines[:80]:
+        normalized_line = re.sub(r"^[\-\u2022*]+\s*", "", line).strip()
+        lowered_line = normalized_line.lower()
+        if not normalized_line or any(token in lowered_line for token in skip_tokens):
+            continue
+        alias_matches = [(alias, canonical) for alias, canonical in alias_lookup if alias in lowered_line]
+        dose_match = dose_pattern.search(normalized_line)
+        frequency_match = frequency_pattern.search(lowered_line)
+        duration_match = duration_pattern.search(lowered_line)
+        if not (alias_matches or dose_match or frequency_match or duration_match):
+            continue
+        dose = _safe_text(dose_match.group("dose") if dose_match else "")
+        frequency = _safe_text(frequency_match.group("frequency") if frequency_match else "")
+        duration = _safe_text(duration_match.group("duration") if duration_match else "")
+        cut_positions = [
+            match.start()
+            for match in [dose_match, frequency_match, duration_match]
+            if match is not None and match.start() > 0
+        ]
+        name_fragment = normalized_line[: min(cut_positions)] if cut_positions else normalized_line
+        name_fragment = re.sub(r"[:;,]+$", "", name_fragment).strip(" -,:;")
+        canonical_name = alias_matches[0][1] if alias_matches else _safe_text(name_fragment)
+        aliases = sorted({canonical_name, *[canonical for _, canonical in alias_matches], *[alias.title() for alias, _ in alias_matches]})
+        if not canonical_name:
+            continue
+        if len(canonical_name) < 3 and not dose:
+            continue
+        summary_parts = [part for part in [dose, frequency, duration] if part]
+        entities.append(
+            {
+                "entity_type": "medication_instruction",
+                "entity_name": canonical_name,
+                "entity_value": ", ".join(summary_parts) if summary_parts else normalized_line[:120],
+                "unit": dose,
+                "reference_range": ", ".join(aliases[:4]) if aliases else "",
+                "flag": "instruction",
+                "confidence": 84 if alias_matches else 74,
+                "source_text": normalized_line[:240],
+            }
+        )
+    return entities[:12]
+
+
+def _extract_diagnosis_entities(text: str) -> list[dict]:
+    entities: list[dict] = []
+    if not text:
+        return entities
+
+    lines = [_safe_text(line) for line in text.splitlines() if _safe_text(line)]
+    explicit_patterns = [
+        re.compile(
+            r"^(?:dx|diag(?:nostico|n[oó]stico)?|diagnostico(?:\s+clinico)?|impresion diagnostica|hipotesis diagnostica|juicio clinico|diagnosticos?)\s*[:\-]\s*(?P<value>.+)$",
+            re.IGNORECASE,
+        ),
+        re.compile(
+            r"^(?:conclusion|impresion|hallazgos principales|evaluacion clinica)\s*[:\-]\s*(?P<value>.+)$",
+            re.IGNORECASE,
+        ),
+    ]
+    diagnosis_keywords = [
+        "sindrome",
+        "síndrome",
+        "infeccion",
+        "infección",
+        "hipertension",
+        "hipertensión",
+        "diabetes",
+        "asma",
+        "bronquitis",
+        "neumonia",
+        "neumonía",
+        "anemia",
+        "gastritis",
+        "hipotiroidismo",
+        "hipertiroidismo",
+        "depresion",
+        "depresión",
+        "ansiedad",
+        "rinitis",
+        "otitis",
+        "faringitis",
+        "migraña",
+        "migraña",
+        "cefalea",
+        "covid",
+    ]
+    seen: set[str] = set()
+    for line in lines[:120]:
+        normalized_line = re.sub(r"^[\-\u2022*]+\s*", "", line).strip()
+        lowered_line = normalized_line.lower()
+        value = ""
+        confidence = 0
+        for pattern in explicit_patterns:
+            match = pattern.match(normalized_line)
+            if match:
+                value = _safe_text(match.group("value"))
+                confidence = 88 if "diagn" in lowered_line or lowered_line.startswith("dx") else 74
+                break
+        if not value:
+            if any(keyword in lowered_line for keyword in diagnosis_keywords):
+                value = normalized_line
+                confidence = 64
+            elif (
+                len(normalized_line) <= 140
+                and any(token in lowered_line for token in ["compatible con", "sugestivo de", "se observa", "impresiona"])
+                and any(keyword in lowered_line for keyword in diagnosis_keywords)
+            ):
+                value = normalized_line
+                confidence = 60
+        if not value:
+            continue
+        cleaned_value = re.sub(r"\s+", " ", value).strip(" .;:-")
+        if len(cleaned_value) < 4:
+            continue
+        dedupe_key = _normalize_text(cleaned_value)
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        entity_name = re.split(r"[.;]", cleaned_value, maxsplit=1)[0].strip()
+        entities.append(
+            {
+                "entity_type": "diagnosis",
+                "entity_name": entity_name[:120],
+                "entity_value": cleaned_value[:240],
+                "unit": "",
+                "reference_range": "",
+                "flag": "clinical",
+                "confidence": confidence,
+                "source_text": normalized_line[:240],
+            }
+        )
+    return entities[:10]
+
+
+def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict]:
+    doc_type = _infer_document_type(doc)
+    file_format = _document_file_format(doc)
+    text = (doc.ocr_text or "").strip()
+    if doc_type == "resultado":
+        entities = _extract_document_lab_entities(text)
+    elif doc_type == "receta":
+        entities = _extract_prescription_entities(text)
+    elif doc_type == "informe":
+        entities = _extract_diagnosis_entities(text)
+    else:
+        entities = []
+    abnormal_values = [item for item in entities if item.get("flag") in {"high", "low"}]
+    prescription_items = [item for item in entities if item.get("entity_type") == "medication_instruction"]
+    diagnosis_items = [item for item in entities if item.get("entity_type") == "diagnosis"]
+    key_points: list[str] = []
+    if doc.center:
+        key_points.append(f"Centro: {doc.center}")
+    if doc.date:
+        key_points.append(f"Fecha: {_safe_iso(doc.date)}")
+    if doc.filename:
+        key_points.append(f"Archivo: {doc.filename}")
+    if doc.notes:
+        key_points.append(_clip_text(doc.notes, 140))
+    if abnormal_values:
+        names = ", ".join(item.get("entity_name") or "valor" for item in abnormal_values[:4])
+        key_points.append(f"Valores fuera de rango detectados: {names}")
+    if diagnosis_items:
+        names = ", ".join(item.get("entity_name") or "diagnostico" for item in diagnosis_items[:4])
+        key_points.append(f"Diagnosticos o impresiones detectadas: {names}")
+
+    if doc_type == "resultado":
+        summary_plain = (
+            f"Resultado clÃ­nico en formato {file_format}. "
+            + (f"Se detectaron {len(entities)} valores legibles por OCR. " if entities else "No se detectaron valores estructurados. ")
+            + (f"Hay {len(abnormal_values)} valor(es) posiblemente fuera de rango." if abnormal_values else "No se identificaron valores fuera de rango de forma automÃ¡tica.")
+        )
+        patient_friendly = (
+            "Este documento parece corresponder a un resultado de examen. "
+            + ("Algunos valores aparecen fuera del rango informado en el mismo documento. " if abnormal_values else "")
+            + "Conviene revisarlo junto a un profesional si tienes sÃ­ntomas o dudas."
+        )
+    elif doc_type == "receta":
+        summary_plain = (
+            f"Receta en formato {file_format}. "
+            + (f"Se detectaron {len(prescription_items)} indicaciones de medicamentos con dosis o frecuencia." if prescription_items else "El OCR sugiere instrucciones de tratamiento, pero requiere confirmacion manual.")
+        )
+        patient_friendly = (
+            "Este documento parece una receta. "
+            + ("Puedo resumir los medicamentos detectados, sus dosis y la frecuencia registrada." if prescription_items else "Puedo ayudarte a revisar manualmente dosis, frecuencia y duracion usando el texto OCR.")
+        )
+        if prescription_items:
+            medication_labels = []
+            for item in prescription_items[:4]:
+                label = item.get("entity_name") or "medicamento"
+                if item.get("entity_value"):
+                    label += f" ({item.get('entity_value')})"
+                medication_labels.append(label)
+            key_points.append(
+                "Medicamentos detectados: "
+                + ", ".join(medication_labels)
+            )
+    elif doc_type == "orden":
+        summary_plain = f"Orden mÃ©dica en formato {file_format}. Puede contener exÃ¡menes o procedimientos solicitados."
+        patient_friendly = "Este documento parece una orden mÃ©dica. Puedo ayudarte a revisar quÃ© examen o trÃ¡mite fue indicado y si falta el resultado."
+    elif doc_type == "informe":
+        summary_plain = (
+            f"Informe clÃ­nico en formato {file_format}. "
+            + (
+                f"Se detectaron {len(diagnosis_items)} diagnostico(s) o impresiones clinicas en el texto OCR. "
+                if diagnosis_items
+                else "El OCR capturÃ³ observaciones mÃ©dicas para resumen. "
+            )
+            + "Conviene validar el contenido directamente con el informe original."
+        )
+        patient_friendly = (
+            "Este documento parece un informe mÃ©dico. "
+            + (
+                "Puedo resumir los diagnosticos o impresiones clinicas detectadas en lenguaje simple. "
+                if diagnosis_items
+                else "Puedo resumir sus hallazgos en lenguaje simple. "
+            )
+            + "La lectura OCR puede contener errores y no reemplaza la explicacion de tu profesional."
+        )
+    else:
+        summary_plain = f"Documento de salud en formato {file_format}. El tipo clÃ­nico no se pudo confirmar con total certeza."
+        patient_friendly = "Este documento fue registrado, pero su tipo clÃ­nico no es completamente claro. Puedo intentar explicarlo con el texto OCR disponible."
+
+    if text:
+        key_points.append("OCR: " + _clip_text(text, 220))
+    return entities, {
+        "document_type_inferred": doc_type,
+        "summary_plain": _clip_text(summary_plain, 500),
+        "patient_friendly_explanation": _clip_text(patient_friendly, 700),
+        "key_points_json": key_points[:8],
+        "abnormal_values_json": abnormal_values[:8],
+        "requires_review": bool(abnormal_values) or not text,
+    }
+
+
+def _upsert_document_intelligence(db: Session, doc: models.Document):
+    db.query(models.DocumentClinicalEntity).filter(models.DocumentClinicalEntity.document_id == doc.id).delete()
+    entities, summary_payload = _build_document_intelligence(doc)
+    for entity in entities:
+        db.add(models.DocumentClinicalEntity(document_id=doc.id, **entity))
+    summary = (
+        db.query(models.DocumentSummary)
+        .filter(models.DocumentSummary.document_id == doc.id)
+        .first()
+    )
+    if not summary:
+        summary = models.DocumentSummary(document_id=doc.id)
+    summary.document_type_inferred = summary_payload["document_type_inferred"]
+    summary.summary_plain = summary_payload["summary_plain"]
+    summary.patient_friendly_explanation = summary_payload["patient_friendly_explanation"]
+    summary.key_points_json = summary_payload["key_points_json"]
+    summary.abnormal_values_json = summary_payload["abnormal_values_json"]
+    summary.requires_review = bool(summary_payload["requires_review"])
+    summary.updated_at = datetime.now()
+    db.add(summary)
+    return summary
+
+
+def _collect_missing_document_flags(
+    documents: list[models.Document],
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+) -> dict:
+    counts_by_type = {"receta": 0, "orden": 0, "resultado": 0, "informe": 0, "otro": 0}
+    for doc in documents:
+        counts_by_type[_infer_document_type(doc)] = counts_by_type.get(_infer_document_type(doc), 0) + 1
+    has_orders = counts_by_type.get("orden", 0) > 0
+    has_results = counts_by_type.get("resultado", 0) > 0
+    active_meds = [med for med in medications if not bool(med.completed)]
+    return {
+        "missing_lab_results": bool(has_orders and not has_results),
+        "missing_recent_documents": len(documents) == 0,
+        "missing_treatment_support_docs": bool(active_meds and counts_by_type.get("receta", 0) == 0),
+    }
+
+
+def _upsert_profile_health_features(
+    db: Session,
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+    adherence_summary: dict,
+) -> models.ProfileHealthFeature:
+    feature = (
+        db.query(models.ProfileHealthFeature)
+        .filter(models.ProfileHealthFeature.profile_id == profile.id)
+        .first()
+    )
+    if not feature:
+        feature = models.ProfileHealthFeature(profile_id=profile.id)
+    dated_appointments = [item for item in appointments if item.date_time]
+    future_appointments = [item for item in dated_appointments if item.date_time >= datetime.now()]
+    feature.next_appointment_at = min((item.date_time for item in future_appointments), default=None)
+    feature.last_appointment_at = max((item.date_time for item in dated_appointments), default=None)
+    feature.active_medications_count = len([med for med in medications if not bool(med.completed)])
+    feature.low_adherence_risk = bool(adherence_summary.get("low_adherence"))
+    active_count = feature.active_medications_count or 0
+    completed_count = len([med for med in medications if bool(med.completed)])
+    total_treatments = active_count + completed_count
+    feature.treatment_completion_score = int(round((completed_count / total_treatments) * 100)) if total_treatments else 0
+    feature.missing_documents_flags_json = _collect_missing_document_flags(documents, appointments, medications)
+    feature.extra_features_json = {
+        "document_count": len(documents),
+        "appointment_count": len(appointments),
+        "overall_adherence_rate": adherence_summary.get("overall_adherence_rate"),
+        "low_adherence_items": adherence_summary.get("low_adherence_items") or [],
+    }
+    feature.updated_at = datetime.now()
+    db.add(feature)
+    return feature
+
+
+def _build_health_alert_candidates(
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+    adherence_summary: dict,
+) -> list[dict]:
+    now = datetime.now()
+    alerts: list[dict] = []
+    for med in medications:
+        if bool(med.completed):
+            continue
+        expected_end = med.end_date
+        if not expected_end:
+            duration_days = _parse_duration_days(med.duration)
+            if duration_days and med.created_at:
+                expected_end = med.created_at + timedelta(days=duration_days)
+        if expected_end and 0 <= (expected_end - now).days <= 5:
+            alerts.append(
+                {
+                    "alert_type": "medication_running_out",
+                    "severity": "medium",
+                    "title": f"{med.name or 'Medicamento'} prÃ³ximo a terminar",
+                    "description": f"El tratamiento podrÃ­a terminar alrededor de {_safe_iso(expected_end)}.",
+                    "recommended_action": "Revisar stock, continuidad del tratamiento o renovaciÃ³n de receta.",
+                    "evidence_json": {"medication_id": med.id, "estimated_end_date": _safe_iso_client(expected_end)},
+                }
+            )
+    if adherence_summary.get("low_adherence"):
+        top = (adherence_summary.get("low_adherence_items") or [{}])[0]
+        alerts.append(
+            {
+                "alert_type": "low_adherence",
+                "severity": "high",
+                "title": "Adherencia baja al tratamiento",
+                "description": (
+                    f"Se detectÃ³ baja adherencia en {top.get('name') or 'un medicamento'} "
+                    f"({top.get('adherence_rate') or 0}% en {adherence_summary.get('window_days', 30)} dÃ­as)."
+                ),
+                "recommended_action": "Revisar recordatorios, horarios y posibles barreras para la toma.",
+                "evidence_json": adherence_summary,
+            }
+        )
+    overdue = [
+        appt
+        for appt in appointments
+        if appt.date_time
+        and appt.date_time < now - timedelta(hours=12)
+        and _appointment_status_key(appt.status) != "realizada"
+    ]
+    if overdue:
+        top = sorted(overdue, key=lambda item: item.date_time)[0]
+        alerts.append(
+            {
+                "alert_type": "missed_appointment_followup",
+                "severity": "high",
+                "title": "Cita posiblemente olvidada o sin cierre",
+                "description": f"Existe una cita registrada para {_safe_iso(top.date_time)} aÃºn no marcada como realizada.",
+                "recommended_action": "Confirmar si se realizÃ³ la cita y actualizar su estado.",
+                "evidence_json": {"appointment_id": top.id},
+            }
+        )
+    missing_flags = _collect_missing_document_flags(documents, appointments, medications)
+    if missing_flags.get("missing_lab_results"):
+        alerts.append(
+            {
+                "alert_type": "missing_lab_result",
+                "severity": "medium",
+                "title": "Faltan resultados asociados a Ã³rdenes mÃ©dicas",
+                "description": "Hay Ã³rdenes mÃ©dicas registradas, pero no aparecen resultados clÃ­nicos vinculados recientemente.",
+                "recommended_action": "Subir o registrar los resultados del examen pendiente.",
+                "evidence_json": missing_flags,
+            }
+        )
+    stale_active = [med for med in medications if not bool(med.completed) and med.end_date and med.end_date < now]
+    if stale_active:
+        alerts.append(
+            {
+                "alert_type": "incomplete_treatment",
+                "severity": "medium",
+                "title": "Tratamiento posiblemente incompleto",
+                "description": f"{stale_active[0].name or 'Un tratamiento'} ya superÃ³ su fecha estimada de tÃ©rmino y sigue marcado como activo.",
+                "recommended_action": "Revisar si el tratamiento terminÃ³ o si requiere continuidad.",
+                "evidence_json": {"medication_id": stale_active[0].id},
+            }
+        )
+    return alerts
+
+
+def _sync_health_alerts(
+    db: Session,
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+    adherence_summary: dict,
+) -> list[models.HealthAlert]:
+    candidates = _build_health_alert_candidates(profile, appointments, medications, documents, adherence_summary)
+    existing = db.query(models.HealthAlert).filter(models.HealthAlert.profile_id == profile.id).all()
+    existing_by_key = {(item.alert_type, item.title): item for item in existing}
+    seen_keys = set()
+    now = datetime.now()
+    for payload in candidates:
+        key = (payload["alert_type"], payload["title"])
+        seen_keys.add(key)
+        row = existing_by_key.get(key)
+        if not row:
+            row = models.HealthAlert(profile_id=profile.id, detected_at=now)
+        row.alert_type = payload["alert_type"]
+        row.severity = payload["severity"]
+        row.title = payload["title"]
+        row.description = payload["description"]
+        row.evidence_json = payload.get("evidence_json") or {}
+        row.recommended_action = payload.get("recommended_action") or ""
+        row.status = "active"
+        row.updated_at = now
+        db.add(row)
+    for item in existing:
+        key = (item.alert_type, item.title)
+        if key not in seen_keys and item.status == "active":
+            item.status = "resolved"
+            item.updated_at = now
+            db.add(item)
+    db.flush()
+    return (
+        db.query(models.HealthAlert)
+        .filter(
+            models.HealthAlert.profile_id == profile.id,
+            models.HealthAlert.status == "active",
+        )
+        .order_by(models.HealthAlert.detected_at.desc())
+        .all()
+    )
+
+
+def _build_advanced_health_context(
+    db: Session,
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+) -> dict:
+    adherence_summary = _upsert_adherence_summaries(db, profile, medications, window_days=30)
+    document_summaries = []
+    for doc in documents[:10]:
+        summary = _upsert_document_intelligence(db, doc)
+        document_summaries.append(summary)
+    document_entities_by_document: dict[int, list[models.DocumentClinicalEntity]] = {}
+    document_ids = [doc.id for doc in documents[:10]]
+    if document_ids:
+        entity_rows = (
+            db.query(models.DocumentClinicalEntity)
+            .filter(models.DocumentClinicalEntity.document_id.in_(document_ids))
+            .order_by(models.DocumentClinicalEntity.document_id.asc(), models.DocumentClinicalEntity.created_at.asc())
+            .all()
+        )
+        for entity in entity_rows:
+            document_entities_by_document.setdefault(entity.document_id, []).append(entity)
+    health_alerts = _sync_health_alerts(db, profile, appointments, medications, documents, adherence_summary)
+    profile_features = _upsert_profile_health_features(
+        db,
+        profile,
+        appointments,
+        medications,
+        documents,
+        adherence_summary,
+    )
+    return {
+        "adherence_summary": adherence_summary,
+        "document_summaries": document_summaries,
+        "document_entities_by_document": document_entities_by_document,
+        "health_alerts": health_alerts,
+        "profile_health_features": profile_features,
+    }
+
+
+def _build_clinical_report_payload(
+    context: dict,
+    report_type: str = "consulta_medica",
+    period_days: int = 30,
+) -> dict:
+    end_dt = datetime.now()
+    start_dt = end_dt - timedelta(days=max(1, period_days))
+    adherence_summary = context.get("adherence_summary") or {}
+    documents = context.get("documents") or []
+    appointments = context.get("appointments") or []
+    medications = context.get("medications") or []
+    document_summaries = context.get("document_summaries") or []
+    health_alerts = context.get("health_alerts") or []
+    recent_appointments = [
+        _appointment_to_ai_dict(item, context.get("timezone_name") or DEFAULT_TZ_NAME)
+        for item in appointments[:8]
+    ]
+    current_medications = [
+        _medication_to_ai_dict(item, context.get("timezone_name") or DEFAULT_TZ_NAME)
+        for item in medications
+        if not bool(item.completed)
+    ][:10]
+    return {
+        "report_type": report_type,
+        "generated_at": _safe_iso_client(end_dt),
+        "period_start": _safe_iso_client(start_dt),
+        "period_end": _safe_iso_client(end_dt),
+        "profile": context.get("profile") or {},
+        "current_medications": current_medications,
+        "adherence": adherence_summary,
+        "appointments": {
+            "recent": recent_appointments,
+            "next_upcoming": context.get("appointment_insights", {}).get("next_upcoming"),
+        },
+        "documents": {
+            "count": len(documents),
+            "summaries": [
+                {
+                    "document_id": item.document_id,
+                    "document_type_inferred": item.document_type_inferred,
+                    "summary_plain": item.summary_plain,
+                    "patient_friendly_explanation": item.patient_friendly_explanation,
+                    "abnormal_values_json": item.abnormal_values_json,
+                }
+                for item in document_summaries[:8]
+            ],
+        },
+        "clinical_events": [
+            {"kind": "appointment", "detail": item}
+            for item in recent_appointments[:4]
+            if item
+        ],
+        "alerts": [
+            {
+                "alert_type": item.alert_type,
+                "severity": item.severity,
+                "title": item.title,
+                "description": item.description,
+                "recommended_action": item.recommended_action,
+            }
+            for item in health_alerts[:8]
+        ],
+        "profile_health_features": (
+            {
+                "active_medications_count": getattr(context.get("profile_health_features"), "active_medications_count", 0),
+                "low_adherence_risk": getattr(context.get("profile_health_features"), "low_adherence_risk", False),
+                "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
+                "missing_documents_flags_json": getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {},
+            }
+        ),
+    }
+
+
+def _pdf_escape(value: str) -> str:
+    raw = (value or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+    return raw.encode("latin-1", "replace").decode("latin-1")
+
+
+def _generate_simple_pdf_bytes(report_payload: dict) -> bytes:
+    lines = [
+        "Klinip - Reporte clinico",
+        f"Perfil: {(report_payload.get('profile') or {}).get('name') or 'Perfil activo'}",
+        f"Periodo: {report_payload.get('period_start')} a {report_payload.get('period_end')}",
+        f"Tipo: {report_payload.get('report_type')}",
+        "",
+        "Medicamentos actuales:",
+    ]
+    for med in (report_payload.get("current_medications") or [])[:8]:
+        lines.append(
+            f"- {med.get('name') or 'Medicamento'} {med.get('dose') or ''} {med.get('frequency') or ''}".strip()
+        )
+    adherence = report_payload.get("adherence") or {}
+    lines.extend(
+        [
+            "",
+            f"Adherencia 30d: {adherence.get('overall_adherence_rate') or 'sin datos'}%",
+            "Citas recientes:",
+        ]
+    )
+    for item in ((report_payload.get("appointments") or {}).get("recent") or [])[:5]:
+        if not item:
+            continue
+        lines.append(f"- {item.get('date_time') or 'sin fecha'} {item.get('specialty') or ''} {item.get('status') or ''}".strip())
+    lines.append("")
+    lines.append("Alertas:")
+    for alert in (report_payload.get("alerts") or [])[:6]:
+        lines.append(f"- {alert.get('title')}: {alert.get('description')}")
+    lines.append("")
+    lines.append("Documentos:")
+    for item in ((report_payload.get("documents") or {}).get("summaries") or [])[:6]:
+        lines.append(f"- {item.get('document_type_inferred')}: {item.get('summary_plain')}")
+
+    y = 790
+    content_parts = ["BT", "/F1 10 Tf", "50 790 Td"]
+    first = True
+    for line in lines[:55]:
+        escaped = _pdf_escape(_clip_text(line, 110))
+        if first:
+            content_parts.append(f"({escaped}) Tj")
+            first = False
+        else:
+            y -= 14
+            content_parts.append(f"0 -14 Td ({escaped}) Tj")
+    content_parts.append("ET")
+    content_stream = "\n".join(content_parts).encode("latin-1", "replace")
+
+    objects = []
+    objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
+    objects.append(b"2 0 obj << /Type /Pages /Count 1 /Kids [3 0 R] >> endobj\n")
+    objects.append(b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n")
+    objects.append(b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
+    objects.append(f"5 0 obj << /Length {len(content_stream)} >> stream\n".encode("latin-1") + content_stream + b"\nendstream endobj\n")
+
+    pdf = b"%PDF-1.4\n"
+    offsets = [0]
+    for obj in objects:
+        offsets.append(len(pdf))
+        pdf += obj
+    xref_offset = len(pdf)
+    pdf += f"xref\n0 {len(offsets)}\n".encode("latin-1")
+    pdf += b"0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        pdf += f"{offset:010d} 00000 n \n".encode("latin-1")
+    pdf += (
+        f"trailer << /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode("latin-1")
+    )
+    return pdf
+
+
+def _persist_clinical_report(
+    db: Session,
+    profile: models.HealthProfile,
+    report_type: str,
+    period_days: int,
+    report_payload: dict,
+) -> models.ClinicalReport:
+    period_end = datetime.now()
+    period_start = period_end - timedelta(days=max(1, period_days))
+    pdf_bytes = _generate_simple_pdf_bytes(report_payload)
+    item = models.ClinicalReport(
+        profile_id=profile.id,
+        report_type=report_type,
+        period_start=period_start,
+        period_end=period_end,
+        report_json=report_payload,
+        pdf_data=pdf_bytes,
+        pdf_filename=f"klinip_reporte_{profile.id}_{period_end.strftime('%Y%m%d_%H%M')}.pdf",
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def _ai_context_bundle_for_profile(
+    db: Session,
+    current_user: models.User,
+    profile: models.HealthProfile,
+    link: models.ProfileRelationship,
+    target_user_id: int,
+    include_family_context: bool = True,
+) -> dict:
     plan_info = _build_plan_info(current_user, db)
     timezone_name = _resolve_user_tz(current_user).key
 
@@ -5174,6 +6376,12 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         .all()
     )
     medications = _attach_medication_adherence(db, medications, current_user)
+    external_records = (
+        db.query(models.ExternalClinicalRecord)
+        .filter(models.ExternalClinicalRecord.profile_id == profile.id)
+        .order_by(models.ExternalClinicalRecord.event_at.desc(), models.ExternalClinicalRecord.created_at.desc())
+        .all()
+    )
 
     profile_notes = []
     activity_log = []
@@ -5235,6 +6443,12 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         medications=medications,
         upcoming=upcoming,
     )
+    advanced_context = _build_advanced_health_context(db, profile, appointments, medications, documents)
+    family_context = (
+        _build_family_ai_summary(db, current_user, 7)
+        if include_family_context and bool(plan_info.get("collaboration_enabled"))
+        else None
+    )
 
     sources = [
         {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": True},
@@ -5255,8 +6469,20 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         {
             "key": "family",
             "label": "Perfil familiar",
-            "count": len(profile_notes) + len(activity_log),
-            "enabled": bool(plan_info.get("collaboration_enabled")),
+            "count": len((family_context or {}).get("profiles") or []),
+            "enabled": bool(plan_info.get("collaboration_enabled")) and bool(family_context),
+        },
+        {
+            "key": "adherence",
+            "label": "Adherencia",
+            "count": len((advanced_context.get("adherence_summary") or {}).get("medication_items") or []),
+            "enabled": True,
+        },
+        {
+            "key": "radar",
+            "label": "Radar de salud",
+            "count": len(advanced_context.get("health_alerts") or []),
+            "enabled": True,
         },
     ]
 
@@ -5278,6 +6504,7 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         "appointments": appointments,
         "documents": documents,
         "medications": medications,
+        "external_records": external_records,
         "upcoming": upcoming,
         "appointment_insights": appointment_insights,
         "document_insights": document_insights,
@@ -5290,11 +6517,23 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1800),
         "profile_notes": profile_notes,
         "activity_log": activity_log,
+        "adherence_summary": advanced_context.get("adherence_summary") or {},
+        "document_summaries": advanced_context.get("document_summaries") or [],
+        "document_entities_by_document": advanced_context.get("document_entities_by_document") or {},
+        "health_alerts": advanced_context.get("health_alerts") or [],
+        "profile_health_features": advanced_context.get("profile_health_features"),
+        "family_context": family_context,
     }
+
+
+def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
+    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    return _ai_context_bundle_for_profile(db, current_user, profile, link, target_user_id)
 
 
 def _serialize_ai_context(context: dict) -> dict:
     timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
+    family_context = context.get("family_context") or {}
     return {
         "profile": context["profile"],
         "learned_profile_context": context.get("learned_profile_context") or "",
@@ -5308,6 +6547,80 @@ def _serialize_ai_context(context: dict) -> dict:
         "appointment_insights": context.get("appointment_insights") or {},
         "document_insights": context.get("document_insights") or {},
         "medication_insights": context.get("medication_insights") or {},
+        "adherence_summary": context.get("adherence_summary") or {},
+        "health_alerts": [
+            {
+                "alert_type": item.alert_type,
+                "severity": item.severity,
+                "title": item.title,
+                "description": item.description,
+                "recommended_action": item.recommended_action,
+                "status": item.status,
+                "detected_at": _safe_iso_local(item.detected_at, timezone_name),
+            }
+            for item in (context.get("health_alerts") or [])[:8]
+        ],
+        "document_summaries": [
+            {
+                "document_id": item.document_id,
+                "document_type_inferred": item.document_type_inferred,
+                "summary_plain": _clip_text(item.summary_plain, 240),
+                "patient_friendly_explanation": _clip_text(item.patient_friendly_explanation, 320),
+                "abnormal_values_json": item.abnormal_values_json or [],
+                "key_points_json": (item.key_points_json or [])[:6],
+            }
+            for item in (context.get("document_summaries") or [])[:8]
+        ],
+        "document_diagnoses": [
+            {
+                "document_id": document_id,
+                "diagnoses": [
+                    {
+                        "name": entity.entity_name,
+                        "detail": _clip_text(entity.entity_value or entity.source_text or "", 180),
+                        "confidence": entity.confidence,
+                    }
+                    for entity in entities
+                    if getattr(entity, "entity_type", "") == "diagnosis"
+                ][:5],
+            }
+            for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:8]
+            if any(getattr(entity, "entity_type", "") == "diagnosis" for entity in entities)
+        ],
+        "profile_health_features": (
+            {
+                "next_appointment_at": _safe_iso_local(getattr(context.get("profile_health_features"), "next_appointment_at", None), timezone_name),
+                "last_appointment_at": _safe_iso_local(getattr(context.get("profile_health_features"), "last_appointment_at", None), timezone_name),
+                "active_medications_count": getattr(context.get("profile_health_features"), "active_medications_count", 0),
+                "low_adherence_risk": getattr(context.get("profile_health_features"), "low_adherence_risk", False),
+                "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
+                "missing_documents_flags_json": getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {},
+            }
+        ),
+        "family_context": (
+            {
+                "summary": family_context.get("summary") or "",
+                "family_size": family_context.get("family_size", 0),
+                "active_alerts_total": family_context.get("active_alerts_total", 0),
+                "low_adherence_profiles": family_context.get("low_adherence_profiles", 0),
+                "pending_documents_total": family_context.get("pending_documents_total", 0),
+                "profiles": [
+                    {
+                        "profile_id": item.get("profile_id"),
+                        "profile_name": item.get("profile_name"),
+                        "relation_with_owner": item.get("relation_with_owner"),
+                        "active_alerts": item.get("active_alerts", 0),
+                        "upcoming_appointments": item.get("upcoming_appointments", 0),
+                        "low_adherence": bool(item.get("low_adherence")),
+                        "pending_documents": item.get("pending_documents") or [],
+                        "key_risks": item.get("key_risks") or [],
+                    }
+                    for item in (family_context.get("profiles") or [])[:6]
+                ],
+            }
+            if family_context
+            else None
+        ),
         "recent_conversations": context.get("recent_conversations") or [],
         "conversation_summaries": [
             {
@@ -5402,6 +6715,12 @@ def _ai_system_prompt(context: dict) -> str:
         "17. Para medicamentos, distingue estado activa vs realizada usando medication_insights.\n"
         "18. Si existe historial de conversaciones guardadas, usalo como contexto adicional del perfil sin contradecir el contexto clinico actual.\n"
         "19. Si el usuario retoma una conversacion anterior, manten continuidad y reconoce lo ya conversado.\n"
+        "20. Usa adherence_summary y health_alerts para explicar como va el tratamiento y riesgos detectados.\n"
+        "21. Si el usuario pide preparar una cita, usa proximas citas, documentos y medicamentos activos para sugerir que llevar.\n"
+        "22. Si interpretas resultados, usa document_summaries y abnormal_values_json; explica en lenguaje simple y sin diagnosticar.\n"
+        "23. Si el usuario pide un reporte clÃ­nico, resume los bloques disponibles y sugiere generar el reporte estructurado.\n"
+        "24. Si el usuario pregunta por su familia o por que familiar necesita mas atencion, usa family_context y prioriza alertas activas, adherencia baja, citas proximas y documentos pendientes.\n"
+        "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
@@ -5480,6 +6799,42 @@ def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tu
         return None
 
 
+def _family_attention_priority(item: dict) -> tuple[int, int, int, int]:
+    pending_count = len(item.get("pending_documents") or [])
+    return (
+        int(item.get("active_alerts") or 0),
+        1 if item.get("low_adherence") else 0,
+        pending_count,
+        int(item.get("upcoming_appointments") or 0),
+    )
+
+
+def _diagnosis_mentions_from_context(context: dict) -> list[dict]:
+    diagnosis_rows: list[dict] = []
+    summaries_by_document = {
+        getattr(item, "document_id", None): item
+        for item in (context.get("document_summaries") or [])
+        if getattr(item, "document_id", None) is not None
+    }
+    for document_id, entities in (context.get("document_entities_by_document") or {}).items():
+        summary = summaries_by_document.get(document_id)
+        for entity in entities or []:
+            if getattr(entity, "entity_type", "") != "diagnosis":
+                continue
+            diagnosis_rows.append(
+                {
+                    "document_id": document_id,
+                    "name": getattr(entity, "entity_name", "") or "Hallazgo clinico",
+                    "detail": getattr(entity, "entity_value", "") or getattr(entity, "source_text", ""),
+                    "confidence": getattr(entity, "confidence", 0),
+                    "document_summary": getattr(summary, "patient_friendly_explanation", "") if summary else "",
+                    "updated_at": getattr(summary, "updated_at", None) if summary else None,
+                }
+            )
+    diagnosis_rows.sort(key=lambda item: item.get("updated_at") or datetime.min, reverse=True)
+    return diagnosis_rows
+
+
 def _fallback_ai_reply(message: str, context: dict) -> str:
     normalized = _normalize_text(message or "")
     latest_document = context.get("latest_document")
@@ -5492,6 +6847,103 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     appointment_insights = context.get("appointment_insights") or {}
     document_insights = context.get("document_insights") or {}
     medication_insights = context.get("medication_insights") or {}
+    adherence_summary = context.get("adherence_summary") or {}
+    health_alerts = context.get("health_alerts") or []
+    document_summaries = context.get("document_summaries") or []
+    family_context = context.get("family_context") or {}
+    family_profiles = family_context.get("profiles") or []
+    diagnosis_mentions = _diagnosis_mentions_from_context(context)
+
+    if family_profiles and any(
+        token in normalized
+        for token in [
+            "familiar",
+            "familia",
+            "quien necesita mas atencion",
+            "quien necesita mas ayuda",
+            "que familiar necesita mas atencion",
+        ]
+    ):
+        ranked = sorted(family_profiles, key=_family_attention_priority, reverse=True)
+        top = ranked[0]
+        reasons = []
+        if top.get("active_alerts"):
+            reasons.append(f"{top.get('active_alerts')} alerta(s) activa(s)")
+        if top.get("low_adherence"):
+            reasons.append("adherencia baja")
+        if top.get("upcoming_appointments"):
+            reasons.append(f"{top.get('upcoming_appointments')} cita(s) proxima(s)")
+        if top.get("pending_documents"):
+            reasons.append(f"documentos pendientes: {', '.join((top.get('pending_documents') or [])[:3])}")
+        response = (
+            f"El familiar que hoy necesita mas atencion es {top.get('profile_name') or 'un perfil familiar'}"
+            + (f" ({top.get('relation_with_owner')})" if top.get("relation_with_owner") else "")
+            + ". "
+        )
+        response += "Motivos principales: " + (", ".join(reasons) if reasons else "aparece primero por prioridad del radar familiar") + "."
+        if len(ranked) > 1:
+            runner_up = ranked[1]
+            response += f" Despues viene {runner_up.get('profile_name') or 'otro perfil'} con {runner_up.get('active_alerts', 0)} alerta(s)."
+        return response
+
+    if diagnosis_mentions and any(
+        token in normalized
+        for token in ["diagnostico", "diagnostico detectado", "diagnosticos", "informe medico", "hallazgo"]
+    ):
+        top = diagnosis_mentions[0]
+        reply = f"En los documentos del perfil activo detecto como hallazgo documental principal: {top.get('name')}."
+        if top.get("detail"):
+            reply += f" Texto OCR relacionado: {_clip_text(top.get('detail'), 180)}."
+        if top.get("document_summary"):
+            reply += " Explicacion simple del documento: " + _clip_text(top.get("document_summary"), 220) + "."
+        reply += " Esto debe leerse como informacion del informe y no como diagnostico definitivo por si sola."
+        return reply
+
+    if any(token in normalized for token in ["como va mi tratamiento", "como va el tratamiento", "como voy con mi tratamiento"]):
+        overall = adherence_summary.get("overall_adherence_rate")
+        low_items = adherence_summary.get("low_adherence_items") or []
+        reply_parts = [
+            f"Tratamiento actual del perfil {context['profile']['name']}: {len(active_medications)} medicamento(s) activo(s)."
+        ]
+        if overall is not None:
+            reply_parts.append(f"Adherencia estimada en 30 dias: {overall}%.")
+        if low_items:
+            top = low_items[0]
+            reply_parts.append(
+                f"El principal punto a revisar es {top.get('name') or 'un medicamento'}, con adherencia {top.get('adherence_rate') or 0}%."
+            )
+        if health_alerts:
+            reply_parts.append(f"Radar de salud: {len(health_alerts)} alerta(s) activa(s).")
+        return " ".join(reply_parts)
+
+    if any(token in normalized for token in ["que debo llevar a mi cita", "que llevar a mi cita", "cita de manana", "cita de maÃ±ana"]):
+        next_item = next((item for item in upcoming if item.date_time), None)
+        if not next_item:
+            return "No encuentro una cita prÃ³xima registrada para preparar."
+        checklist = ["documento de identidad", "orden mÃ©dica o motivo de consulta", "lista de medicamentos actuales"]
+        if latest_document:
+            checklist.append("resultados o documentos clÃ­nicos recientes")
+        return (
+            f"Para tu prÃ³xima cita del {_safe_iso(next_item.date_time)}, te sugiero llevar: "
+            + ", ".join(checklist)
+            + ". Si corresponde, confirma el centro y la especialidad antes de salir."
+        )
+
+    if any(token in normalized for token in ["radar", "alertas", "riesgos", "que debo revisar"]):
+        if not health_alerts:
+            return "No detecto alertas activas relevantes en este momento para el perfil activo."
+        parts = [f"Radar de salud: hay {len(health_alerts)} alerta(s) activa(s)."]
+        for alert in health_alerts[:3]:
+            parts.append(f"{alert.title}: {alert.description}")
+        return " ".join(parts)
+
+    if any(token in normalized for token in ["reporte clinico", "reporte clÃ­nico", "genera un reporte", "reporte medico", "reporte mÃ©dico"]):
+        overall = adherence_summary.get("overall_adherence_rate")
+        return (
+            f"Puedo generar un reporte clÃ­nico estructurado del perfil activo {context['profile']['name']}. "
+            f"Hoy veo {len(active_medications)} medicamento(s) activo(s), {len(appointments)} cita(s), "
+            f"{len(documents)} documento(s) y adherencia estimada de {overall if overall is not None else 'sin datos'}%."
+        )
 
     if "ultima" in normalized and "cita" in normalized:
         pick = appointment_insights.get("last_scheduled_created") if "agendada" in normalized else appointment_insights.get("last_created")
@@ -5566,6 +7018,9 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
         else:
             parts.append("Todavia no hay texto OCR disponible para ese documento.")
+        summary_row = document_summaries[0] if document_summaries else None
+        if summary_row and summary_row.patient_friendly_explanation:
+            parts.append("Explicacion simple: " + _clip_text(summary_row.patient_friendly_explanation, 280))
         return " ".join(parts)
 
     if any(token in normalized for token in ["resumen de medicamentos", "mis medicamentos", "estado de medicamentos"]):
@@ -5633,21 +7088,25 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             if next_item
             else " No hay proxima cita fechada."
         )
+        diagnosis_text = ""
+        if diagnosis_mentions:
+            diagnosis_text = f" Hallazgos documentales recientes: {', '.join(item.get('name') or 'hallazgo' for item in diagnosis_mentions[:3])}."
         return (
             f"Resumen del perfil activo {context['profile']['name']}: "
             f"{len(appointments)} actividad(es), {len(documents)} documento(s) y {len(medications)} medicamento(s) registrados."
             + latest_doc_text
             + next_appt_text
+            + diagnosis_text
         )
 
-    return (
-        f"Claro, te ayudo con el perfil activo {context['profile']['name']}. "
-        + (f"Contexto relevante detectado: {learned_context}. " if learned_context else "")
-        + "Puedo revisar documentos, medicamentos, citas, historial y recordatorios. "
+        return (
+            f"Claro, te ayudo con el perfil activo {context['profile']['name']}. "
+            + (f"Contexto relevante detectado: {learned_context}. " if learned_context else "")
+        + "Puedo revisar documentos, medicamentos, citas, historial, adherencia, radar de salud y reportes clÃ­nicos. "
         + "Si quieres, partimos con una de estas: "
         + "'Explicame mi ultimo documento', 'Que medicamentos estoy tomando', "
-        + "'Cuando es mi proxima cita' o 'Resume mi historial clinico'."
-    )
+        + "'Como va mi tratamiento', 'Que debo llevar a mi cita de maÃ±ana' o 'Genera un reporte clinico'."
+        )
 
 
 def _build_ai_references(message: str, context: dict) -> list[dict]:
@@ -5658,6 +7117,10 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     upcoming = context.get("upcoming") or []
     document_insights = context.get("document_insights") or {}
     medication_insights = context.get("medication_insights") or {}
+    adherence_summary = context.get("adherence_summary") or {}
+    health_alerts = context.get("health_alerts") or []
+    family_context = context.get("family_context") or {}
+    diagnosis_mentions = _diagnosis_mentions_from_context(context)
 
     if latest_document and any(
         token in normalized for token in ["documento", "ocr", "ultimo documento", "explicame mi ultimo documento"]
@@ -5706,6 +7169,54 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
             }
         )
 
+    if adherence_summary and any(token in normalized for token in ["adherencia", "tratamiento", "recordatorio"]):
+        refs.append(
+            {
+                "kind": "adherence",
+                "label": "Resumen de adherencia",
+                "detail": f"{adherence_summary.get('overall_adherence_rate') or 'sin datos'}% en {adherence_summary.get('window_days', 30)} dÃ­as",
+            }
+        )
+
+    if health_alerts and any(token in normalized for token in ["radar", "alerta", "riesgo"]):
+        first = health_alerts[0]
+        refs.append(
+            {
+                "kind": "health-alert",
+                "label": first.title,
+                "detail": first.severity,
+            }
+            )
+
+    if family_context and any(
+        token in normalized for token in ["familiar", "familia", "quien necesita mas atencion", "que familiar"]
+    ):
+        top_profiles = sorted(family_context.get("profiles") or [], key=_family_attention_priority, reverse=True)[:2]
+        for item in top_profiles:
+            refs.append(
+                {
+                    "kind": "family-summary",
+                    "label": item.get("profile_name") or "Perfil familiar",
+                    "detail": (
+                        f"Alertas {item.get('active_alerts', 0)} | "
+                        f"Adherencia baja {'si' if item.get('low_adherence') else 'no'} | "
+                        f"Citas {item.get('upcoming_appointments', 0)}"
+                    ),
+                }
+            )
+
+    if diagnosis_mentions and any(
+        token in normalized for token in ["diagnostico", "diagnosticos", "informe", "hallazgo", "resultado"]
+    ):
+        for item in diagnosis_mentions[:2]:
+            refs.append(
+                {
+                    "kind": "diagnosis-document",
+                    "label": item.get("name") or "Hallazgo documental",
+                    "detail": _clip_text(item.get("detail") or item.get("document_summary") or "", 120),
+                }
+            )
+
     if upcoming and any(token in normalized for token in ["cita", "proxima", "actividad", "agenda"]):
         item = next((appt for appt in upcoming if appt.date_time), None)
         if item:
@@ -5713,8 +7224,8 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
             refs.append(
                 {
                     "kind": "appointment",
-                    "label": f"{appt_type.title()} próxima",
-                    "detail": " · ".join(
+                    "label": f"{appt_type.title()} prÃ³xima",
+                    "detail": " Â· ".join(
                         [value for value in [_safe_iso(item.date_time), item.specialty or "", item.center or ""] if value]
                     ),
                 }
@@ -5764,6 +7275,89 @@ def _build_ai_reply(message: str, history: list[dict], context: dict) -> tuple[s
     return _sanitize_ai_reply(_fallback_ai_reply(message, context)), "context-fallback", "fallback", references
 
 
+def _extract_direct_report_request(message: str) -> dict | None:
+    normalized = _normalize_text(message or "")
+    if "reporte" not in normalized:
+        return None
+    if not any(token in normalized for token in ["genera", "generar", "crea", "crear", "prepara", "preparar", "haz", "hacer"]):
+        return None
+
+    report_type = "consulta_medica"
+    if "seguimiento" in normalized or "tratamiento" in normalized:
+        report_type = "seguimiento_tratamiento"
+    elif "mensual" in normalized:
+        report_type = "resumen_mensual"
+    elif "familiar" in normalized or "familia" in normalized:
+        report_type = "resumen_familiar"
+
+    period_days = 30
+    if "semanal" in normalized or "esta semana" in normalized or "7 dias" in normalized or "7 dias" in normalized:
+        period_days = 7
+    elif "quincenal" in normalized or "15 dias" in normalized:
+        period_days = 15
+    elif "mensual" in normalized or "30 dias" in normalized:
+        period_days = 30
+    elif "trimestral" in normalized or "90 dias" in normalized:
+        period_days = 90
+
+    explicit_days = re.search(r"(\d{1,3})\s*dias?", normalized)
+    if explicit_days:
+        period_days = max(1, min(365, int(explicit_days.group(1))))
+
+    return {
+        "report_type": report_type,
+        "period_days": period_days,
+    }
+
+
+def _generate_direct_chat_report(
+    db: Session,
+    current_user: models.User,
+    context: dict,
+    message: str,
+) -> tuple[str, str, str, list[dict]]:
+    request = _extract_direct_report_request(message)
+    if not request:
+        return _build_ai_reply(message, [], context)
+
+    profile, _ = _get_profile_access_or_404(db, current_user, int(context["profile"]["id"]))
+    report_payload = _build_clinical_report_payload(
+        context,
+        report_type=request["report_type"],
+        period_days=request["period_days"],
+    )
+    report = _persist_clinical_report(
+        db,
+        profile,
+        report_type=report_payload["report_type"],
+        period_days=request["period_days"],
+        report_payload=report_payload,
+    )
+    adherence = context.get("adherence_summary") or {}
+    reply = (
+        f"Ya generé un reporte clínico de tipo {report_payload['report_type'].replace('_', ' ')} para {context['profile']['name']} "
+        f"con ventana de {request['period_days']} días. "
+        f"El reporte incluye {len(report_payload.get('current_medications') or [])} medicamento(s) actual(es), "
+        f"{len((report_payload.get('appointments') or {}).get('recent') or [])} cita(s) reciente(s), "
+        f"{len((report_payload.get('documents') or {}).get('summaries') or [])} documento(s) resumido(s) "
+        f"y adherencia estimada de {adherence.get('overall_adherence_rate') if adherence.get('overall_adherence_rate') is not None else 'sin datos'}%. "
+        "Lo dejé disponible en Reportes clínicos para descargar en PDF."
+    )
+    references = [
+        {
+            "kind": "clinical-report",
+            "label": f"Reporte #{report.id}",
+            "detail": f"{report.report_type} | {report.pdf_filename or 'PDF disponible'}",
+        },
+        {
+            "kind": "profile",
+            "label": f"Perfil activo: {context['profile']['name']}",
+            "detail": f"Plan {context['plan'].get('plan_type')}",
+        },
+    ]
+    return reply, "clinical-report-generator", "report-generated", references
+
+
 def _persist_ai_message(
     db: Session,
     *,
@@ -5800,7 +7394,7 @@ def register(
     try:
         existing = auth.get_user_by_email(db, user_in.email)
         if existing:
-            raise HTTPException(status_code=400, detail="El correo ya está registrado")
+            raise HTTPException(status_code=400, detail="El correo ya estÃ¡ registrado")
 
         user = models.User(
             email=user_in.email,
@@ -5841,9 +7435,9 @@ def login(
     print(f"DEBUG: Intento de login con email: {form_data.username}")
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        print(f"DEBUG: Autenticación fallida para: {form_data.username}")
-        raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
-    print(f"DEBUG: Autenticación exitosa para usuario ID: {user.id}")
+        print(f"DEBUG: AutenticaciÃ³n fallida para: {form_data.username}")
+        raise HTTPException(status_code=400, detail="Correo o contraseÃ±a incorrectos")
+    print(f"DEBUG: AutenticaciÃ³n exitosa para usuario ID: {user.id}")
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     # JWT requiere que 'sub' sea una cadena, no un entero
     access_token = auth.create_access_token(
@@ -7078,7 +8672,16 @@ async def ai_chat(
             continue
         history.append({"role": role_value, "content": content_value})
         seen_pairs.add(key)
-    reply, model_name, mode, references = _build_ai_reply(message, history, context)
+    direct_report_request = _extract_direct_report_request(message)
+    if direct_report_request:
+        reply, model_name, mode, references = _generate_direct_chat_report(
+            db=db,
+            current_user=current_user,
+            context=context,
+            message=message,
+        )
+    else:
+        reply, model_name, mode, references = _build_ai_reply(message, history, context)
     user_item = _persist_ai_message(
         db,
         profile_id=profile_id,
@@ -7138,6 +8741,562 @@ async def get_ai_history(
         limit=160,
     )
     return items
+
+
+def _requested_or_active_profile_context(
+    db: Session,
+    current_user: models.User,
+    profile_id: int | None = None,
+) -> dict:
+    if profile_id:
+        profile, link = _get_profile_access_or_404(db, current_user, int(profile_id))
+        return _ai_context_bundle_for_profile(db, current_user, profile, link, profile.owner_user_id)
+    return _ai_context_bundle(db, current_user)
+
+
+def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> list[models.ProfileRelationship]:
+    return (
+        db.query(models.ProfileRelationship)
+        .join(models.HealthProfile, models.HealthProfile.id == models.ProfileRelationship.profile_id)
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(
+            models.HealthProfile.is_primary_profile.desc(),
+            models.HealthProfile.full_name.asc(),
+        )
+        .all()
+    )
+
+
+def _life_timeline_events_from_context(context: dict, include_alerts: bool = False) -> list[dict]:
+    profile_data = context.get("profile") or {}
+    profile_id = int(profile_data.get("id") or 0)
+    profile_name = profile_data.get("name") or "Perfil"
+    timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
+    document_entities_by_document = context.get("document_entities_by_document") or {}
+    events: list[dict] = []
+
+    for appt in context.get("appointments") or []:
+        event_at_tz = _ai_dt_in_tz(getattr(appt, "date_time", None), timezone_name)
+        event_at = event_at_tz.replace(tzinfo=None) if event_at_tz else getattr(appt, "created_at", None)
+        events.append(
+            {
+                "id": f"appointment-{appt.id}",
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "event_type": "appointment",
+                "category": getattr(appt, "status", "") or "agenda",
+                "title": getattr(appt, "specialty", "") or "Actividad clinica",
+                "summary": getattr(appt, "center", "") or "Centro por confirmar",
+                "event_at": event_at,
+                "related_ids": {"appointment_id": appt.id},
+                "metadata_json": {
+                    "type": getattr(appt, "type", ""),
+                    "status": getattr(appt, "status", ""),
+                    "notes": getattr(appt, "notes", "") or "",
+                },
+            }
+        )
+
+    for doc in context.get("documents") or []:
+        matching_summary = next(
+            (item for item in (context.get("document_summaries") or []) if getattr(item, "document_id", None) == doc.id),
+            None,
+        )
+        diagnosis_entities = [
+            entity
+            for entity in (document_entities_by_document.get(doc.id) or [])
+            if getattr(entity, "entity_type", "") == "diagnosis"
+        ]
+        events.append(
+            {
+                "id": f"document-{doc.id}",
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "event_type": "document",
+                "category": _infer_document_type(doc),
+                "title": _infer_document_type(doc).title(),
+                "summary": _clip_text(
+                    (getattr(matching_summary, "patient_friendly_explanation", "") if matching_summary else "")
+                    or getattr(doc, "notes", "")
+                    or getattr(doc, "center", "")
+                    or "Documento clinico cargado",
+                    220,
+                ),
+                "event_at": getattr(doc, "date", None) or getattr(doc, "created_at", None),
+                "related_ids": {"document_id": doc.id, "appointment_id": getattr(doc, "appointment_id", None)},
+                "metadata_json": {
+                    "filename": getattr(doc, "filename", "") or "",
+                    "ocr_status": getattr(doc, "ocr_status", "") or "",
+                    "diagnosis_count": len(diagnosis_entities),
+                },
+            }
+        )
+        for index, entity in enumerate(diagnosis_entities[:3]):
+            diagnosis_summary = getattr(entity, "entity_value", "") or getattr(entity, "source_text", "") or ""
+            if matching_summary and getattr(matching_summary, "patient_friendly_explanation", ""):
+                diagnosis_summary = (
+                    diagnosis_summary + " | " if diagnosis_summary else ""
+                ) + getattr(matching_summary, "patient_friendly_explanation", "")
+            events.append(
+                {
+                    "id": f"diagnosis-{doc.id}-{index}",
+                    "profile_id": profile_id,
+                    "profile_name": profile_name,
+                    "event_type": "diagnosis",
+                    "category": "documented",
+                    "title": getattr(entity, "entity_name", "") or "Diagnostico documentado",
+                    "summary": _clip_text(diagnosis_summary or "Hallazgo detectado en informe clinico.", 220),
+                    "event_at": getattr(doc, "date", None)
+                    or getattr(matching_summary, "updated_at", None)
+                    or getattr(doc, "created_at", None),
+                    "related_ids": {"document_id": doc.id, "appointment_id": getattr(doc, "appointment_id", None)},
+                    "metadata_json": {
+                        "confidence": getattr(entity, "confidence", 0),
+                        "source_text": getattr(entity, "source_text", "") or "",
+                    },
+                }
+            )
+
+    for med in context.get("medications") or []:
+        summary_parts = [part for part in [getattr(med, "dose", ""), getattr(med, "frequency", ""), getattr(med, "duration", "")] if part]
+        events.append(
+            {
+                "id": f"medication-{med.id}",
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "event_type": "treatment" if getattr(med, "completed", False) else "medication",
+                "category": "completed" if getattr(med, "completed", False) else "active",
+                "title": getattr(med, "name", "") or "Medicamento",
+                "summary": " | ".join(summary_parts) if summary_parts else "Tratamiento registrado",
+                "event_at": getattr(med, "created_at", None),
+                "related_ids": {"medication_id": med.id, "document_id": getattr(med, "document_id", None)},
+                "metadata_json": {
+                    "end_date": _safe_iso_client(getattr(med, "end_date", None)),
+                    "notes": getattr(med, "notes", "") or "",
+                },
+            }
+        )
+
+    for summary in context.get("document_summaries") or []:
+        abnormal_values = getattr(summary, "abnormal_values_json", None) or []
+        if abnormal_values:
+            events.append(
+                {
+                    "id": f"diagnostic-result-{getattr(summary, 'document_id', 0)}",
+                    "profile_id": profile_id,
+                    "profile_name": profile_name,
+                    "event_type": "diagnostic_result",
+                    "category": "review_required",
+                    "title": "Resultados con valores a revisar",
+                    "summary": _clip_text(
+                        ", ".join(
+                            f"{item.get('entity_name', 'valor')}: {item.get('entity_value', '')}"
+                            for item in abnormal_values[:3]
+                        )
+                        or "Se detectaron resultados fuera de rango en un documento.",
+                        220,
+                    ),
+                    "event_at": getattr(summary, "updated_at", None),
+                    "related_ids": {"document_id": getattr(summary, "document_id", None)},
+                    "metadata_json": {"abnormal_values": abnormal_values[:5]},
+                }
+            )
+
+    external_records = context.get("external_records") or []
+    for record in external_records:
+        events.append(
+            {
+                "id": f"external-record-{record.id}",
+                "profile_id": profile_id,
+                "profile_name": profile_name,
+                "event_type": "external_record",
+                "category": getattr(record, "record_type", "") or "external",
+                "title": getattr(record, "title", "") or "Registro externo",
+                "summary": _clip_text(getattr(record, "summary", "") or "", 220),
+                "event_at": getattr(record, "event_at", None) or getattr(record, "created_at", None),
+                "related_ids": {"external_record_id": record.id, "source_id": getattr(record, "source_id", None)},
+                "metadata_json": getattr(record, "payload_json", {}) or {},
+            }
+        )
+
+    if include_alerts:
+        for alert in context.get("health_alerts") or []:
+            events.append(
+                {
+                    "id": f"alert-{alert.id}",
+                    "profile_id": profile_id,
+                    "profile_name": profile_name,
+                    "event_type": "health_alert",
+                    "category": getattr(alert, "severity", "") or "low",
+                    "title": getattr(alert, "title", "") or "Alerta de salud",
+                    "summary": _clip_text(getattr(alert, "description", "") or "", 220),
+                    "event_at": getattr(alert, "detected_at", None) or getattr(alert, "updated_at", None),
+                    "related_ids": {"alert_id": alert.id},
+                    "metadata_json": getattr(alert, "evidence_json", {}) or {},
+                }
+            )
+
+    return sorted(
+        [item for item in events if item.get("event_at")],
+        key=lambda item: item.get("event_at") or datetime.min,
+        reverse=True,
+    )
+
+
+def _life_timeline_summary(events: list[dict], profile_label: str) -> str:
+    if not events:
+        return f"No hay eventos clinicos suficientes para resumir la evolucion de {profile_label}."
+    categories: dict[str, int] = {}
+    for item in events:
+        key = item.get("event_type", "evento")
+        categories[key] = categories.get(key, 0) + 1
+    dominant = max(categories, key=categories.get) if categories else "eventos clinicos"
+    latest_titles = ", ".join(item.get("title", "evento") for item in events[:3])
+    return (
+        f"Evolucion resumida de {profile_label}: {len(events)} eventos clinicos registrados. "
+        f"Predominan {dominant}. Ultimos hitos: {latest_titles}."
+    )
+
+
+def _build_family_ai_summary(db: Session, current_user: models.User, days: int = 30) -> dict:
+    profile_rows: list[dict] = []
+    active_alerts_total = 0
+    pending_documents_total = 0
+    low_adherence_profiles = 0
+    for link in _accepted_profile_links_for_user(db, current_user):
+        profile = link.profile
+        if not profile:
+            continue
+        context = _ai_context_bundle_for_profile(
+            db,
+            current_user,
+            profile,
+            link,
+            profile.owner_user_id,
+            include_family_context=False,
+        )
+        alerts = [item for item in (context.get("health_alerts") or []) if getattr(item, "status", "active") == "active"]
+        adherence = context.get("adherence_summary") or {}
+        missing_flags = getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {}
+        pending_documents = [key for key, value in missing_flags.items() if value]
+        low_adherence = bool(adherence.get("low_adherence"))
+        active_alerts_total += len(alerts)
+        pending_documents_total += len(pending_documents)
+        low_adherence_profiles += 1 if low_adherence else 0
+        profile_rows.append(
+            {
+                "profile_id": profile.id,
+                "profile_name": profile.full_name,
+                "relation_with_owner": profile.relation_with_owner or "",
+                "active_alerts": len(alerts),
+                "upcoming_appointments": len(context.get("upcoming") or []),
+                "low_adherence": low_adherence,
+                "pending_documents": pending_documents[:4],
+                "key_risks": [getattr(item, "title", "") for item in alerts[:3]],
+            }
+        )
+    profile_rows.sort(key=lambda item: (item["active_alerts"], len(item["pending_documents"]), item["upcoming_appointments"]), reverse=True)
+    return {
+        "generated_at": datetime.now(),
+        "family_size": len(profile_rows),
+        "active_alerts_total": active_alerts_total,
+        "pending_documents_total": pending_documents_total,
+        "low_adherence_profiles": low_adherence_profiles,
+        "summary": (
+            f"Panel familiar IA: {len(profile_rows)} perfiles analizados, "
+            f"{active_alerts_total} alertas activas, {low_adherence_profiles} perfiles con adherencia baja "
+            f"y {pending_documents_total} brechas documentales detectadas."
+        ),
+        "profiles": profile_rows,
+    }
+
+
+@app.get("/ai/context/profile/{profile_id}", response_model=schemas.AiHealthContextOut)
+async def get_ai_profile_context(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    return {
+        "profile": context.get("profile") or {},
+        "plan": context.get("plan") or {},
+        "adherence_summary": context.get("adherence_summary") or {},
+        "health_alerts": context.get("health_alerts") or [],
+        "document_summaries": context.get("document_summaries") or [],
+        "profile_health_features": (
+            {
+                "next_appointment_at": _safe_iso_client(getattr(context.get("profile_health_features"), "next_appointment_at", None)),
+                "last_appointment_at": _safe_iso_client(getattr(context.get("profile_health_features"), "last_appointment_at", None)),
+                "active_medications_count": getattr(context.get("profile_health_features"), "active_medications_count", 0),
+                "low_adherence_risk": getattr(context.get("profile_health_features"), "low_adherence_risk", False),
+                "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
+                "missing_documents_flags_json": getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {},
+            }
+        ),
+        "context": _serialize_ai_context(context),
+    }
+
+
+@app.get("/ai/context/profile/{profile_id}/summary")
+async def get_ai_profile_context_summary(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    adherence = context.get("adherence_summary") or {}
+    return {
+        "profile": context.get("profile") or {},
+        "summary": {
+            "active_medications": len(context.get("active_medications") or []),
+            "upcoming_appointments": len(context.get("upcoming") or []),
+            "documents": len(context.get("documents") or []),
+            "health_alerts": len(context.get("health_alerts") or []),
+            "overall_adherence_rate": adherence.get("overall_adherence_rate"),
+            "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
+        },
+    }
+
+
+@app.get("/ai/family/context", response_model=schemas.AiFamilyContextOut)
+async def get_ai_family_context(
+    days: int = 30,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    return _build_family_ai_summary(db, current_user, days)
+
+
+@app.get("/ai/life-timeline", response_model=schemas.LifeTimelineOut)
+async def get_ai_life_timeline(
+    profile_id: int | None = None,
+    days: int = 365,
+    include_family: bool = False,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    events = _life_timeline_events_from_context(context, include_alerts=True)
+    if include_family:
+        current_profile_id = int((context.get("profile") or {}).get("id") or 0)
+        for link in _accepted_profile_links_for_user(db, current_user):
+            profile = link.profile
+            if not profile or profile.id == current_profile_id:
+                continue
+            family_context = _ai_context_bundle_for_profile(db, current_user, profile, link, profile.owner_user_id)
+            events.extend(_life_timeline_events_from_context(family_context, include_alerts=False))
+        events = sorted(events, key=lambda item: item.get("event_at") or datetime.min, reverse=True)
+    if days and int(days) > 0:
+        cutoff = datetime.now() - timedelta(days=max(1, min(int(days), 3650)))
+        events = [item for item in events if (item.get("event_at") or datetime.min) >= cutoff]
+    profile_label = "la familia" if include_family else ((context.get("profile") or {}).get("name") or "tu perfil")
+    return {
+        "generated_at": datetime.now(),
+        "profile_id": (context.get("profile") or {}).get("id"),
+        "include_family": bool(include_family),
+        "summary": _life_timeline_summary(events, profile_label),
+        "event_count": len(events),
+        "events": events[:250],
+    }
+
+
+@app.get("/ai/interoperability/sources", response_model=List[schemas.ExternalClinicalSourceOut])
+async def list_external_clinical_sources(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    target_profile_id = int(profile_id or _requested_or_active_profile_context(db, current_user).get("profile", {}).get("id") or 0)
+    profile, _ = _get_profile_access_or_404(db, current_user, target_profile_id)
+    return (
+        db.query(models.ExternalClinicalSource)
+        .filter(models.ExternalClinicalSource.profile_id == profile.id)
+        .order_by(models.ExternalClinicalSource.updated_at.desc(), models.ExternalClinicalSource.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/ai/interoperability/sources", response_model=schemas.ExternalClinicalSourceOut)
+async def create_external_clinical_source(
+    payload: schemas.ExternalClinicalSourceCreate,
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    target_profile_id = int(profile_id or _requested_or_active_profile_context(db, current_user).get("profile", {}).get("id") or 0)
+    profile, link = _get_profile_access_or_404(db, current_user, target_profile_id)
+    _require_role(link, "caregiver")
+    row = models.ExternalClinicalSource(
+        profile_id=profile.id,
+        source_type=_safe_text(payload.source_type or "manual")[:40] or "manual",
+        source_name=_clip_text(payload.source_name or "Fuente clinica", 120),
+        status=_safe_text(payload.status or "connected")[:30] or "connected",
+        metadata_json=payload.metadata_json or {},
+        last_sync_at=datetime.now(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.get("/ai/interoperability/records", response_model=List[schemas.ExternalClinicalRecordOut])
+async def list_external_clinical_records(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    target_profile_id = int(profile_id or _requested_or_active_profile_context(db, current_user).get("profile", {}).get("id") or 0)
+    profile, _ = _get_profile_access_or_404(db, current_user, target_profile_id)
+    return (
+        db.query(models.ExternalClinicalRecord)
+        .filter(models.ExternalClinicalRecord.profile_id == profile.id)
+        .order_by(models.ExternalClinicalRecord.event_at.desc(), models.ExternalClinicalRecord.created_at.desc())
+        .all()
+    )
+
+
+@app.post("/ai/interoperability/records", response_model=schemas.ExternalClinicalRecordOut)
+async def create_external_clinical_record(
+    payload: schemas.ExternalClinicalRecordCreate,
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    target_profile_id = int(profile_id or _requested_or_active_profile_context(db, current_user).get("profile", {}).get("id") or 0)
+    profile, link = _get_profile_access_or_404(db, current_user, target_profile_id)
+    _require_role(link, "caregiver")
+    row = models.ExternalClinicalRecord(
+        profile_id=profile.id,
+        source_id=payload.source_id,
+        external_id=_safe_text(payload.external_id or "")[:80],
+        record_type=_safe_text(payload.record_type or "lab_result")[:40] or "lab_result",
+        title=_clip_text(payload.title or "Registro externo", 140),
+        summary=_clip_text(payload.summary or "", 400),
+        payload_json=payload.payload_json or {},
+        event_at=payload.event_at,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.get("/ai/health-radar", response_model=List[schemas.HealthAlertOut])
+async def get_ai_health_radar(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    db.commit()
+    return context.get("health_alerts") or []
+
+
+@app.post("/ai/health-radar/run", response_model=List[schemas.HealthAlertOut])
+async def run_ai_health_radar(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    db.commit()
+    return context.get("health_alerts") or []
+
+
+@app.get("/ai/adherence")
+async def get_ai_adherence_summary(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    db.commit()
+    return context.get("adherence_summary") or {}
+
+
+@app.get("/ai/documents/intelligence", response_model=List[schemas.DocumentSummaryOut])
+async def get_ai_document_intelligence(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    db.commit()
+    return context.get("document_summaries") or []
+
+
+@app.post("/ai/reports/generate", response_model=schemas.ClinicalReportOut)
+async def generate_ai_clinical_report(
+    payload: schemas.ClinicalReportRequest,
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    profile, _ = _get_profile_access_or_404(db, current_user, int(context["profile"]["id"]))
+    report_payload = _build_clinical_report_payload(
+        context,
+        report_type=(payload.report_type or "consulta_medica").strip() or "consulta_medica",
+        period_days=max(1, min(365, int(payload.period_days or 30))),
+    )
+    report = _persist_clinical_report(
+        db,
+        profile,
+        report_type=report_payload["report_type"],
+        period_days=max(1, min(365, int(payload.period_days or 30))),
+        report_payload=report_payload,
+    )
+    return report
+
+
+@app.get("/ai/reports", response_model=List[schemas.ClinicalReportOut])
+async def list_ai_clinical_reports(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    reports = (
+        db.query(models.ClinicalReport)
+        .filter(models.ClinicalReport.profile_id == int(context["profile"]["id"]))
+        .order_by(models.ClinicalReport.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    return reports
+
+
+@app.get("/ai/reports/{report_id}", response_model=schemas.ClinicalReportOut)
+async def get_ai_clinical_report(
+    report_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    report = db.query(models.ClinicalReport).filter(models.ClinicalReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    _get_profile_access_or_404(db, current_user, report.profile_id)
+    return report
+
+
+@app.get("/ai/reports/{report_id}/pdf")
+async def get_ai_clinical_report_pdf(
+    report_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    report = db.query(models.ClinicalReport).filter(models.ClinicalReport.id == report_id).first()
+    if not report or not report.pdf_data:
+        raise HTTPException(status_code=404, detail="PDF no encontrado")
+    _get_profile_access_or_404(db, current_user, report.profile_id)
+    headers = {"Content-Disposition": f'attachment; filename="{report.pdf_filename or "klinip_reporte.pdf"}"'}
+    return Response(content=report.pdf_data, media_type="application/pdf", headers=headers)
 
 
 @app.delete("/ai/conversations/{conversation_id}")
@@ -7222,7 +9381,7 @@ async def create_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = models.Appointment(
         user_id=target_user_id,
         type=appt_in.type,
@@ -7258,7 +9417,7 @@ async def update_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = (
         db.query(models.Appointment)
         .filter(
@@ -7380,10 +9539,11 @@ async def update_medication(
 @app.post("/medications/{medication_id}/intake", response_model=schemas.MedicationIntakeOut)
 async def record_medication_intake(
     medication_id: int,
+    payload: schemas.MedicationIntakeCreate | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
@@ -7395,14 +9555,76 @@ async def record_medication_intake(
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
-    intake = models.MedicationIntake(
-        user_id=target_user_id,
-        medication_id=medication_id,
+    requested_status = _normalize_adherence_status(getattr(payload, "status", "taken"))
+    scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        requested_status,
+        getattr(payload, "scheduled_at", None),
+        getattr(payload, "taken_at", None),
     )
+    intake = None
+    if scheduled_at:
+        intake = (
+            db.query(models.MedicationIntake)
+            .filter(
+                models.MedicationIntake.medication_id == medication_id,
+                models.MedicationIntake.user_id == target_user_id,
+                models.MedicationIntake.scheduled_at == scheduled_at,
+            )
+            .order_by(models.MedicationIntake.id.desc())
+            .first()
+        )
+    if not intake:
+        intake = models.MedicationIntake(
+            user_id=target_user_id,
+            medication_id=medication_id,
+        )
+    intake.scheduled_at = scheduled_at
+    intake.taken_at = taken_at
+    intake.status = normalized_status
+    intake.source = _safe_text(getattr(payload, "source", "") or "manual")[:40] or "manual"
+    intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
     db.add(intake)
+    db.flush()
+    try:
+        _refresh_profile_ai_analytics(db, profile)
+    except Exception:
+        db.rollback()
+        raise
     db.commit()
     db.refresh(intake)
     return intake
+
+
+@app.get("/medications/{medication_id}/intakes", response_model=schemas.MedicationIntakeListOut)
+async def list_medication_intakes(
+    medication_id: int,
+    limit: int = 40,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    med = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.id == medication_id,
+            models.Medication.user_id == target_user_id,
+        )
+        .first()
+    )
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+    items = (
+        db.query(models.MedicationIntake)
+        .filter(
+            models.MedicationIntake.medication_id == medication_id,
+            models.MedicationIntake.user_id == target_user_id,
+        )
+        .order_by(models.MedicationIntake.created_at.desc(), models.MedicationIntake.id.desc())
+        .limit(max(1, min(int(limit or 40), 120)))
+        .all()
+    )
+    return {"medication_id": medication_id, "items": items}
 
 
 @app.delete("/medications/{medication_id}")
@@ -7476,7 +9698,7 @@ async def cleanup_duplicate_subscriptions(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """
-    Elimina suscripciones duplicadas, manteniendo solo la más reciente
+    Elimina suscripciones duplicadas, manteniendo solo la mÃ¡s reciente
     """
     all_subs = (
         db.query(models.PushSubscription)
@@ -7488,7 +9710,7 @@ async def cleanup_duplicate_subscriptions(
     if len(all_subs) <= 1:
         return {"message": "No hay suscripciones duplicadas", "removed": 0}
 
-    # Mantener solo la más reciente (primera en la lista)
+    # Mantener solo la mÃ¡s reciente (primera en la lista)
     to_remove = all_subs[1:]
     for sub in to_remove:
         db.delete(sub)
@@ -7914,7 +10136,7 @@ async def upload_document(
     original_filename = file.filename or "document"
 
     print(
-        f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaño: {len(file_content)} bytes"
+        f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaÃ±o: {len(file_content)} bytes"
     )
 
     parsed_date = None
@@ -7993,7 +10215,7 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    # Borrar archivo físico
+    # Borrar archivo fÃ­sico
     if doc.file_path and os.path.exists(doc.file_path):
         os.remove(doc.file_path)
 
@@ -8056,10 +10278,10 @@ async def get_document_file(
         )
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    # Prioridad 1: Si el archivo está en la BD (file_data)
+    # Prioridad 1: Si el archivo estÃ¡ en la BD (file_data)
     if doc.file_data:
         print(
-            f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaño: {len(doc.file_data)} bytes"
+            f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaÃ±o: {len(doc.file_data)} bytes"
         )
         filename = doc.filename or f"document_{doc.id}"
 
@@ -8075,7 +10297,7 @@ async def get_document_file(
             headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
 
-    # Prioridad 2: Si el archivo está en el sistema de archivos (compatibilidad con documentos antiguos)
+    # Prioridad 2: Si el archivo estÃ¡ en el sistema de archivos (compatibilidad con documentos antiguos)
     if doc.file_path:
         print(
             f"DEBUG get_document_file: Intentando servir desde file_path: {doc.file_path}"
@@ -8089,7 +10311,7 @@ async def get_document_file(
                 f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}"
             )
 
-        # También intentar con la ruta relativa original
+        # TambiÃ©n intentar con la ruta relativa original
         if not os.path.exists(file_path_to_check):
             # Intentar con la ruta relativa desde el directorio de trabajo
             relative_path = doc.file_path
@@ -8128,7 +10350,7 @@ async def get_document_file(
 
     # Si no hay archivo ni en BD ni en sistema de archivos
     print(
-        f"DEBUG get_document_file: No se encontró archivo para el documento {document_id}"
+        f"DEBUG get_document_file: No se encontrÃ³ archivo para el documento {document_id}"
     )
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
@@ -8136,7 +10358,7 @@ async def get_document_file(
 # Servir archivos subidos (mantener para compatibilidad, pero usar endpoint protegido)
 # app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
 
-# Servir archivos estáticos del frontend
+# Servir archivos estÃ¡ticos del frontend
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -8151,7 +10373,7 @@ if os.path.exists(static_dir):
 
         # Si es una ruta de API, no servir el SPA (dejar que FastAPI maneje el 404)
         # IMPORTANTE: NO interceptar rutas que terminan en /file (para documentos)
-        # Estas deben ser manejadas por el endpoint específico /documents/{id}/file
+        # Estas deben ser manejadas por el endpoint especÃ­fico /documents/{id}/file
         if "/file" in full_path:
             raise HTTPException(status_code=404, detail="Not found")
 
@@ -8170,7 +10392,7 @@ if os.path.exists(static_dir):
         if full_path.startswith(api_routes) or full_path in ("health", "debug"):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Para "documents", servir SPA cuando sea navegación HTML; mantener API para llamadas JSON.
+        # Para "documents", servir SPA cuando sea navegaciÃ³n HTML; mantener API para llamadas JSON.
         if full_path == "documents" or full_path == "documents/":
             accept = request.headers.get("accept", "")
             if "text/html" not in accept:
@@ -8188,7 +10410,7 @@ if os.path.exists(static_dir):
         ) and not os.path.isfile(file_path):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Extensiones de archivos estáticos que deben servirse con su tipo MIME correcto
+        # Extensiones de archivos estÃ¡ticos que deben servirse con su tipo MIME correcto
         static_extensions = {
             ".js",
             ".jsx",
@@ -8203,7 +10425,7 @@ if os.path.exists(static_dir):
             ".gif",
             ".svg",
             ".webp",
-            ".ico",  # Imágenes
+            ".ico",  # ImÃ¡genes
             ".woff",
             ".woff2",
             ".ttf",
@@ -8217,7 +10439,7 @@ if os.path.exists(static_dir):
             ".wasm",  # WebAssembly
         }
 
-        # Verificar si es un archivo estático por su extensión
+        # Verificar si es un archivo estÃ¡tico por su extensiÃ³n
         is_static_file = any(
             full_path.lower().endswith(ext) for ext in static_extensions
         )
@@ -8225,7 +10447,7 @@ if os.path.exists(static_dir):
         # Intentar servir el archivo solicitado
         file_path = os.path.join(static_dir, full_path)
 
-        # Si es un archivo estático y existe, servirlo con el tipo MIME correcto
+        # Si es un archivo estÃ¡tico y existe, servirlo con el tipo MIME correcto
         if is_static_file and os.path.exists(file_path) and os.path.isfile(file_path):
             # Detectar el tipo MIME
             mime_type, _ = mimetypes.guess_type(file_path)
@@ -8255,11 +10477,11 @@ if os.path.exists(static_dir):
                 },
             )
 
-        # Si es un archivo estático pero no existe, devolver 404 (no index.html)
+        # Si es un archivo estÃ¡tico pero no existe, devolver 404 (no index.html)
         if is_static_file:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # Para rutas que no son archivos estáticos, verificar si existe el archivo
+        # Para rutas que no son archivos estÃ¡ticos, verificar si existe el archivo
         if os.path.exists(file_path) and os.path.isfile(file_path):
             mime_type, _ = mimetypes.guess_type(file_path)
             return FileResponse(file_path, media_type=mime_type or "text/html")
@@ -8274,3 +10496,4 @@ if os.path.exists(static_dir):
             )
 
         raise HTTPException(status_code=404, detail="Not found")
+

@@ -22,6 +22,7 @@ import {
   getHealthProfileActivity,
   getFamilyAlerts,
   getFamilyReportSummary,
+  getAiFamilyContext,
   runFamilyAutomations,
   getProfileAutomation,
   updateProfileAutomation,
@@ -71,6 +72,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [activityLog, setActivityLog] = useState([]);
   const [familyAlerts, setFamilyAlerts] = useState([]);
   const [familyReport, setFamilyReport] = useState(null);
+  const [familyAiContext, setFamilyAiContext] = useState(null);
   const [automationStatus, setAutomationStatus] = useState("");
   const [automationSettings, setAutomationSettings] = useState({
     smart_alerts_enabled: true,
@@ -87,9 +89,9 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     role: "viewer",
     relationship_type: "",
   });
-  const [quickAddSelection, setQuickAddSelection] = useState(null);
-  const [quickAddName, setQuickAddName] = useState("");
   const plan = planInfo?.plan_type || "basico";
+  const normalizedPlan = String(planInfo?.plan_type || "basico").trim().toLowerCase();
+  const hasAdvancedFamilyPlan = normalizedPlan === "plus" || normalizedPlan === "familiar";
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -112,6 +114,27 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
   const isFamilyStandalone = (initialSection || "perfil") === "familia";
   const familyNameInputRef = useRef(null);
+  const familyCreateCardRef = useRef(null);
+
+  const normalizeCaregivers = (items) => {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : []).filter((row) => {
+      const isSelfRow =
+        Number(row?.user_id || 0) === Number(profile?.id || 0) ||
+        String(row?.relationship_type || "").toLowerCase() === "self";
+      if (isSelfRow) return false;
+
+      const key =
+        row?.user_id
+          ? `user:${row.user_id}`
+          : row?.user_email
+            ? `email:${String(row.user_email).trim().toLowerCase()}`
+            : `row:${row?.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
 
   const timezoneOptions = [
     "America/Santiago",
@@ -125,64 +148,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     "Europe/London",
     "UTC",
   ];
-
-  const familyQuickCards = [
-    {
-      id: "minor",
-      title: "Menor de edad",
-      description: "Anade a tus hijos o menores a tu cuidado.",
-      relation: "Hijo/a",
-      gender: "",
-      icon: "minor",
-    },
-    {
-      id: "adult_guarded",
-      title: "Adulto con apoyo",
-      description: "Anade a quien este a tu cargo o necesite ayuda.",
-      relation: "Persona a cargo",
-      gender: "",
-      icon: "guarded",
-    },
-    {
-      id: "adult",
-      title: "Adulto",
-      description: "Anade a tu pareja, madre, padre o familiar.",
-      relation: "Familiar adulto",
-      gender: "",
-      icon: "adult",
-    },
-  ];
-
-  const renderFamilyQuickIcon = (kind) => {
-    if (kind === "minor") {
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <circle cx="8" cy="9" r="2.6" />
-          <circle cx="16" cy="8" r="2.2" />
-          <path d="M3.8 19a4.6 4.6 0 0 1 8.4 0" />
-          <path d="M12.4 19a4 4 0 0 1 7.2 0" />
-        </svg>
-      );
-    }
-    if (kind === "guarded") {
-      return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <circle cx="9" cy="8" r="2.6" />
-          <path d="M4.8 18a4.6 4.6 0 0 1 8.4 0" />
-          <circle cx="17" cy="10" r="2.1" />
-          <path d="M14 19a3.7 3.7 0 0 1 6 0" />
-        </svg>
-      );
-    }
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <circle cx="9" cy="8" r="2.6" />
-        <path d="M4.8 19a4.6 4.6 0 0 1 8.4 0" />
-        <circle cx="17" cy="9" r="2.4" />
-        <path d="M13.2 19a4.2 4.2 0 0 1 7.6 0" />
-      </svg>
-    );
-  };
 
   const familyAccentTones = [
     { key: "green", start: "#0ea5e9", end: "#2563eb", soft: "#e0f2fe", border: "#bae6fd" },
@@ -252,6 +217,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     { id: "privacidad", label: "Privacidad", icon: "shield" },
     { id: "notificaciones", label: "Notificaciones", icon: "bell" },
     { id: "datos", label: "Exportar datos", icon: "export" },
+    { id: "reportes", label: "Reportes IA", icon: "legal" },
     { id: "legal", label: "Legal", icon: "legal" },
   ];
 
@@ -308,20 +274,23 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     const loadFamilyDetails = async () => {
       if (!profile?.id) return;
       try {
-        const [cards, alerts, report, pendingForMe] = await Promise.all([
+        const [cards, alerts, report, aiContext, pendingForMe] = await Promise.all([
           getFamilyPanel(),
           getFamilyAlerts().catch(() => []),
           getFamilyReportSummary(30).catch(() => null),
+          getAiFamilyContext(30).catch(() => null),
           getMyPendingProfileInvitations().catch(() => []),
         ]);
         if (mounted) setFamilyPanelCards(Array.isArray(cards) ? cards : []);
         if (mounted) setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
         if (mounted) setFamilyReport(report || null);
+        if (mounted) setFamilyAiContext(aiContext || null);
         if (mounted) setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
       } catch (err) {
         if (mounted) setFamilyPanelCards([]);
         if (mounted) setFamilyAlerts([]);
         if (mounted) setFamilyReport(null);
+        if (mounted) setFamilyAiContext(null);
         if (mounted) setMyPendingInvitations([]);
         console.error("No se pudo cargar panel familiar:", err);
       }
@@ -345,7 +314,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           getProfileNotes(activeFamilyProfileId).catch(() => []),
         ]);
         if (!mounted) return;
-        setCaregivers(Array.isArray(careList) ? careList : []);
+        setCaregivers(normalizeCaregivers(careList));
         setInvitations(Array.isArray(invList) ? invList : []);
         setActivityLog(Array.isArray(actList) ? actList : []);
         if (autoCfg) setAutomationSettings(autoCfg);
@@ -378,6 +347,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     privacidad: "Privacidad",
     notificaciones: "Notificaciones",
     datos: "Exportar",
+    reportes: "Reportes IA",
     legal: "Legal",
   }[activeSection] || "Perfil";
 
@@ -656,58 +626,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
-  const handleFamilyQuickAdd = async (card) => {
-    const maxProfiles = Number(planInfo?.max_profiles ?? 1);
-    const currentProfiles = Number(planInfo?.current_profiles ?? familyProfiles.length ?? 0);
-    if (currentProfiles >= maxProfiles) {
-      setFamilyStatus("Alcanzaste el limite de perfiles de tu plan. Para agregar mas, sube de plan.");
-      window.alert("Alcanzaste el limite de perfiles de tu plan.");
-      return;
-    }
-
-    setQuickAddSelection(card);
-    setQuickAddName("");
-    setNewFamilyProfile((prev) => ({
-      ...prev,
-      relation_with_owner: card?.relation || prev.relation_with_owner || "",
-      gender: card?.gender ?? prev.gender,
-    }));
-    setFamilyStatus(`Tipo seleccionado: ${card?.title || "Perfil"}. Escribe el nombre y confirma.`);
+  const focusAssistedFamilyForm = () => {
     setTimeout(() => {
+      familyCreateCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       familyNameInputRef.current?.focus();
-    }, 0);
-  };
-
-  const handleConfirmQuickAdd = async () => {
-    if (!quickAddSelection) return;
-    const cleanName = (quickAddName || "").trim();
-    if (!cleanName) {
-      setFamilyStatus("Debes ingresar nombre completo para agregar el familiar.");
-      return;
-    }
-    setFamilyStatus("");
-    try {
-      const created = await createHealthProfile({
-        full_name: cleanName,
-        relation_with_owner: quickAddSelection?.relation || "",
-        gender: quickAddSelection?.gender || "",
-      });
-      const [plan, cards] = await Promise.all([
-        getMyPlan().catch(() => null),
-        getFamilyPanel().catch(() => []),
-      ]);
-      setPlanInfo(plan || planInfo);
-      setFamilyProfiles((prev) => [...prev, created]);
-      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
-      setActiveFamilyProfileId(created?.id || activeFamilyProfileId);
-      setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
-      setQuickAddSelection(null);
-      setQuickAddName("");
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFamilyStatus(detail || "No se pudo crear el perfil");
-      console.error("Error creando perfil rapido:", err);
-    }
+    }, 10);
   };
 
   const handleInviteCaregiver = async () => {
@@ -732,7 +655,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getProfileInvitations(activeFamilyProfileId).catch(() => []),
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
-      setCaregivers(Array.isArray(careList) ? careList : []);
+      setCaregivers(normalizeCaregivers(careList));
       setInvitations(Array.isArray(invList) ? invList : []);
       setActivityLog(Array.isArray(actList) ? actList : []);
       setInviteForm({ email: "", role: "viewer", relationship_type: "" });
@@ -797,7 +720,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getProfileCaregivers(activeFamilyProfileId),
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
-      setCaregivers(Array.isArray(careList) ? careList : []);
+      setCaregivers(normalizeCaregivers(careList));
       setActivityLog(Array.isArray(actList) ? actList : []);
       setFamilyStatus("Rol actualizado");
     } catch (err) {
@@ -816,7 +739,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getProfileCaregivers(activeFamilyProfileId),
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
-      setCaregivers(Array.isArray(careList) ? careList : []);
+      setCaregivers(normalizeCaregivers(careList));
       setActivityLog(Array.isArray(actList) ? actList : []);
       setFamilyStatus("Colaborador removido");
     } catch (err) {
@@ -872,12 +795,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setAutomationStatus(
         `Automatizaciones ejecutadas. Alertas: ${executed.alerts_generated || 0}, correo: ${executed.emails_sent || 0}`
       );
-      const [alerts, report] = await Promise.all([
+      const [alerts, report, aiContext] = await Promise.all([
         getFamilyAlerts().catch(() => []),
         getFamilyReportSummary(30).catch(() => null),
+        getAiFamilyContext(30).catch(() => null),
       ]);
       setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
       setFamilyReport(report || null);
+      setFamilyAiContext(aiContext || null);
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setAutomationStatus(detail || "No se pudieron ejecutar automatizaciones");
@@ -946,13 +871,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <div className="settings-mobile-avatar">{profileInitial}</div>
             <h3>{profileDisplayName}</h3>
             <p>{profileDisplayEmail}</p>
-            <button
-              className="primary-btn"
-              type="button"
-              onClick={() => handleSectionSelect("perfil")}
-            >
-              Editar perfil
-            </button>
           </div>
           <p className="settings-nav-label">Configuración</p>
           <div className="settings-nav">
@@ -1300,10 +1218,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   key={`slot-${index}`}
                   type="button"
                   className="family-klinip-avatar family-klinip-avatar-add"
-                  onClick={() => {
-                    setQuickAddSelection(familyQuickCards[2]);
-                    setTimeout(() => familyNameInputRef.current?.focus(), 10);
-                  }}
+                  onClick={focusAssistedFamilyForm}
                 >
                   +
                 </button>
@@ -1393,10 +1308,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <button
               type="button"
               className="family-member-card family-member-card-add"
-              onClick={() => {
-                setQuickAddSelection(familyQuickCards[2]);
-                setTimeout(() => familyNameInputRef.current?.focus(), 10);
-              }}
+              onClick={focusAssistedFamilyForm}
             >
               <span className="family-member-add-icon">+</span>
               <span className="family-member-add-title">Agregar familiar</span>
@@ -1406,37 +1318,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             </button>
           )}
         </div>
-
-        {quickAddSelection ? (
-          <div className="family-create-card family-management-card">
-            <div className="family-card-line tone-blue" />
-            <div className="family-card-head">
-              <div>
-                <p className="family-card-kicker family-title-blue">Agregar familiar rapido</p>
-                <p className="family-inline-muted">
-                  Agregando: <strong>{quickAddSelection.title}</strong>
-                </p>
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="input-group">
-                <label className="input-label">Nombre completo</label>
-                <input
-                  className="input-field"
-                  ref={familyNameInputRef}
-                  value={quickAddName}
-                  onChange={(e) => setQuickAddName(e.target.value)}
-                  placeholder="Ej: Maria Gonzalez"
-                />
-              </div>
-              <div className="input-group" style={{ alignSelf: "flex-end" }}>
-                <button className="secondary-btn" type="button" onClick={handleConfirmQuickAdd}>
-                  Agregar ahora
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
 
         <div className="family-lower-layout">
           <div className="family-lower-left">
@@ -1570,48 +1451,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 </div>
               </div>
 
-              {planInfo?.collaboration_enabled && !!activeFamilyProfileId ? (
-                <div className="family-invite-inline">
-                  <div className="form-row">
-                    <div className="input-group">
-                      <label className="input-label">Correo</label>
-                      <input
-                        className="input-field"
-                        type="email"
-                        value={inviteForm.email}
-                        onChange={(e) => setInviteForm((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="correo@ejemplo.com"
-                      />
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label">Rol</label>
-                      <select
-                        className="select-field"
-                        value={inviteForm.role}
-                        onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value }))}
-                      >
-                        <option value="admin">Administrador</option>
-                        <option value="caregiver">Cuidador</option>
-                        <option value="viewer">Visualizador</option>
-                      </select>
-                    </div>
-                    <div className="input-group">
-                      <label className="input-label">Relación</label>
-                      <input
-                        className="input-field"
-                        value={inviteForm.relationship_type}
-                        onChange={(e) =>
-                          setInviteForm((prev) => ({ ...prev, relationship_type: e.target.value }))
-                        }
-                        placeholder="Ej: Hijo, Hermana, Cuidador"
-                      />
-                    </div>
-                  </div>
-                  <button className="secondary-btn" type="button" onClick={handleInviteCaregiver}>
-                    Enviar invitación
-                  </button>
-                </div>
-              ) : null}
             </section>
 
             <section className="family-collab-card family-canvas-card family-notes-card">
@@ -1723,6 +1562,59 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </div>
             </section>
 
+            <section className="family-collab-card family-canvas-card family-report-card family-ai-family-card">
+              <div className="family-card-line tone-blue" />
+              <div className="family-card-head">
+                <div>
+                  <p className="family-card-kicker family-title-blue">IA familiar</p>
+                  <p className="family-inline-muted">Lectura transversal de perfiles, alertas y brechas del grupo</p>
+                </div>
+                <span className="family-inline-muted">30 dias</span>
+              </div>
+
+              {familyAiContext ? (
+                <>
+                  <p className="family-ai-summary">{familyAiContext.summary}</p>
+                  <div className="family-report-kpis family-ai-kpis">
+                    <article className="family-report-kpi">
+                      <strong>{familyAiContext.family_size ?? 0}</strong>
+                      <span>Perfiles</span>
+                    </article>
+                    <article className="family-report-kpi">
+                      <strong>{familyAiContext.active_alerts_total ?? 0}</strong>
+                      <span>Alertas</span>
+                    </article>
+                    <article className="family-report-kpi">
+                      <strong>{familyAiContext.low_adherence_profiles ?? 0}</strong>
+                      <span>Adherencia baja</span>
+                    </article>
+                    <article className="family-report-kpi">
+                      <strong>{familyAiContext.pending_documents_total ?? 0}</strong>
+                      <span>Docs pendientes</span>
+                    </article>
+                  </div>
+                  <div className="family-ai-profile-list">
+                    {(familyAiContext.profiles || []).slice(0, 3).map((item) => (
+                      <article key={item.profile_id} className="family-ai-profile-row">
+                        <div>
+                          <p className="family-report-highlight-name">{item.profile_name}</p>
+                          <p className="family-inline-muted">
+                            {item.relation_with_owner || "Perfil familiar"} · {item.upcoming_appointments || 0} citas proximas
+                          </p>
+                        </div>
+                        <div className="family-ai-profile-tags">
+                          <span className="family-status-pill is-pending">{item.active_alerts || 0} alertas</span>
+                          {item.low_adherence ? <span className="family-status-pill is-danger">adherencia baja</span> : null}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">Sin analisis IA familiar aun.</p>
+              )}
+            </section>
+
             <section className="family-collab-card family-canvas-card family-report-card">
               <div className="family-card-line tone-green" />
               <div className="family-card-head">
@@ -1832,40 +1724,63 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         </div>
 
         <div className="family-secondary-stack">
-          <div className="family-create-card family-management-card">
-            <div className="family-card-line tone-blue" />
-            <div className="family-card-head">
-              <div>
-                <p className="family-card-kicker family-title-blue">Agregar familiar rapido</p>
-                <p className="family-inline-muted">Accesos directos para crear perfiles en pocos pasos</p>
+          {hasAdvancedFamilyPlan && planInfo?.collaboration_enabled && !!activeFamilyProfileId ? (
+            <div className="family-create-card family-management-card">
+              <div className="family-card-line tone-teal" />
+              <div className="family-card-head">
+                <div>
+                  <p className="family-card-kicker family-title-teal">Invitar colaborador</p>
+                  <p className="family-inline-muted">Envía acceso a otra persona para ayudar con este perfil</p>
+                </div>
               </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Correo</label>
+                  <input
+                    className="input-field"
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, email: e.target.value }))}
+                    placeholder="correo@ejemplo.com"
+                  />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Rol</label>
+                  <select
+                    className="select-field"
+                    value={inviteForm.role}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value }))}
+                  >
+                    <option value="admin">Administrador</option>
+                    <option value="caregiver">Cuidador</option>
+                    <option value="viewer">Visualizador</option>
+                  </select>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Relación</label>
+                  <input
+                    className="input-field"
+                    value={inviteForm.relationship_type}
+                    onChange={(e) =>
+                      setInviteForm((prev) => ({ ...prev, relationship_type: e.target.value }))
+                    }
+                    placeholder="Ej: Hijo, Hermana, Cuidador"
+                  />
+                </div>
+              </div>
+              <button className="secondary-btn" type="button" onClick={handleInviteCaregiver}>
+                Enviar invitación
+              </button>
             </div>
-            <div className="family-quick-grid">
-              {familyQuickCards.map((card) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  className="family-quick-card family-quick-card-modern"
-                  onClick={() => handleFamilyQuickAdd(card)}
-                >
-                  <span className="family-quick-icon" aria-hidden="true">
-                    {renderFamilyQuickIcon(card.icon)}
-                  </span>
-                  <p className="family-quick-title">{card.title}</p>
-                  <p className="family-quick-description">{card.description}</p>
-                  <span className="family-quick-action">Agregar</span>
-                </button>
-              ))}
-            </div>
-          </div>
+          ) : null}
 
           {planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
-            <div className="family-create-card family-management-card">
+            <div className="family-create-card family-management-card" ref={familyCreateCardRef}>
               <div className="family-card-line tone-blue" />
               <div className="family-card-head">
                 <div>
                   <p className="family-card-kicker family-title-blue">Agregar perfil asistido</p>
-                  <p className="family-inline-muted">Crea un perfil de salud manual con más detalle</p>
+                  <p className="family-inline-muted">Crea manualmente un perfil de salud con más detalle</p>
                 </div>
               </div>
               <div className="form-row">
@@ -2007,6 +1922,50 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
               {exporting ? "Generando..." : "Compartir link rápido"}
             </button>
+          </div>
+        </div>
+      </div>
+      )}
+
+      {activeSection === "reportes" && (
+      <div className="settings-section">
+        <div className="profile-page-header">
+          <div>
+            <p className="profile-page-eyebrow"><span />Copiloto IA</p>
+            <h2 className="profile-page-title">
+              Reportes <em>clínicos</em>
+            </h2>
+            <p className="muted">Accede a la vista dedicada de reportes y también solicítalos directamente desde Klinip IA.</p>
+          </div>
+        </div>
+        <div className="export-layout">
+          <div className="export-card">
+            <h4>Vista dedicada de reportes</h4>
+            <p className="muted">
+              Revisa, filtra y descarga reportes clínicos estructurados del perfil activo desde una vista exclusiva.
+            </p>
+            <div className="export-actions">
+              <Link className="secondary-btn" to="/clinical-reports">
+                Ir a reportes clínicos
+              </Link>
+            </div>
+          </div>
+
+          <div className="export-card">
+            <h4>Pedir reportes en el chat</h4>
+            <p className="muted">
+              También puedes generarlos desde Klinip IA con mensajes como “genera un reporte clínico” o “crea un reporte mensual”.
+            </p>
+            <div className="export-actions">
+              <Link className="secondary-btn" to="/ai">
+                Abrir Klinip IA
+              </Link>
+            </div>
+          </div>
+        </div>
+        <div className="export-footer">
+          <div className="export-footer-tip">
+            Los reportes generados desde IA también quedan disponibles en la vista dedicada para descarga en PDF.
           </div>
         </div>
       </div>
