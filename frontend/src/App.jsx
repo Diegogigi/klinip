@@ -159,7 +159,7 @@ function Sidebar({
     { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
     { to: "/stats", label: "Stats", icon: icons.chart },
-    { to: "/ai", label: "IA Klinip", icon: icons.ai },
+    { to: "/ai", label: "IA Klinip", icon: icons.aiMobile },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },

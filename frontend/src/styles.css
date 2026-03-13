@@ -4047,10 +4047,10 @@ body.theme-dark .primary-btn {
   }
 
   .sidebar-link.is-mobile-ai {
-    max-width: 86px;
-    min-height: 58px;
-    margin-top: -0.45rem;
-    border-radius: 14px;
+    max-width: 80px;
+    min-height: 54px;
+    margin-top: 0;
+    border-radius: 12px;
     background: transparent;
     color: inherit;
     box-shadow: none;
@@ -4068,13 +4068,13 @@ body.theme-dark .primary-btn {
   }
 
   .sidebar-link.is-mobile-ai .sidebar-icon .icon-k {
-    font-size: 0.84rem;
-    font-weight: 900;
+    font-size: 0.9rem;
+    font-weight: 800;
   }
 
   .sidebar-link.is-mobile-ai .sidebar-label {
-    font-size: 0.56rem;
-    font-weight: 700;
+    font-size: 0.58rem;
+    font-weight: 600;
   }
 
   .sidebar-icon {
@@ -4094,8 +4094,13 @@ body.theme-dark .primary-btn {
     font-size: 0.58rem;
     font-weight: 600;
     color: inherit;
+    width: auto;
+    opacity: 1;
+    overflow: visible;
     margin-top: 0;
     line-height: 1;
+    white-space: nowrap;
+    text-align: center;
   }
 
   .sidebar-link.active {
@@ -4143,11 +4148,11 @@ body.theme-dark .primary-btn {
     left: 0.35rem;
     right: 0.35rem;
     bottom: calc(100% + 0.65rem);
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 0.2rem 0;
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 0.38rem;
+    box-shadow: 0 -3px 16px rgba(15, 23, 42, 0.14);
     display: none;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.34rem;
@@ -4155,12 +4160,7 @@ body.theme-dark .primary-btn {
   }
 
   .sidebar-profile-mobile {
-    grid-column: 1 / -1;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    background: #f8fafc;
-    padding: 0.45rem 0.5rem;
-    margin-bottom: 0.15rem;
+    display: none;
   }
 
   .sidebar-profile-mobile-head {
@@ -4511,20 +4511,20 @@ body.theme-dark .primary-btn {
   }
 
   body.theme-dark .sidebar-more-menu {
-    background: transparent;
-    border: none;
-    box-shadow: none;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 -3px 16px rgba(15, 23, 42, 0.14);
   }
 
   body.theme-dark .sidebar-menu-link {
     background: transparent;
     border: none;
-    color: #e2e8f0;
+    color: #0f172a;
   }
 
   body.theme-dark .sidebar-menu-link.active {
-    background: rgba(96, 165, 250, 0.18);
-    color: #e2e8f0;
+    background: #f1f5f9;
+    color: #0f172a;
   }
 
   body.theme-dark .sidebar-link.sidebar-more.active {
