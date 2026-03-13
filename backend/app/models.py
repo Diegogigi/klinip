@@ -336,6 +336,8 @@ class AiConversationMessage(Base):
     id = Column(Integer, primary_key=True, index=True)
     profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = Column(String, nullable=False, index=True, default="")
+    conversation_title = Column(String, default="")
     role = Column(String, nullable=False)
     content = Column(Text, nullable=False)
     metadata_json = Column(JSON, default=dict)

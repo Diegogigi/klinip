@@ -442,8 +442,10 @@ export default function Plans({ user }) {
       <header className="pp-navbar">
         <div className="pp-navbar-inner">
           <Link to="/" className="pp-nav-logo">
-            <img src="/icons/img_sin_fondo.png" alt="Klinip" className="pp-brand-logo-img" />
-            <span className="pp-nav-logo-name">Klinip</span>
+            <span className="brand-wordmark responsive" aria-label="Klinip">
+              <span className="brand-wordmark-full">Klinip</span>
+              <span className="brand-wordmark-compact">K</span>
+            </span>
           </Link>
 
           <nav className="pp-nav-links">
@@ -630,9 +632,11 @@ export default function Plans({ user }) {
       <footer className="pp-footer">
         <div className="pp-footer-inner">
           <div className="pp-footer-brand">
-            <img src="/icons/img_sin_fondo.png" alt="Klinip" className="pp-brand-logo-img" />
             <div>
-              <div className="pp-footer-name">Klinip</div>
+              <div className="pp-footer-name brand-wordmark responsive" aria-label="Klinip">
+                <span className="brand-wordmark-full">Klinip</span>
+                <span className="brand-wordmark-compact">K</span>
+              </div>
               <div className="pp-footer-tag">Tu ruta de salud, simplificada</div>
             </div>
           </div>

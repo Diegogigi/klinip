@@ -387,6 +387,55 @@ def ensure_medication_schema():
 
 ensure_medication_schema()
 
+
+def ensure_ai_conversation_schema():
+    """
+    Garantiza que ai_conversation_messages tenga columnas para conversaciones.
+    """
+    try:
+        inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("ai_conversation_messages")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        if "conversation_id" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE ai_conversation_messages ADD COLUMN IF NOT EXISTS conversation_id VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE ai_conversation_messages ADD COLUMN conversation_id VARCHAR DEFAULT ''"
+                )
+            added_columns.append("conversation_id")
+
+        if "conversation_title" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE ai_conversation_messages ADD COLUMN IF NOT EXISTS conversation_title VARCHAR DEFAULT ''"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE ai_conversation_messages ADD COLUMN conversation_title VARCHAR DEFAULT ''"
+                )
+            added_columns.append("conversation_title")
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                f"DEBUG ensure_ai_conversation_schema: columnas agregadas a ai_conversation_messages: {', '.join(added_columns)}"
+            )
+        else:
+            print("DEBUG ensure_ai_conversation_schema: tabla ai_conversation_messages ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_ai_conversation_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_ai_conversation_schema()
+
 PLAN_DEFINITIONS = {
     "basico": {
         "limits": {
@@ -4731,6 +4780,117 @@ def _sanitize_ai_reply(text: str) -> str:
     return cleaned.strip()
 
 
+def _new_ai_conversation_id() -> str:
+    return f"conv_{secrets.token_urlsafe(8)}"
+
+
+def _derive_ai_conversation_title(message: str | None) -> str:
+    base = re.sub(r"\s+", " ", (message or "").strip())
+    if not base:
+        return "Nueva conversacion"
+    return _clip_text(base, 48)
+
+
+def _get_ai_conversation_messages(
+    db: Session,
+    *,
+    profile_id: int,
+    conversation_id: str | None = None,
+    limit: int = 100,
+) -> list[models.AiConversationMessage]:
+    query = db.query(models.AiConversationMessage).filter(
+        models.AiConversationMessage.profile_id == profile_id
+    )
+    if conversation_id:
+        query = query.filter(models.AiConversationMessage.conversation_id == conversation_id)
+    items = (
+        query.order_by(
+            models.AiConversationMessage.created_at.desc(),
+            models.AiConversationMessage.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+    return list(reversed(items))
+
+
+def _ai_conversation_summaries(
+    db: Session,
+    *,
+    profile_id: int,
+    limit: int = 12,
+) -> list[dict]:
+    items = (
+        db.query(models.AiConversationMessage)
+        .filter(models.AiConversationMessage.profile_id == profile_id)
+        .order_by(
+            models.AiConversationMessage.created_at.desc(),
+            models.AiConversationMessage.id.desc(),
+        )
+        .limit(400)
+        .all()
+    )
+    grouped: dict[str, dict] = {}
+    for item in items:
+        conv_id = (item.conversation_id or "").strip()
+        if not conv_id:
+            continue
+        group = grouped.get(conv_id)
+        if not group:
+            grouped[conv_id] = {
+                "conversation_id": conv_id,
+                "title": (item.conversation_title or "").strip() or "Nueva conversacion",
+                "updated_at": item.created_at,
+                "message_count": 1,
+                "last_message_excerpt": _clip_text(item.content or "", 110),
+            }
+        else:
+            group["message_count"] += 1
+            if not group.get("title") and item.conversation_title:
+                group["title"] = item.conversation_title.strip()
+    summaries = sorted(
+        grouped.values(),
+        key=lambda item: item.get("updated_at") or datetime.min,
+        reverse=True,
+    )
+    return summaries[:limit]
+
+
+def _ai_recent_conversation_context(
+    db: Session,
+    *,
+    profile_id: int,
+    exclude_conversation_id: str | None = None,
+    limit: int = 4,
+) -> list[dict]:
+    summaries = _ai_conversation_summaries(db, profile_id=profile_id, limit=limit + 2)
+    result = []
+    for summary in summaries:
+        if exclude_conversation_id and summary["conversation_id"] == exclude_conversation_id:
+            continue
+        conv_messages = _get_ai_conversation_messages(
+            db,
+            profile_id=profile_id,
+            conversation_id=summary["conversation_id"],
+            limit=24,
+        )
+        first_user = next((m for m in conv_messages if m.role == "user"), None)
+        last_assistant = next((m for m in reversed(conv_messages) if m.role == "assistant"), None)
+        result.append(
+            {
+                "conversation_id": summary["conversation_id"],
+                "title": summary["title"],
+                "message_count": summary["message_count"],
+                "first_user_message": _clip_text(first_user.content if first_user else "", 140),
+                "last_assistant_reply": _clip_text(last_assistant.content if last_assistant else "", 180),
+                "updated_at": _safe_iso(summary.get("updated_at")),
+            }
+        )
+        if len(result) >= limit:
+            break
+    return result
+
+
 def _clip_text(value: str | None, limit: int = 420) -> str:
     text_value = (value or "").strip()
     if len(text_value) <= limit:
@@ -5057,6 +5217,16 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
     appointment_insights = _appointment_insights(appointments, timezone_name)
     document_insights = _document_insights(documents, timezone_name)
     medication_insights = _medication_insights(medications, timezone_name)
+    recent_conversations = _ai_recent_conversation_context(
+        db,
+        profile_id=profile.id,
+        limit=4,
+    )
+    conversation_summaries = _ai_conversation_summaries(
+        db,
+        profile_id=profile.id,
+        limit=12,
+    )
     ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
     user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
     runtime_memory = _build_ai_profile_memory(
@@ -5112,6 +5282,8 @@ def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
         "appointment_insights": appointment_insights,
         "document_insights": document_insights,
         "medication_insights": medication_insights,
+        "recent_conversations": recent_conversations,
+        "conversation_summaries": conversation_summaries,
         "active_medications": active_medications,
         "latest_document": latest_document,
         "latest_document_text": latest_document_text,
@@ -5136,6 +5308,14 @@ def _serialize_ai_context(context: dict) -> dict:
         "appointment_insights": context.get("appointment_insights") or {},
         "document_insights": context.get("document_insights") or {},
         "medication_insights": context.get("medication_insights") or {},
+        "recent_conversations": context.get("recent_conversations") or [],
+        "conversation_summaries": [
+            {
+                **item,
+                "updated_at": _safe_iso_local(item.get("updated_at"), timezone_name),
+            }
+            for item in (context.get("conversation_summaries") or [])
+        ],
         "appointments": [
             {
                 "type": str(getattr(item.type, "value", item.type)),
@@ -5220,6 +5400,8 @@ def _ai_system_prompt(context: dict) -> str:
         "15. Para documentos, reconoce tipo clinico (receta, orden, resultado, informe, otro) y tipo de archivo (pdf o imagen).\n"
         "16. Si el usuario pide resumen de documentos o medicamentos, responde ordenado por secciones cortas y en texto claro.\n"
         "17. Para medicamentos, distingue estado activa vs realizada usando medication_insights.\n"
+        "18. Si existe historial de conversaciones guardadas, usalo como contexto adicional del perfil sin contradecir el contexto clinico actual.\n"
+        "19. Si el usuario retoma una conversacion anterior, manten continuidad y reconoce lo ya conversado.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
@@ -5587,6 +5769,8 @@ def _persist_ai_message(
     *,
     profile_id: int,
     user_id: int,
+    conversation_id: str,
+    conversation_title: str = "",
     role: str,
     content: str,
     metadata_json: dict | None = None,
@@ -5594,6 +5778,8 @@ def _persist_ai_message(
     item = models.AiConversationMessage(
         profile_id=profile_id,
         user_id=user_id,
+        conversation_id=(conversation_id or "").strip(),
+        conversation_title=(conversation_title or "").strip(),
         role=(role or "").strip().lower() or "assistant",
         content=(content or "").strip(),
         metadata_json=metadata_json or {},
@@ -6854,17 +7040,51 @@ async def ai_chat(
 
     context = _ai_context_bundle(db, current_user)
     timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
-    history = [
-        {"role": item.role, "content": item.content}
-        for item in (payload.history or [])
-        if (item.content or "").strip()
-    ]
-    reply, model_name, mode, references = _build_ai_reply(message, history, context)
     profile_id = int(context["profile"]["id"])
+    conversation_id = (payload.conversation_id or "").strip()
+    existing_items = []
+    conversation_title = ""
+    if conversation_id:
+        existing_items = _get_ai_conversation_messages(
+            db,
+            profile_id=profile_id,
+            conversation_id=conversation_id,
+            limit=80,
+        )
+        if existing_items:
+            conversation_title = (existing_items[0].conversation_title or "").strip()
+    if not conversation_id:
+        conversation_id = _new_ai_conversation_id()
+    if not conversation_title:
+        conversation_title = _derive_ai_conversation_title(message)
+
+    history = []
+    seen_pairs: set[tuple[str, str]] = set()
+    for item in existing_items:
+        content_value = (item.content or "").strip()
+        role_value = (item.role or "").strip().lower()
+        if not content_value:
+            continue
+        key = (role_value, content_value)
+        history.append({"role": role_value, "content": content_value})
+        seen_pairs.add(key)
+    for item in (payload.history or []):
+        content_value = (item.content or "").strip()
+        role_value = (item.role or "").strip().lower()
+        if not content_value:
+            continue
+        key = (role_value, content_value)
+        if key in seen_pairs:
+            continue
+        history.append({"role": role_value, "content": content_value})
+        seen_pairs.add(key)
+    reply, model_name, mode, references = _build_ai_reply(message, history, context)
     user_item = _persist_ai_message(
         db,
         profile_id=profile_id,
         user_id=current_user.id,
+        conversation_id=conversation_id,
+        conversation_title=conversation_title,
         role="user",
         content=message,
         metadata_json={"mode": "input"},
@@ -6873,6 +7093,8 @@ async def ai_chat(
         db,
         profile_id=profile_id,
         user_id=current_user.id,
+        conversation_id=conversation_id,
+        conversation_title=conversation_title,
         role="assistant",
         content=reply,
         metadata_json={"model": model_name, "mode": mode, "references": references},
@@ -6888,23 +7110,71 @@ async def ai_chat(
         "references": references,
         "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
         "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
+        "conversation_id": conversation_id,
+        "conversation_title": conversation_title,
     }
 
 
-@app.get("/ai/history", response_model=List[schemas.AiConversationMessageOut])
-async def get_ai_history(
+@app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
+async def get_ai_conversations(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, _ = _get_active_profile_context(db, current_user)
-    items = (
-        db.query(models.AiConversationMessage)
-        .filter(models.AiConversationMessage.profile_id == profile.id)
-        .order_by(models.AiConversationMessage.created_at.asc(), models.AiConversationMessage.id.asc())
-        .limit(100)
-        .all()
+    return _ai_conversation_summaries(db, profile_id=profile.id, limit=20)
+
+
+@app.get("/ai/history", response_model=List[schemas.AiConversationMessageOut])
+async def get_ai_history(
+    conversation_id: str | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    items = _get_ai_conversation_messages(
+        db,
+        profile_id=profile.id,
+        conversation_id=(conversation_id or "").strip() or None,
+        limit=160,
     )
     return items
+
+
+@app.delete("/ai/conversations/{conversation_id}")
+async def delete_ai_conversation(
+    conversation_id: str,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link, _ = _get_active_profile_context(db, current_user, require_write=True)
+    conversation_id = (conversation_id or "").strip()
+    if not conversation_id:
+        raise HTTPException(status_code=400, detail="Conversacion invalida")
+
+    deleted = (
+        db.query(models.AiConversationMessage)
+        .filter(
+            models.AiConversationMessage.profile_id == profile.id,
+            models.AiConversationMessage.conversation_id == conversation_id,
+        )
+        .delete()
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversacion no encontrada")
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="ai_conversation_deleted",
+        description=f"{current_user.name or current_user.email} elimino una conversacion de Klinip IA",
+        metadata_json={
+            "conversation_id": conversation_id,
+            "messages_deleted": deleted,
+            "role": link.role,
+        },
+    )
+    db.commit()
+    return {"ok": True, "messages_deleted": deleted}
 
 
 @app.delete("/ai/history")

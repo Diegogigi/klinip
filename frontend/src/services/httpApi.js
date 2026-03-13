@@ -223,8 +223,20 @@ export async function sendAiChat(payload) {
   return res.data;
 }
 
-export async function getAiHistory() {
-  const res = await api.get("/ai/history");
+export async function getAiConversations() {
+  const res = await api.get("/ai/conversations");
+  return res.data;
+}
+
+export async function getAiHistory(conversationId) {
+  const res = await api.get("/ai/history", {
+    params: conversationId ? { conversation_id: conversationId } : undefined,
+  });
+  return res.data;
+}
+
+export async function deleteAiConversation(conversationId) {
+  const res = await api.delete(`/ai/conversations/${conversationId}`);
   return res.data;
 }
 

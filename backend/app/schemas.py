@@ -497,6 +497,7 @@ class AiChatMessageIn(BaseModel):
 class AiChatRequest(BaseModel):
     message: str
     history: list[AiChatMessageIn] = []
+    conversation_id: str | None = None
 
 
 class AiContextSourceOut(BaseModel):
@@ -523,12 +524,30 @@ class AiChatResponse(BaseModel):
     references: list[AiReferenceOut] = []
     user_message_created_at: str = ""
     assistant_message_created_at: str = ""
+    conversation_id: str = ""
+    conversation_title: str = ""
+
+
+class AiConversationSummaryOut(BaseModel):
+    conversation_id: str
+    title: str
+    updated_at: datetime | None = None
+    message_count: int = 0
+    last_message_excerpt: str = ""
+
+    @field_serializer('updated_at')
+    def serialize_ai_conversation_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
 
 class AiConversationMessageOut(BaseModel):
     id: int
     profile_id: int
     user_id: int
+    conversation_id: str = ""
+    conversation_title: str = ""
     role: str
     content: str
     metadata_json: dict | None = None

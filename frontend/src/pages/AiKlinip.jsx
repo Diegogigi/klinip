@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   getActiveHealthProfile,
+  getAiConversations,
   getAiHistory,
   getAppointments,
+  deleteAiConversation,
   getDocuments,
   getMedications,
   sendAiChat,
@@ -41,6 +43,17 @@ function formatShortDate(value) {
   const parsed = parseDate(value);
   if (!parsed) return "Sin fecha";
   return new Intl.DateTimeFormat("es-CL", { day: "numeric", month: "short" }).format(parsed);
+}
+
+function formatConversationStamp(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
 }
 
 function formatDateTime(value) {
@@ -126,10 +139,13 @@ function Ring({ value }) {
 
 export default function AiKlinip() {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const [conversations, setConversations] = useState([]);
+  const [conversationId, setConversationId] = useState("");
+  const [conversationTitle, setConversationTitle] = useState("");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
-  const [rightTab, setRightTab] = useState("today");
+  const [rightTab, setRightTab] = useState("chat");
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [scanVisible, setScanVisible] = useState(false);
@@ -142,7 +158,40 @@ export default function AiKlinip() {
     sources: [],
   });
   const scrollRef = useRef(null);
+  const inputZoneRef = useRef(null);
+  const inputFieldRef = useRef(null);
   const fileTimerRef = useRef(null);
+
+  const mapHistoryToMessages = (items) => {
+    if (!Array.isArray(items) || !items.length) return [INITIAL_MESSAGE];
+    return items.map((item) => ({
+      id: item.id,
+      role: item.role === "user" ? "user" : "assistant",
+      content: item.content,
+      references: Array.isArray(item?.metadata_json?.references) ? item.metadata_json.references : [],
+      createdAt: item.created_at || null,
+      conversationId: item.conversation_id || "",
+      conversationTitle: item.conversation_title || "",
+    }));
+  };
+
+  const loadConversation = async (targetConversationId, summaryItems = conversations) => {
+    if (!targetConversationId) {
+      setConversationId("");
+      setConversationTitle("");
+      setMessages([INITIAL_MESSAGE]);
+      return;
+    }
+
+    const historyItems = await getAiHistory(targetConversationId).catch(() => []);
+    setMessages(mapHistoryToMessages(historyItems));
+    setConversationId(targetConversationId);
+    setConversationTitle(
+      historyItems?.[0]?.conversation_title ||
+      summaryItems.find((item) => item.conversation_id === targetConversationId)?.title ||
+      ""
+    );
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -170,20 +219,21 @@ export default function AiKlinip() {
     const loadAll = async () => {
       setHistoryLoading(true);
       try {
-        const historyItems = await getAiHistory().catch(() => []);
+        const conversationItems = await getAiConversations().catch(() => []);
         if (!mounted) return;
+        const safeConversations = Array.isArray(conversationItems) ? conversationItems : [];
+        setConversations(safeConversations);
 
-        if (Array.isArray(historyItems) && historyItems.length) {
-          setMessages(
-            historyItems.map((item) => ({
-              id: item.id,
-              role: item.role === "user" ? "user" : "assistant",
-              content: item.content,
-              references: Array.isArray(item?.metadata_json?.references) ? item.metadata_json.references : [],
-              createdAt: item.created_at || null,
-            }))
-          );
+        if (safeConversations.length) {
+          const targetConversationId = safeConversations[0].conversation_id;
+          const historyItems = await getAiHistory(targetConversationId).catch(() => []);
+          if (!mounted) return;
+          setConversationId(targetConversationId);
+          setConversationTitle(safeConversations[0].title || "");
+          setMessages(mapHistoryToMessages(historyItems));
         } else {
+          setConversationId("");
+          setConversationTitle("");
           setMessages([INITIAL_MESSAGE]);
         }
 
@@ -201,6 +251,14 @@ export default function AiKlinip() {
       loadResources().catch((error) => {
         console.error("No se pudieron refrescar recursos IA", error);
       });
+      getAiConversations()
+        .then((items) => {
+          if (!mounted) return;
+          setConversations(Array.isArray(items) ? items : []);
+        })
+        .catch((error) => {
+          console.error("No se pudieron refrescar conversaciones IA", error);
+        });
     };
 
     loadAll();
@@ -219,6 +277,8 @@ export default function AiKlinip() {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, loading, historyLoading]);
+
+  const hasConversation = useMemo(() => messages.some((message) => String(message.id) !== "welcome"), [messages]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -279,8 +339,6 @@ export default function AiKlinip() {
     };
   }, [activeMedications.length, resources.documents.length, nextAppointment]);
 
-  const hasConversation = useMemo(() => messages.some((message) => String(message.id) !== "welcome"), [messages]);
-
   const submitPrompt = async (promptValue) => {
     const prompt = (promptValue || "").trim();
     if (!prompt || loading) return;
@@ -296,10 +354,12 @@ export default function AiKlinip() {
       references: [],
       createdAt: new Date().toISOString(),
       attachmentName,
+      conversationId,
+      conversationTitle,
     };
 
     const historyForApi = messages
-      .filter((item) => item.role === "user" || item.role === "assistant")
+      .filter((item) => (item.role === "user" || item.role === "assistant") && String(item.id) !== "welcome")
       .map((item) => ({ role: item.role, content: item.content }));
 
     setMessages((prev) => [...prev, nextUserMessage]);
@@ -309,7 +369,13 @@ export default function AiKlinip() {
     setLoading(true);
 
     try {
-      const response = await sendAiChat({ message: finalPrompt, history: historyForApi });
+      const response = await sendAiChat({
+        message: finalPrompt,
+        history: historyForApi,
+        conversation_id: conversationId || undefined,
+      });
+      const nextConversationId = response?.conversation_id || conversationId || "";
+      const nextConversationTitle = response?.conversation_title || conversationTitle || prompt;
       setMeta((prev) => ({
         disclaimer: response?.disclaimer || prev.disclaimer,
         model: response?.model || "context-fallback",
@@ -317,10 +383,17 @@ export default function AiKlinip() {
         activeProfileName: response?.active_profile_name || prev.activeProfileName || resources.profile?.full_name || "",
         sources: Array.isArray(response?.sources) ? response.sources : prev.sources,
       }));
+      setConversationId(nextConversationId);
+      setConversationTitle(nextConversationTitle);
       setMessages((prev) => [
         ...prev.map((item) => (
           item.id === userMessageId && response?.user_message_created_at
-            ? { ...item, createdAt: response.user_message_created_at }
+            ? {
+                ...item,
+                createdAt: response.user_message_created_at,
+                conversationId: nextConversationId,
+                conversationTitle: nextConversationTitle,
+              }
             : item
         )),
         {
@@ -329,8 +402,12 @@ export default function AiKlinip() {
           content: cleanAssistantText(response?.reply || "No pude generar una respuesta en este momento. Intenta reformular tu consulta."),
           references: Array.isArray(response?.references) ? response.references : [],
           createdAt: response?.assistant_message_created_at || new Date().toISOString(),
+          conversationId: nextConversationId,
+          conversationTitle: nextConversationTitle,
         },
       ]);
+      const nextConversations = await getAiConversations().catch(() => []);
+      setConversations(Array.isArray(nextConversations) ? nextConversations : []);
       const [profile, appointments, documents, medications] = await Promise.all([
         getActiveHealthProfile().catch(() => null),
         getAppointments().catch(() => []),
@@ -376,6 +453,58 @@ export default function AiKlinip() {
     ? "Revisa si tengo interacciones entre mis medicamentos actuales"
     : "Resume mis medicamentos activos";
 
+  const jumpToComposer = () => {
+    inputZoneRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setTimeout(() => {
+      inputFieldRef.current?.focus();
+    }, 180);
+  };
+
+  const handleSelectConversation = async (targetConversationId) => {
+    if (!targetConversationId || loading || historyLoading) return;
+    setHistoryLoading(true);
+    try {
+      await loadConversation(targetConversationId);
+      setRightTab("chat");
+      setMobilePanelOpen(false);
+    } catch (error) {
+      console.error("No se pudo abrir la conversacion", error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleDeleteConversation = async (event, targetConversationId) => {
+    event.stopPropagation();
+    if (!targetConversationId || loading) return;
+    try {
+      await deleteAiConversation(targetConversationId);
+      const nextConversations = await getAiConversations().catch(() => []);
+      const safeConversations = Array.isArray(nextConversations) ? nextConversations : [];
+      setConversations(safeConversations);
+      if (targetConversationId === conversationId) {
+        if (safeConversations.length) {
+          await loadConversation(safeConversations[0].conversation_id, safeConversations);
+        } else {
+          setConversationId("");
+          setConversationTitle("");
+          setMessages([INITIAL_MESSAGE]);
+        }
+      }
+    } catch (error) {
+      console.error("No se pudo eliminar la conversacion", error);
+    }
+  };
+
+  const handleStartNewConversation = () => {
+    setConversationId("");
+    setConversationTitle("");
+    setMessages([INITIAL_MESSAGE]);
+    setRightTab("chat");
+    setMobilePanelOpen(false);
+    setTimeout(() => inputFieldRef.current?.focus(), 50);
+  };
+
   return (
     <div className="ai-page ai-copilot-page">
       <section className="ai-copilot-shell">
@@ -400,7 +529,6 @@ export default function AiKlinip() {
             {!hasConversation ? (
               <div className="ai-landing">
                 <div className="ai-landing-center">
-                  <div className="ai-landing-icon" aria-hidden="true">KI</div>
                   <h2 className="ai-landing-title">En que te ayudo hoy?</h2>
                   <p className="ai-landing-subtitle">
                     Consulta sobre tus medicamentos, documentos, citas o historial. Soy tu copiloto de salud.
@@ -500,10 +628,23 @@ export default function AiKlinip() {
                     </article>
                   ) : null}
                 </div>
+                <div className="ai-chat-jump-slot">
+                  <button
+                    type="button"
+                    className="ai-jump-composer-btn"
+                    onClick={jumpToComposer}
+                    aria-label="Bajar al cuadro de mensaje"
+                    title="Bajar al cuadro de mensaje"
+                  >
+                    <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             )}
 
-            <div className="ai-input-zone">
+            <div className="ai-input-zone" ref={inputZoneRef}>
               <form className="ai-input-shell" onSubmit={(event) => { event.preventDefault(); submitPrompt(input); }}>
                 {(attachedFile || scanVisible) ? (
                   <div className={`ai-upload-strip ${attachedFile ? "has-file" : ""}`}>
@@ -525,6 +666,7 @@ export default function AiKlinip() {
 
                 <div className="ai-input-row">
                   <textarea
+                    ref={inputFieldRef}
                     className="ai-input-field"
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
@@ -587,6 +729,7 @@ export default function AiKlinip() {
           </div>
 
           <div className="ai-right-tabs">
+            <button type="button" className={rightTab === "chat" ? "is-active" : ""} onClick={() => setRightTab("chat")}>Chat</button>
             <button type="button" className={rightTab === "today" ? "is-active" : ""} onClick={() => setRightTab("today")}>Hoy</button>
             <button type="button" className={rightTab === "meds" ? "is-active" : ""} onClick={() => setRightTab("meds")}>Meds</button>
             <button type="button" className={rightTab === "docs" ? "is-active" : ""} onClick={() => setRightTab("docs")}>Docs</button>
@@ -695,6 +838,50 @@ export default function AiKlinip() {
                   {!recentDocuments.length ? <div className="ai-empty-note">Todavia no hay documentos guardados.</div> : null}
                 </div>
               </section>
+            </div>
+          ) : null}
+
+          {rightTab === "chat" ? (
+            <div className="ai-right-body ai-right-body-chat">
+              <div className="ai-chat-sidebar-head">
+                <div className="ai-chat-sidebar-copy">
+                  <strong>Tus chats</strong>
+                  <span>{conversationTitle || "Conversaciones guardadas de Klinip IA"}</span>
+                </div>
+                <button type="button" className="ai-chat-sidebar-new" onClick={handleStartNewConversation}>Nuevo</button>
+              </div>
+
+              <div className="ai-conversation-list simple">
+                {conversations.map((item) => (
+                  <div
+                    key={item.conversation_id}
+                    className={`ai-conversation-item simple ${conversationId === item.conversation_id ? "is-active" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="ai-conversation-open simple"
+                      onClick={() => handleSelectConversation(item.conversation_id)}
+                      title={item.title || "Nueva conversacion"}
+                    >
+                      <span>{item.title || "Nueva conversacion"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="ai-conversation-delete simple"
+                      aria-label="Eliminar conversacion"
+                      title={`Eliminar ${item.title || "conversacion"}`}
+                      onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
+                    >
+                      ···
+                    </button>
+                  </div>
+                ))}
+                {!conversations.length ? (
+                  <div className="ai-empty-note">
+                    No hay conversaciones guardadas todavia. Tu proximo mensaje iniciara un nuevo chat.
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
 

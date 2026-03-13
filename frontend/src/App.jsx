@@ -202,12 +202,9 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="brand-avatar">
-          <img
-            src="/icons/img_sin_fondo.png"
-            alt="Klinip"
-            className="brand-avatar-img"
-          />
+        <div className="brand-wordmark brand-wordmark-sidebar" aria-label="Klinip">
+          <span className="brand-wordmark-full">Klinip</span>
+          <span className="brand-wordmark-compact">K</span>
         </div>
       </div>
 

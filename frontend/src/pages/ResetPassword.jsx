@@ -57,8 +57,10 @@ export default function ResetPassword() {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <div className="auth-logo-icon"><img src="/icons/img_sin_fondo.png" alt="Klinip" className="auth-logo-image" /></div>
-              <h1 className="auth-logo-text">Klinip</h1>
+              <h1 className="auth-logo-text brand-wordmark" aria-label="Klinip">
+                <span className="brand-wordmark-full">Klinip</span>
+                <span className="brand-wordmark-compact">K</span>
+              </h1>
             </div>
             <h2 className="auth-welcome">Nueva contrasena</h2>
             <p className="auth-description">

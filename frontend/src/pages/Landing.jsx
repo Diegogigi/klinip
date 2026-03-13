@@ -177,8 +177,10 @@ export default function Landing() {
       <header className="lp-navbar">
         <div className="lp-navbar-inner">
           <Link className="lp-nav-logo" to="/">
-            <img src="/icons/img_sin_fondo.png" alt="Klinip" className="lp-brand-logo-img" />
-            <span className="lp-nav-logo-name">Klinip</span>
+            <span className="brand-wordmark responsive" aria-label="Klinip">
+              <span className="brand-wordmark-full">Klinip</span>
+              <span className="brand-wordmark-compact">K</span>
+            </span>
           </Link>
 
           <nav className="lp-nav-links">
@@ -438,9 +440,11 @@ export default function Landing() {
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
-            <img src="/icons/img_sin_fondo.png" alt="Klinip" className="lp-brand-logo-img" />
             <div>
-              <strong>Klinip</strong>
+              <strong className="brand-wordmark responsive" aria-label="Klinip">
+                <span className="brand-wordmark-full">Klinip</span>
+                <span className="brand-wordmark-compact">K</span>
+              </strong>
               <span>Tu ruta de salud, simplificada</span>
             </div>
           </div>
