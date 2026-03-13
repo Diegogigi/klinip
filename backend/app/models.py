@@ -153,7 +153,12 @@ class MedicationIntake(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     medication_id = Column(Integer, ForeignKey("medications.id"))
-    taken_at = Column(DateTime, default=datetime.now)
+    scheduled_at = Column(DateTime, nullable=True)
+    taken_at = Column(DateTime, nullable=True, default=datetime.now)
+    status = Column(String, default="taken", index=True)
+    source = Column(String, default="manual")
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")
     medication = relationship("Medication")
@@ -345,3 +350,142 @@ class AiConversationMessage(Base):
 
     profile = relationship("HealthProfile")
     user = relationship("User")
+
+
+class AdherenceSummary(Base):
+    __tablename__ = "adherence_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    medication_id = Column(Integer, ForeignKey("medications.id"), nullable=True, index=True)
+    window_days = Column(Integer, default=30)
+    adherence_rate = Column(Integer, default=0)
+    missed_count = Column(Integer, default=0)
+    late_count = Column(Integer, default=0)
+    expected_doses = Column(Integer, default=0)
+    taken_doses = Column(Integer, default=0)
+    pattern_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    medication = relationship("Medication")
+
+
+class HealthAlert(Base):
+    __tablename__ = "health_alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    alert_type = Column(String, nullable=False, index=True)
+    severity = Column(String, default="low")
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    evidence_json = Column(JSON, default=dict)
+    recommended_action = Column(Text, default="")
+    status = Column(String, default="active", index=True)
+    detected_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+
+
+class DocumentSummary(Base):
+    __tablename__ = "document_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, unique=True, index=True)
+    document_type_inferred = Column(String, default="otro")
+    summary_plain = Column(Text, default="")
+    patient_friendly_explanation = Column(Text, default="")
+    key_points_json = Column(JSON, default=list)
+    abnormal_values_json = Column(JSON, default=list)
+    requires_review = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    document = relationship("Document")
+
+
+class DocumentClinicalEntity(Base):
+    __tablename__ = "document_clinical_entities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False, index=True)
+    entity_name = Column(String, default="")
+    entity_value = Column(String, default="")
+    unit = Column(String, default="")
+    reference_range = Column(String, default="")
+    flag = Column(String, default="unknown")
+    confidence = Column(Integer, default=0)
+    source_text = Column(Text, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    document = relationship("Document")
+
+
+class ClinicalReport(Base):
+    __tablename__ = "clinical_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    report_type = Column(String, default="consulta_medica", index=True)
+    period_start = Column(DateTime, nullable=True)
+    period_end = Column(DateTime, nullable=True)
+    report_json = Column(JSON, default=dict)
+    pdf_data = Column(LargeBinary, nullable=True)
+    pdf_filename = Column(String, default="")
+    created_at = Column(DateTime, default=datetime.now)
+
+    profile = relationship("HealthProfile")
+
+
+class ProfileHealthFeature(Base):
+    __tablename__ = "profile_health_features"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, unique=True, index=True)
+    next_appointment_at = Column(DateTime, nullable=True)
+    last_appointment_at = Column(DateTime, nullable=True)
+    active_medications_count = Column(Integer, default=0)
+    low_adherence_risk = Column(Boolean, default=False)
+    treatment_completion_score = Column(Integer, default=0)
+    missing_documents_flags_json = Column(JSON, default=dict)
+    extra_features_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+
+
+class ExternalClinicalSource(Base):
+    __tablename__ = "external_clinical_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    source_type = Column(String, default="manual", index=True)
+    source_name = Column(String, nullable=False)
+    status = Column(String, default="connected", index=True)
+    last_sync_at = Column(DateTime, nullable=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+
+
+class ExternalClinicalRecord(Base):
+    __tablename__ = "external_clinical_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    source_id = Column(Integer, ForeignKey("external_clinical_sources.id"), nullable=True, index=True)
+    external_id = Column(String, default="", index=True)
+    record_type = Column(String, default="lab_result", index=True)
+    title = Column(String, nullable=False)
+    summary = Column(Text, default="")
+    payload_json = Column(JSON, default=dict)
+    event_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    source = relationship("ExternalClinicalSource")

@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getActiveHealthProfile,
+  getAiAdherence,
+  getAiHealthRadar,
   getAppointments,
   getDocuments,
   getHealthProfiles,
@@ -92,6 +94,12 @@ function getRadarToneFromAdherence(value) {
   return "alert";
 }
 
+function getAlertTone(severity) {
+  if (severity === "high") return "alert";
+  if (severity === "medium") return "warn";
+  return "ok";
+}
+
 function renderIcon(name) {
   switch (name) {
     case "medication":
@@ -171,6 +179,8 @@ export default function Dashboard({ user }) {
   const [medications, setMedications] = useState([]);
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
+  const [healthRadar, setHealthRadar] = useState([]);
+  const [adherenceSummary, setAdherenceSummary] = useState(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
@@ -185,12 +195,16 @@ export default function Dashboard({ user }) {
           appointmentsResponse,
           documentsResponse,
           medicationsResponse,
+          radarResponse,
+          adherenceResponse,
         ] = await Promise.all([
           getActiveHealthProfile().catch(() => null),
           getHealthProfiles().catch(() => []),
           getAppointments().catch(() => []),
           getDocuments().catch(() => []),
           getMedications().catch(() => []),
+          getAiHealthRadar().catch(() => []),
+          getAiAdherence().catch(() => ({})),
         ]);
         if (cancelled) return;
         setActiveProfile(activeProfileResponse || null);
@@ -198,6 +212,8 @@ export default function Dashboard({ user }) {
         setAppointments(Array.isArray(appointmentsResponse) ? appointmentsResponse : []);
         setDocuments(Array.isArray(documentsResponse) ? documentsResponse : []);
         setMedications(Array.isArray(medicationsResponse) ? medicationsResponse : []);
+        setHealthRadar(Array.isArray(radarResponse) ? radarResponse : []);
+        setAdherenceSummary(adherenceResponse || {});
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -247,11 +263,18 @@ export default function Dashboard({ user }) {
     { expected: 0, taken: 0 }
   );
   const adherence =
-    adherenceTotals.expected > 0
+    Number(adherenceSummary?.overall_adherence_rate) > 0
+      ? Math.round(Number(adherenceSummary?.overall_adherence_rate))
+      : adherenceTotals.expected > 0
       ? Math.round((adherenceTotals.taken / adherenceTotals.expected) * 100)
       : activeMedications.length
       ? 100
       : 0;
+  const lowAdherenceItems = Array.isArray(adherenceSummary?.low_adherence_items)
+    ? adherenceSummary.low_adherence_items
+    : [];
+  const activeHealthAlerts = Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : [];
+  const topHealthAlerts = activeHealthAlerts.slice(0, 3);
   const pendingDocuments = documents.filter((item) => {
     const status = String(item.ocr_status || "").toLowerCase();
     return !status || status === "pending" || status === "processing" || status === "error";
@@ -292,9 +315,13 @@ export default function Dashboard({ user }) {
     {
       key: "family",
       icon: "family",
-      tone: linkedProfiles > 0 ? "warn" : "ok",
+      tone: activeHealthAlerts.length ? "warn" : linkedProfiles > 0 ? "warn" : "ok",
       label: "Familia",
-      value: linkedProfiles > 0 ? `${linkedProfiles} vinculados` : "sin alertas",
+      value: activeHealthAlerts.length
+        ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
+        : linkedProfiles > 0
+        ? `${linkedProfiles} vinculados`
+        : "sin alertas",
     },
   ];
 
@@ -380,6 +407,12 @@ export default function Dashboard({ user }) {
       text: "Hay medicamentos sin horario definido. Completa su recordatorio para no olvidarlos.",
     });
   }
+  if (activeHealthAlerts.length) {
+    suggestionItems.unshift({
+      id: "suggestion-radar",
+      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
+    });
+  }
 
   const quickActions = [
     {
@@ -446,7 +479,12 @@ export default function Dashboard({ user }) {
                 Hola, <em>{userName}</em>
               </h1>
               <p className="home-greeting-subtitle">Este es tu resumen de salud para hoy.</p>
-              <p className="home-greeting-context">Perfil activo: {activeProfileName}</p>
+              <div className="home-greeting-context">
+                <span className="status-badge status-badge-green">
+                  <span className="status-badge-label">Perfil activo</span>
+                  <span className="status-badge-value">{activeProfileName}</span>
+                </span>
+              </div>
             </div>
             <div className="home-greeting-side">
               <div className="home-greeting-date">
@@ -488,6 +526,46 @@ export default function Dashboard({ user }) {
                   <div className="home-radar-value">{item.value}</div>
                 </div>
               ))}
+            </div>
+            <div className="home-radar-insights">
+              <div className="home-radar-summary">
+                <div className="home-radar-summary-chip tone-teal">
+                  <span>Adherencia</span>
+                  <strong>{activeMedications.length ? `${adherence}%` : "Sin datos"}</strong>
+                </div>
+                <div className={`home-radar-summary-chip tone-${activeHealthAlerts.length ? "alert" : "ok"}`}>
+                  <span>Alertas activas</span>
+                  <strong>{activeHealthAlerts.length}</strong>
+                </div>
+              </div>
+              <div className="home-radar-alert-list">
+                {topHealthAlerts.length ? (
+                  topHealthAlerts.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`home-radar-alert tone-${getAlertTone(item.severity)}`}
+                      onClick={() => navigate("/ai")}
+                    >
+                      <strong>{item.title}</strong>
+                      <span>{item.description}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="home-empty-state">No hay alertas activas detectadas por el radar inteligente.</div>
+                )}
+              </div>
+              {lowAdherenceItems.length ? (
+                <div className="home-radar-pattern">
+                  <strong>Medicamentos a revisar</strong>
+                  <span>
+                    {lowAdherenceItems
+                      .slice(0, 2)
+                      .map((item) => `${item.name}: ${item.adherence_rate}%`)
+                      .join(" · ")}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </article>
 

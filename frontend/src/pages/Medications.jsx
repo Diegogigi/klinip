@@ -2,6 +2,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   deleteMedication,
+  getMedicationIntakes,
   getMedications,
   recordMedicationIntake,
   saveMedication,
@@ -58,6 +59,8 @@ export default function Medications() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [detailIntakes, setDetailIntakes] = useState([]);
+  const [detailIntakesLoading, setDetailIntakesLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [notifyQueue, setNotifyQueue] = useState([]);
@@ -97,6 +100,24 @@ export default function Medications() {
       setMissingFrequency(null);
     }
     scheduleMedicationNotifications(data || []);
+  };
+
+  const loadDetailIntakeItems = async (medicationId) => {
+    if (!medicationId) {
+      setDetailIntakes([]);
+      setDetailIntakesLoading(false);
+      return;
+    }
+    setDetailIntakesLoading(true);
+    try {
+      const response = await getMedicationIntakes(medicationId, 60);
+      setDetailIntakes(Array.isArray(response?.items) ? response.items : []);
+    } catch (error) {
+      console.error("No se pudo cargar la linea de tiempo de adherencia", error);
+      setDetailIntakes([]);
+    } finally {
+      setDetailIntakesLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -144,6 +165,15 @@ export default function Medications() {
     });
     navigate("/medications", { replace: true });
   }, [location.search, meds, navigate]);
+
+  useEffect(() => {
+    if (!detailOpen || !detailTarget?.id) {
+      setDetailIntakes([]);
+      setDetailIntakesLoading(false);
+      return;
+    }
+    loadDetailIntakeItems(detailTarget.id);
+  }, [detailOpen, detailTarget?.id]);
 
   useEffect(() => {
     const checkDueMedicationPrompt = () => {
@@ -279,7 +309,7 @@ export default function Medications() {
 
   const handleRecordIntake = async (med) => {
     try {
-      await recordMedicationIntake(med.id);
+      await recordMedicationIntake(med.id, { status: "taken", source: "manual" });
       await load();
       setIntakeFeedback(`info:Toma registrada: ${med.name}`);
       if (feedbackTimer.current) {
@@ -302,6 +332,8 @@ export default function Medications() {
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setDetailTarget(null);
+    setDetailIntakes([]);
+    setDetailIntakesLoading(false);
   };
 
   const closeNotifyModal = () => {
@@ -326,7 +358,11 @@ export default function Medications() {
     if (!notifyTarget) return;
     setNotifyActionLoading(true);
     try {
-      await recordMedicationIntake(notifyTarget.id);
+      await recordMedicationIntake(notifyTarget.id, {
+        status: "taken",
+        source: "reminder_prompt",
+        scheduled_at: notifyTriggeredAt || new Date().toISOString(),
+      });
       if (notifyPromptKey) {
         localStorage.setItem(notifyPromptKey, "taken");
       }
@@ -354,13 +390,17 @@ export default function Medications() {
   const handleTakenAllFromAlert = async () => {
     if (!notifyTarget) return;
     const batch = [
-      { med: notifyTarget, key: notifyPromptKey },
-      ...notifyQueue.map((item) => ({ med: item.med, key: item.key })),
+      { med: notifyTarget, key: notifyPromptKey, triggeredAt: notifyTriggeredAt },
+      ...notifyQueue.map((item) => ({ med: item.med, key: item.key, triggeredAt: item.triggeredAt })),
     ];
     setNotifyActionLoading(true);
     try {
       for (const item of batch) {
-        await recordMedicationIntake(item.med.id);
+        await recordMedicationIntake(item.med.id, {
+          status: "taken",
+          source: "reminder_batch",
+          scheduled_at: item.triggeredAt || new Date().toISOString(),
+        });
         if (item.key) {
           localStorage.setItem(item.key, "taken");
         }
@@ -384,6 +424,40 @@ export default function Medications() {
     } catch (err) {
       console.error(err);
       alert("No se pudieron registrar todas las tomas.");
+    } finally {
+      setNotifyActionLoading(false);
+    }
+  };
+
+  const handleSkipFromAlert = async () => {
+    if (!notifyTarget) return;
+    setNotifyActionLoading(true);
+    try {
+      await recordMedicationIntake(notifyTarget.id, {
+        status: "skipped",
+        source: "reminder_prompt",
+        scheduled_at: notifyTriggeredAt || new Date().toISOString(),
+        notes: "El usuario marco la dosis como omitida desde el recordatorio.",
+      });
+      if (notifyPromptKey) {
+        localStorage.setItem(notifyPromptKey, "skipped");
+      }
+      await load();
+      setIntakeFeedback(`info:Dosis omitida: ${notifyTarget.name}`);
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+      feedbackTimer.current = setTimeout(() => {
+        setIntakeFeedback("");
+      }, 2600);
+      setNotifyOpen(false);
+      setNotifyTarget(null);
+      setNotifyPromptKey("");
+      setNotifyTriggeredAt(null);
+      navigate("/medications", { replace: true });
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo registrar la omision.");
     } finally {
       setNotifyActionLoading(false);
     }
@@ -430,6 +504,57 @@ export default function Medications() {
       (statusFilter === "scheduled" && Boolean(med.schedule_time));
     return matchesSearch && matchesStatus;
   });
+
+  const formatTimelineStamp = (value) => {
+    if (!value) return "Sin fecha";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "Sin fecha";
+    return new Intl.DateTimeFormat("es-CL", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(parsed);
+  };
+
+  const getIntakeStatusLabel = (status) => {
+    const normalized = String(status || "taken").toLowerCase();
+    if (normalized === "late") return "Tomado tarde";
+    if (normalized === "missed") return "No registrado";
+    if (normalized === "skipped") return "Omitido";
+    return "Tomado";
+  };
+
+  const handleTimelineStatusUpdate = async (item, nextStatus) => {
+    if (!detailTarget?.id) return;
+    try {
+      await recordMedicationIntake(detailTarget.id, {
+        status: nextStatus,
+        source: "timeline_update",
+        scheduled_at: item.scheduled_at || item.taken_at || item.created_at || new Date().toISOString(),
+        notes:
+          nextStatus === "late"
+            ? "Actualizado desde la linea de tiempo como tomado tarde."
+            : "Actualizado desde la linea de tiempo como omitido.",
+      });
+      await Promise.all([load(), loadDetailIntakeItems(detailTarget.id)]);
+      setIntakeFeedback(
+        nextStatus === "late"
+          ? "success:Evento actualizado como tomado tarde."
+          : "info:Evento actualizado como omitido."
+      );
+      if (feedbackTimer.current) {
+        clearTimeout(feedbackTimer.current);
+      }
+      feedbackTimer.current = setTimeout(() => {
+        setIntakeFeedback("");
+      }, 2600);
+    } catch (error) {
+      console.error(error);
+      alert("No se pudo actualizar el evento de adherencia.");
+    }
+  };
 
   return (
     <>
@@ -525,6 +650,14 @@ export default function Medications() {
                 <p className="med-dose-alert-notes">{notifyTarget.notes}</p>
               )}
               <div className="med-dose-alert-actions">
+                <button
+                  className="med-dose-btn"
+                  type="button"
+                  onClick={handleSkipFromAlert}
+                  disabled={notifyActionLoading}
+                >
+                  Omitir
+                </button>
                 <button
                   className="med-dose-btn is-primary"
                   type="button"
@@ -744,6 +877,67 @@ export default function Medications() {
                     <p>{detailTarget.notes || "Sin notas"}</p>
                   </div>
                 </div>
+              </div>
+              <div className="medication-intake-timeline">
+                <div className="medication-intake-timeline-head">
+                  <div>
+                    <h4>Linea de tiempo de adherencia</h4>
+                    <p>Eventos reales registrados para este medicamento.</p>
+                  </div>
+                  <span className="medication-intake-timeline-count">
+                    {detailIntakes.length} eventos
+                  </span>
+                </div>
+                {detailIntakesLoading ? (
+                  <div className="medication-intake-empty">Cargando eventos...</div>
+                ) : detailIntakes.length ? (
+                  <div className="medication-intake-list">
+                    {detailIntakes.map((item) => {
+                      const normalizedStatus = String(item.status || "taken").toLowerCase();
+                      const primaryStamp = item.scheduled_at || item.taken_at || item.created_at;
+                      return (
+                        <article key={item.id} className="medication-intake-item">
+                          <div className={`medication-intake-dot status-${normalizedStatus}`} aria-hidden />
+                          <div className="medication-intake-copy">
+                            <div className="medication-intake-row">
+                              <strong>{getIntakeStatusLabel(item.status)}</strong>
+                              <span>{formatTimelineStamp(primaryStamp)}</span>
+                            </div>
+                            <div className="medication-intake-meta">
+                              <span>Fuente: {item.source || "manual"}</span>
+                              {item.taken_at && item.scheduled_at ? (
+                                <span>Registrado: {formatTimelineStamp(item.taken_at)}</span>
+                              ) : null}
+                            </div>
+                            {item.notes ? <p>{item.notes}</p> : null}
+                            <div className="medication-intake-actions">
+                              <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => handleTimelineStatusUpdate(item, "late")}
+                                disabled={normalizedStatus === "late"}
+                              >
+                                Tomado tarde
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => handleTimelineStatusUpdate(item, "skipped")}
+                                disabled={normalizedStatus === "skipped"}
+                              >
+                                Omitido
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="medication-intake-empty">
+                    Todavia no hay eventos explicitos de adherencia para este medicamento.
+                  </div>
+                )}
               </div>
             </div>
             <div className="modal-actions">

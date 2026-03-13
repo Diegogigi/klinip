@@ -450,10 +450,296 @@ class MedicationIntakeOut(BaseModel):
     id: int
     medication_id: int
     user_id: int
-    taken_at: datetime
+    scheduled_at: Optional[datetime] = None
+    taken_at: Optional[datetime] = None
+    status: str = "taken"
+    source: str = "manual"
+    notes: str = ""
+    created_at: Optional[datetime] = None
 
-    @field_serializer('taken_at')
-    def serialize_datetime(self, dt: Optional[datetime], _info):
+    @field_serializer('scheduled_at', 'taken_at', 'created_at')
+    def serialize_intake_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class MedicationIntakeCreate(BaseModel):
+    scheduled_at: Optional[datetime] = None
+    taken_at: Optional[datetime] = None
+    status: str = "taken"
+    source: str = "manual"
+    notes: Optional[str] = ""
+
+
+class MedicationIntakeListOut(BaseModel):
+    medication_id: int
+    items: list[MedicationIntakeOut] = []
+
+
+class AdherenceSummaryOut(BaseModel):
+    id: int
+    profile_id: int
+    medication_id: Optional[int] = None
+    window_days: int = 30
+    adherence_rate: int = 0
+    missed_count: int = 0
+    late_count: int = 0
+    expected_doses: int = 0
+    taken_doses: int = 0
+    pattern_json: dict | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('updated_at')
+    def serialize_adherence_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class HealthAlertOut(BaseModel):
+    id: int
+    profile_id: int
+    alert_type: str
+    severity: str
+    title: str
+    description: str
+    evidence_json: dict | None = None
+    recommended_action: str = ""
+    status: str = "active"
+    detected_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('detected_at', 'updated_at')
+    def serialize_health_alert_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentClinicalEntityOut(BaseModel):
+    id: int
+    document_id: int
+    entity_type: str
+    entity_name: str = ""
+    entity_value: str = ""
+    unit: str = ""
+    reference_range: str = ""
+    flag: str = "unknown"
+    confidence: int = 0
+    source_text: str = ""
+    created_at: datetime | None = None
+
+    @field_serializer('created_at')
+    def serialize_document_entity_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentSummaryOut(BaseModel):
+    id: int
+    document_id: int
+    document_type_inferred: str = "otro"
+    summary_plain: str = ""
+    patient_friendly_explanation: str = ""
+    key_points_json: list | None = None
+    abnormal_values_json: list | None = None
+    requires_review: bool = False
+    updated_at: datetime | None = None
+
+    @field_serializer('updated_at')
+    def serialize_document_summary_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class ProfileHealthFeatureOut(BaseModel):
+    profile_id: int
+    next_appointment_at: datetime | None = None
+    last_appointment_at: datetime | None = None
+    active_medications_count: int = 0
+    low_adherence_risk: bool = False
+    treatment_completion_score: int = 0
+    missing_documents_flags_json: dict | None = None
+    extra_features_json: dict | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('next_appointment_at', 'last_appointment_at', 'updated_at')
+    def serialize_profile_feature_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class ClinicalReportRequest(BaseModel):
+    report_type: str = "consulta_medica"
+    period_days: int = 30
+
+
+class ClinicalReportOut(BaseModel):
+    id: int
+    profile_id: int
+    report_type: str
+    period_start: datetime | None = None
+    period_end: datetime | None = None
+    report_json: dict | None = None
+    pdf_filename: str = ""
+    created_at: datetime | None = None
+
+    @field_serializer('period_start', 'period_end', 'created_at')
+    def serialize_clinical_report_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class AiHealthContextOut(BaseModel):
+    profile: dict
+    plan: dict
+    adherence_summary: dict
+    health_alerts: list[HealthAlertOut] = []
+    document_summaries: list[DocumentSummaryOut] = []
+    profile_health_features: dict = {}
+    context: dict = {}
+
+
+class AiFamilyProfileInsightOut(BaseModel):
+    profile_id: int
+    profile_name: str
+    relation_with_owner: str = ""
+    active_alerts: int = 0
+    upcoming_appointments: int = 0
+    low_adherence: bool = False
+    pending_documents: list[str] = []
+    key_risks: list[str] = []
+
+
+class AiFamilyContextOut(BaseModel):
+    generated_at: datetime | None = None
+    family_size: int = 0
+    active_alerts_total: int = 0
+    pending_documents_total: int = 0
+    low_adherence_profiles: int = 0
+    summary: str = ""
+    profiles: list[AiFamilyProfileInsightOut] = []
+
+    @field_serializer('generated_at')
+    def serialize_family_context_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class LifeTimelineEventOut(BaseModel):
+    id: str
+    profile_id: int
+    profile_name: str = ""
+    event_type: str
+    category: str
+    title: str
+    summary: str = ""
+    event_at: datetime | None = None
+    related_ids: dict = {}
+    metadata_json: dict = {}
+
+    @field_serializer('event_at')
+    def serialize_life_timeline_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class LifeTimelineOut(BaseModel):
+    generated_at: datetime | None = None
+    profile_id: int | None = None
+    include_family: bool = False
+    summary: str = ""
+    event_count: int = 0
+    events: list[LifeTimelineEventOut] = []
+
+    @field_serializer('generated_at')
+    def serialize_life_timeline_generated_at(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class ExternalClinicalSourceCreate(BaseModel):
+    source_type: str = "manual"
+    source_name: str
+    status: str = "connected"
+    metadata_json: dict | None = None
+
+
+class ExternalClinicalSourceOut(BaseModel):
+    id: int
+    profile_id: int
+    source_type: str
+    source_name: str
+    status: str
+    last_sync_at: datetime | None = None
+    metadata_json: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('last_sync_at', 'created_at', 'updated_at')
+    def serialize_external_source_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class ExternalClinicalRecordCreate(BaseModel):
+    source_id: int | None = None
+    external_id: str = ""
+    record_type: str = "lab_result"
+    title: str
+    summary: str = ""
+    payload_json: dict | None = None
+    event_at: datetime | None = None
+
+
+class ExternalClinicalRecordOut(BaseModel):
+    id: int
+    profile_id: int
+    source_id: int | None = None
+    external_id: str = ""
+    record_type: str
+    title: str
+    summary: str = ""
+    payload_json: dict | None = None
+    event_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('event_at', 'created_at', 'updated_at')
+    def serialize_external_record_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
         return dt.strftime('%Y-%m-%dT%H:%M:%S')

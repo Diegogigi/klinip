@@ -245,6 +245,98 @@ export async function clearAiHistory() {
   return res.data;
 }
 
+export async function getAiHealthRadar(profileId) {
+  const res = await api.get("/ai/health-radar", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function runAiHealthRadar(profileId) {
+  const res = await api.post("/ai/health-radar/run", null, {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getAiAdherence(profileId) {
+  const res = await api.get("/ai/adherence", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return res.data || {};
+}
+
+export async function getAiDocumentIntelligence(profileId) {
+  const res = await api.get("/ai/documents/intelligence", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function generateAiClinicalReport(payload, profileId) {
+  const res = await api.post("/ai/reports/generate", payload, {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return res.data;
+}
+
+export async function getAiClinicalReports(profileId) {
+  const res = await api.get("/ai/reports", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getAiClinicalReport(reportId) {
+  const res = await api.get(`/ai/reports/${reportId}`);
+  return res.data;
+}
+
+export async function getAiClinicalReportPdf(reportId) {
+  const res = await api.get(`/ai/reports/${reportId}/pdf`, {
+    responseType: "blob",
+  });
+  return res.data;
+}
+
+export async function getAiFamilyContext(days = 30) {
+  const res = await api.get("/ai/family/context", { params: { days } });
+  return res.data || {};
+}
+
+export async function getAiLifeTimeline(params = {}) {
+  const res = await api.get("/ai/life-timeline", { params });
+  return res.data || {};
+}
+
+export async function getInteroperabilitySources(profileId) {
+  const res = await api.get("/ai/interoperability/sources", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createInteroperabilitySource(payload, profileId) {
+  const res = await api.post("/ai/interoperability/sources", payload, {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return res.data;
+}
+
+export async function getInteroperabilityRecords(profileId) {
+  const res = await api.get("/ai/interoperability/records", {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createInteroperabilityRecord(payload, profileId) {
+  const res = await api.post("/ai/interoperability/records", payload, {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return res.data;
+}
+
 // Privacy
 export async function revokeDataConsent() {
   const res = await api.post("/privacy/revoke-consent");
@@ -348,8 +440,13 @@ export async function deleteMedication(id) {
   return res.data;
 }
 
-export async function recordMedicationIntake(id) {
-  const res = await api.post(`/medications/${id}/intake`);
+export async function recordMedicationIntake(id, payload) {
+  const res = await api.post(`/medications/${id}/intake`, payload || {});
+  return res.data;
+}
+
+export async function getMedicationIntakes(id, limit = 40) {
+  const res = await api.get(`/medications/${id}/intakes`, { params: { limit } });
   return res.data;
 }
 

@@ -70,7 +70,7 @@ export default function Calendar() {
     return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
   }, [viewDate]);
 
-  const monthLabel = normalizedViewDate.toLocaleDateString(undefined, {
+  const monthLabel = normalizedViewDate.toLocaleDateString("es-CL", {
     month: "long",
     year: "numeric",
   });

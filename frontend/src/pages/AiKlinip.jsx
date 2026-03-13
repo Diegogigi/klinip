@@ -1,12 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   getActiveHealthProfile,
+  generateAiClinicalReport,
+  getAiAdherence,
+  getAiClinicalReportPdf,
+  getAiClinicalReports,
   getAiConversations,
+  getAiDocumentIntelligence,
+  getAiHealthRadar,
   getAiHistory,
   getAppointments,
   deleteAiConversation,
   getDocuments,
+  getHealthProfiles,
   getMedications,
+  runAiHealthRadar,
   sendAiChat,
 } from "../api";
 import { parseDate } from "../utils/dates";
@@ -20,6 +28,12 @@ const QUICK_ACTIONS = [
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
 const APPOINTMENT_TYPE_LABELS = { cita: "Cita", examen: "Examen", tramite: "Tramite" };
+const RADAR_PERIOD_OPTIONS = [
+  { value: "7", label: "7 dias" },
+  { value: "30", label: "30 dias" },
+  { value: "90", label: "90 dias" },
+  { value: "all", label: "Todo" },
+];
 
 const INITIAL_MESSAGE = {
   id: "welcome",
@@ -68,6 +82,31 @@ function formatDateTime(value) {
   }).format(parsed);
 }
 
+function getPeriodCutoff(periodKey) {
+  if (periodKey === "all") return null;
+  const days = Number(periodKey);
+  if (!Number.isFinite(days) || days <= 0) return null;
+  const cutoff = new Date();
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - days);
+  return cutoff;
+}
+
+function formatReportLabel(value) {
+  if (!value) return "Reporte clinico";
+  return String(value)
+    .split("_")
+    .filter(Boolean)
+    .map((item) => item.charAt(0).toUpperCase() + item.slice(1))
+    .join(" ");
+}
+
+function getSeverityLabel(value) {
+  if (value === "high") return "Alta";
+  if (value === "medium") return "Media";
+  return "Baja";
+}
+
 function daysUntil(value) {
   const parsed = parseDate(value);
   if (!parsed) return null;
@@ -97,14 +136,6 @@ function getUpcomingAppointments(items) {
   return validItems
     .slice()
     .sort((a, b) => Math.abs(parseDate(a.date_time).getTime() - now) - Math.abs(parseDate(b.date_time).getTime() - now));
-}
-
-function getRecentDocuments(items) {
-  return [...(items || [])].sort((a, b) => {
-    const left = parseDate(a.date || a.created_at)?.getTime() || 0;
-    const right = parseDate(b.date || b.created_at)?.getTime() || 0;
-    return right - left;
-  });
 }
 
 function getActiveMedications(items) {
@@ -149,6 +180,16 @@ export default function AiKlinip() {
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [attachedFile, setAttachedFile] = useState(null);
   const [scanVisible, setScanVisible] = useState(false);
+  const [isAtLatest, setIsAtLatest] = useState(true);
+  const [clinicalReports, setClinicalReports] = useState([]);
+  const [healthRadar, setHealthRadar] = useState([]);
+  const [documentIntelligence, setDocumentIntelligence] = useState([]);
+  const [adherenceSummary, setAdherenceSummary] = useState({});
+  const [reportBusy, setReportBusy] = useState(false);
+  const [radarRefreshing, setRadarRefreshing] = useState(false);
+  const [radarProfiles, setRadarProfiles] = useState([]);
+  const [radarProfileId, setRadarProfileId] = useState("active");
+  const [radarPeriod, setRadarPeriod] = useState("30");
   const [resources, setResources] = useState({ profile: null, appointments: [], documents: [], medications: [] });
   const [meta, setMeta] = useState({
     disclaimer: "Klinip IA entrega informacion orientativa y no reemplaza la evaluacion de un profesional de salud.",
@@ -196,11 +237,19 @@ export default function AiKlinip() {
   useEffect(() => {
     let mounted = true;
     const loadResources = async () => {
-      const [profile, appointments, documents, medications] = await Promise.all([
+      const [profile, profiles] = await Promise.all([
         getActiveHealthProfile().catch(() => null),
+        getHealthProfiles().catch(() => []),
+      ]);
+      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+      const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
         getAppointments().catch(() => []),
         getDocuments().catch(() => []),
         getMedications().catch(() => []),
+        getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
+        getAiAdherence().catch(() => ({})),
+        getAiDocumentIntelligence().catch(() => []),
+        getAiClinicalReports().catch(() => []),
       ]);
       if (!mounted) return;
 
@@ -210,6 +259,11 @@ export default function AiKlinip() {
         documents: Array.isArray(documents) ? documents : [],
         medications: Array.isArray(medications) ? medications : [],
       });
+      setHealthRadar(Array.isArray(radar) ? radar : []);
+      setAdherenceSummary(adherence || {});
+      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
+      setClinicalReports(Array.isArray(reports) ? reports : []);
+      setRadarProfiles(Array.isArray(profiles) ? profiles : []);
 
       if (profile?.full_name) {
         setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
@@ -271,14 +325,32 @@ export default function AiKlinip() {
       document.removeEventListener("visibilitychange", handleWindowSync);
       if (fileTimerRef.current) clearTimeout(fileTimerRef.current);
     };
-  }, []);
+  }, [radarProfileId]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    setIsAtLatest(true);
   }, [messages, loading, historyLoading]);
 
   const hasConversation = useMemo(() => messages.some((message) => String(message.id) !== "welcome"), [messages]);
+
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement || !hasConversation) {
+      setIsAtLatest(true);
+      return undefined;
+    }
+
+    const updateScrollState = () => {
+      const distanceToBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+      setIsAtLatest(distanceToBottom <= 56);
+    };
+
+    updateScrollState();
+    scrollElement.addEventListener("scroll", updateScrollState, { passive: true });
+    return () => scrollElement.removeEventListener("scroll", updateScrollState);
+  }, [hasConversation, messages.length, historyLoading]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -293,8 +365,27 @@ export default function AiKlinip() {
 
   const upcomingAppointments = useMemo(() => getUpcomingAppointments(resources.appointments), [resources.appointments]);
   const nextAppointment = upcomingAppointments[0] || null;
-  const recentDocuments = useMemo(() => getRecentDocuments(resources.documents).slice(0, 4), [resources.documents]);
   const activeMedications = useMemo(() => getActiveMedications(resources.medications), [resources.medications]);
+  const activeRadarAlerts = useMemo(
+    () => (Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : []),
+    [healthRadar]
+  );
+  const filteredRadarAlerts = useMemo(() => {
+    const cutoff = getPeriodCutoff(radarPeriod);
+    return activeRadarAlerts.filter((item) => {
+      if (!cutoff) return true;
+      const stamp = parseDate(item.detected_at || item.updated_at);
+      return stamp ? stamp >= cutoff : false;
+    });
+  }, [activeRadarAlerts, radarPeriod]);
+  const topDocumentInsights = useMemo(() => documentIntelligence.slice(0, 4), [documentIntelligence]);
+  const lowAdherenceItems = Array.isArray(adherenceSummary?.low_adherence_items)
+    ? adherenceSummary.low_adherence_items
+    : [];
+  const overallAdherenceRate =
+    adherenceSummary?.overall_adherence_rate === null || adherenceSummary?.overall_adherence_rate === undefined
+      ? null
+      : Math.round(Number(adherenceSummary.overall_adherence_rate) || 0);
 
   const inferredSources = useMemo(() => {
     if (Array.isArray(meta.sources) && meta.sources.length) return meta.sources;
@@ -308,14 +399,15 @@ export default function AiKlinip() {
         count: resources.appointments.length + resources.documents.length + resources.medications.length,
         enabled: true,
       },
-      {
-        key: "reminders",
-        label: "Recordatorios",
-        count: upcomingAppointments.length + activeMedications.length,
-        enabled: true,
-      },
-    ];
-  }, [meta.sources, resources.documents.length, resources.medications.length, resources.appointments.length, upcomingAppointments.length, activeMedications.length]);
+        {
+          key: "reminders",
+          label: "Recordatorios",
+          count: upcomingAppointments.length + activeMedications.length,
+          enabled: true,
+        },
+        { key: "radar", label: "Radar de salud", count: activeRadarAlerts.length, enabled: true },
+      ];
+  }, [meta.sources, resources.documents.length, resources.medications.length, resources.appointments.length, upcomingAppointments.length, activeMedications.length, activeRadarAlerts.length]);
 
   const contextTags = useMemo(
     () => [
@@ -328,7 +420,7 @@ export default function AiKlinip() {
   );
 
   const scoreData = useMemo(() => {
-    const medicationScore = activeMedications.length ? 100 : 35;
+    const medicationScore = overallAdherenceRate ?? (activeMedications.length ? 100 : 35);
     const documentScore = Math.min(100, resources.documents.length * 20);
     const appointmentScore = nextAppointment ? 100 : 25;
     return {
@@ -337,7 +429,7 @@ export default function AiKlinip() {
       appointmentScore,
       total: Math.round((medicationScore + documentScore + appointmentScore) / 3),
     };
-  }, [activeMedications.length, resources.documents.length, nextAppointment]);
+  }, [activeMedications.length, resources.documents.length, nextAppointment, overallAdherenceRate]);
 
   const submitPrompt = async (promptValue) => {
     const prompt = (promptValue || "").trim();
@@ -408,11 +500,16 @@ export default function AiKlinip() {
       ]);
       const nextConversations = await getAiConversations().catch(() => []);
       setConversations(Array.isArray(nextConversations) ? nextConversations : []);
-      const [profile, appointments, documents, medications] = await Promise.all([
-        getActiveHealthProfile().catch(() => null),
+      const profile = await getActiveHealthProfile().catch(() => null);
+      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+      const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
         getAppointments().catch(() => []),
         getDocuments().catch(() => []),
         getMedications().catch(() => []),
+        getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
+        getAiAdherence().catch(() => ({})),
+        getAiDocumentIntelligence().catch(() => []),
+        getAiClinicalReports().catch(() => []),
       ]);
       setResources({
         profile,
@@ -420,6 +517,10 @@ export default function AiKlinip() {
         documents: Array.isArray(documents) ? documents : [],
         medications: Array.isArray(medications) ? medications : [],
       });
+      setHealthRadar(Array.isArray(radar) ? radar : []);
+      setAdherenceSummary(adherence || {});
+      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
+      setClinicalReports(Array.isArray(reports) ? reports : []);
     } catch (error) {
       console.error("No se pudo consultar Klinip IA", error);
       setMessages((prev) => [
@@ -454,10 +555,55 @@ export default function AiKlinip() {
     : "Resume mis medicamentos activos";
 
   const jumpToComposer = () => {
-    inputZoneRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
     setTimeout(() => {
       inputFieldRef.current?.focus();
     }, 180);
+  };
+
+  const handleGenerateReport = async (reportType = "consulta_medica", periodDays = 30) => {
+    if (reportBusy) return;
+    setReportBusy(true);
+    try {
+      const report = await generateAiClinicalReport({ report_type: reportType, period_days: periodDays });
+      setClinicalReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)].slice(0, 10));
+    } catch (error) {
+      console.error("No se pudo generar el reporte clinico", error);
+    } finally {
+      setReportBusy(false);
+    }
+  };
+
+  const handleDownloadReport = async (reportId, filename) => {
+    try {
+      const blob = await getAiClinicalReportPdf(reportId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename || `klinip-reporte-${reportId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("No se pudo descargar el reporte clinico", error);
+    }
+  };
+
+  const handleRefreshRadar = async () => {
+    if (radarRefreshing) return;
+    setRadarRefreshing(true);
+    try {
+      const resolvedProfileId = radarProfileId === "active" ? resources.profile?.id : Number(radarProfileId);
+      const items = await runAiHealthRadar(resolvedProfileId || undefined);
+      setHealthRadar(Array.isArray(items) ? items : []);
+    } catch (error) {
+      console.error("No se pudo recalcular el radar de salud", error);
+    } finally {
+      setRadarRefreshing(false);
+    }
   };
 
   const handleSelectConversation = async (targetConversationId) => {
@@ -585,6 +731,17 @@ export default function AiKlinip() {
                     </small>
                     <em>{activeMedications.length > 1 ? "Ver con IA" : "Generar resumen"}</em>
                   </button>
+
+                  <button type="button" className="ai-info-card" onClick={() => handleGenerateReport("consulta_medica", 30)}>
+                    <span className="ai-info-label tone-blue">Reporte clinico</span>
+                    <strong>{clinicalReports[0] ? "Actualizar reporte" : "Generar primer reporte"}</strong>
+                    <small>
+                      {clinicalReports[0]
+                        ? `Ultimo: ${formatShortDate(clinicalReports[0].created_at)}`
+                        : "Genera un PDF para llevar a consulta"}
+                    </small>
+                    <em>{reportBusy ? "Generando..." : "Crear PDF"}</em>
+                  </button>
                 </section>
               </div>
             ) : (
@@ -609,7 +766,7 @@ export default function AiKlinip() {
                           ) : null}
                         </div>
                         <div className="ai-message-time">
-                          {message.role === "user" ? "Tu" : "Klinip IA"} · {formatMessageTime(message.createdAt)}
+                          {message.role === "user" ? "Tu" : "Klinip IA"} Â· {formatMessageTime(message.createdAt)}
                         </div>
                       </div>
                     </article>
@@ -628,19 +785,21 @@ export default function AiKlinip() {
                     </article>
                   ) : null}
                 </div>
-                <div className="ai-chat-jump-slot">
-                  <button
-                    type="button"
-                    className="ai-jump-composer-btn"
-                    onClick={jumpToComposer}
-                    aria-label="Bajar al cuadro de mensaje"
-                    title="Bajar al cuadro de mensaje"
-                  >
-                    <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                </div>
+                {!isAtLatest ? (
+                  <div className="ai-chat-jump-slot">
+                    <button
+                      type="button"
+                      className="ai-jump-composer-btn"
+                      onClick={jumpToComposer}
+                      aria-label="Bajar a la parte mas reciente del chat"
+                      title="Bajar a la parte mas reciente del chat"
+                    >
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                ) : null}
               </div>
             )}
 
@@ -755,6 +914,58 @@ export default function AiKlinip() {
 
               <section className="ai-widget">
                 <div className="ai-widget-head">
+                  <span>Radar inteligente</span>
+                  <button type="button" onClick={handleRefreshRadar}>{radarRefreshing ? "Actualizando" : "Recalcular"}</button>
+                </div>
+                <div className="ai-radar-filters">
+                  <select
+                    className="ai-filter-select"
+                    value={radarProfileId}
+                    onChange={(event) => setRadarProfileId(event.target.value)}
+                  >
+                    <option value="active">Perfil activo</option>
+                    {radarProfiles.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.full_name || `Perfil ${item.id}`}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    className="ai-filter-select"
+                    value={radarPeriod}
+                    onChange={(event) => setRadarPeriod(event.target.value)}
+                  >
+                    {RADAR_PERIOD_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {filteredRadarAlerts.length ? (
+                  <div className="ai-radar-list">
+                    {filteredRadarAlerts.slice(0, 3).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`ai-radar-card severity-${item.severity || "low"}`}
+                        onClick={() => submitPrompt(`Explicame la alerta ${item.title}`)}
+                      >
+                        <div className="ai-radar-card-head">
+                          <strong>{item.title}</strong>
+                          <span>{getSeverityLabel(item.severity)}</span>
+                        </div>
+                        <p>{item.description}</p>
+                        <small>{formatConversationStamp(item.detected_at || item.updated_at)}</small>
+                        {item.recommended_action ? <em>{item.recommended_action}</em> : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : <div className="ai-empty-note">No hay alertas activas en el radar de salud para esos filtros.</div>}
+              </section>
+
+              <section className="ai-widget">
+                <div className="ai-widget-head">
                   <span>Proxima cita</span>
                   <button type="button" onClick={() => submitPrompt(nextAppointmentPrompt)}>Ver con IA</button>
                 </div>
@@ -792,11 +1003,60 @@ export default function AiKlinip() {
                   </button>
                 ) : null}
               </section>
+
+              <section className="ai-widget">
+                <div className="ai-widget-head">
+                  <span>Reportes clinicos</span>
+                  <button type="button" onClick={() => handleGenerateReport("consulta_medica", 30)}>
+                    {reportBusy ? "Generando" : "Nuevo"}
+                  </button>
+                </div>
+                <div className="ai-report-list">
+                  {clinicalReports.slice(0, 4).map((report) => (
+                    <div key={report.id} className="ai-report-item">
+                      <div className="ai-report-copy">
+                        <strong>{formatReportLabel(report.report_type)}</strong>
+                        <span>{formatConversationStamp(report.created_at)}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="ai-report-download"
+                        onClick={() => handleDownloadReport(report.id, report.pdf_filename)}
+                      >
+                        PDF
+                      </button>
+                    </div>
+                  ))}
+                  {!clinicalReports.length ? <div className="ai-empty-note">Todavia no generas reportes clinicos.</div> : null}
+                </div>
+              </section>
             </div>
           ) : null}
 
           {rightTab === "meds" ? (
             <div className="ai-right-body">
+              <section className="ai-widget">
+                <div className="ai-widget-head">
+                  <span>Adherencia</span>
+                  <button type="button" onClick={() => submitPrompt("Como va mi tratamiento y adherencia?")}>Analizar</button>
+                </div>
+                <div className="ai-adherence-summary">
+                  <div className={`ai-adherence-pill ${overallAdherenceRate !== null && overallAdherenceRate < 80 ? "is-warning" : ""}`}>
+                    <strong>{overallAdherenceRate !== null ? `${overallAdherenceRate}%` : "Sin datos"}</strong>
+                    <span>Ultimos {adherenceSummary?.window_days || 30} dias</span>
+                  </div>
+                  <div className="ai-adherence-copy">
+                    <strong>
+                      {lowAdherenceItems.length ? "Se detectaron brechas de adherencia" : "Seguimiento sin alertas principales"}
+                    </strong>
+                    <span>
+                      {lowAdherenceItems.length
+                        ? lowAdherenceItems.slice(0, 2).map((item) => `${item.name}: ${item.adherence_rate}%`).join(" Â· ")
+                        : "Puedo revisar patrones por horario, frecuencia y continuidad del tratamiento."}
+                    </span>
+                  </div>
+                </div>
+              </section>
               <section className="ai-widget">
                 <div className="ai-widget-head">
                   <span>Activos ({activeMedications.length})</span>
@@ -808,7 +1068,7 @@ export default function AiKlinip() {
                       <div className="ai-resource-badge tone-teal">MED</div>
                       <div className="ai-resource-copy">
                         <strong>{medication.name}</strong>
-                        <span>{medication.dose || "Sin dosis"} · {medication.frequency || "Sin frecuencia"}</span>
+                        <span>{medication.dose || "Sin dosis"} Â· {medication.frequency || "Sin frecuencia"}</span>
                       </div>
                     </div>
                   ))}
@@ -822,21 +1082,37 @@ export default function AiKlinip() {
             <div className="ai-right-body">
               <section className="ai-widget">
                 <div className="ai-widget-head">
-                  <span>Recientes</span>
+                  <span>Inteligencia documental</span>
                   <button type="button" onClick={() => submitPrompt("Resume mis documentos recientes")}>Resumir</button>
                 </div>
                 <div className="ai-resource-list">
-                  {recentDocuments.map((document) => (
-                    <div key={document.id} className="ai-resource-item">
+                  {topDocumentInsights.map((document) => (
+                    <button
+                      key={document.id}
+                      type="button"
+                      className="ai-resource-item ai-resource-item-button"
+                      onClick={() => submitPrompt(`Explicame mi documento ${document.document_type_inferred || "clinico"} mas reciente`)}
+                    >
                       <div className="ai-resource-badge tone-blue">DOC</div>
                       <div className="ai-resource-copy">
-                        <strong>{DOC_LABELS[document.doc_type] || "Documento"}</strong>
-                        <span>{document.center || "Sin centro"} · {formatShortDate(document.date || document.created_at)}</span>
+                        <strong>{DOC_LABELS[document.document_type_inferred] || "Documento"}</strong>
+                        <span>{document.summary_plain || "Resumen no disponible"}</span>
                       </div>
-                    </div>
+                    </button>
                   ))}
-                  {!recentDocuments.length ? <div className="ai-empty-note">Todavia no hay documentos guardados.</div> : null}
+                  {!topDocumentInsights.length ? <div className="ai-empty-note">Todavia no hay documentos procesados por IA.</div> : null}
                 </div>
+                {topDocumentInsights[0]?.abnormal_values_json?.length ? (
+                  <div className="ai-doc-abnormal">
+                    <strong>Valores a revisar</strong>
+                    <span>
+                      {topDocumentInsights[0].abnormal_values_json
+                        .slice(0, 3)
+                        .map((item) => `${item.entity_name}: ${item.entity_value}${item.unit ? ` ${item.unit}` : ""}`)
+                        .join(" · ")}
+                    </span>
+                  </div>
+                ) : null}
               </section>
             </div>
           ) : null}
@@ -848,8 +1124,22 @@ export default function AiKlinip() {
                   <strong>Tus chats</strong>
                   <span>{conversationTitle || "Conversaciones guardadas de Klinip IA"}</span>
                 </div>
-                <button type="button" className="ai-chat-sidebar-new" onClick={handleStartNewConversation}>Nuevo</button>
+                <div className="ai-chat-sidebar-actions">
+                  <button type="button" className="ai-chat-sidebar-new" onClick={() => handleGenerateReport("consulta_medica", 30)}>
+                    Reporte
+                  </button>
+                  <button type="button" className="ai-chat-sidebar-new" onClick={handleStartNewConversation}>Nuevo</button>
+                </div>
               </div>
+
+              {clinicalReports.length ? (
+                <div className="ai-chat-report-strip">
+                  <strong>Ultimo reporte</strong>
+                  <button type="button" onClick={() => handleDownloadReport(clinicalReports[0].id, clinicalReports[0].pdf_filename)}>
+                    {formatReportLabel(clinicalReports[0].report_type)}
+                  </button>
+                </div>
+              ) : null}
 
               <div className="ai-conversation-list simple">
                 {conversations.map((item) => (
@@ -872,7 +1162,7 @@ export default function AiKlinip() {
                       title={`Eliminar ${item.title || "conversacion"}`}
                       onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
                     >
-                      ···
+                      Â·Â·Â·
                     </button>
                   </div>
                 ))}
@@ -890,3 +1180,4 @@ export default function AiKlinip() {
     </div>
   );
 }
+
