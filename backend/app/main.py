@@ -2412,7 +2412,14 @@ def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
         .order_by(models.Document.created_at.desc())
         .all()
     )
-    _build_advanced_health_context(db, profile, appointments, medications, documents)
+    _build_advanced_health_context(
+        db,
+        profile,
+        appointments,
+        medications,
+        documents,
+        refresh=True,
+    )
     _refresh_profile_ai_learning_memory(db, owner_user_id)
     db.add(profile)
 
@@ -5598,6 +5605,89 @@ def _upsert_adherence_summaries(
     }
 
 
+def _load_adherence_summary_cached(
+    db: Session,
+    profile: models.HealthProfile,
+    medications: list[models.Medication],
+    window_days: int = 30,
+) -> dict:
+    medication_ids = [med.id for med in medications if getattr(med, "id", None)]
+    if not medication_ids:
+        return {
+            "window_days": window_days,
+            "overall_adherence_rate": None,
+            "low_adherence": False,
+            "low_adherence_items": [],
+            "medication_items": [],
+            "pattern_summary": {
+                "most_consistent_day": "",
+                "lowest_recorded_time_slot": "",
+            },
+        }
+
+    rows = (
+        db.query(models.AdherenceSummary)
+        .filter(
+            models.AdherenceSummary.profile_id == profile.id,
+            models.AdherenceSummary.window_days == window_days,
+            models.AdherenceSummary.medication_id.in_(medication_ids),
+        )
+        .all()
+    )
+    row_by_medication = {row.medication_id: row for row in rows}
+    summaries: list[dict] = []
+    overall_rates: list[float] = []
+    low_items: list[dict] = []
+    day_counts: dict[str, int] = {}
+    time_counts: dict[str, int] = {}
+
+    for med in medications:
+        row = row_by_medication.get(med.id)
+        if not row:
+            continue
+        adherence_rate = int(getattr(row, "adherence_rate", 0) or 0)
+        pattern_json = getattr(row, "pattern_json", {}) or {}
+        summaries.append(
+            {
+                "medication_id": med.id,
+                "name": med.name or "Medicamento",
+                "adherence_rate": adherence_rate,
+                "expected_doses": int(getattr(row, "expected_doses", 0) or 0),
+                "taken_doses": int(getattr(row, "taken_doses", 0) or 0),
+                "missed_count": int(getattr(row, "missed_count", 0) or 0),
+                "pattern": pattern_json,
+            }
+        )
+        overall_rates.append(adherence_rate)
+        if adherence_rate < 80 and not bool(med.completed):
+            low_items.append(
+                {
+                    "medication_id": med.id,
+                    "name": med.name or "Medicamento",
+                    "adherence_rate": adherence_rate,
+                    "missed_count": int(getattr(row, "missed_count", 0) or 0),
+                }
+            )
+        best_day = (pattern_json.get("most_recorded_day") or "").strip()
+        dominant_slot = (pattern_json.get("dominant_time_slot") or "").strip()
+        if best_day:
+            day_counts[best_day] = day_counts.get(best_day, 0) + 1
+        if dominant_slot:
+            time_counts[dominant_slot] = time_counts.get(dominant_slot, 0) + 1
+
+    return {
+        "window_days": window_days,
+        "overall_adherence_rate": round(sum(overall_rates) / len(overall_rates), 1) if overall_rates else None,
+        "low_adherence": bool(low_items),
+        "low_adherence_items": low_items[:6],
+        "medication_items": summaries[:12],
+        "pattern_summary": {
+            "most_consistent_day": max(day_counts, key=day_counts.get) if day_counts else "",
+            "lowest_recorded_time_slot": min(time_counts, key=time_counts.get) if time_counts else "",
+        },
+    }
+
+
 def _extract_document_lab_entities(text: str) -> list[dict]:
     entities: list[dict] = []
     if not text:
@@ -6241,12 +6331,30 @@ def _build_advanced_health_context(
     appointments: list[models.Appointment],
     medications: list[models.Medication],
     documents: list[models.Document],
+    refresh: bool = False,
 ) -> dict:
-    adherence_summary = _upsert_adherence_summaries(db, profile, medications, window_days=30)
-    document_summaries = []
-    for doc in documents[:10]:
-        summary = _upsert_document_intelligence(db, doc)
-        document_summaries.append(summary)
+    if refresh:
+        adherence_summary = _upsert_adherence_summaries(db, profile, medications, window_days=30)
+        document_summaries = []
+        for doc in documents[:10]:
+            summary = _upsert_document_intelligence(db, doc)
+            document_summaries.append(summary)
+    else:
+        adherence_summary = _load_adherence_summary_cached(db, profile, medications, window_days=30)
+        document_ids = [doc.id for doc in documents[:10]]
+        summary_rows = []
+        if document_ids:
+            summary_rows = (
+                db.query(models.DocumentSummary)
+                .filter(models.DocumentSummary.document_id.in_(document_ids))
+                .all()
+            )
+        summaries_by_document = {row.document_id: row for row in summary_rows}
+        document_summaries = [
+            summaries_by_document[doc.id]
+            for doc in documents[:10]
+            if doc.id in summaries_by_document
+        ]
     document_entities_by_document: dict[int, list[models.DocumentClinicalEntity]] = {}
     document_ids = [doc.id for doc in documents[:10]]
     if document_ids:
@@ -6258,15 +6366,31 @@ def _build_advanced_health_context(
         )
         for entity in entity_rows:
             document_entities_by_document.setdefault(entity.document_id, []).append(entity)
-    health_alerts = _sync_health_alerts(db, profile, appointments, medications, documents, adherence_summary)
-    profile_features = _upsert_profile_health_features(
-        db,
-        profile,
-        appointments,
-        medications,
-        documents,
-        adherence_summary,
-    )
+    if refresh:
+        health_alerts = _sync_health_alerts(db, profile, appointments, medications, documents, adherence_summary)
+        profile_features = _upsert_profile_health_features(
+            db,
+            profile,
+            appointments,
+            medications,
+            documents,
+            adherence_summary,
+        )
+    else:
+        health_alerts = (
+            db.query(models.HealthAlert)
+            .filter(
+                models.HealthAlert.profile_id == profile.id,
+                models.HealthAlert.status == "active",
+            )
+            .order_by(models.HealthAlert.detected_at.desc())
+            .all()
+        )
+        profile_features = (
+            db.query(models.ProfileHealthFeature)
+            .filter(models.ProfileHealthFeature.profile_id == profile.id)
+            .first()
+        )
     return {
         "adherence_summary": adherence_summary,
         "document_summaries": document_summaries,
@@ -6457,6 +6581,7 @@ def _ai_context_bundle_for_profile(
     link: models.ProfileRelationship,
     target_user_id: int,
     include_family_context: bool = True,
+    refresh_advanced: bool = False,
 ) -> dict:
     plan_info = _build_plan_info(current_user, db)
     timezone_name = _resolve_user_tz_name(current_user)
@@ -6550,7 +6675,14 @@ def _ai_context_bundle_for_profile(
         medications=medications,
         upcoming=upcoming,
     )
-    advanced_context = _build_advanced_health_context(db, profile, appointments, medications, documents)
+    advanced_context = _build_advanced_health_context(
+        db,
+        profile,
+        appointments,
+        medications,
+        documents,
+        refresh=refresh_advanced,
+    )
     family_context = (
         _build_family_ai_summary(db, current_user, 7)
         if include_family_context and bool(plan_info.get("collaboration_enabled"))
@@ -6633,9 +6765,22 @@ def _ai_context_bundle_for_profile(
     }
 
 
-def _ai_context_bundle(db: Session, current_user: models.User) -> dict:
+def _ai_context_bundle(
+    db: Session,
+    current_user: models.User,
+    refresh_advanced: bool = False,
+    include_family_context: bool = True,
+) -> dict:
     profile, link, target_user_id = _get_active_profile_context(db, current_user)
-    return _ai_context_bundle_for_profile(db, current_user, profile, link, target_user_id)
+    return _ai_context_bundle_for_profile(
+        db,
+        current_user,
+        profile,
+        link,
+        target_user_id,
+        include_family_context=include_family_context,
+        refresh_advanced=refresh_advanced,
+    )
 
 
 def _serialize_ai_context(context: dict) -> dict:
@@ -8739,7 +8884,12 @@ async def ai_chat(
     if not message:
         raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
 
-    context = _ai_context_bundle(db, current_user)
+    context = _ai_context_bundle(
+        db,
+        current_user,
+        refresh_advanced=False,
+        include_family_context=False,
+    )
     timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
     profile_id = int(context["profile"]["id"])
     conversation_id = (payload.conversation_id or "").strip()
@@ -8854,11 +9004,30 @@ def _requested_or_active_profile_context(
     db: Session,
     current_user: models.User,
     profile_id: int | None = None,
+    refresh_advanced: bool = False,
 ) -> dict:
     if profile_id:
         profile, link = _get_profile_access_or_404(db, current_user, int(profile_id))
-        return _ai_context_bundle_for_profile(db, current_user, profile, link, profile.owner_user_id)
-    return _ai_context_bundle(db, current_user)
+        return _ai_context_bundle_for_profile(
+            db,
+            current_user,
+            profile,
+            link,
+            profile.owner_user_id,
+            refresh_advanced=refresh_advanced,
+        )
+    return _ai_context_bundle(db, current_user, refresh_advanced=refresh_advanced)
+
+
+def _requested_or_active_profile_only(
+    db: Session,
+    current_user: models.User,
+    profile_id: int | None = None,
+) -> tuple[models.HealthProfile, models.ProfileRelationship, int]:
+    if profile_id:
+        profile, link = _get_profile_access_or_404(db, current_user, int(profile_id))
+        return profile, link, int(profile.owner_user_id)
+    return _get_active_profile_context(db, current_user)
 
 
 def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> list[models.ProfileRelationship]:
@@ -9300,9 +9469,16 @@ async def get_ai_health_radar(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
-    db.commit()
-    return context.get("health_alerts") or []
+    profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
+    return (
+        db.query(models.HealthAlert)
+        .filter(
+            models.HealthAlert.profile_id == profile.id,
+            models.HealthAlert.status == "active",
+        )
+        .order_by(models.HealthAlert.detected_at.desc())
+        .all()
+    )
 
 
 @app.post("/ai/health-radar/run", response_model=List[schemas.HealthAlertOut])
@@ -9311,7 +9487,12 @@ async def run_ai_health_radar(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    context = _requested_or_active_profile_context(
+        db,
+        current_user,
+        profile_id,
+        refresh_advanced=True,
+    )
     db.commit()
     return context.get("health_alerts") or []
 
@@ -9322,9 +9503,14 @@ async def get_ai_adherence_summary(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
-    db.commit()
-    return context.get("adherence_summary") or {}
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.user_id == target_user_id)
+        .order_by(models.Medication.created_at.desc())
+        .all()
+    )
+    return _load_adherence_summary_cached(db, profile, medications, window_days=30)
 
 
 @app.get("/ai/documents/intelligence", response_model=List[schemas.DocumentSummaryOut])
@@ -9333,9 +9519,15 @@ async def get_ai_document_intelligence(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
-    db.commit()
-    return context.get("document_summaries") or []
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    return (
+        db.query(models.DocumentSummary)
+        .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
+        .filter(models.Document.user_id == target_user_id)
+        .order_by(models.Document.created_at.desc())
+        .limit(20)
+        .all()
+    )
 
 
 @app.post("/ai/reports/generate", response_model=schemas.ClinicalReportOut)
@@ -9368,10 +9560,10 @@ async def list_ai_clinical_reports(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
+    profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
     reports = (
         db.query(models.ClinicalReport)
-        .filter(models.ClinicalReport.profile_id == int(context["profile"]["id"]))
+        .filter(models.ClinicalReport.profile_id == profile.id)
         .order_by(models.ClinicalReport.created_at.desc())
         .limit(20)
         .all()

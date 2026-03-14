@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI Copy Integrity"
+  short_description: "Catch broken text and spelling issues"
+  default_prompt: "Review visible UI copy for encoding corruption, malformed accents, mojibake, stray replacement characters, and spelling mistakes before completing frontend or text-facing changes."
