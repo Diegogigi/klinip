@@ -38,6 +38,7 @@ export const sendAiChat = api.sendAiChat;
 export const getAiConversations = api.getAiConversations;
 export const getAiHistory = api.getAiHistory;
 export const deleteAiConversation = api.deleteAiConversation;
+export const renameAiConversation = api.renameAiConversation;
 export const clearAiHistory = api.clearAiHistory;
 export const getAiHealthRadar = api.getAiHealthRadar;
 export const runAiHealthRadar = api.runAiHealthRadar;

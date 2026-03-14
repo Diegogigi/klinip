@@ -818,6 +818,10 @@ class AiChatResponse(BaseModel):
     conversation_title: str = ""
 
 
+class AiConversationRenameIn(BaseModel):
+    title: str
+
+
 class AiConversationSummaryOut(BaseModel):
     conversation_id: str
     title: str

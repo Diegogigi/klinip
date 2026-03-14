@@ -10078,6 +10078,63 @@ async def get_ai_history(
     return items
 
 
+@app.patch("/ai/conversations/{conversation_id}", response_model=schemas.AiConversationSummaryOut)
+async def rename_ai_conversation(
+    conversation_id: str,
+    payload: schemas.AiConversationRenameIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link, _ = _get_active_profile_context(db, current_user, require_write=True)
+    conversation_id = (conversation_id or "").strip()
+    title = (payload.title or "").strip()
+    if not conversation_id:
+        raise HTTPException(status_code=400, detail="Conversacion invalida")
+    if not title:
+        raise HTTPException(status_code=400, detail="El titulo no puede estar vacio")
+
+    normalized_title = _clip_text(title, 120)
+    updated = (
+        db.query(models.AiConversationMessage)
+        .filter(
+            models.AiConversationMessage.profile_id == profile.id,
+            models.AiConversationMessage.conversation_id == conversation_id,
+        )
+        .update(
+            {models.AiConversationMessage.conversation_title: normalized_title},
+            synchronize_session=False,
+        )
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Conversacion no encontrada")
+
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="ai_conversation_renamed",
+        description=f"{current_user.name or current_user.email} renombro una conversacion de Klinip IA",
+        metadata_json={
+            "conversation_id": conversation_id,
+            "conversation_title": normalized_title,
+            "role": link.role,
+        },
+    )
+    db.commit()
+
+    summaries = _ai_conversation_summaries(db, profile_id=profile.id, limit=50)
+    for summary in summaries:
+        if summary["conversation_id"] == conversation_id:
+            return summary
+    return {
+        "conversation_id": conversation_id,
+        "title": normalized_title,
+        "updated_at": datetime.now(),
+        "message_count": updated,
+        "last_message_excerpt": "",
+    }
+
+
 def _requested_or_active_profile_context(
     db: Session,
     current_user: models.User,

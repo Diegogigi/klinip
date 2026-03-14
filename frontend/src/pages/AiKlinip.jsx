@@ -14,6 +14,7 @@ import {
   getDocuments,
   getHealthProfiles,
   getMedications,
+  renameAiConversation,
   runAiHealthRadar,
   sendAiChat,
 } from "../api";
@@ -34,6 +35,8 @@ const RADAR_PERIOD_OPTIONS = [
   { value: "90", label: "90 días" },
   { value: "all", label: "Todo" },
 ];
+
+const PINNED_CONVERSATIONS_KEY = "klinip_ai_pinned_conversations";
 
 const INITIAL_MESSAGE = {
   id: "welcome",
@@ -131,6 +134,10 @@ function formatConversationListDate(value) {
     month: "short",
     year: "numeric",
   }).format(parsed);
+}
+
+function getPinnedConversationStorageKey(profileId) {
+  return `${PINNED_CONVERSATIONS_KEY}:${profileId || "global"}`;
 }
 
 function formatDateTime(value) {
@@ -254,6 +261,8 @@ export default function AiKlinip() {
   const [radarProfileId, setRadarProfileId] = useState("active");
   const [radarPeriod, setRadarPeriod] = useState("30");
   const [resources, setResources] = useState({ profile: null, appointments: [], documents: [], medications: [] });
+  const [pinnedConversationIds, setPinnedConversationIds] = useState([]);
+  const [openConversationMenuId, setOpenConversationMenuId] = useState("");
   const [meta, setMeta] = useState({
     disclaimer: "Klinip IA entrega información orientativa y no reemplaza la evaluación de un profesional de salud.",
     model: "context-fallback",
@@ -268,6 +277,7 @@ export default function AiKlinip() {
   const resourcesRequestRef = useRef(null);
   const conversationsRequestRef = useRef(null);
   const insightsRequestRef = useRef(null);
+  const conversationMenuRef = useRef(null);
 
   const mapHistoryToMessages = (items) => {
     if (!Array.isArray(items) || !items.length) return [INITIAL_MESSAGE];
@@ -280,6 +290,17 @@ export default function AiKlinip() {
       conversationId: item.conversation_id || "",
       conversationTitle: item.conversation_title || "",
     }));
+  };
+
+  const persistPinnedConversations = (nextIds) => {
+    const storageKey = getPinnedConversationStorageKey(resources.profile?.id);
+    const uniqueIds = Array.from(new Set((nextIds || []).filter(Boolean)));
+    setPinnedConversationIds(uniqueIds);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(uniqueIds));
+    } catch {
+      // noop
+    }
   };
 
   const loadConversation = async (targetConversationId, summaryItems = conversations) => {
@@ -479,6 +500,36 @@ export default function AiKlinip() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    const storageKey = getPinnedConversationStorageKey(resources.profile?.id);
+    try {
+      const raw = localStorage.getItem(storageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      setPinnedConversationIds(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+    } catch {
+      setPinnedConversationIds([]);
+    }
+  }, [resources.profile?.id]);
+
+  useEffect(() => {
+    if (!openConversationMenuId) return undefined;
+    const handlePointerDown = (event) => {
+      if (conversationMenuRef.current?.contains(event.target)) return;
+      setOpenConversationMenuId("");
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setOpenConversationMenuId("");
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [openConversationMenuId]);
+
   const upcomingAppointments = useMemo(() => getUpcomingAppointments(resources.appointments), [resources.appointments]);
   const nextAppointment = upcomingAppointments[0] || null;
   const activeMedications = useMemo(() => getActiveMedications(resources.medications), [resources.medications]);
@@ -546,6 +597,22 @@ export default function AiKlinip() {
       total: Math.round((medicationScore + documentScore + appointmentScore) / 3),
     };
   }, [activeMedications.length, resources.documents.length, nextAppointment, overallAdherenceRate]);
+
+  const sortedConversations = useMemo(() => {
+    const pinnedOrder = new Map(pinnedConversationIds.map((id, index) => [id, index]));
+    return [...conversations].sort((left, right) => {
+      const leftPinned = pinnedOrder.has(left.conversation_id);
+      const rightPinned = pinnedOrder.has(right.conversation_id);
+      if (leftPinned && rightPinned) {
+        return pinnedOrder.get(left.conversation_id) - pinnedOrder.get(right.conversation_id);
+      }
+      if (leftPinned) return -1;
+      if (rightPinned) return 1;
+      const leftStamp = parseDate(left.updated_at || left.created_at)?.getTime() || 0;
+      const rightStamp = parseDate(right.updated_at || right.created_at)?.getTime() || 0;
+      return rightStamp - leftStamp;
+    });
+  }, [conversations, pinnedConversationIds]);
 
   const submitPrompt = async (promptValue) => {
     const prompt = (promptValue || "").trim();
@@ -722,6 +789,7 @@ export default function AiKlinip() {
 
   const handleSelectConversation = async (targetConversationId) => {
     if (!targetConversationId || loading || historyLoading) return;
+    setOpenConversationMenuId("");
     setHistoryLoading(true);
     try {
       await loadConversation(targetConversationId);
@@ -737,8 +805,10 @@ export default function AiKlinip() {
   const handleDeleteConversation = async (event, targetConversationId) => {
     event.stopPropagation();
     if (!targetConversationId || loading) return;
+    setOpenConversationMenuId("");
     try {
       await deleteAiConversation(targetConversationId);
+      persistPinnedConversations(pinnedConversationIds.filter((item) => item !== targetConversationId));
       const nextConversations = await getAiConversations().catch(() => []);
       const safeConversations = Array.isArray(nextConversations) ? nextConversations : [];
       setConversations(safeConversations);
@@ -756,12 +826,101 @@ export default function AiKlinip() {
     }
   };
 
+  const handleToggleConversationMenu = (event, targetConversationId) => {
+    event.stopPropagation();
+    setOpenConversationMenuId((prev) => (prev === targetConversationId ? "" : targetConversationId));
+  };
+
+  const handlePinConversation = (event, targetConversationId) => {
+    event.stopPropagation();
+    const isPinned = pinnedConversationIds.includes(targetConversationId);
+    if (isPinned) {
+      persistPinnedConversations(pinnedConversationIds.filter((item) => item !== targetConversationId));
+    } else {
+      persistPinnedConversations([targetConversationId, ...pinnedConversationIds]);
+    }
+    setOpenConversationMenuId("");
+  };
+
+  const handleRenameConversation = async (event, targetConversationId, currentTitle) => {
+    event.stopPropagation();
+    const nextTitle = window.prompt(
+      "Nuevo nombre de la conversación",
+      cleanUiText(currentTitle, "Nueva conversación")
+    );
+    const normalizedTitle = cleanUiText(nextTitle);
+    if (!normalizedTitle || normalizedTitle === cleanUiText(currentTitle, "Nueva conversación")) {
+      setOpenConversationMenuId("");
+      return;
+    }
+    try {
+      const updated = await renameAiConversation(targetConversationId, { title: normalizedTitle });
+      setConversations((prev) => prev.map((item) => (
+        item.conversation_id === targetConversationId
+          ? { ...item, title: updated?.title || normalizedTitle }
+          : item
+      )));
+      if (conversationId === targetConversationId) {
+        setConversationTitle(updated?.title || normalizedTitle);
+        setMessages((prev) => prev.map((item) => (
+          item.conversationId === targetConversationId
+            ? { ...item, conversationTitle: updated?.title || normalizedTitle }
+            : item
+        )));
+      }
+    } catch (error) {
+      console.error("No se pudo renombrar la conversación", error);
+    } finally {
+      setOpenConversationMenuId("");
+    }
+  };
+
+  const handleExportConversation = async (event, targetConversationId, currentTitle) => {
+    event.stopPropagation();
+    try {
+      const resolvedHistoryItems = targetConversationId === conversationId
+        ? messages.filter((item) => String(item.id) !== "welcome")
+        : await (async () => {
+            const rawItems = await getAiHistory(targetConversationId).catch(() => []);
+            return Array.isArray(rawItems) && rawItems.length ? mapHistoryToMessages(rawItems) : [];
+          })();
+      if (!resolvedHistoryItems.length) return;
+
+      const title = cleanUiText(currentTitle, "Nueva conversación");
+      const content = [
+        `Klinip IA - ${title}`,
+        `Exportado: ${new Date().toLocaleString("es-CL")}`,
+        "",
+        ...resolvedHistoryItems.map((item) => {
+          const author = item.role === "user" ? "Tú" : "Klinip IA";
+          const body = item.role === "assistant" ? cleanAssistantText(item.content) : cleanUiText(item.content);
+          return `[${formatConversationStamp(item.createdAt)}] ${author}: ${body}`;
+        }),
+      ].join("\n");
+
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title.toLowerCase().replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "") || "klinip-chat"}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("No se pudo exportar la conversación", error);
+    } finally {
+      setOpenConversationMenuId("");
+    }
+  };
+
   const handleStartNewConversation = () => {
     setConversationId("");
     setConversationTitle("");
     setMessages([INITIAL_MESSAGE]);
     setRightTab("chat");
     setMobilePanelOpen(false);
+    setOpenConversationMenuId("");
     setTimeout(() => inputFieldRef.current?.focus(), 50);
   };
 
@@ -1256,7 +1415,7 @@ export default function AiKlinip() {
               ) : null}
 
               <div className="ai-conversation-list simple">
-                {conversations.map((item) => (
+                {sortedConversations.map((item) => (
                   <div
                     key={item.conversation_id}
                     className={`ai-conversation-item simple ${conversationId === item.conversation_id ? "is-active" : ""}`}
@@ -1268,24 +1427,71 @@ export default function AiKlinip() {
                       title={cleanUiText(item.title, "Nueva conversación")}
                     >
                       <span className="ai-conversation-summary">
-                        <strong>{cleanUiText(item.title, "Nueva conversación")}</strong>
+                        <strong>
+                          {pinnedConversationIds.includes(item.conversation_id) ? (
+                            <span className="ai-conversation-pinned-mark" aria-hidden="true">Fijado</span>
+                          ) : null}
+                          <span className="ai-conversation-title-text">
+                            {cleanUiText(item.title, "Nueva conversación")}
+                          </span>
+                        </strong>
                         <small>{formatConversationListDate(item.updated_at || item.created_at)}</small>
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className="ai-conversation-delete simple"
-                      aria-label="Eliminar conversación"
-                      title={`Eliminar ${cleanUiText(item.title, "conversación")}`}
-                      onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
+                    <div
+                      className="ai-conversation-actions"
+                      ref={openConversationMenuId === item.conversation_id ? conversationMenuRef : null}
                     >
-                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 6h.01M12 12h.01M12 18h.01" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </button>
+                      <button
+                        type="button"
+                        className="ai-conversation-delete simple"
+                        aria-label="Más acciones de conversación"
+                        title={`Más acciones para ${cleanUiText(item.title, "conversación")}`}
+                        onClick={(event) => handleToggleConversationMenu(event, item.conversation_id)}
+                      >
+                        <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 6h.01M12 12h.01M12 18h.01" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      {openConversationMenuId === item.conversation_id ? (
+                        <div className="ai-conversation-menu" role="menu" aria-label="Acciones de conversación">
+                          <button type="button" className="ai-conversation-menu-item" onClick={() => handleSelectConversation(item.conversation_id)}>
+                            Abrir
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-conversation-menu-item"
+                            onClick={(event) => handleRenameConversation(event, item.conversation_id, item.title)}
+                          >
+                            Renombrar
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-conversation-menu-item"
+                            onClick={(event) => handlePinConversation(event, item.conversation_id)}
+                          >
+                            {pinnedConversationIds.includes(item.conversation_id) ? "Quitar fijado" : "Fijar arriba"}
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-conversation-menu-item"
+                            onClick={(event) => handleExportConversation(event, item.conversation_id, item.title)}
+                          >
+                            Exportar
+                          </button>
+                          <button
+                            type="button"
+                            className="ai-conversation-menu-item is-danger"
+                            onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 ))}
-                {!conversations.length ? (
+                {!sortedConversations.length ? (
                   <div className="ai-empty-note">
                     No hay conversaciones guardadas todavía. Tu próximo mensaje iniciará un nuevo chat.
                   </div>

@@ -242,6 +242,11 @@ export async function deleteAiConversation(conversationId) {
   return res.data;
 }
 
+export async function renameAiConversation(conversationId, payload) {
+  const res = await api.patch(`/ai/conversations/${conversationId}`, payload);
+  return res.data;
+}
+
 export async function clearAiHistory() {
   const res = await api.delete("/ai/history");
   return res.data;
