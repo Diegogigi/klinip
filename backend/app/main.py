@@ -6055,10 +6055,25 @@ def _upsert_profile_health_features(
     compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
     now_dt = datetime.now(compare_tz)
     future_appointments = [
-        item for item in dated_appointments if (_normalize_dt_for_tz(item.date_time, compare_tz) or datetime.min.replace(tzinfo=compare_tz)) >= now_dt
+        item
+        for item in dated_appointments
+        if (_normalize_dt_for_tz(item.date_time, compare_tz) or datetime.min.replace(tzinfo=compare_tz))
+        >= now_dt
     ]
-    feature.next_appointment_at = min((item.date_time for item in future_appointments), default=None)
-    feature.last_appointment_at = max((item.date_time for item in dated_appointments), default=None)
+    next_appointment = min(
+        future_appointments,
+        key=lambda item: _normalize_dt_for_tz(item.date_time, compare_tz)
+        or datetime.max.replace(tzinfo=compare_tz),
+        default=None,
+    )
+    last_appointment = max(
+        dated_appointments,
+        key=lambda item: _normalize_dt_for_tz(item.date_time, compare_tz)
+        or datetime.min.replace(tzinfo=compare_tz),
+        default=None,
+    )
+    feature.next_appointment_at = next_appointment.date_time if next_appointment else None
+    feature.last_appointment_at = last_appointment.date_time if last_appointment else None
     feature.active_medications_count = len([med for med in medications if not bool(med.completed)])
     feature.low_adherence_risk = bool(adherence_summary.get("low_adherence"))
     active_count = feature.active_medications_count or 0
