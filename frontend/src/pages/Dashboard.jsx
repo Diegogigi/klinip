@@ -14,7 +14,7 @@ import { parseDate } from "../utils/dates";
 const typeLabels = {
   cita: "Cita",
   examen: "Examen",
-  tramite: "Tramite",
+  tramite: "Trámite",
 };
 
 const kindToneMap = {
@@ -22,6 +22,33 @@ const kindToneMap = {
   document: "teal",
   medication: "amber",
 };
+
+const MOJIBAKE_FALLBACKS = [
+  ["Ã¡", "á"],
+  ["Ã©", "é"],
+  ["Ã­", "í"],
+  ["Ã³", "ó"],
+  ["Ãº", "ú"],
+  ["Ã±", "ñ"],
+  ["Ã", "Á"],
+  ["Ã‰", "É"],
+  ["Ã", "Í"],
+  ["Ã“", "Ó"],
+  ["Ãš", "Ú"],
+  ["Ã‘", "Ñ"],
+  ["Â¿", "¿"],
+  ["Â¡", "¡"],
+  ["Â·", "·"],
+];
+
+function cleanUiText(value, fallback = "") {
+  const text = String(value ?? "");
+  const cleaned = MOJIBAKE_FALLBACKS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    text
+  ).trim();
+  return cleaned || fallback;
+}
 
 function toDayLabel(date) {
   if (!date) return "";
@@ -46,8 +73,8 @@ function toRelativeDayLabel(date) {
   const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.round((startDate - startNow) / 86400000);
   if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Manana";
-  if (diffDays > 1) return `En ${diffDays} dias`;
+  if (diffDays === 1) return "Mañana";
+  if (diffDays > 1) return `En ${diffDays} días`;
   return "Reciente";
 }
 
@@ -296,14 +323,14 @@ export default function Dashboard({ user }) {
       label: "Citas",
       value: nextAppointment
         ? `${toRelativeDayLabel(parseDate(nextAppointment.date_time)).toLowerCase()}`
-        : "sin citas proximas",
+        : "sin citas próximas",
     },
     {
       key: "documents",
       icon: "document",
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
-      value: pendingDocuments > 0 ? `${pendingDocuments} pendientes` : "al dia",
+      value: pendingDocuments > 0 ? `${pendingDocuments} pendientes` : "al día",
     },
     {
       key: "adherence",
@@ -330,9 +357,9 @@ export default function Dashboard({ user }) {
       id: `appointment-${item.id}`,
       date: parseDate(item.date_time),
       kind: item.type === "examen" ? "exam" : "appointment",
-      tag: typeLabels[item.type] || "Cita",
-      title: item.specialty || typeLabels[item.type] || "Actividad",
-      meta: [item.center, item.notes].filter(Boolean).join(" - ") || "Sin detalle adicional",
+      tag: cleanUiText(typeLabels[item.type] || "Cita"),
+      title: cleanUiText(item.specialty, typeLabels[item.type] || "Actividad"),
+      meta: cleanUiText([item.center, item.notes].filter(Boolean).join(" - "), "Sin detalle adicional"),
       urgent:
         parseDate(item.date_time) &&
         new Date(parseDate(item.date_time)).toDateString() === new Date().toDateString(),
@@ -362,7 +389,7 @@ export default function Dashboard({ user }) {
       date: parseDate(item.date || item.created_at),
       kind: "document",
       title: "Documento agregado",
-      subtitle: item.center || item.type || "Documento de salud",
+      subtitle: cleanUiText(item.center, item.type || "Documento de salud"),
       time: item.date || item.created_at,
     })),
     ...medications.map((item) => ({
@@ -379,7 +406,7 @@ export default function Dashboard({ user }) {
       kind: "appointment",
       title: "Actividad agendada",
       subtitle:
-        `${typeLabels[item.type] || "Actividad"}${item.specialty ? ` - ${item.specialty}` : ""}` ||
+        cleanUiText(`${typeLabels[item.type] || "Actividad"}${item.specialty ? ` - ${item.specialty}` : ""}`) ||
         "Actividad",
       time: item.date_time,
     })),
@@ -392,7 +419,7 @@ export default function Dashboard({ user }) {
   if (!futureAppointments.length) {
     suggestionItems.push({
       id: "suggestion-appointment",
-      text: "No tienes citas proximas registradas. Agenda tu proximo control.",
+      text: "No tienes citas próximas registradas. Agenda tu próximo control.",
     });
   }
   if (pendingDocuments > 0) {
@@ -547,8 +574,8 @@ export default function Dashboard({ user }) {
                       className={`home-radar-alert tone-${getAlertTone(item.severity)}`}
                       onClick={() => navigate("/ai")}
                     >
-                      <strong>{item.title}</strong>
-                      <span>{item.description}</span>
+                      <strong>{cleanUiText(item.title)}</strong>
+                      <span>{cleanUiText(item.description)}</span>
                     </button>
                   ))
                 ) : (
@@ -558,12 +585,14 @@ export default function Dashboard({ user }) {
               {lowAdherenceItems.length ? (
                 <div className="home-radar-pattern">
                   <strong>Medicamentos a revisar</strong>
-                  <span>
-                    {lowAdherenceItems
-                      .slice(0, 2)
-                      .map((item) => `${item.name}: ${item.adherence_rate}%`)
-                      .join(" · ")}
-                  </span>
+                    <span>
+                      {cleanUiText(
+                        lowAdherenceItems
+                          .slice(0, 2)
+                          .map((item) => `${item.name}: ${item.adherence_rate}%`)
+                          .join(" · ")
+                      )}
+                    </span>
                 </div>
               ) : null}
             </div>
@@ -572,7 +601,7 @@ export default function Dashboard({ user }) {
           <article className="home-panel-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Actividad proxima</h2>
+                <h2 className="home-panel-title">Actividad próxima</h2>
                 <p className="home-panel-subtitle">Lo que viene en tu agenda</p>
               </div>
               <button type="button" className="home-panel-link" onClick={() => navigate("/calendar")}>
@@ -601,8 +630,8 @@ export default function Dashboard({ user }) {
                     </span>
                     <span className="home-upcoming-divider" />
                     <span className="home-upcoming-copy">
-                      <strong>{item.title}</strong>
-                      <span>{[toTimeLabel(item.date), item.meta].filter(Boolean).join(" · ")}</span>
+                      <strong>{cleanUiText(item.title)}</strong>
+                      <span>{cleanUiText([toTimeLabel(item.date), item.meta].filter(Boolean).join(" · "))}</span>
                     </span>
                     <span className={`home-upcoming-tag tone-${item.kind === "medication" ? "amber" : item.kind === "exam" ? "teal" : "blue"}`}>
                       {item.tag}
@@ -610,7 +639,7 @@ export default function Dashboard({ user }) {
                   </button>
                 ))
               ) : (
-                <div className="home-empty-state">Sin actividad proxima registrada.</div>
+                <div className="home-empty-state">Sin actividad próxima registrada.</div>
               )}
             </div>
           </article>
@@ -618,8 +647,8 @@ export default function Dashboard({ user }) {
           <article className="home-panel-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Acciones rapidas</h2>
-                <p className="home-panel-subtitle">Ejecuta tareas comunes sin navegar por menus.</p>
+                <h2 className="home-panel-title">Acciones rápidas</h2>
+                <p className="home-panel-subtitle">Ejecuta tareas comunes sin navegar por menús.</p>
               </div>
             </div>
             <div className="home-actions-grid">
@@ -642,7 +671,7 @@ export default function Dashboard({ user }) {
           <article className="home-panel-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Notas rapidas</h2>
+                <h2 className="home-panel-title">Notas rápidas</h2>
                 <p className="home-panel-subtitle">Pendientes e ideas de tu cuidado.</p>
               </div>
               <button
@@ -685,7 +714,7 @@ export default function Dashboard({ user }) {
                   <button key={item.id} type="button" className="home-note-row">
                     <span className={`home-note-dot tone-${["blue", "violet", "green", "amber"][index % 4]}`} />
                     <span className="home-note-copy">
-                      <strong>{item.text}</strong>
+                      <strong>{cleanUiText(item.text)}</strong>
                       <small>
                         {parseDate(item.created_at)?.toLocaleString("es-CL", {
                           day: "2-digit",
@@ -698,7 +727,7 @@ export default function Dashboard({ user }) {
                   </button>
                 ))
               ) : (
-                <div className="home-empty-state">Todavia no guardas notas rapidas.</div>
+                <div className="home-empty-state">Todavía no guardas notas rápidas.</div>
               )}
             </div>
           </article>
@@ -707,7 +736,7 @@ export default function Dashboard({ user }) {
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Actividad reciente</h2>
-                <p className="home-panel-subtitle">Ultimas acciones en la aplicacion.</p>
+                <p className="home-panel-subtitle">Últimas acciones en la aplicación.</p>
               </div>
               <button type="button" className="home-panel-link" onClick={() => navigate("/timeline")}>
                 Ver historial
@@ -721,8 +750,8 @@ export default function Dashboard({ user }) {
                       {renderIcon(item.kind)}
                     </span>
                     <span className="home-recent-copy">
-                      <strong>{item.title}</strong>
-                      <small>{item.subtitle}</small>
+                      <strong>{cleanUiText(item.title)}</strong>
+                      <small>{cleanUiText(item.subtitle)}</small>
                     </span>
                     <span className="home-recent-time">
                       {parseDate(item.time)?.toLocaleDateString("es-CL", {
@@ -733,7 +762,7 @@ export default function Dashboard({ user }) {
                   </div>
                 ))
               ) : (
-                <div className="home-empty-state">Aun no hay actividad reciente.</div>
+                <div className="home-empty-state">Aún no hay actividad reciente.</div>
               )}
             </div>
           </article>
@@ -750,11 +779,11 @@ export default function Dashboard({ user }) {
                 suggestionItems.map((item) => (
                   <button key={item.id} type="button" className="home-suggestion-item">
                     <span className="home-suggestion-icon">{renderIcon("ai")}</span>
-                    <span>{item.text}</span>
+                    <span>{cleanUiText(item.text)}</span>
                   </button>
                 ))
               ) : (
-                <div className="home-empty-state">Tu resumen esta al dia por ahora.</div>
+                <div className="home-empty-state">Tu resumen está al día por ahora.</div>
               )}
             </div>
           </article>
@@ -765,3 +794,4 @@ export default function Dashboard({ user }) {
     </section>
   );
 }
+

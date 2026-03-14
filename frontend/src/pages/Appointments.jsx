@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getAppointments,
@@ -25,6 +25,33 @@ const statusLabels = {
   agendada: "Agendada",
   realizada: "Realizada",
 };
+
+const MOJIBAKE_FALLBACKS = [
+  ["Ã¡", "á"],
+  ["Ã©", "é"],
+  ["Ã­", "í"],
+  ["Ã³", "ó"],
+  ["Ãº", "ú"],
+  ["Ã±", "ñ"],
+  ["Ã", "Á"],
+  ["Ã‰", "É"],
+  ["Ã", "Í"],
+  ["Ã“", "Ó"],
+  ["Ãš", "Ú"],
+  ["Ã‘", "Ñ"],
+  ["Â¿", "¿"],
+  ["Â¡", "¡"],
+  ["Â·", "·"],
+];
+
+function cleanUiText(value, fallback = "") {
+  const text = String(value ?? "");
+  const cleaned = MOJIBAKE_FALLBACKS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    text
+  ).trim();
+  return cleaned || fallback;
+}
 
 export default function Appointments() {
   const location = useLocation();
@@ -194,8 +221,8 @@ export default function Appointments() {
   };
 
   const getAppointmentLabel = (appt) => {
-    const typeLabel = typeLabels[appt.type] || appt.type || "Actividad";
-    const detail = appt.specialty || appt.center || "Sin detalle";
+    const typeLabel = cleanUiText(typeLabels[appt.type] || appt.type || "Actividad");
+    const detail = cleanUiText(appt.specialty || appt.center || "Sin detalle");
     return `${typeLabel} · ${detail}`;
   };
 
@@ -230,7 +257,7 @@ export default function Appointments() {
       <div className="card appointments-surface-free appointments-intro">
         <h2 className="card-title">Citas, exámenes y trámites</h2>
         <p className="muted">
-          Organiza tus citas, examenes y tramites. Todo queda guardado.
+          Organiza tus citas, exámenes y trámites. Todo queda guardado.
         </p>
       </div>
 
@@ -309,10 +336,10 @@ export default function Appointments() {
           navigate("/appointments", { replace: true });
         }}>
           <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <h3>Actividad desde notificacion</h3>
+            <h3>Actividad desde notificación</h3>
             <p className="muted">
-              {notifyTarget.specialty || typeLabels[notifyTarget.type] || "Cita"}{" "}
-              {notifyTarget.center ? `· ${notifyTarget.center}` : ""}
+              {cleanUiText(notifyTarget.specialty, typeLabels[notifyTarget.type] || "Cita")}{" "}
+              {notifyTarget.center ? `· ${cleanUiText(notifyTarget.center)}` : ""}
               {notifyTarget.date_time ? ` · ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
             </p>
             <div className="modal-actions">
@@ -358,29 +385,29 @@ export default function Appointments() {
             <div className="detail-modal-content">
               <div className="detail-highlight">
                 <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
-                  {typeLabels[detailTarget.type] || detailTarget.type}
+                  {cleanUiText(typeLabels[detailTarget.type] || detailTarget.type)}
                 </span>
                 <span className={`detail-chip detail-chip-status ${detailTarget.status}`}>
-                  {statusLabels[detailTarget.status] || detailTarget.status}
+                  {cleanUiText(statusLabels[detailTarget.status] || detailTarget.status)}
                 </span>
               </div>
               <div className="detail-grid">
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>🩺</span>
+                  <span className="detail-item-icon" aria-hidden>ES</span>
                   <div>
                     <span className="detail-label">Especialidad</span>
-                    <p>{detailTarget.specialty || "Sin especialidad"}</p>
+                    <p>{cleanUiText(detailTarget.specialty, "Sin especialidad")}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>📍</span>
+                  <span className="detail-item-icon" aria-hidden>CE</span>
                   <div>
                     <span className="detail-label">Centro</span>
-                    <p>{detailTarget.center || "Sin centro"}</p>
+                    <p>{cleanUiText(detailTarget.center, "Sin centro")}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>🗓️</span>
+                  <span className="detail-item-icon" aria-hidden>FH</span>
                   <div>
                     <span className="detail-label">Fecha y hora</span>
                     <p>
@@ -391,10 +418,10 @@ export default function Appointments() {
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>📝</span>
+                  <span className="detail-item-icon" aria-hidden>NT</span>
                   <div>
                     <span className="detail-label">Notas</span>
-                    <p>{detailTarget.notes || "Sin notas"}</p>
+                    <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
                   </div>
                 </div>
               </div>
@@ -608,11 +635,11 @@ export default function Appointments() {
                   >
                     <td>
                       <span className={`chip ${a.type}`}>
-                        {typeLabels[a.type] || a.type}
+                        {cleanUiText(typeLabels[a.type] || a.type)}
                       </span>
                     </td>
-                    <td>{a.specialty}</td>
-                    <td>{a.center}</td>
+                    <td>{cleanUiText(a.specialty)}</td>
+                    <td>{cleanUiText(a.center)}</td>
                     <td>
                       {a.date_time
                         ? toLocaleDateTimeOrEmpty(a.date_time) || "Por agendar"
@@ -620,7 +647,7 @@ export default function Appointments() {
                     </td>
                     <td>
                       <span className={`chip-status-${a.status}`}>
-                        {statusLabels[a.status] || a.status}
+                        {cleanUiText(statusLabels[a.status] || a.status)}
                       </span>
                     </td>
                     <td onClick={(event) => event.stopPropagation()}>
@@ -657,3 +684,4 @@ export default function Appointments() {
     </>
   );
 }
+

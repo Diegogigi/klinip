@@ -289,10 +289,49 @@ def ensure_user_schema():
                 )
             added_columns.append("active_health_profile_id")
 
+        if "family_ai_needs_refresh" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_needs_refresh BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN family_ai_needs_refresh BOOLEAN DEFAULT 0"
+                )
+            added_columns.append("family_ai_needs_refresh")
+
+        if "family_ai_refresh_requested_at" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_refresh_requested_at TIMESTAMP NULL"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN family_ai_refresh_requested_at DATETIME"
+                )
+            added_columns.append("family_ai_refresh_requested_at")
+
+        if "family_ai_last_refreshed_at" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_last_refreshed_at TIMESTAMP NULL"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN family_ai_last_refreshed_at DATETIME"
+                )
+            added_columns.append("family_ai_last_refreshed_at")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
                     conn.execute(text(stmt))
+                if "family_ai_needs_refresh" in added_columns:
+                    conn.execute(
+                        text(
+                            "UPDATE users SET family_ai_needs_refresh = COALESCE(family_ai_needs_refresh, FALSE)"
+                        )
+                    )
             print(
                 f"DEBUG ensure_user_schema: columnas agregadas a users: {', '.join(added_columns)}"
             )
@@ -327,10 +366,49 @@ def ensure_health_profile_schema():
                 )
             added_columns.append("automation_settings_json")
 
+        if "ai_needs_refresh" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_needs_refresh BOOLEAN DEFAULT FALSE"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN ai_needs_refresh BOOLEAN DEFAULT 0"
+                )
+            added_columns.append("ai_needs_refresh")
+
+        if "ai_refresh_requested_at" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_refresh_requested_at TIMESTAMP NULL"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN ai_refresh_requested_at DATETIME"
+                )
+            added_columns.append("ai_refresh_requested_at")
+
+        if "ai_last_refreshed_at" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_last_refreshed_at TIMESTAMP NULL"
+                )
+            else:
+                statements.append(
+                    "ALTER TABLE health_profiles ADD COLUMN ai_last_refreshed_at DATETIME"
+                )
+            added_columns.append("ai_last_refreshed_at")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
                     conn.execute(text(stmt))
+                if "ai_needs_refresh" in added_columns:
+                    conn.execute(
+                        text(
+                            "UPDATE health_profiles SET ai_needs_refresh = COALESCE(ai_needs_refresh, FALSE)"
+                        )
+                    )
             print(
                 "DEBUG ensure_health_profile_schema: columnas agregadas a health_profiles: "
                 + ", ".join(added_columns)
@@ -1794,6 +1872,9 @@ SCHEDULE_WINDOW_SECONDS = 60
 SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
 AI_REFRESH_INTERVAL_SECONDS = 600
+AI_REFRESH_BATCH_SIZE = 4
+_chat_profile_limiters_guard = threading.Lock()
+_chat_profile_limiters: dict[int, threading.BoundedSemaphore] = {}
 DEFAULT_TZ_NAME = "America/Santiago"
 FALLBACK_TZ_OFFSETS = {
     "America/Santiago": -3,
@@ -2387,6 +2468,100 @@ _scheduler_started = False
 _last_ai_refresh_ts = 0.0
 
 
+def _mark_family_ai_dirty(
+    db: Session,
+    user: models.User | None,
+    requested_at: datetime | None = None,
+):
+    if not user:
+        return
+    user.family_ai_needs_refresh = True
+    user.family_ai_refresh_requested_at = requested_at or datetime.now()
+    db.add(user)
+
+
+def _family_ai_eligible(db: Session, user: models.User | None) -> bool:
+    if not user:
+        return False
+    plan_info = _build_plan_info(user, db)
+    if not bool(plan_info.get("collaboration_enabled")):
+        return False
+    accepted_links = _accepted_profile_links_for_user(db, user)
+    return len(accepted_links) > 1
+
+
+def _mark_profile_ai_dirty(
+    db: Session,
+    profile: models.HealthProfile | None,
+    include_family: bool = True,
+    requested_at: datetime | None = None,
+):
+    if not profile or bool(getattr(profile, "is_archived", False)):
+        return
+    mark_at = requested_at or datetime.now()
+    profile.ai_needs_refresh = True
+    profile.ai_refresh_requested_at = mark_at
+    db.add(profile)
+    owner_user = (
+        db.query(models.User).filter(models.User.id == int(profile.owner_user_id)).first()
+    )
+    if include_family and _family_ai_eligible(db, owner_user):
+        _mark_family_ai_dirty(db, owner_user, mark_at)
+
+
+def _load_dirty_profiles_for_refresh(
+    db: Session,
+    limit: int = AI_REFRESH_BATCH_SIZE,
+) -> list[models.HealthProfile]:
+    rows = (
+        db.query(models.HealthProfile, models.User.active_health_profile_id)
+        .join(models.User, models.User.id == models.HealthProfile.owner_user_id)
+        .filter(
+            models.HealthProfile.is_archived.is_(False),
+            models.HealthProfile.ai_needs_refresh.is_(True),
+        )
+        .order_by(
+            func.coalesce(
+                models.HealthProfile.ai_refresh_requested_at,
+                models.HealthProfile.created_at,
+            ).asc()
+        )
+        .all()
+    )
+    rows.sort(key=lambda item: 0 if item[1] == item[0].id else 1)
+    return [item[0] for item in rows[: max(1, int(limit or AI_REFRESH_BATCH_SIZE))]]
+
+
+def _load_dirty_family_users_for_refresh(
+    db: Session,
+    limit: int = AI_REFRESH_BATCH_SIZE,
+) -> list[models.User]:
+    return (
+        db.query(models.User)
+        .filter(models.User.family_ai_needs_refresh.is_(True))
+        .order_by(
+            func.coalesce(
+                models.User.family_ai_refresh_requested_at,
+                models.User.created_at,
+            ).asc()
+        )
+        .limit(max(1, int(limit or AI_REFRESH_BATCH_SIZE)))
+        .all()
+    )
+
+
+def _user_has_pending_profile_refresh(db: Session, user_id: int) -> bool:
+    return bool(
+        db.query(models.HealthProfile.id)
+        .filter(
+            models.HealthProfile.owner_user_id == int(user_id),
+            models.HealthProfile.is_archived.is_(False),
+            models.HealthProfile.ai_needs_refresh.is_(True),
+        )
+        .first()
+    )
+
+
 def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
     if not profile or bool(getattr(profile, "is_archived", False)):
         return
@@ -2412,7 +2587,7 @@ def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
         .order_by(models.Document.created_at.desc())
         .all()
     )
-    _build_advanced_health_context(
+    advanced_context = _build_advanced_health_context(
         db,
         profile,
         appointments,
@@ -2421,18 +2596,25 @@ def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
         refresh=True,
     )
     _refresh_profile_ai_learning_memory(db, owner_user_id)
+    _refresh_profile_ai_summary(
+        db,
+        profile,
+        appointments,
+        medications,
+        documents,
+        advanced_context,
+    )
+    now_dt = datetime.now()
+    profile.ai_needs_refresh = False
+    profile.ai_refresh_requested_at = None
+    profile.ai_last_refreshed_at = now_dt
     db.add(profile)
 
 
 def _run_scheduled_ai_refresh():
     db = SessionLocal()
     try:
-        profiles = (
-            db.query(models.HealthProfile)
-            .filter(models.HealthProfile.is_archived.is_(False))
-            .order_by(models.HealthProfile.created_at.asc())
-            .all()
-        )
+        profiles = _load_dirty_profiles_for_refresh(db)
         for profile in profiles:
             try:
                 _refresh_profile_ai_analytics(db, profile)
@@ -2440,19 +2622,31 @@ def _run_scheduled_ai_refresh():
             except Exception as exc:
                 db.rollback()
                 print(f"WARNING ai_refresh profile {getattr(profile, 'id', 'unknown')}: {exc}")
+        family_users = _load_dirty_family_users_for_refresh(db)
+        for user in family_users:
+            try:
+                if _user_has_pending_profile_refresh(db, user.id):
+                    continue
+                if _family_ai_eligible(db, user):
+                    _refresh_family_ai_summary(db, user, 7)
+                    _refresh_family_ai_summary(db, user, 30)
+                user.family_ai_needs_refresh = False
+                user.family_ai_refresh_requested_at = None
+                user.family_ai_last_refreshed_at = datetime.now()
+                db.add(user)
+                db.commit()
+            except Exception as exc:
+                db.rollback()
+                print(f"WARNING family_ai_refresh user {getattr(user, 'id', 'unknown')}: {exc}")
     finally:
         db.close()
 
 
 def _scheduler_loop():
-    global _last_ai_refresh_ts
     while True:
         try:
             _send_scheduled_push_reminders()
-            now_ts = time.time()
-            if now_ts - _last_ai_refresh_ts >= AI_REFRESH_INTERVAL_SECONDS:
-                _run_scheduled_ai_refresh()
-                _last_ai_refresh_ts = now_ts
+            _run_scheduled_ai_refresh()
         except Exception as exc:
             print(f"WARNING scheduler: {exc}")
         time.sleep(SCHEDULE_INTERVAL_SECONDS)
@@ -4061,10 +4255,8 @@ def _run_document_ocr(document_id: int):
 
                 # Eliminar el documento para mantenerlo solo como medicamento
                 db.delete(doc)
-                try:
-                    _refresh_profile_ai_learning_memory(db, medication.user_id)
-                except Exception as exc:
-                    print(f"WARNING ai memory refresh (medication conversion) failed: {exc}")
+                profile = _resolve_profile_for_user_learning(db, medication.user_id)
+                _mark_profile_ai_dirty(db, profile, include_family=True)
                 db.commit()
                 user = db.query(models.User).filter(models.User.id == medication.user_id).first()
                 if user and user.email:
@@ -4115,11 +4307,8 @@ def _run_document_ocr(document_id: int):
                 doc.appointment_id = appointment.id
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
-        try:
-            _upsert_document_intelligence(db, doc)
-            _refresh_profile_ai_learning_memory(db, doc.user_id)
-        except Exception as exc:
-            print(f"WARNING ai memory refresh failed: {exc}")
+        profile = _resolve_profile_for_user_learning(db, doc.user_id)
+        _mark_profile_ai_dirty(db, profile, include_family=True)
         db.commit()
         if user and user.email and detected_meds_for_email:
             _send_medications_detected_email_safe(
@@ -4782,6 +4971,42 @@ def _ai_max_output_tokens() -> int:
     return max(80, min(1200, value))
 
 
+def _ai_openai_timeout_seconds() -> float:
+    raw = (os.getenv("OPENAI_TIMEOUT_SECONDS") or "20").strip()
+    try:
+        value = float(raw)
+    except Exception:
+        return 20.0
+    return max(5.0, min(60.0, value))
+
+
+def _ai_db_statement_timeout_ms() -> int:
+    raw = (os.getenv("AI_DB_STATEMENT_TIMEOUT_MS") or "2200").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 2200
+    return max(300, min(10000, value))
+
+
+def _ai_context_timeout_ms() -> int:
+    raw = (os.getenv("AI_CONTEXT_TIMEOUT_MS") or "2800").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 2800
+    return max(600, min(15000, value))
+
+
+def _ai_chat_concurrency_limit() -> int:
+    raw = (os.getenv("AI_CHAT_PROFILE_CONCURRENCY_LIMIT") or "1").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 1
+    return max(1, min(4, value))
+
+
 def _safe_iso(dt: datetime | None) -> str:
     if not dt:
         return ""
@@ -5180,6 +5405,133 @@ def _clip_text(value: str | None, limit: int = 420) -> str:
     if len(text_value) <= limit:
         return text_value
     return f"{text_value[:limit].rstrip()}..."
+
+
+def _should_include_document_text_for_chat(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return False
+    explicit_tokens = [
+        "texto completo",
+        "texto del documento",
+        "contenido completo",
+        "transcribe",
+        "transcribir",
+        "ocr completo",
+        "detalle completo",
+        "copia el texto",
+        "que dice exactamente",
+        "lee el documento",
+    ]
+    return any(token in normalized for token in explicit_tokens)
+
+
+def _compact_history_for_prompt(
+    history: list[dict],
+    *,
+    max_recent_messages: int = 6,
+) -> tuple[list[dict], str]:
+    cleaned: list[dict] = []
+    for item in history or []:
+        role_value = (item.get("role") or "").strip().lower()
+        if role_value not in {"user", "assistant"}:
+            continue
+        content_value = _clip_text(item.get("content") or "", 280)
+        if not content_value:
+            continue
+        cleaned.append({"role": role_value, "content": content_value})
+
+    if len(cleaned) <= max_recent_messages:
+        return cleaned, ""
+
+    recent = cleaned[-max_recent_messages:]
+    older = cleaned[:-max_recent_messages]
+    prior_user_topics: list[str] = []
+    prior_assistant_points: list[str] = []
+    for item in older[-10:]:
+        if item["role"] == "user":
+            prior_user_topics.append(_clip_text(item["content"], 100))
+        else:
+            prior_assistant_points.append(_clip_text(item["content"], 110))
+
+    summary_parts: list[str] = []
+    if prior_user_topics:
+        summary_parts.append(
+            "Consultas previas: " + " | ".join(prior_user_topics[-4:])
+        )
+    if prior_assistant_points:
+        summary_parts.append(
+            "Respuestas previas: " + " | ".join(prior_assistant_points[-3:])
+        )
+    return recent, _clip_text(" ".join(summary_parts), 900)
+
+
+def _chat_profile_limiter(profile_id: int) -> threading.BoundedSemaphore:
+    key = int(profile_id)
+    with _chat_profile_limiters_guard:
+        limiter = _chat_profile_limiters.get(key)
+        if limiter is None:
+            limiter = threading.BoundedSemaphore(_ai_chat_concurrency_limit())
+            _chat_profile_limiters[key] = limiter
+        return limiter
+
+
+def _apply_ai_db_timeout(db: Session, timeout_ms: int):
+    if timeout_ms <= 0:
+        return
+    try:
+        if engine.url.get_backend_name() == "postgresql":
+            db.execute(text(f"SET LOCAL statement_timeout = {int(timeout_ms)}"))
+    except Exception as exc:
+        print(f"WARNING ai db timeout setup failed: {exc}")
+
+
+def _safe_ai_context_query(
+    db: Session,
+    *,
+    module_name: str,
+    loader,
+    default_value,
+    degraded_reasons: list[str],
+    statement_timeout_ms: int,
+    context_deadline_ts: float | None = None,
+):
+    if context_deadline_ts is not None and time.perf_counter() >= context_deadline_ts:
+        degraded_reasons.append(f"{module_name}:budget")
+        return default_value
+    try:
+        _apply_ai_db_timeout(db, statement_timeout_ms)
+        value = loader()
+    except Exception as exc:
+        db.rollback()
+        degraded_reasons.append(f"{module_name}:error")
+        print(f"WARNING ai_context {module_name}: {exc}")
+        return default_value
+    if context_deadline_ts is not None and time.perf_counter() >= context_deadline_ts:
+        degraded_reasons.append(f"{module_name}:partial")
+    return value
+
+
+def _degraded_ai_notice(context: dict) -> str:
+    reasons = list(context.get("degraded_reasons") or [])
+    if not reasons:
+        return ""
+    return (
+        "Te respondo con el perfil activo y datos esenciales mientras termino de "
+        "actualizar el analisis."
+    )
+
+
+def _prepend_degraded_notice(reply: str, context: dict) -> str:
+    notice = _degraded_ai_notice(context)
+    clean_reply = (reply or "").strip()
+    if not notice:
+        return clean_reply
+    if clean_reply.startswith(notice):
+        return clean_reply
+    if not clean_reply:
+        return notice
+    return f"{notice} {clean_reply}"
 
 
 AI_MEMORY_START = "[[KLINIP_AI_MEMORY_START]]"
@@ -6667,6 +7019,7 @@ def _ai_context_bundle_for_profile(
         profile_id=profile.id,
         limit=12,
     )
+    cached_profile_summary = _load_cached_profile_ai_summary(db, profile) or {}
     ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
     user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
     runtime_memory = _build_ai_profile_memory(
@@ -6684,7 +7037,7 @@ def _ai_context_bundle_for_profile(
         refresh=refresh_advanced,
     )
     family_context = (
-        _build_family_ai_summary(db, current_user, 7)
+        _load_cached_family_ai_summary(db, current_user, 7)
         if include_family_context and bool(plan_info.get("collaboration_enabled"))
         else None
     )
@@ -6734,6 +7087,7 @@ def _ai_context_bundle_for_profile(
             "gender": profile.gender or "",
             "base_medical_data": _clip_text(user_profile_notes_text, 700),
             "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1800),
+            "brief_profile_summary": _clip_text(cached_profile_summary.get("summary") or "", 320),
             "access_role": (link.role or "").lower(),
             "is_primary": bool(profile.is_primary_profile),
         },
@@ -6754,6 +7108,7 @@ def _ai_context_bundle_for_profile(
         "latest_document": latest_document,
         "latest_document_text": latest_document_text,
         "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1800),
+        "brief_profile_summary": _clip_text(cached_profile_summary.get("summary") or "", 320),
         "profile_notes": profile_notes,
         "activity_log": activity_log,
         "adherence_summary": advanced_context.get("adherence_summary") or {},
@@ -6783,47 +7138,687 @@ def _ai_context_bundle(
     )
 
 
+def _profile_age_years(profile: models.HealthProfile | None) -> int | None:
+    if not profile or not getattr(profile, "birth_date", None):
+        return None
+    try:
+        return max(0, (datetime.now().date() - profile.birth_date.date()).days // 365)
+    except Exception:
+        return None
+
+
+def _load_profile_brief_summary(
+    db: Session,
+    profile: models.HealthProfile,
+    target_user_id: int,
+) -> str:
+    cached_row = (
+        db.query(models.ProfileAiSummary)
+        .filter(models.ProfileAiSummary.profile_id == profile.id)
+        .first()
+    )
+    if cached_row and (cached_row.summary or "").strip():
+        return _clip_text(cached_row.summary or "", 320)
+
+    learned_summary = _clip_text(_extract_ai_memory_block(profile.base_medical_data or "").strip(), 320)
+    if learned_summary:
+        return learned_summary
+
+    latest_document_summary = (
+        db.query(models.DocumentSummary)
+        .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
+        .filter(models.Document.user_id == target_user_id)
+        .order_by(models.Document.created_at.desc(), models.Document.id.desc())
+        .first()
+    )
+    if latest_document_summary:
+        return _clip_text(
+            latest_document_summary.patient_friendly_explanation
+            or latest_document_summary.summary_plain
+            or "",
+            320,
+        )
+    return ""
+
+
+def _load_cached_profile_ai_summary(db: Session, profile: models.HealthProfile) -> dict | None:
+    row = (
+        db.query(models.ProfileAiSummary)
+        .filter(models.ProfileAiSummary.profile_id == profile.id)
+        .first()
+    )
+    if not row:
+        return None
+    payload = dict(getattr(row, "summary_json", {}) or {})
+    payload["summary"] = row.summary or ""
+    payload["updated_at"] = getattr(row, "updated_at", None)
+    return payload
+
+
+def _unique_compact_items(values: list[str], limit: int = 4) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        clean = _clip_text((value or "").strip(), 120)
+        key = _normalize_text(clean)
+        if not clean or not key or key in seen:
+            continue
+        seen.add(key)
+        result.append(clean)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _extract_profile_relevant_conditions(
+    profile: models.HealthProfile,
+    advanced_context: dict,
+) -> list[str]:
+    conditions: list[str] = []
+    for entities in (advanced_context.get("document_entities_by_document") or {}).values():
+        for entity in entities or []:
+            if getattr(entity, "entity_type", "") == "diagnosis":
+                conditions.append(getattr(entity, "entity_name", "") or getattr(entity, "entity_value", ""))
+    if conditions:
+        return _unique_compact_items(conditions, limit=4)
+
+    memory_text = _extract_ai_memory_block(profile.base_medical_data or "") or _strip_ai_memory_block(profile.base_medical_data or "")
+    candidates = [
+        part.strip(" -.,;:")
+        for part in re.split(r"[\n.;]", memory_text or "")
+        if (part or "").strip()
+    ]
+    return _unique_compact_items(candidates, limit=3)
+
+
+def _relevant_medications_snapshot(medications: list[models.Medication]) -> list[str]:
+    items: list[str] = []
+    for med in medications:
+        if bool(getattr(med, "completed", False)):
+            continue
+        detail = getattr(med, "name", "") or "Medicamento"
+        if getattr(med, "dose", ""):
+            detail += f" ({med.dose})"
+        if getattr(med, "frequency", ""):
+            detail += f", {med.frequency}"
+        items.append(detail)
+    return _unique_compact_items(items, limit=4)
+
+
+def _relevant_appointments_snapshot(appointments: list[models.Appointment]) -> list[str]:
+    compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+    now_dt = datetime.now(compare_tz)
+    upcoming = sorted(
+        [
+            appt
+            for appt in appointments
+            if _normalize_dt_for_tz(getattr(appt, "date_time", None), compare_tz)
+            and _normalize_dt_for_tz(getattr(appt, "date_time", None), compare_tz) >= now_dt
+            and _appointment_status_key(getattr(appt, "status", "")) != "realizada"
+        ],
+        key=lambda appt: _normalize_dt_for_tz(getattr(appt, "date_time", None), compare_tz)
+        or datetime.max.replace(tzinfo=compare_tz),
+    )
+    items: list[str] = []
+    for appt in upcoming[:3]:
+        label = getattr(appt, "specialty", "") or str(getattr(appt, "type", "") or "Cita")
+        if getattr(appt, "date_time", None):
+            label += f" {_safe_iso(getattr(appt, 'date_time', None))}"
+        if getattr(appt, "center", ""):
+            label += f" en {appt.center}"
+        items.append(label)
+    return _unique_compact_items(items, limit=3)
+
+
+def _build_profile_ai_summary_payload(
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+    advanced_context: dict,
+) -> dict:
+    active_medications = [med for med in medications if not bool(med.completed)]
+    compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+    now_dt = datetime.now(compare_tz)
+    upcoming_count = len(
+        [
+            appt
+            for appt in appointments
+            if _normalize_dt_for_tz(getattr(appt, "date_time", None), compare_tz)
+            and _normalize_dt_for_tz(getattr(appt, "date_time", None), compare_tz) >= now_dt
+            and _appointment_status_key(getattr(appt, "status", "")) != "realizada"
+        ]
+    )
+    adherence_summary = advanced_context.get("adherence_summary") or {}
+    health_alerts = advanced_context.get("health_alerts") or []
+    profile_features = advanced_context.get("profile_health_features")
+    key_alerts = [getattr(item, "title", "") for item in health_alerts[:3] if getattr(item, "title", "")]
+    pending_documents = [
+        key
+        for key, value in (getattr(profile_features, "missing_documents_flags_json", {}) or {}).items()
+        if value
+    ]
+    relevant_conditions = _extract_profile_relevant_conditions(profile, advanced_context)
+    relevant_medications = _relevant_medications_snapshot(medications)
+    relevant_appointments = _relevant_appointments_snapshot(appointments)
+    payload = {
+        "profile_id": profile.id,
+        "profile_name": profile.full_name,
+        "relation_with_owner": profile.relation_with_owner or "",
+        "active_medications": len(active_medications),
+        "upcoming_appointments": upcoming_count,
+        "documents": len(documents),
+        "health_alerts": len(health_alerts),
+        "overall_adherence_rate": adherence_summary.get("overall_adherence_rate"),
+        "low_adherence": bool(adherence_summary.get("low_adherence")),
+        "treatment_completion_score": getattr(profile_features, "treatment_completion_score", 0),
+        "missing_documents_flags": getattr(profile_features, "missing_documents_flags_json", {}) or {},
+        "pending_documents": pending_documents[:4],
+        "relevant_conditions": relevant_conditions,
+        "relevant_medications": relevant_medications,
+        "relevant_appointments": relevant_appointments,
+        "key_alerts": key_alerts,
+        "key_risks": key_alerts,
+    }
+    summary = (
+        f"Resumen clínico de {profile.full_name}: "
+        f"{payload['active_medications']} medicamento(s) activo(s), "
+        f"{payload['upcoming_appointments']} cita(s) próxima(s), "
+        f"{payload['documents']} documento(s) y "
+        f"{payload['health_alerts']} alerta(s) activa(s)."
+    )
+    if payload.get("overall_adherence_rate") is not None:
+        summary += f" Adherencia estimada: {payload['overall_adherence_rate']}%."
+    if relevant_conditions:
+        summary += " Condiciones relevantes: " + ", ".join(relevant_conditions[:3]) + "."
+    if key_alerts:
+        summary += " Alertas clave: " + ", ".join(key_alerts[:3]) + "."
+    payload["summary"] = summary
+    return payload
+
+
+def _refresh_profile_ai_summary(
+    db: Session,
+    profile: models.HealthProfile,
+    appointments: list[models.Appointment],
+    medications: list[models.Medication],
+    documents: list[models.Document],
+    advanced_context: dict,
+) -> models.ProfileAiSummary:
+    payload = _build_profile_ai_summary_payload(
+        profile,
+        appointments,
+        medications,
+        documents,
+        advanced_context,
+    )
+    row = (
+        db.query(models.ProfileAiSummary)
+        .filter(models.ProfileAiSummary.profile_id == profile.id)
+        .first()
+    )
+    if not row:
+        row = models.ProfileAiSummary(profile_id=profile.id)
+    row.summary = payload.get("summary") or ""
+    row.summary_json = payload
+    row.updated_at = datetime.now()
+    db.add(row)
+    return row
+
+
+def _load_cached_family_ai_summary(
+    db: Session,
+    current_user: models.User,
+    days: int = 30,
+) -> dict | None:
+    window_days = max(1, min(int(days or 30), 365))
+    row = (
+        db.query(models.FamilyAiSummary)
+        .filter(
+            models.FamilyAiSummary.user_id == current_user.id,
+            models.FamilyAiSummary.window_days == window_days,
+        )
+        .first()
+    )
+    if not row:
+        return None
+    return {
+        "generated_at": getattr(row, "updated_at", None),
+        "family_size": int(getattr(row, "family_size", 0) or 0),
+        "active_alerts_total": int(getattr(row, "active_alerts_total", 0) or 0),
+        "pending_documents_total": int(getattr(row, "pending_documents_total", 0) or 0),
+        "low_adherence_profiles": int(getattr(row, "low_adherence_profiles", 0) or 0),
+        "summary": getattr(row, "summary", "") or "",
+        "profiles": list(getattr(row, "profiles_json", []) or []),
+        "summary_json": dict(getattr(row, "summary_json", {}) or {}),
+    }
+
+
+def _refresh_family_ai_summary(
+    db: Session,
+    current_user: models.User,
+    days: int = 30,
+) -> models.FamilyAiSummary:
+    window_days = max(1, min(int(days or 30), 365))
+    links = _accepted_profile_links_for_user(db, current_user)
+    profile_ids = [int(link.profile_id) for link in links if getattr(link, "profile_id", None)]
+    summary_rows = []
+    if profile_ids:
+        summary_rows = (
+            db.query(models.ProfileAiSummary)
+            .filter(models.ProfileAiSummary.profile_id.in_(profile_ids))
+            .all()
+        )
+    summaries_by_profile = {row.profile_id: dict(getattr(row, "summary_json", {}) or {}) for row in summary_rows}
+
+    profile_rows: list[dict] = []
+    active_alerts_total = 0
+    pending_documents_total = 0
+    low_adherence_profiles = 0
+    for link in links:
+        profile = link.profile
+        if not profile:
+            continue
+        summary_payload = summaries_by_profile.get(profile.id, {})
+        pending_documents = list(summary_payload.get("pending_documents") or [])[:4]
+        low_adherence = bool(summary_payload.get("low_adherence"))
+        upcoming_appointments = int(summary_payload.get("upcoming_appointments") or 0)
+        key_alerts = list(summary_payload.get("key_alerts") or summary_payload.get("key_risks") or [])[:3]
+        active_alert_count = int(summary_payload.get("health_alerts") or 0)
+        active_alerts_total += active_alert_count
+        pending_documents_total += len(pending_documents)
+        low_adherence_profiles += 1 if low_adherence else 0
+        profile_rows.append(
+            {
+                "profile_id": profile.id,
+                "profile_name": summary_payload.get("profile_name") or profile.full_name,
+                "relation_with_owner": summary_payload.get("relation_with_owner") or profile.relation_with_owner or "",
+                "active_alerts": active_alert_count,
+                "upcoming_appointments": upcoming_appointments,
+                "low_adherence": low_adherence,
+                "relevant_conditions": list(summary_payload.get("relevant_conditions") or [])[:4],
+                "relevant_medications": list(summary_payload.get("relevant_medications") or [])[:4],
+                "relevant_appointments": list(summary_payload.get("relevant_appointments") or [])[:3],
+                "pending_documents": pending_documents[:4],
+                "key_alerts": key_alerts,
+                "key_risks": key_alerts,
+            }
+        )
+    profile_rows.sort(
+        key=lambda item: (item["active_alerts"], len(item["pending_documents"]), item["upcoming_appointments"]),
+        reverse=True,
+    )
+    summary_text = (
+        f"Panel familiar IA: {len(profile_rows)} perfiles analizados, "
+        f"{active_alerts_total} alertas activas, {low_adherence_profiles} perfiles con adherencia baja "
+        f"y {pending_documents_total} brechas documentales detectadas."
+    )
+    summary_json = {
+        "family_size": len(profile_rows),
+        "active_alerts_total": active_alerts_total,
+        "pending_documents_total": pending_documents_total,
+        "low_adherence_profiles": low_adherence_profiles,
+    }
+    row = (
+        db.query(models.FamilyAiSummary)
+        .filter(
+            models.FamilyAiSummary.user_id == current_user.id,
+            models.FamilyAiSummary.window_days == window_days,
+        )
+        .first()
+    )
+    if not row:
+        row = models.FamilyAiSummary(user_id=current_user.id, window_days=window_days)
+    row.family_size = len(profile_rows)
+    row.active_alerts_total = active_alerts_total
+    row.pending_documents_total = pending_documents_total
+    row.low_adherence_profiles = low_adherence_profiles
+    row.summary = summary_text
+    row.profiles_json = profile_rows
+    row.summary_json = summary_json
+    row.updated_at = datetime.now()
+    db.add(row)
+    return row
+
+
+def _build_chat_context_base(
+    db: Session,
+    current_user: models.User,
+    profile: models.HealthProfile,
+    link: models.ProfileRelationship,
+    target_user_id: int,
+    intent: str = "general",
+    modules: dict | None = None,
+    include_family_context: bool = False,
+    include_document_text: bool = False,
+) -> tuple[dict, dict]:
+    modules = modules or select_context_modules(intent)
+    db_started_at = time.perf_counter()
+    statement_timeout_ms = _ai_db_statement_timeout_ms()
+    context_timeout_ms = _ai_context_timeout_ms()
+    context_deadline_ts = time.perf_counter() + (context_timeout_ms / 1000.0)
+    degraded_reasons: list[str] = []
+    plan_info = _build_plan_info(current_user, db)
+    timezone_name = _resolve_user_tz_name(current_user)
+    appointments: list[models.Appointment] = []
+    documents: list[models.Document] = []
+    medications: list[models.Medication] = []
+    if modules.get("appointments"):
+        appointments = _safe_ai_context_query(
+            db,
+            module_name="appointments",
+            loader=lambda: (
+                db.query(models.Appointment)
+                .filter(models.Appointment.user_id == target_user_id)
+                .order_by(models.Appointment.date_time.desc(), models.Appointment.created_at.desc())
+                .limit(24)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+        )
+    if modules.get("documents"):
+        documents = _safe_ai_context_query(
+            db,
+            module_name="documents",
+            loader=lambda: (
+                db.query(models.Document)
+                .filter(models.Document.user_id == target_user_id)
+                .order_by(models.Document.created_at.desc(), models.Document.id.desc())
+                .limit(6)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+        )
+    if modules.get("medications"):
+        medications = _safe_ai_context_query(
+            db,
+            module_name="medications",
+            loader=lambda: (
+                db.query(models.Medication)
+                .filter(models.Medication.user_id == target_user_id)
+                .order_by(
+                    models.Medication.completed.asc(),
+                    models.Medication.created_at.desc(),
+                    models.Medication.id.desc(),
+                )
+                .limit(12)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+        )
+    brief_profile_summary = _safe_ai_context_query(
+        db,
+        module_name="profile-summary",
+        loader=lambda: _load_profile_brief_summary(db, profile, target_user_id),
+        default_value="",
+        degraded_reasons=degraded_reasons,
+        statement_timeout_ms=statement_timeout_ms,
+        context_deadline_ts=context_deadline_ts,
+    )
+    db_load_ms = round((time.perf_counter() - db_started_at) * 1000, 1)
+
+    context_started_at = time.perf_counter()
+    upcoming = sorted(
+        [
+            appt
+            for appt in appointments
+            if appt.date_time and appt.status != models.AppointmentStatus.realizada
+        ],
+        key=lambda appt: _ai_dt_in_tz(appt.date_time, timezone_name) or datetime.max.replace(
+            tzinfo=_safe_zoneinfo(DEFAULT_TZ_NAME)
+        ),
+    )
+    future_upcoming = [
+        appt
+        for appt in upcoming
+        if (_ai_dt_in_tz(appt.date_time, timezone_name) or datetime.min.replace(tzinfo=_safe_zoneinfo(DEFAULT_TZ_NAME)))
+        >= datetime.now(_safe_zoneinfo(timezone_name))
+    ]
+    if future_upcoming:
+        upcoming = future_upcoming
+
+    active_medications = [med for med in medications if not bool(med.completed)]
+    latest_document = documents[0] if documents else None
+    latest_document_text = (
+        _clip_text(getattr(latest_document, "ocr_text", "") or "", 1800)
+        if include_document_text
+        else ""
+    )
+    appointment_insights = _appointment_insights(appointments, timezone_name) if modules.get("appointments") else {}
+    document_insights = _document_insights(documents, timezone_name) if modules.get("documents") else {}
+    medication_insights = _medication_insights(medications, timezone_name) if modules.get("medications") else {}
+    adherence_summary = (
+        _safe_ai_context_query(
+            db,
+            module_name="adherence",
+            loader=lambda: _load_adherence_summary_cached(db, profile, medications, window_days=30),
+            default_value={},
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+        )
+        if modules.get("adherence")
+        else {}
+    )
+    document_summaries = []
+    document_entities_by_document: dict[int, list[models.DocumentClinicalEntity]] = {}
+    if modules.get("document_summaries") and documents:
+        document_ids = [doc.id for doc in documents if getattr(doc, "id", None) is not None]
+        if document_ids:
+            summary_rows = _safe_ai_context_query(
+                db,
+                module_name="document-summaries",
+                loader=lambda: (
+                    db.query(models.DocumentSummary)
+                    .filter(models.DocumentSummary.document_id.in_(document_ids))
+                    .all()
+                ),
+                default_value=[],
+                degraded_reasons=degraded_reasons,
+                statement_timeout_ms=statement_timeout_ms,
+                context_deadline_ts=context_deadline_ts,
+            )
+            summaries_by_document = {row.document_id: row for row in summary_rows}
+            document_summaries = [
+                summaries_by_document[doc.id]
+                for doc in documents
+                if doc.id in summaries_by_document
+            ]
+            entity_rows = _safe_ai_context_query(
+                db,
+                module_name="document-entities",
+                loader=lambda: (
+                    db.query(models.DocumentClinicalEntity)
+                    .filter(models.DocumentClinicalEntity.document_id.in_(document_ids))
+                    .order_by(
+                        models.DocumentClinicalEntity.document_id.asc(),
+                        models.DocumentClinicalEntity.created_at.asc(),
+                    )
+                    .all()
+                ),
+                default_value=[],
+                degraded_reasons=degraded_reasons,
+                statement_timeout_ms=statement_timeout_ms,
+                context_deadline_ts=context_deadline_ts,
+            )
+            for entity in entity_rows:
+                document_entities_by_document.setdefault(entity.document_id, []).append(entity)
+    ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
+    user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
+    runtime_memory = _build_ai_profile_memory(
+        profile=profile,
+        documents=documents,
+        medications=medications,
+        upcoming=upcoming,
+    )
+    family_context = (
+        _safe_ai_context_query(
+            db,
+            module_name="family-summary",
+            loader=lambda: _load_cached_family_ai_summary(db, current_user, 7),
+            default_value=None,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+        )
+        if include_family_context and bool(plan_info.get("collaboration_enabled"))
+        else None
+    )
+    context_build_ms = round((time.perf_counter() - context_started_at) * 1000, 1)
+    degraded_reasons = list(dict.fromkeys(degraded_reasons))
+
+    sources = [
+        {"key": "profile-summary", "label": "Resumen del perfil", "count": 1 if brief_profile_summary else 0, "enabled": True},
+        {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": bool(modules.get("documents"))},
+        {"key": "medications", "label": "Medicamentos", "count": len(medications), "enabled": bool(modules.get("medications"))},
+        {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": bool(modules.get("appointments"))},
+        {
+            "key": "family",
+            "label": "Perfil familiar",
+            "count": len((family_context or {}).get("profiles") or []),
+            "enabled": bool(modules.get("family")) and bool(plan_info.get("collaboration_enabled")) and bool(family_context),
+        },
+    ]
+
+    context = {
+        "profile": {
+            "id": profile.id,
+            "name": profile.full_name,
+            "owner_user_id": target_user_id,
+            "relation_with_owner": profile.relation_with_owner or "",
+            "gender": profile.gender or "",
+            "age_years": _profile_age_years(profile),
+            "base_medical_data": _clip_text(user_profile_notes_text, 500),
+            "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1200),
+            "brief_profile_summary": brief_profile_summary,
+            "access_role": (link.role or "").lower(),
+            "is_primary": bool(profile.is_primary_profile),
+        },
+        "plan": plan_info,
+        "sources": sources,
+        "timezone_name": timezone_name,
+        "chat_intent": intent,
+        "enabled_modules": modules,
+        "include_document_text": bool(include_document_text),
+        "degraded_reasons": degraded_reasons,
+        "appointments": appointments,
+        "documents": documents,
+        "medications": medications,
+        "external_records": [],
+        "upcoming": upcoming,
+        "appointment_insights": appointment_insights,
+        "document_insights": document_insights,
+        "medication_insights": medication_insights,
+        "recent_conversations": [],
+        "conversation_summaries": [],
+        "active_medications": active_medications,
+        "latest_document": latest_document,
+        "latest_document_text": latest_document_text,
+        "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1200),
+        "brief_profile_summary": brief_profile_summary,
+        "profile_notes": [],
+        "activity_log": [],
+        "adherence_summary": adherence_summary,
+        "document_summaries": document_summaries,
+        "document_entities_by_document": document_entities_by_document,
+        "health_alerts": [],
+        "profile_health_features": None,
+        "family_context": family_context,
+    }
+    timing_info = {
+        "db_load_ms": db_load_ms,
+        "context_build_ms": context_build_ms,
+        "chat_context_ms": round(db_load_ms + context_build_ms, 1),
+        "db_statement_timeout_ms": statement_timeout_ms,
+        "context_timeout_ms": context_timeout_ms,
+        "degraded_reasons": degraded_reasons,
+    }
+    return context, timing_info
+
+
 def _serialize_ai_context(context: dict) -> dict:
     timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
     family_context = context.get("family_context") or {}
-    return {
+    enabled_modules = context.get("enabled_modules") or {}
+    include_document_text = bool(context.get("include_document_text"))
+    payload = {
         "profile": context["profile"],
         "learned_profile_context": context.get("learned_profile_context") or "",
+        "brief_profile_summary": context.get("brief_profile_summary")
+        or (context.get("profile") or {}).get("brief_profile_summary")
+        or "",
         "timezone": timezone_name,
+        "chat_intent": context.get("chat_intent") or "general",
+        "enabled_modules": enabled_modules,
         "plan": {
             "plan_type": context["plan"].get("plan_type"),
             "max_profiles": context["plan"].get("max_profiles"),
             "collaboration_enabled": context["plan"].get("collaboration_enabled"),
             "family_panel_enabled": context["plan"].get("family_panel_enabled"),
         },
-        "appointment_insights": context.get("appointment_insights") or {},
-        "document_insights": context.get("document_insights") or {},
-        "medication_insights": context.get("medication_insights") or {},
-        "adherence_summary": context.get("adherence_summary") or {},
-        "health_alerts": [
+    }
+    if enabled_modules.get("appointments"):
+        payload["appointment_insights"] = context.get("appointment_insights") or {}
+        payload["appointments"] = [
             {
-                "alert_type": item.alert_type,
-                "severity": item.severity,
-                "title": item.title,
-                "description": item.description,
-                "recommended_action": item.recommended_action,
-                "status": item.status,
-                "detected_at": _safe_iso_local(item.detected_at, timezone_name),
+                "type": str(getattr(item.type, "value", item.type)),
+                "specialty": item.specialty or "",
+                "center": item.center or "",
+                "date_time": _safe_iso_local(item.date_time, timezone_name),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
+                "status": str(getattr(item.status, "value", item.status)),
+                "notes": _clip_text(item.notes or "", 180),
             }
-            for item in (context.get("health_alerts") or [])[:8]
-        ],
-        "document_summaries": [
+            for item in context["appointments"][:6]
+        ]
+    if enabled_modules.get("documents"):
+        payload["document_insights"] = context.get("document_insights") or {}
+        payload["documents"] = [
+            {
+                "doc_type": str(getattr(item.doc_type, "value", item.doc_type)),
+                "detected_doc_type": _infer_document_type(item),
+                "date": _safe_iso_local(item.date, timezone_name),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
+                "center": item.center or "",
+                "notes": _clip_text(item.notes or "", 180),
+                "ocr_status": item.ocr_status or "",
+                "filename": item.filename or "",
+                "file_format": _document_file_format(item),
+                **(
+                    {
+                        "ocr_excerpt": _clip_text(
+                            item.ocr_text or "",
+                            1200 if index == 0 else 320,
+                        )
+                    }
+                    if include_document_text and (item.ocr_text or "").strip()
+                    else {}
+                ),
+            }
+            for index, item in enumerate(context["documents"][:4])
+        ]
+    if enabled_modules.get("document_summaries"):
+        payload["document_summaries"] = [
             {
                 "document_id": item.document_id,
                 "document_type_inferred": item.document_type_inferred,
                 "summary_plain": _clip_text(item.summary_plain, 240),
                 "patient_friendly_explanation": _clip_text(item.patient_friendly_explanation, 320),
                 "abnormal_values_json": item.abnormal_values_json or [],
-                "key_points_json": (item.key_points_json or [])[:6],
+                "key_points_json": (item.key_points_json or [])[:4],
             }
-            for item in (context.get("document_summaries") or [])[:8]
-        ],
-        "document_diagnoses": [
+            for item in (context.get("document_summaries") or [])[:4]
+        ]
+        payload["document_diagnoses"] = [
             {
                 "document_id": document_id,
                 "diagnoses": [
@@ -6834,81 +7829,14 @@ def _serialize_ai_context(context: dict) -> dict:
                     }
                     for entity in entities
                     if getattr(entity, "entity_type", "") == "diagnosis"
-                ][:5],
+                ][:3],
             }
-            for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:8]
+            for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:4]
             if any(getattr(entity, "entity_type", "") == "diagnosis" for entity in entities)
-        ],
-        "profile_health_features": (
-            {
-                "next_appointment_at": _safe_iso_local(getattr(context.get("profile_health_features"), "next_appointment_at", None), timezone_name),
-                "last_appointment_at": _safe_iso_local(getattr(context.get("profile_health_features"), "last_appointment_at", None), timezone_name),
-                "active_medications_count": getattr(context.get("profile_health_features"), "active_medications_count", 0),
-                "low_adherence_risk": getattr(context.get("profile_health_features"), "low_adherence_risk", False),
-                "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
-                "missing_documents_flags_json": getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {},
-            }
-        ),
-        "family_context": (
-            {
-                "summary": family_context.get("summary") or "",
-                "family_size": family_context.get("family_size", 0),
-                "active_alerts_total": family_context.get("active_alerts_total", 0),
-                "low_adherence_profiles": family_context.get("low_adherence_profiles", 0),
-                "pending_documents_total": family_context.get("pending_documents_total", 0),
-                "profiles": [
-                    {
-                        "profile_id": item.get("profile_id"),
-                        "profile_name": item.get("profile_name"),
-                        "relation_with_owner": item.get("relation_with_owner"),
-                        "active_alerts": item.get("active_alerts", 0),
-                        "upcoming_appointments": item.get("upcoming_appointments", 0),
-                        "low_adherence": bool(item.get("low_adherence")),
-                        "pending_documents": item.get("pending_documents") or [],
-                        "key_risks": item.get("key_risks") or [],
-                    }
-                    for item in (family_context.get("profiles") or [])[:6]
-                ],
-            }
-            if family_context
-            else None
-        ),
-        "recent_conversations": context.get("recent_conversations") or [],
-        "conversation_summaries": [
-            {
-                **item,
-                "updated_at": _safe_iso_local(item.get("updated_at"), timezone_name),
-            }
-            for item in (context.get("conversation_summaries") or [])
-        ],
-        "appointments": [
-            {
-                "type": str(getattr(item.type, "value", item.type)),
-                "specialty": item.specialty or "",
-                "center": item.center or "",
-                "date_time": _safe_iso_local(item.date_time, timezone_name),
-                "created_at": _safe_iso_local(item.created_at, timezone_name),
-                "status": str(getattr(item.status, "value", item.status)),
-                "notes": _clip_text(item.notes or "", 180),
-            }
-            for item in context["appointments"][:10]
-        ],
-        "documents": [
-            {
-                "doc_type": str(getattr(item.doc_type, "value", item.doc_type)),
-                "detected_doc_type": _infer_document_type(item),
-                "date": _safe_iso_local(item.date, timezone_name),
-                "created_at": _safe_iso_local(item.created_at, timezone_name),
-                "center": item.center or "",
-                "notes": _clip_text(item.notes or "", 180),
-                "ocr_status": item.ocr_status or "",
-                "ocr_excerpt": _clip_text(item.ocr_text or "", 900 if index == 0 else 260),
-                "filename": item.filename or "",
-                "file_format": _document_file_format(item),
-            }
-            for index, item in enumerate(context["documents"][:6])
-        ],
-        "medications": [
+        ]
+    if enabled_modules.get("medications"):
+        payload["medication_insights"] = context.get("medication_insights") or {}
+        payload["medications"] = [
             {
                 "name": item.name,
                 "dose": item.dose or "",
@@ -6923,25 +7851,36 @@ def _serialize_ai_context(context: dict) -> dict:
                 "expected_doses": getattr(item, "expected_doses", 0),
                 "taken_doses": getattr(item, "taken_doses", 0),
             }
-            for item in context["medications"][:10]
-        ],
-        "profile_notes": [
-            {
-                "note": _clip_text(item.note or "", 200),
-                "visibility": item.visibility or "",
-                "created_at": _safe_iso(item.created_at),
-            }
-            for item in context["profile_notes"][:4]
-        ],
-        "activity_log": [
-            {
-                "action_type": item.action_type,
-                "description": _clip_text(item.description or "", 180),
-                "created_at": _safe_iso(item.created_at),
-            }
-            for item in context["activity_log"][:4]
-        ],
-    }
+            for item in context["medications"][:6]
+        ]
+    if enabled_modules.get("adherence"):
+        payload["adherence_summary"] = context.get("adherence_summary") or {}
+    if enabled_modules.get("family") and family_context:
+        payload["family_context"] = {
+            "summary": family_context.get("summary") or "",
+            "family_size": family_context.get("family_size", 0),
+            "active_alerts_total": family_context.get("active_alerts_total", 0),
+            "low_adherence_profiles": family_context.get("low_adherence_profiles", 0),
+            "pending_documents_total": family_context.get("pending_documents_total", 0),
+            "profiles": [
+                {
+                    "profile_id": item.get("profile_id"),
+                    "profile_name": item.get("profile_name"),
+                    "relation_with_owner": item.get("relation_with_owner"),
+                    "active_alerts": item.get("active_alerts", 0),
+                    "upcoming_appointments": item.get("upcoming_appointments", 0),
+                    "low_adherence": bool(item.get("low_adherence")),
+                    "relevant_conditions": item.get("relevant_conditions") or [],
+                    "relevant_medications": item.get("relevant_medications") or [],
+                    "relevant_appointments": item.get("relevant_appointments") or [],
+                    "pending_documents": item.get("pending_documents") or [],
+                    "key_alerts": item.get("key_alerts") or [],
+                    "key_risks": item.get("key_risks") or [],
+                }
+                for item in (family_context.get("profiles") or [])[:4]
+            ],
+        }
+    return payload
 
 
 def _ai_system_prompt(context: dict) -> str:
@@ -6975,12 +7914,18 @@ def _ai_system_prompt(context: dict) -> str:
         "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
+        f"Resumen breve persistido del perfil: {_clip_text(context.get('brief_profile_summary') or '', 320)}\n"
         f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
         f"Disclaimer obligatorio: {AI_KLINIP_DISCLAIMER}"
     )
 
 
-def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tuple[str, str] | None:
+def _call_openai_ai(
+    system_prompt: str,
+    history: list[dict],
+    message: str,
+    conversation_summary: str = "",
+) -> tuple[str, str] | None:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key or OpenAI is None:
         return None
@@ -6989,14 +7934,22 @@ def _call_openai_ai(system_prompt: str, history: list[dict], message: str) -> tu
     temperature = _ai_temperature()
     max_output_tokens = _ai_max_output_tokens()
     messages = [{"role": "system", "content": system_prompt}]
-    for item in history[-8:]:
+    if conversation_summary:
+        messages.append(
+            {
+                "role": "system",
+                "content": "Resumen breve de la conversacion previa: "
+                + _clip_text(conversation_summary, 900),
+            }
+        )
+    for item in history:
         role = "assistant" if (item.get("role") or "") == "assistant" else "user"
         content = (item.get("content") or "").strip()
         if content:
             messages.append({"role": role, "content": content})
     messages.append({"role": "user", "content": message})
 
-    client = OpenAI(api_key=api_key, timeout=25.0)
+    client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
 
     responses_input = []
     for item in messages:
@@ -7514,17 +8467,39 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     return unique_refs[:4]
 
 
-def _build_ai_reply(message: str, history: list[dict], context: dict) -> tuple[str, str, str, list[dict]]:
+def _build_ai_reply(
+    message: str,
+    history: list[dict],
+    context: dict,
+    timing_info: dict | None = None,
+) -> tuple[str, str, str, list[dict]]:
+    compact_history, conversation_summary = _compact_history_for_prompt(history)
     serialized_context = _serialize_ai_context(context)
     system_prompt = _ai_system_prompt(context) + "\n\nContexto clinico JSON:\n" + json.dumps(
         serialized_context, ensure_ascii=False
     )
     references = _build_ai_references(message, context)
-    provider_reply = _call_openai_ai(system_prompt, history, message)
+    openai_started_at = time.perf_counter()
+    provider_reply = _call_openai_ai(
+        system_prompt,
+        compact_history,
+        message,
+        conversation_summary=conversation_summary,
+    )
+    openai_ms = round((time.perf_counter() - openai_started_at) * 1000, 1)
+    if timing_info is not None:
+        timing_info["openai_ms"] = openai_ms
+        timing_info["prompt_history_messages"] = len(compact_history)
+        timing_info["conversation_summary_chars"] = len(conversation_summary or "")
     if provider_reply:
         text_reply, model = provider_reply
-        return _sanitize_ai_reply(text_reply), model, "openai", references
-    return _sanitize_ai_reply(_fallback_ai_reply(message, context)), "context-fallback", "fallback", references
+        return _prepend_degraded_notice(_sanitize_ai_reply(text_reply), context), model, "openai", references
+    return (
+        _prepend_degraded_notice(_sanitize_ai_reply(_fallback_ai_reply(message, context)), context),
+        "context-fallback",
+        "fallback",
+        references,
+    )
 
 
 def _extract_direct_report_request(message: str) -> dict | None:
@@ -7941,6 +8916,7 @@ async def create_health_profile(
         description=f"{current_user.name or current_user.email} creo el perfil {profile.full_name}",
         metadata_json={"full_name": profile.full_name},
     )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
 
     db.commit()
     db.refresh(profile)
@@ -7981,6 +8957,7 @@ async def update_health_profile(
         action_type="profile_updated",
         description=f"{current_user.name or current_user.email} actualizo el perfil {profile.full_name}",
     )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.add(profile)
     db.commit()
     db.refresh(profile)
@@ -8417,6 +9394,7 @@ async def accept_profile_invitation(
         description=f"{current_user.name or current_user.email} acepto invitacion para colaborar en el perfil de {inviter_user.name or inviter_user.email}",
         metadata_json={"role": role, "email": current_user.email, "inviter_user_id": inviter_user.id},
     )
+    _mark_profile_ai_dirty(db, invited_profile, include_family=True)
     db.commit()
     db.refresh(link)
 
@@ -8508,6 +9486,8 @@ async def update_profile_relationship(
         description=f"{current_user.name or current_user.email} actualizo rol de colaborador a {role}",
         metadata_json={"relationship_id": relationship_id, "role": role},
     )
+    if link.profile:
+        _mark_profile_ai_dirty(db, link.profile, include_family=True)
     db.commit()
     db.refresh(link)
     return _relationship_out(link)
@@ -8551,6 +9531,8 @@ async def remove_profile_relationship(
         description=f"{current_user.name or current_user.email} removio colaborador {email or link.user_id}",
         metadata_json={"relationship_id": relationship_id, "email": email},
     )
+    if link.profile:
+        _mark_profile_ai_dirty(db, link.profile, include_family=True)
     db.commit()
     if email:
         background_tasks.add_task(
@@ -8641,6 +9623,8 @@ async def revoke_profile_invitation(
         description=f"{current_user.name or current_user.email} revoco invitacion a {invitation.invitee_email}",
         metadata_json={"invitation_id": invitation_id, "email": invitation.invitee_email},
     )
+    if invitation.profile and removed_user_id:
+        _mark_profile_ai_dirty(db, invitation.profile, include_family=True)
     db.commit()
     db.refresh(invitation)
     profile_name = invitation.profile.full_name if invitation.profile else f"Perfil #{profile_id}"
@@ -8880,99 +9864,193 @@ async def ai_chat(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    total_started_at = time.perf_counter()
     message = (payload.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
 
-    context = _ai_context_bundle(
+    direct_report_request = _extract_direct_report_request(message)
+    chat_intent = detect_chat_intent(message)
+    context_modules = select_context_modules(chat_intent)
+    include_document_text = _should_include_document_text_for_chat(message)
+    include_family_context = _should_include_family_context_for_chat(
         db,
         current_user,
-        refresh_advanced=False,
-        include_family_context=False,
+        message,
     )
-    timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
-    profile_id = int(context["profile"]["id"])
-    conversation_id = (payload.conversation_id or "").strip()
-    existing_items = []
-    conversation_title = ""
-    if conversation_id:
-        existing_items = _get_ai_conversation_messages(
+    if not include_family_context:
+        context_modules["family"] = False
+    if direct_report_request:
+        context_modules["appointments"] = True
+        context_modules["documents"] = True
+        context_modules["document_summaries"] = True
+        context_modules["medications"] = True
+        context_modules["adherence"] = True
+        if direct_report_request.get("report_type") == "resumen_familiar" and include_family_context:
+            context_modules["family"] = True
+    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    profile_id = int(profile.id)
+    limiter = _chat_profile_limiter(profile_id)
+    limiter_acquired = limiter.acquire(blocking=False)
+    degraded_busy = not limiter_acquired
+    if degraded_busy:
+        context_modules = select_context_modules("general")
+        include_family_context = False
+        include_document_text = False
+        direct_report_request = None
+    try:
+        context, timing_info = _build_chat_context_base(
+            db,
+            current_user,
+            profile,
+            link,
+            target_user_id,
+            intent=chat_intent,
+            modules=context_modules,
+            include_family_context=include_family_context,
+            include_document_text=include_document_text,
+        )
+        timing_info.setdefault("openai_ms", 0.0)
+        if degraded_busy:
+            current_reasons = list(context.get("degraded_reasons") or [])
+            current_reasons.append("busy-profile")
+            context["degraded_reasons"] = list(dict.fromkeys(current_reasons))
+            timing_info["degraded_reasons"] = list(context["degraded_reasons"])
+        timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
+        conversation_id = (payload.conversation_id or "").strip()
+        existing_items = []
+        conversation_title = ""
+        if conversation_id:
+            existing_items = _safe_ai_context_query(
+                db,
+                module_name="conversation-history",
+                loader=lambda: _get_ai_conversation_messages(
+                    db,
+                    profile_id=profile_id,
+                    conversation_id=conversation_id,
+                    limit=80,
+                ),
+                default_value=[],
+                degraded_reasons=context["degraded_reasons"],
+                statement_timeout_ms=_ai_db_statement_timeout_ms(),
+            )
+            if existing_items:
+                conversation_title = (existing_items[0].conversation_title or "").strip()
+        if not conversation_id:
+            conversation_id = _new_ai_conversation_id()
+        if not conversation_title:
+            conversation_title = _derive_ai_conversation_title(message)
+
+        history = []
+        seen_pairs: set[tuple[str, str]] = set()
+        for item in existing_items:
+            content_value = (item.content or "").strip()
+            role_value = (item.role or "").strip().lower()
+            if not content_value:
+                continue
+            key = (role_value, content_value)
+            history.append({"role": role_value, "content": content_value})
+            seen_pairs.add(key)
+        for item in (payload.history or []):
+            content_value = (item.content or "").strip()
+            role_value = (item.role or "").strip().lower()
+            if not content_value:
+                continue
+            key = (role_value, content_value)
+            if key in seen_pairs:
+                continue
+            history.append({"role": role_value, "content": content_value})
+            seen_pairs.add(key)
+        if direct_report_request and context.get("degraded_reasons"):
+            references = _build_ai_references(message, context)
+            reply = _prepend_degraded_notice(
+                "Todavia no genero el reporte porque faltan algunos datos secundarios. "
+                "Intenta nuevamente en unos segundos.",
+                context,
+            )
+            model_name = "context-fallback"
+            mode = "degraded-report-wait"
+            timing_info["openai_ms"] = 0.0
+            timing_info["prompt_history_messages"] = 0
+            timing_info["conversation_summary_chars"] = 0
+        elif direct_report_request:
+            reply, model_name, mode, references = _generate_direct_chat_report(
+                db=db,
+                current_user=current_user,
+                context=context,
+                message=message,
+            )
+            timing_info["openai_ms"] = 0.0
+        elif degraded_busy:
+            references = _build_ai_references(message, context)
+            reply = _prepend_degraded_notice(
+                _sanitize_ai_reply(_fallback_ai_reply(message, context)),
+                context,
+            )
+            model_name = "context-fallback"
+            mode = "degraded-busy"
+            timing_info["prompt_history_messages"] = 0
+            timing_info["conversation_summary_chars"] = 0
+        else:
+            reply, model_name, mode, references = _build_ai_reply(message, history, context, timing_info=timing_info)
+        user_item = _persist_ai_message(
             db,
             profile_id=profile_id,
+            user_id=current_user.id,
             conversation_id=conversation_id,
-            limit=80,
+            conversation_title=conversation_title,
+            role="user",
+            content=message,
+            metadata_json={"mode": "input"},
         )
-        if existing_items:
-            conversation_title = (existing_items[0].conversation_title or "").strip()
-    if not conversation_id:
-        conversation_id = _new_ai_conversation_id()
-    if not conversation_title:
-        conversation_title = _derive_ai_conversation_title(message)
-
-    history = []
-    seen_pairs: set[tuple[str, str]] = set()
-    for item in existing_items:
-        content_value = (item.content or "").strip()
-        role_value = (item.role or "").strip().lower()
-        if not content_value:
-            continue
-        key = (role_value, content_value)
-        history.append({"role": role_value, "content": content_value})
-        seen_pairs.add(key)
-    for item in (payload.history or []):
-        content_value = (item.content or "").strip()
-        role_value = (item.role or "").strip().lower()
-        if not content_value:
-            continue
-        key = (role_value, content_value)
-        if key in seen_pairs:
-            continue
-        history.append({"role": role_value, "content": content_value})
-        seen_pairs.add(key)
-    direct_report_request = _extract_direct_report_request(message)
-    if direct_report_request:
-        reply, model_name, mode, references = _generate_direct_chat_report(
-            db=db,
-            current_user=current_user,
-            context=context,
-            message=message,
+        assistant_item = _persist_ai_message(
+            db,
+            profile_id=profile_id,
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            conversation_title=conversation_title,
+            role="assistant",
+            content=reply,
+            metadata_json={"model": model_name, "mode": mode, "references": references},
         )
-    else:
-        reply, model_name, mode, references = _build_ai_reply(message, history, context)
-    user_item = _persist_ai_message(
-        db,
-        profile_id=profile_id,
-        user_id=current_user.id,
-        conversation_id=conversation_id,
-        conversation_title=conversation_title,
-        role="user",
-        content=message,
-        metadata_json={"mode": "input"},
-    )
-    assistant_item = _persist_ai_message(
-        db,
-        profile_id=profile_id,
-        user_id=current_user.id,
-        conversation_id=conversation_id,
-        conversation_title=conversation_title,
-        role="assistant",
-        content=reply,
-        metadata_json={"model": model_name, "mode": mode, "references": references},
-    )
-    return {
-        "reply": reply,
-        "disclaimer": AI_KLINIP_DISCLAIMER,
-        "model": model_name,
-        "mode": mode,
-        "active_profile_id": profile_id,
-        "active_profile_name": context["profile"]["name"],
-        "sources": context["sources"],
-        "references": references,
-        "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
-        "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
-        "conversation_id": conversation_id,
-        "conversation_title": conversation_title,
-    }
+        timing_info["total_ms"] = round((time.perf_counter() - total_started_at) * 1000, 1)
+        print(
+            "INFO ai_chat_timing "
+            f"profile {profile_id}: "
+            f"db_load_ms={timing_info.get('db_load_ms', 0)} "
+            f"context_build_ms={timing_info.get('context_build_ms', 0)} "
+            f"chat_context_ms={timing_info.get('chat_context_ms', 0)} "
+            f"openai_ms={timing_info.get('openai_ms', 0)} "
+            f"total_ms={timing_info.get('total_ms', 0)} "
+            f"db_statement_timeout_ms={timing_info.get('db_statement_timeout_ms', 0)} "
+            f"context_timeout_ms={timing_info.get('context_timeout_ms', 0)} "
+            f"prompt_history_messages={timing_info.get('prompt_history_messages', 0)} "
+            f"conversation_summary_chars={timing_info.get('conversation_summary_chars', 0)} "
+            f"intent={chat_intent} "
+            f"modules={','.join(sorted(key for key, enabled in context_modules.items() if enabled)) or 'base'} "
+            f"family_context={'yes' if include_family_context else 'no'} "
+            f"document_text={'yes' if include_document_text else 'no'} "
+            f"degraded={'yes' if bool(context.get('degraded_reasons')) else 'no'} "
+            f"degraded_reasons={','.join(context.get('degraded_reasons') or []) or 'none'} "
+            f"mode={mode}"
+        )
+        return {
+            "reply": reply,
+            "disclaimer": AI_KLINIP_DISCLAIMER,
+            "model": model_name,
+            "mode": mode,
+            "active_profile_id": profile_id,
+            "active_profile_name": context["profile"]["name"],
+            "sources": context["sources"],
+            "references": references,
+            "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
+            "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
+            "conversation_id": conversation_id,
+            "conversation_title": conversation_title,
+        }
+    finally:
+        if limiter_acquired:
+            limiter.release()
 
 
 @app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
@@ -9045,6 +10123,116 @@ def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> 
         )
         .all()
     )
+
+
+def detect_chat_intent(message: str | None) -> str:
+    normalized = _normalize_text(message or "")
+    if _message_needs_family_context(message):
+        return "familiar"
+    medication_tokens = [
+        "medicamento",
+        "medicamentos",
+        "tratamiento",
+        "adherencia",
+        "dosis",
+        "frecuencia",
+        "pastilla",
+        "remedio",
+    ]
+    if any(token in normalized for token in medication_tokens):
+        return "medicamentos"
+    document_tokens = [
+        "documento",
+        "documentos",
+        "ocr",
+        "pdf",
+        "imagen",
+        "resultado",
+        "informe",
+        "receta",
+        "orden medica",
+        "orden médica",
+        "archivo",
+    ]
+    if any(token in normalized for token in document_tokens):
+        return "documentos"
+    appointment_tokens = [
+        "cita",
+        "citas",
+        "agenda",
+        "agendada",
+        "proxima cita",
+        "próxima cita",
+        "consulta",
+        "doctor",
+        "medico",
+        "médico",
+        "hora",
+    ]
+    if any(token in normalized for token in appointment_tokens):
+        return "citas"
+    return "general"
+
+
+def select_context_modules(intent: str) -> dict:
+    base_modules = {
+        "appointments": False,
+        "documents": False,
+        "document_summaries": False,
+        "medications": False,
+        "adherence": False,
+        "family": False,
+    }
+    if intent == "medicamentos":
+        base_modules["medications"] = True
+        base_modules["adherence"] = True
+    elif intent == "documentos":
+        base_modules["documents"] = True
+        base_modules["document_summaries"] = True
+    elif intent == "citas":
+        base_modules["appointments"] = True
+    elif intent == "familiar":
+        base_modules["family"] = True
+    return base_modules
+
+
+def _message_needs_family_context(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    family_tokens = [
+        "familia",
+        "familiar",
+        "cuidador",
+        "cuidadora",
+        "perfil familiar",
+        "perfil asistido",
+        "colaborador",
+        "colaboradora",
+        "mama",
+        "mamá",
+        "papa",
+        "papá",
+        "hijo",
+        "hija",
+        "esposo",
+        "esposa",
+        "quien necesita mas atencion",
+        "que familiar necesita mas atencion",
+    ]
+    return any(token in normalized for token in family_tokens)
+
+
+def _should_include_family_context_for_chat(
+    db: Session,
+    current_user: models.User,
+    message: str | None,
+) -> bool:
+    plan_info = _build_plan_info(current_user, db)
+    if not bool(plan_info.get("collaboration_enabled")):
+        return False
+    if not _message_needs_family_context(message):
+        return False
+    accepted_links = _accepted_profile_links_for_user(db, current_user)
+    return len(accepted_links) > 1
 
 
 def _life_timeline_events_from_context(context: dict, include_alerts: bool = False) -> list[dict]:
@@ -9239,55 +10427,14 @@ def _life_timeline_summary(events: list[dict], profile_label: str) -> str:
 
 
 def _build_family_ai_summary(db: Session, current_user: models.User, days: int = 30) -> dict:
-    profile_rows: list[dict] = []
-    active_alerts_total = 0
-    pending_documents_total = 0
-    low_adherence_profiles = 0
-    for link in _accepted_profile_links_for_user(db, current_user):
-        profile = link.profile
-        if not profile:
-            continue
-        context = _ai_context_bundle_for_profile(
-            db,
-            current_user,
-            profile,
-            link,
-            profile.owner_user_id,
-            include_family_context=False,
-        )
-        alerts = [item for item in (context.get("health_alerts") or []) if getattr(item, "status", "active") == "active"]
-        adherence = context.get("adherence_summary") or {}
-        missing_flags = getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {}
-        pending_documents = [key for key, value in missing_flags.items() if value]
-        low_adherence = bool(adherence.get("low_adherence"))
-        active_alerts_total += len(alerts)
-        pending_documents_total += len(pending_documents)
-        low_adherence_profiles += 1 if low_adherence else 0
-        profile_rows.append(
-            {
-                "profile_id": profile.id,
-                "profile_name": profile.full_name,
-                "relation_with_owner": profile.relation_with_owner or "",
-                "active_alerts": len(alerts),
-                "upcoming_appointments": len(context.get("upcoming") or []),
-                "low_adherence": low_adherence,
-                "pending_documents": pending_documents[:4],
-                "key_risks": [getattr(item, "title", "") for item in alerts[:3]],
-            }
-        )
-    profile_rows.sort(key=lambda item: (item["active_alerts"], len(item["pending_documents"]), item["upcoming_appointments"]), reverse=True)
-    return {
-        "generated_at": datetime.now(),
-        "family_size": len(profile_rows),
-        "active_alerts_total": active_alerts_total,
-        "pending_documents_total": pending_documents_total,
-        "low_adherence_profiles": low_adherence_profiles,
-        "summary": (
-            f"Panel familiar IA: {len(profile_rows)} perfiles analizados, "
-            f"{active_alerts_total} alertas activas, {low_adherence_profiles} perfiles con adherencia baja "
-            f"y {pending_documents_total} brechas documentales detectadas."
-        ),
-        "profiles": profile_rows,
+    return _load_cached_family_ai_summary(db, current_user, days) or {
+        "generated_at": None,
+        "family_size": 0,
+        "active_alerts_total": 0,
+        "pending_documents_total": 0,
+        "low_adherence_profiles": 0,
+        "summary": "",
+        "profiles": [],
     }
 
 
@@ -9324,17 +10471,24 @@ async def get_ai_profile_context_summary(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
-    adherence = context.get("adherence_summary") or {}
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    cached_summary = _load_cached_profile_ai_summary(db, profile) or {}
     return {
-        "profile": context.get("profile") or {},
+        "profile": {
+            "id": profile.id,
+            "name": profile.full_name,
+            "relation_with_owner": profile.relation_with_owner or "",
+        },
         "summary": {
-            "active_medications": len(context.get("active_medications") or []),
-            "upcoming_appointments": len(context.get("upcoming") or []),
-            "documents": len(context.get("documents") or []),
-            "health_alerts": len(context.get("health_alerts") or []),
-            "overall_adherence_rate": adherence.get("overall_adherence_rate"),
-            "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
+            "text": cached_summary.get("summary") or "",
+            "active_medications": int(cached_summary.get("active_medications") or 0),
+            "upcoming_appointments": int(cached_summary.get("upcoming_appointments") or 0),
+            "documents": int(cached_summary.get("documents") or 0),
+            "health_alerts": int(cached_summary.get("health_alerts") or 0),
+            "overall_adherence_rate": cached_summary.get("overall_adherence_rate"),
+            "treatment_completion_score": int(cached_summary.get("treatment_completion_score") or 0),
+            "key_risks": cached_summary.get("key_risks") or [],
+            "updated_at": _safe_iso_client(cached_summary.get("updated_at")),
         },
     }
 
@@ -9345,7 +10499,18 @@ async def get_ai_family_context(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    return _build_family_ai_summary(db, current_user, days)
+    cached = _load_cached_family_ai_summary(db, current_user, days)
+    if cached:
+        return cached
+    return {
+        "generated_at": None,
+        "family_size": 0,
+        "active_alerts_total": 0,
+        "pending_documents_total": 0,
+        "low_adherence_profiles": 0,
+        "summary": "",
+        "profiles": [],
+    }
 
 
 @app.get("/ai/life-timeline", response_model=schemas.LifeTimelineOut)
@@ -9692,6 +10857,7 @@ async def create_appointment(
         checklist=appt_in.checklist or [],
     )
     db.add(appt)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
     if current_user.email:
@@ -9731,6 +10897,7 @@ async def update_appointment(
     for field, value in appt_in.dict(exclude_unset=True).items():
         setattr(appt, field, value)
 
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
     return appt
@@ -9742,7 +10909,7 @@ async def delete_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = (
         db.query(models.Appointment)
         .filter(
@@ -9754,6 +10921,7 @@ async def delete_appointment(
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
     db.delete(appt)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     return {"ok": True}
 
@@ -9787,7 +10955,7 @@ async def create_medication(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     try:
-        _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+        profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
         med = models.Medication(
             user_id=target_user_id,
             name=med_in.name,
@@ -9801,6 +10969,7 @@ async def create_medication(
             document_id=med_in.document_id,
         )
         db.add(med)
+        _mark_profile_ai_dirty(db, profile, include_family=True)
         db.commit()
         db.refresh(med)
         _attach_medication_adherence(db, [med], current_user)
@@ -9820,7 +10989,7 @@ async def update_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
@@ -9835,6 +11004,7 @@ async def update_medication(
     for field, value in med_in.dict(exclude_unset=True).items():
         setattr(med, field, value)
 
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(med)
     _attach_medication_adherence(db, [med], current_user)
@@ -9891,11 +11061,7 @@ async def record_medication_intake(
     intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
     db.add(intake)
     db.flush()
-    try:
-        _refresh_profile_ai_analytics(db, profile)
-    except Exception:
-        db.rollback()
-        raise
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(intake)
     return intake
@@ -9938,7 +11104,7 @@ async def delete_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
         .filter(
@@ -9954,6 +11120,7 @@ async def delete_medication(
         models.MedicationIntake.user_id == target_user_id,
     ).delete()
     db.delete(med)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     return {"ok": True}
 
@@ -10430,7 +11597,7 @@ async def upload_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     # Leer el contenido del archivo
     file_content = await file.read()
     if len(file_content) > MAX_UPLOAD_BYTES:
@@ -10469,6 +11636,7 @@ async def upload_document(
         ocr_lang=OCR_LANG_DEFAULT,
     )
     db.add(doc)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
     print(
@@ -10508,7 +11676,7 @@ async def delete_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     doc = (
         db.query(models.Document)
         .filter(
@@ -10525,6 +11693,7 @@ async def delete_document(
         os.remove(doc.file_path)
 
     db.delete(doc)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     return {"ok": True}
 
@@ -10536,7 +11705,7 @@ async def update_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     doc = (
         db.query(models.Document)
         .filter(
@@ -10550,6 +11719,7 @@ async def update_document(
 
     for field, value in doc_in.dict(exclude_unset=True).items():
         setattr(doc, field, value)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
     return doc

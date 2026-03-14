@@ -20,18 +20,18 @@ import {
 import { parseDate } from "../utils/dates";
 
 const QUICK_ACTIONS = [
-  { id: "document", prompt: "Explicame mi ultimo documento", title: "Ultimo documento", subtitle: "Analizar y explicar", token: "DOC" },
-  { id: "meds", prompt: "Que medicamentos estoy tomando?", title: "Mis medicamentos", subtitle: "Ver plan activo", token: "MED" },
-  { id: "next", prompt: "Cuando es mi proxima cita?", title: "Proxima cita", subtitle: "Fecha y detalles", token: "CIT" },
-  { id: "timeline", prompt: "Resume mi historial clinico", title: "Historial clinico", subtitle: "Resumen general", token: "HIS" },
+  { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
+  { id: "meds", prompt: "¿Qué medicamentos estoy tomando?", title: "Mis medicamentos", subtitle: "Ver plan activo", token: "MED" },
+  { id: "next", prompt: "¿Cuándo es mi próxima cita?", title: "Próxima cita", subtitle: "Fecha y detalles", token: "CIT" },
+  { id: "timeline", prompt: "Resume mi historial clínico", title: "Historial clínico", subtitle: "Resumen general", token: "HIS" },
 ];
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
-const APPOINTMENT_TYPE_LABELS = { cita: "Cita", examen: "Examen", tramite: "Tramite" };
+const APPOINTMENT_TYPE_LABELS = { cita: "Cita", examen: "Examen", tramite: "Trámite" };
 const RADAR_PERIOD_OPTIONS = [
-  { value: "7", label: "7 dias" },
-  { value: "30", label: "30 dias" },
-  { value: "90", label: "90 dias" },
+  { value: "7", label: "7 días" },
+  { value: "30", label: "30 días" },
+  { value: "90", label: "90 días" },
   { value: "all", label: "Todo" },
 ];
 
@@ -43,8 +43,61 @@ const INITIAL_MESSAGE = {
   createdAt: null,
 };
 
+const MOJIBAKE_PATTERN = /(?:Ã.|Â.|â.|�)/;
+const MOJIBAKE_FALLBACKS = [
+  ["Ã¡", "á"],
+  ["Ã©", "é"],
+  ["Ã­", "í"],
+  ["Ã³", "ó"],
+  ["Ãº", "ú"],
+  ["Ã±", "ñ"],
+  ["Ã", "Á"],
+  ["Ã‰", "É"],
+  ["Ã", "Í"],
+  ["Ã“", "Ó"],
+  ["Ãš", "Ú"],
+  ["Ã‘", "Ñ"],
+  ["Â¿", "¿"],
+  ["Â¡", "¡"],
+  ["â", "'"],
+  ["â", '"'],
+  ["â", '"'],
+  ["â", "-"],
+  ["â", "-"],
+];
+
+function repairMojibakeText(value) {
+  const text = String(value ?? "");
+  if (!text || !MOJIBAKE_PATTERN.test(text)) return text;
+
+  if (typeof TextDecoder !== "undefined") {
+    try {
+      const bytes = Uint8Array.from(text, (char) => char.charCodeAt(0) & 0xff);
+      const decoded = new TextDecoder("utf-8").decode(bytes);
+      if (decoded && !decoded.includes("\u0000")) {
+        return decoded;
+      }
+    } catch {
+      // Fallback replacements handle the common browser-side mojibake cases.
+    }
+  }
+
+  return MOJIBAKE_FALLBACKS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    text
+  );
+}
+
+function cleanUiText(value, fallback = "") {
+  const cleaned = repairMojibakeText(value).trim();
+  return cleaned || fallback;
+}
+
 function cleanAssistantText(value) {
-  return String(value || "").replace(/\*\*/g, "").replace(/__/g, "").trim();
+  return repairMojibakeText(String(value || ""))
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .trim();
 }
 
 function formatMessageTime(value) {
@@ -70,16 +123,26 @@ function formatConversationStamp(value) {
   }).format(parsed);
 }
 
-function formatDateTime(value) {
+function formatConversationListDate(value) {
   const parsed = parseDate(value);
   if (!parsed) return "Sin fecha";
   return new Intl.DateTimeFormat("es-CL", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+}
+
+function formatDateTime(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin fecha";
+  return cleanUiText(new Intl.DateTimeFormat("es-CL", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(parsed);
+  }).format(parsed));
 }
 
 function getPeriodCutoff(periodKey) {
@@ -93,7 +156,7 @@ function getPeriodCutoff(periodKey) {
 }
 
 function formatReportLabel(value) {
-  if (!value) return "Reporte clinico";
+  if (!value) return "Reporte clínico";
   return String(value)
     .split("_")
     .filter(Boolean)
@@ -192,7 +255,7 @@ export default function AiKlinip() {
   const [radarPeriod, setRadarPeriod] = useState("30");
   const [resources, setResources] = useState({ profile: null, appointments: [], documents: [], medications: [] });
   const [meta, setMeta] = useState({
-    disclaimer: "Klinip IA entrega informacion orientativa y no reemplaza la evaluacion de un profesional de salud.",
+    disclaimer: "Klinip IA entrega información orientativa y no reemplaza la evaluación de un profesional de salud.",
     model: "context-fallback",
     mode: "fallback",
     activeProfileName: "",
@@ -448,7 +511,7 @@ export default function AiKlinip() {
       { key: "appointments", label: "Citas y actividades", count: resources.appointments.length, enabled: true },
       {
         key: "timeline",
-        label: "Historial clinico",
+        label: "Historial clínico",
         count: resources.appointments.length + resources.documents.length + resources.medications.length,
         enabled: true,
       },
@@ -466,8 +529,8 @@ export default function AiKlinip() {
     () => [
       { key: "documents", label: `${sourceCount(inferredSources, "documents")} ${sourceLabel(inferredSources, "documents", "Documentos").toLowerCase()}`, tone: "blue" },
       { key: "medications", label: `${sourceCount(inferredSources, "medications")} ${sourceLabel(inferredSources, "medications", "Medicamentos").toLowerCase()}`, tone: "teal" },
-      { key: "appointments", label: `${sourceCount(inferredSources, "appointments")} citas proximas`, tone: "violet" },
-      { key: "timeline", label: `${sourceCount(inferredSources, "timeline")} registros clinicos`, tone: "amber" },
+      { key: "appointments", label: `${sourceCount(inferredSources, "appointments")} citas próximas`, tone: "violet" },
+      { key: "timeline", label: `${sourceCount(inferredSources, "timeline")} registros clínicos`, tone: "amber" },
     ],
     [inferredSources]
   );
@@ -577,9 +640,9 @@ export default function AiKlinip() {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
           content:
-            error?.code === "ECONNABORTED"
-              ? "Klinip IA esta tardando mas de lo normal en responder. Intenta de nuevo en unos segundos."
-              : "No pude consultar Klinip IA en este momento. Revisa tu conexion o intenta nuevamente.",
+              error?.code === "ECONNABORTED"
+                ? "Klinip IA está tardando más de lo normal en responder. Intenta de nuevo en unos segundos."
+                : "No pude consultar Klinip IA en este momento. Revisa tu conexión o intenta nuevamente.",
           references: [],
           createdAt: new Date().toISOString(),
         },
@@ -600,7 +663,7 @@ export default function AiKlinip() {
 
   const nextAppointmentPrompt = nextAppointment
     ? `Prepara un resumen para mi cita de ${formatDateTime(nextAppointment.date_time)}`
-    : "Cuando es mi proxima cita?";
+    : "¿Cuándo es mi próxima cita?";
   const medsAlertPrompt = activeMedications.length > 1
     ? "Revisa si tengo interacciones entre mis medicamentos actuales"
     : "Resume mis medicamentos activos";
@@ -621,7 +684,7 @@ export default function AiKlinip() {
       const report = await generateAiClinicalReport({ report_type: reportType, period_days: periodDays });
       setClinicalReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)].slice(0, 10));
     } catch (error) {
-      console.error("No se pudo generar el reporte clinico", error);
+      console.error("No se pudo generar el reporte clínico", error);
     } finally {
       setReportBusy(false);
     }
@@ -639,7 +702,7 @@ export default function AiKlinip() {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error("No se pudo descargar el reporte clinico", error);
+      console.error("No se pudo descargar el reporte clínico", error);
     }
   };
 
@@ -665,7 +728,7 @@ export default function AiKlinip() {
       setRightTab("chat");
       setMobilePanelOpen(false);
     } catch (error) {
-      console.error("No se pudo abrir la conversacion", error);
+      console.error("No se pudo abrir la conversación", error);
     } finally {
       setHistoryLoading(false);
     }
@@ -689,7 +752,7 @@ export default function AiKlinip() {
         }
       }
     } catch (error) {
-      console.error("No se pudo eliminar la conversacion", error);
+      console.error("No se pudo eliminar la conversación", error);
     }
   };
 
@@ -726,13 +789,13 @@ export default function AiKlinip() {
             {!hasConversation ? (
               <div className="ai-landing">
                 <div className="ai-landing-center">
-                  <h2 className="ai-landing-title">En que te ayudo hoy?</h2>
+                  <h2 className="ai-landing-title">¿En qué te ayudo hoy?</h2>
                   <p className="ai-landing-subtitle">
                     Consulta sobre tus medicamentos, documentos, citas o historial. Soy tu copiloto de salud.
                   </p>
                   <div className="ai-landing-safe">
                     <span className="ai-safe-dot" />
-                    <span>{meta.disclaimer}</span>
+                    <span>{cleanUiText(meta.disclaimer)}</span>
                   </div>
                 </div>
 
@@ -746,7 +809,7 @@ export default function AiKlinip() {
                 </div>
 
                 <section className="ai-quick-section">
-                  <p className="ai-section-kicker">Acciones rapidas</p>
+                  <p className="ai-section-kicker">Acciones rápidas</p>
                   <div className="ai-quick-grid">
                     {QUICK_ACTIONS.map((item) => (
                       <button key={item.id} type="button" className="ai-quick-card" onClick={() => submitPrompt(item.prompt)}>
@@ -762,18 +825,18 @@ export default function AiKlinip() {
 
                 <section className="ai-info-row">
                   <button type="button" className="ai-info-card" onClick={() => submitPrompt(nextAppointmentPrompt)}>
-                    <span className="ai-info-label tone-violet">Proxima cita</span>
-                    <strong>{nextAppointment ? nextAppointment.specialty || "Atencion agendada" : "Sin cita proxima"}</strong>
-                    <small>{nextAppointment ? formatDateTime(nextAppointment.date_time) : "Puedo ayudarte a revisar tu agenda clinica."}</small>
+                    <span className="ai-info-label tone-violet">Próxima cita</span>
+                    <strong>{nextAppointment ? cleanUiText(nextAppointment.specialty, "Atención agendada") : "Sin cita próxima"}</strong>
+                    <small>{nextAppointment ? formatDateTime(nextAppointment.date_time) : "Puedo ayudarte a revisar tu agenda clínica."}</small>
                     <em>
                       {nextAppointment && daysUntil(nextAppointment.date_time) !== null
-                        ? `En ${Math.max(daysUntil(nextAppointment.date_time), 0)} dias`
+                        ? `En ${Math.max(daysUntil(nextAppointment.date_time), 0)} días`
                         : "Preparar con IA"}
                     </em>
                   </button>
 
                   <button type="button" className="ai-info-card" onClick={() => submitPrompt(medsAlertPrompt)}>
-                    <span className="ai-info-label tone-amber">Revision sugerida</span>
+                    <span className="ai-info-label tone-amber">Revisión sugerida</span>
                     <strong>{activeMedications.length > 1 ? "Interacciones y adherencia" : "Plan de medicamentos"}</strong>
                     <small>
                       {activeMedications.length > 1
@@ -784,11 +847,11 @@ export default function AiKlinip() {
                   </button>
 
                   <button type="button" className="ai-info-card" onClick={() => handleGenerateReport("consulta_medica", 30)}>
-                    <span className="ai-info-label tone-blue">Reporte clinico</span>
+                    <span className="ai-info-label tone-blue">Reporte clínico</span>
                     <strong>{clinicalReports[0] ? "Actualizar reporte" : "Generar primer reporte"}</strong>
                     <small>
                       {clinicalReports[0]
-                        ? `Ultimo: ${formatShortDate(clinicalReports[0].created_at)}`
+                        ? `Último: ${formatShortDate(clinicalReports[0].created_at)}`
                         : "Genera un PDF para llevar a consulta"}
                     </small>
                     <em>{reportBusy ? "Generando..." : "Crear PDF"}</em>
@@ -803,7 +866,7 @@ export default function AiKlinip() {
                       <div className={`ai-message-avatar ${message.role === "user" ? "is-user" : "is-ai"}`}>{message.role === "user" ? "TU" : "KI"}</div>
                       <div className="ai-message-column">
                         <div className={`ai-message-bubble ${message.role === "user" ? "is-user" : "is-ai"}`}>
-                          <p>{message.role === "assistant" ? cleanAssistantText(message.content) : message.content}</p>
+                          <p>{message.role === "assistant" ? cleanAssistantText(message.content) : cleanUiText(message.content)}</p>
                           {message.attachmentName ? <div className="ai-inline-attachment">{message.attachmentName}</div> : null}
                           {message.role === "assistant" && Array.isArray(message.references) && message.references.length > 0 ? (
                             <div className="ai-reference-list">
@@ -906,7 +969,7 @@ export default function AiKlinip() {
 
               <div className="ai-input-footer">
                 <span className="ai-safe-dot" />
-                <span>La respuesta usa documentos, medicamentos, citas e historial segun permisos del plan.</span>
+                <span>La respuesta usa documentos, medicamentos, citas e historial según permisos del plan.</span>
               </div>
             </div>
           </div>
@@ -1000,34 +1063,34 @@ export default function AiKlinip() {
                         key={item.id}
                         type="button"
                         className={`ai-radar-card severity-${item.severity || "low"}`}
-                        onClick={() => submitPrompt(`Explicame la alerta ${item.title}`)}
-                      >
-                        <div className="ai-radar-card-head">
-                          <strong>{item.title}</strong>
-                          <span>{getSeverityLabel(item.severity)}</span>
-                        </div>
-                        <p>{item.description}</p>
-                        <small>{formatConversationStamp(item.detected_at || item.updated_at)}</small>
-                        {item.recommended_action ? <em>{item.recommended_action}</em> : null}
-                      </button>
-                    ))}
-                  </div>
+                          onClick={() => submitPrompt(`Explícame la alerta ${cleanUiText(item.title)}`)}
+                        >
+                          <div className="ai-radar-card-head">
+                            <strong>{cleanUiText(item.title)}</strong>
+                            <span>{getSeverityLabel(item.severity)}</span>
+                          </div>
+                          <p>{cleanUiText(item.description)}</p>
+                          <small>{formatConversationStamp(item.detected_at || item.updated_at)}</small>
+                          {item.recommended_action ? <em>{cleanUiText(item.recommended_action)}</em> : null}
+                        </button>
+                      ))}
+                    </div>
                 ) : <div className="ai-empty-note">No hay alertas activas en el radar de salud para esos filtros.</div>}
               </section>
 
               <section className="ai-widget">
                 <div className="ai-widget-head">
-                  <span>Proxima cita</span>
+                  <span>Próxima cita</span>
                   <button type="button" onClick={() => submitPrompt(nextAppointmentPrompt)}>Ver con IA</button>
                 </div>
                 {nextAppointment ? (
                   <div className="ai-next-card">
-                    <em>{Math.max(daysUntil(nextAppointment.date_time) || 0, 0)} dias</em>
-                    <strong>{nextAppointment.specialty || APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atencion"}</strong>
-                    <p>{nextAppointment.center || "Centro por confirmar"}</p>
+                    <em>{Math.max(daysUntil(nextAppointment.date_time) || 0, 0)} días</em>
+                    <strong>{cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")}</strong>
+                    <p>{cleanUiText(nextAppointment.center, "Centro por confirmar")}</p>
                     <span>{formatDateTime(nextAppointment.date_time)}</span>
                   </div>
-                ) : <div className="ai-empty-note">No hay citas proximas registradas.</div>}
+                ) : <div className="ai-empty-note">No hay citas próximas registradas.</div>}
               </section>
 
               <section className="ai-widget">
@@ -1049,7 +1112,7 @@ export default function AiKlinip() {
                 </div>
                 {activeMedications.length > 1 ? (
                   <button type="button" className="ai-alert-card" onClick={() => submitPrompt(medsAlertPrompt)}>
-                    <strong>Revision sugerida</strong>
+                    <strong>Revisión sugerida</strong>
                     <span>Verifica interacciones y orden del tratamiento con IA.</span>
                   </button>
                 ) : null}
@@ -1057,7 +1120,7 @@ export default function AiKlinip() {
 
               <section className="ai-widget">
                 <div className="ai-widget-head">
-                  <span>Reportes clinicos</span>
+                  <span>Reportes clínicos</span>
                   <button type="button" onClick={() => handleGenerateReport("consulta_medica", 30)}>
                     {reportBusy ? "Generando" : "Nuevo"}
                   </button>
@@ -1078,7 +1141,7 @@ export default function AiKlinip() {
                       </button>
                     </div>
                   ))}
-                  {!clinicalReports.length ? <div className="ai-empty-note">Todavia no generas reportes clinicos.</div> : null}
+                  {!clinicalReports.length ? <div className="ai-empty-note">Todavía no generas reportes clínicos.</div> : null}
                 </div>
               </section>
             </div>
@@ -1089,12 +1152,12 @@ export default function AiKlinip() {
               <section className="ai-widget">
                 <div className="ai-widget-head">
                   <span>Adherencia</span>
-                  <button type="button" onClick={() => submitPrompt("Como va mi tratamiento y adherencia?")}>Analizar</button>
+                  <button type="button" onClick={() => submitPrompt("¿Cómo va mi tratamiento y adherencia?")}>Analizar</button>
                 </div>
                 <div className="ai-adherence-summary">
                   <div className={`ai-adherence-pill ${overallAdherenceRate !== null && overallAdherenceRate < 80 ? "is-warning" : ""}`}>
                     <strong>{overallAdherenceRate !== null ? `${overallAdherenceRate}%` : "Sin datos"}</strong>
-                    <span>Ultimos {adherenceSummary?.window_days || 30} dias</span>
+                    <span>Últimos {adherenceSummary?.window_days || 30} días</span>
                   </div>
                   <div className="ai-adherence-copy">
                     <strong>
@@ -1142,16 +1205,16 @@ export default function AiKlinip() {
                       key={document.id}
                       type="button"
                       className="ai-resource-item ai-resource-item-button"
-                      onClick={() => submitPrompt(`Explicame mi documento ${document.document_type_inferred || "clinico"} mas reciente`)}
+                      onClick={() => submitPrompt(`Explícame mi documento ${document.document_type_inferred || "clínico"} más reciente`)}
                     >
                       <div className="ai-resource-badge tone-blue">DOC</div>
                       <div className="ai-resource-copy">
-                        <strong>{DOC_LABELS[document.document_type_inferred] || "Documento"}</strong>
-                        <span>{document.summary_plain || "Resumen no disponible"}</span>
+                        <strong>{cleanUiText(DOC_LABELS[document.document_type_inferred] || "Documento")}</strong>
+                        <span>{cleanUiText(document.summary_plain, "Resumen no disponible")}</span>
                       </div>
                     </button>
                   ))}
-                  {!topDocumentInsights.length ? <div className="ai-empty-note">Todavia no hay documentos procesados por IA.</div> : null}
+                  {!topDocumentInsights.length ? <div className="ai-empty-note">Todavía no hay documentos procesados por IA.</div> : null}
                 </div>
                 {topDocumentInsights[0]?.abnormal_values_json?.length ? (
                   <div className="ai-doc-abnormal">
@@ -1159,7 +1222,7 @@ export default function AiKlinip() {
                     <span>
                       {topDocumentInsights[0].abnormal_values_json
                         .slice(0, 3)
-                        .map((item) => `${item.entity_name}: ${item.entity_value}${item.unit ? ` ${item.unit}` : ""}`)
+                        .map((item) => `${cleanUiText(item.entity_name)}: ${cleanUiText(item.entity_value)}${item.unit ? ` ${cleanUiText(item.unit)}` : ""}`)
                         .join(" · ")}
                     </span>
                   </div>
@@ -1173,7 +1236,7 @@ export default function AiKlinip() {
               <div className="ai-chat-sidebar-head">
                 <div className="ai-chat-sidebar-copy">
                   <strong>Tus chats</strong>
-                  <span>{conversationTitle || "Conversaciones guardadas de Klinip IA"}</span>
+                  <span>{cleanUiText(conversationTitle, "Conversaciones guardadas de Klinip IA")}</span>
                 </div>
                 <div className="ai-chat-sidebar-actions">
                   <button type="button" className="ai-chat-sidebar-new" onClick={() => handleGenerateReport("consulta_medica", 30)}>
@@ -1185,7 +1248,7 @@ export default function AiKlinip() {
 
               {clinicalReports.length ? (
                 <div className="ai-chat-report-strip">
-                  <strong>Ultimo reporte</strong>
+                  <strong>Último reporte</strong>
                   <button type="button" onClick={() => handleDownloadReport(clinicalReports[0].id, clinicalReports[0].pdf_filename)}>
                     {formatReportLabel(clinicalReports[0].report_type)}
                   </button>
@@ -1202,24 +1265,29 @@ export default function AiKlinip() {
                       type="button"
                       className="ai-conversation-open simple"
                       onClick={() => handleSelectConversation(item.conversation_id)}
-                      title={item.title || "Nueva conversacion"}
+                      title={cleanUiText(item.title, "Nueva conversación")}
                     >
-                      <span>{item.title || "Nueva conversacion"}</span>
+                      <span className="ai-conversation-summary">
+                        <strong>{cleanUiText(item.title, "Nueva conversación")}</strong>
+                        <small>{formatConversationListDate(item.updated_at || item.created_at)}</small>
+                      </span>
                     </button>
                     <button
                       type="button"
                       className="ai-conversation-delete simple"
-                      aria-label="Eliminar conversacion"
-                      title={`Eliminar ${item.title || "conversacion"}`}
+                      aria-label="Eliminar conversación"
+                      title={`Eliminar ${cleanUiText(item.title, "conversación")}`}
                       onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
                     >
-                      ...
+                      <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 6h.01M12 12h.01M12 18h.01" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
                     </button>
                   </div>
                 ))}
                 {!conversations.length ? (
                   <div className="ai-empty-note">
-                    No hay conversaciones guardadas todavia. Tu proximo mensaje iniciara un nuevo chat.
+                    No hay conversaciones guardadas todavía. Tu próximo mensaje iniciará un nuevo chat.
                   </div>
                 ) : null}
               </div>

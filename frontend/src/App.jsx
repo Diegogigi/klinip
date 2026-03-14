@@ -1313,16 +1313,31 @@ export default function App() {
   const handleLogout = async () => {
     const registeredKey = getUserKey(PUSH_REGISTERED_KEY_BASE, user?.id);
     const endpointKey = getUserKey(PUSH_ENDPOINT_KEY_BASE, user?.id);
-    await removePushSubscription().catch(() => false);
+    const pushCleanup = Promise.race([
+      removePushSubscription().catch(() => false),
+      new Promise((resolve) => window.setTimeout(() => resolve(false), 1500)),
+    ]);
     localStorage.removeItem("token");
     if (registeredKey) localStorage.removeItem(registeredKey);
     if (endpointKey) localStorage.removeItem(endpointKey);
+    localStorage.removeItem(LAST_USER_ID_KEY);
     if (user?.id) {
       const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
       localStorage.removeItem(key);
     }
-    apiLogout?.();
     setUser(null);
+    setBooting(false);
+    navigate("/login", { replace: true });
+    try {
+      await pushCleanup;
+    } catch (_) {
+      // noop
+    }
+    try {
+      await apiLogout?.();
+    } catch (_) {
+      // noop
+    }
     if ("caches" in window) {
       caches.keys().then((keys) => {
         keys

@@ -633,7 +633,11 @@ class AiFamilyProfileInsightOut(BaseModel):
     active_alerts: int = 0
     upcoming_appointments: int = 0
     low_adherence: bool = False
+    relevant_conditions: list[str] = []
+    relevant_medications: list[str] = []
+    relevant_appointments: list[str] = []
     pending_documents: list[str] = []
+    key_alerts: list[str] = []
     key_risks: list[str] = []
 
 

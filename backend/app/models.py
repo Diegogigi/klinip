@@ -59,6 +59,9 @@ class User(Base):
     notification_settings_json = Column(Text, default="")
     plan_type = Column(String, default="basico")
     active_health_profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True)
+    family_ai_needs_refresh = Column(Boolean, default=False)
+    family_ai_refresh_requested_at = Column(DateTime, nullable=True)
+    family_ai_last_refreshed_at = Column(DateTime, nullable=True)
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"
@@ -243,6 +246,9 @@ class HealthProfile(Base):
     automation_settings_json = Column(Text, default="")
     is_primary_profile = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False)
+    ai_needs_refresh = Column(Boolean, default=False)
+    ai_refresh_requested_at = Column(DateTime, nullable=True)
+    ai_last_refreshed_at = Column(DateTime, nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -454,6 +460,39 @@ class ProfileHealthFeature(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     profile = relationship("HealthProfile")
+
+
+class ProfileAiSummary(Base):
+    __tablename__ = "profile_ai_summaries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, unique=True, index=True)
+    summary = Column(Text, default="")
+    summary_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+
+
+class FamilyAiSummary(Base):
+    __tablename__ = "family_ai_summaries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "window_days", name="uq_family_ai_summary_user_window"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    window_days = Column(Integer, default=30)
+    family_size = Column(Integer, default=0)
+    active_alerts_total = Column(Integer, default=0)
+    pending_documents_total = Column(Integer, default=0)
+    low_adherence_profiles = Column(Integer, default=0)
+    summary = Column(Text, default="")
+    profiles_json = Column(JSON, default=list)
+    summary_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User")
 
 
 class ExternalClinicalSource(Base):
