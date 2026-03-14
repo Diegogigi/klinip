@@ -18,7 +18,7 @@ from typing import List
 import os
 import mimetypes
 import base64
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import hashlib
 import secrets
 import smtplib
@@ -1761,22 +1761,41 @@ SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
 AI_REFRESH_INTERVAL_SECONDS = 600
 DEFAULT_TZ_NAME = "America/Santiago"
+FALLBACK_TZ_OFFSETS = {
+    "America/Santiago": -3,
+    "UTC": 0,
+}
 
 
-def _resolve_user_tz(user: models.User | None) -> ZoneInfo:
-    tz_name = getattr(user, "timezone", None) or DEFAULT_TZ_NAME
+def _safe_zoneinfo(tz_name: str | None) -> timezone | ZoneInfo:
+    resolved_name = (tz_name or "").strip() or DEFAULT_TZ_NAME
     try:
-        return ZoneInfo(tz_name)
+        return ZoneInfo(resolved_name)
     except Exception:
-        return ZoneInfo(DEFAULT_TZ_NAME)
+        fallback_hours = FALLBACK_TZ_OFFSETS.get(resolved_name, FALLBACK_TZ_OFFSETS.get(DEFAULT_TZ_NAME, 0))
+        return timezone(timedelta(hours=fallback_hours), name=resolved_name)
 
 
-def _to_schedule_tz(value: datetime | None, tz: ZoneInfo) -> datetime | None:
+def _resolve_user_tz(user: models.User | None) -> timezone | ZoneInfo:
+    tz_name = getattr(user, "timezone", None) or DEFAULT_TZ_NAME
+    return _safe_zoneinfo(tz_name)
+
+
+def _normalize_dt_for_tz(value: datetime | None, tz: timezone | ZoneInfo) -> datetime | None:
     if not value:
         return None
     if value.tzinfo is None:
         return value.replace(tzinfo=tz)
-    return value.astimezone(tz)
+    try:
+        return value.astimezone(tz)
+    except Exception:
+        return value.replace(tzinfo=tz)
+
+
+def _to_schedule_tz(value: datetime | None, tz: timezone | ZoneInfo) -> datetime | None:
+    if not value:
+        return None
+    return _normalize_dt_for_tz(value, tz)
 
 
 def _appointment_type_label(appt_type) -> str:
@@ -4699,13 +4718,8 @@ def _safe_iso(dt: datetime | None) -> str:
 def _ai_dt_in_tz(value: datetime | None, tz_name: str | None) -> datetime | None:
     if not value:
         return None
-    try:
-        tz = ZoneInfo((tz_name or "").strip() or DEFAULT_TZ_NAME)
-    except Exception:
-        tz = ZoneInfo(DEFAULT_TZ_NAME)
-    if value.tzinfo is None:
-        return value.replace(tzinfo=tz)
-    return value.astimezone(tz)
+    tz = _safe_zoneinfo(tz_name)
+    return _normalize_dt_for_tz(value, tz)
 
 
 def _safe_iso_local(dt: datetime | None, tz_name: str | None) -> str:
@@ -4760,10 +4774,7 @@ def _appointment_insights(appointments: list[models.Appointment], tz_name: str) 
             "counts_by_status": {"pendiente": 0, "agendada": 0, "realizada": 0},
         }
 
-    try:
-        safe_tz = ZoneInfo((tz_name or "").strip() or DEFAULT_TZ_NAME)
-    except Exception:
-        safe_tz = ZoneInfo(DEFAULT_TZ_NAME)
+    safe_tz = _safe_zoneinfo(tz_name)
     now_dt = datetime.now(safe_tz)
     now_ts = now_dt.timestamp()
 
@@ -5972,7 +5983,11 @@ def _upsert_profile_health_features(
     if not feature:
         feature = models.ProfileHealthFeature(profile_id=profile.id)
     dated_appointments = [item for item in appointments if item.date_time]
-    future_appointments = [item for item in dated_appointments if item.date_time >= datetime.now()]
+    compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+    now_dt = datetime.now(compare_tz)
+    future_appointments = [
+        item for item in dated_appointments if (_normalize_dt_for_tz(item.date_time, compare_tz) or datetime.min.replace(tzinfo=compare_tz)) >= now_dt
+    ]
     feature.next_appointment_at = min((item.date_time for item in future_appointments), default=None)
     feature.last_appointment_at = max((item.date_time for item in dated_appointments), default=None)
     feature.active_medications_count = len([med for med in medications if not bool(med.completed)])
@@ -6000,16 +6015,18 @@ def _build_health_alert_candidates(
     documents: list[models.Document],
     adherence_summary: dict,
 ) -> list[dict]:
-    now = datetime.now()
+    compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+    now = datetime.now(compare_tz)
     alerts: list[dict] = []
     for med in medications:
         if bool(med.completed):
             continue
-        expected_end = med.end_date
+        expected_end = _normalize_dt_for_tz(med.end_date, compare_tz)
         if not expected_end:
             duration_days = _parse_duration_days(med.duration)
             if duration_days and med.created_at:
-                expected_end = med.created_at + timedelta(days=duration_days)
+                created_at = _normalize_dt_for_tz(med.created_at, compare_tz)
+                expected_end = created_at + timedelta(days=duration_days) if created_at else None
         if expected_end and 0 <= (expected_end - now).days <= 5:
             alerts.append(
                 {
@@ -6039,8 +6056,8 @@ def _build_health_alert_candidates(
     overdue = [
         appt
         for appt in appointments
-        if appt.date_time
-        and appt.date_time < now - timedelta(hours=12)
+        if _normalize_dt_for_tz(appt.date_time, compare_tz)
+        and _normalize_dt_for_tz(appt.date_time, compare_tz) < now - timedelta(hours=12)
         and _appointment_status_key(appt.status) != "realizada"
     ]
     if overdue:
@@ -6067,7 +6084,13 @@ def _build_health_alert_candidates(
                 "evidence_json": missing_flags,
             }
         )
-    stale_active = [med for med in medications if not bool(med.completed) and med.end_date and med.end_date < now]
+    stale_active = [
+        med
+        for med in medications
+        if not bool(med.completed)
+        and _normalize_dt_for_tz(med.end_date, compare_tz)
+        and _normalize_dt_for_tz(med.end_date, compare_tz) < now
+    ]
     if stale_active:
         alerts.append(
             {
@@ -6408,14 +6431,14 @@ def _ai_context_bundle_for_profile(
             if appt.date_time and appt.status != models.AppointmentStatus.realizada
         ],
         key=lambda appt: _ai_dt_in_tz(appt.date_time, timezone_name) or datetime.max.replace(
-            tzinfo=ZoneInfo(DEFAULT_TZ_NAME)
+            tzinfo=_safe_zoneinfo(DEFAULT_TZ_NAME)
         ),
     )
     future_upcoming = [
         appt
         for appt in upcoming
-        if (_ai_dt_in_tz(appt.date_time, timezone_name) or datetime.min.replace(tzinfo=ZoneInfo(DEFAULT_TZ_NAME)))
-        >= datetime.now(ZoneInfo((timezone_name or "").strip() or DEFAULT_TZ_NAME))
+        if (_ai_dt_in_tz(appt.date_time, timezone_name) or datetime.min.replace(tzinfo=_safe_zoneinfo(DEFAULT_TZ_NAME)))
+        >= datetime.now(_safe_zoneinfo(timezone_name))
     ]
     if future_upcoming:
         upcoming = future_upcoming
@@ -7538,7 +7561,7 @@ async def update_me(
 
     if payload.timezone:
         try:
-            ZoneInfo(payload.timezone)
+            _safe_zoneinfo(payload.timezone)
         except Exception:
             raise HTTPException(status_code=400, detail="Zona horaria invalida")
         current_user.timezone = payload.timezone
