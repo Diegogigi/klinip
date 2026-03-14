@@ -701,6 +701,7 @@ export default function App() {
     primaryCareCenter: "",
   });
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
+  const medAlertPollingRef = useRef(false);
   const locationRef = useRef(location);
   const seenUpdateKeysRef = useRef(new Set());
   const dismissedUpdateKeyRef = useRef("");
@@ -804,10 +805,12 @@ export default function App() {
       const currentPath = locationRef.current?.pathname || "";
       // Si el usuario ya está en medicamentos, evita doble polling (esa vista maneja su propio flujo).
       if (currentPath.startsWith("/medications")) return;
+      if (medAlertPollingRef.current) return;
 
       const now = new Date();
       const nowTs = now.getTime();
       const lastChecked = globalMedCheckRef.current;
+      medAlertPollingRef.current = true;
 
       try {
         const meds = (await getMedications()) || [];
@@ -847,6 +850,7 @@ export default function App() {
       } catch (err) {
         console.error("No se pudo verificar alertas de medicamentos", err);
       } finally {
+        medAlertPollingRef.current = false;
         globalMedCheckRef.current = nowTs;
       }
     };
@@ -855,6 +859,7 @@ export default function App() {
     const intervalId = window.setInterval(checkDueMedicationPopups, MED_ALERT_POLL_MS);
     return () => {
       active = false;
+      medAlertPollingRef.current = false;
       window.clearInterval(intervalId);
     };
   }, [user, booting, navigate]);

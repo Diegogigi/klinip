@@ -202,6 +202,8 @@ export default function AiKlinip() {
   const inputZoneRef = useRef(null);
   const inputFieldRef = useRef(null);
   const fileTimerRef = useRef(null);
+  const resourcesRequestRef = useRef(null);
+  const conversationsRequestRef = useRef(null);
 
   const mapHistoryToMessages = (items) => {
     if (!Array.isArray(items) || !items.length) return [INITIAL_MESSAGE];
@@ -237,46 +239,74 @@ export default function AiKlinip() {
   useEffect(() => {
     let mounted = true;
     const loadResources = async () => {
-      const [profile, profiles] = await Promise.all([
-        getActiveHealthProfile().catch(() => null),
-        getHealthProfiles().catch(() => []),
-      ]);
-      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
-      const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
-        getAppointments().catch(() => []),
-        getDocuments().catch(() => []),
-        getMedications().catch(() => []),
-        getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
-        getAiAdherence().catch(() => ({})),
-        getAiDocumentIntelligence().catch(() => []),
-        getAiClinicalReports().catch(() => []),
-      ]);
-      if (!mounted) return;
+      if (resourcesRequestRef.current) {
+        return resourcesRequestRef.current;
+      }
+      resourcesRequestRef.current = (async () => {
+        const [profile, profiles] = await Promise.all([
+          getActiveHealthProfile().catch(() => null),
+          getHealthProfiles().catch(() => []),
+        ]);
+        const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+        const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
+          getAppointments().catch(() => []),
+          getDocuments().catch(() => []),
+          getMedications().catch(() => []),
+          getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
+          getAiAdherence().catch(() => ({})),
+          getAiDocumentIntelligence().catch(() => []),
+          getAiClinicalReports().catch(() => []),
+        ]);
+        if (!mounted) return;
 
-      setResources({
-        profile,
-        appointments: Array.isArray(appointments) ? appointments : [],
-        documents: Array.isArray(documents) ? documents : [],
-        medications: Array.isArray(medications) ? medications : [],
-      });
-      setHealthRadar(Array.isArray(radar) ? radar : []);
-      setAdherenceSummary(adherence || {});
-      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
-      setClinicalReports(Array.isArray(reports) ? reports : []);
-      setRadarProfiles(Array.isArray(profiles) ? profiles : []);
+        setResources({
+          profile,
+          appointments: Array.isArray(appointments) ? appointments : [],
+          documents: Array.isArray(documents) ? documents : [],
+          medications: Array.isArray(medications) ? medications : [],
+        });
+        setHealthRadar(Array.isArray(radar) ? radar : []);
+        setAdherenceSummary(adherence || {});
+        setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
+        setClinicalReports(Array.isArray(reports) ? reports : []);
+        setRadarProfiles(Array.isArray(profiles) ? profiles : []);
 
-      if (profile?.full_name) {
-        setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
+        if (profile?.full_name) {
+          setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
+        }
+      })();
+
+      try {
+        await resourcesRequestRef.current;
+      } finally {
+        resourcesRequestRef.current = null;
+      }
+    };
+
+    const refreshConversations = async () => {
+      if (conversationsRequestRef.current) {
+        return conversationsRequestRef.current;
+      }
+      conversationsRequestRef.current = (async () => {
+        const items = await getAiConversations().catch(() => []);
+        if (!mounted) return [];
+        const safeItems = Array.isArray(items) ? items : [];
+        setConversations(safeItems);
+        return safeItems;
+      })();
+
+      try {
+        return await conversationsRequestRef.current;
+      } finally {
+        conversationsRequestRef.current = null;
       }
     };
 
     const loadAll = async () => {
       setHistoryLoading(true);
       try {
-        const conversationItems = await getAiConversations().catch(() => []);
+        const safeConversations = await refreshConversations();
         if (!mounted) return;
-        const safeConversations = Array.isArray(conversationItems) ? conversationItems : [];
-        setConversations(safeConversations);
 
         if (safeConversations.length) {
           const targetConversationId = safeConversations[0].conversation_id;
@@ -302,14 +332,11 @@ export default function AiKlinip() {
     };
 
     const handleWindowSync = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
       loadResources().catch((error) => {
         console.error("No se pudieron refrescar recursos IA", error);
       });
-      getAiConversations()
-        .then((items) => {
-          if (!mounted) return;
-          setConversations(Array.isArray(items) ? items : []);
-        })
+      refreshConversations()
         .catch((error) => {
           console.error("No se pudieron refrescar conversaciones IA", error);
         });

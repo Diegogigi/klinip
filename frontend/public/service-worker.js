@@ -14,6 +14,13 @@ const NOTIFICATIONS_STORE = "klinip-notifications";
 const RECEIVED_STORE = "klinip-received-notifications";
 const BADGE_STORE = "klinip-badge";
 
+function fetchWithNetworkFallback(request, fallback = null) {
+  return fetch(request).catch(() => {
+    if (fallback) return fallback();
+    return Response.error();
+  });
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -78,7 +85,7 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
 
   if (event.request.headers.get("authorization")) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetchWithNetworkFallback(event.request));
     return;
   }
 
@@ -88,11 +95,14 @@ self.addEventListener("fetch", (event) => {
     event.request.url.includes("/privacy/") ||
     event.request.url.includes("/push/") ||
     event.request.url.includes("/api/") ||
+    event.request.url.includes("/ai/") ||
+    event.request.url.includes("/health-profiles") ||
+    event.request.url.includes("/plans/me") ||
     event.request.url.includes("/appointments") ||
     event.request.url.includes("/medications") ||
     event.request.url.includes("/documents")
   ) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetchWithNetworkFallback(event.request));
     return;
   }
 
@@ -108,7 +118,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).then((response) => {
+      return fetchWithNetworkFallback(event.request, () => caches.match(event.request)).then((response) => {
         if (response && response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {

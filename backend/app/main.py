@@ -447,6 +447,40 @@ def ensure_medication_intake_schema():
 ensure_medication_intake_schema()
 
 
+def ensure_medication_performance_indexes():
+    try:
+        backend = engine.url.get_backend_name()
+        statements = []
+        if backend == "postgresql":
+            statements.extend(
+                [
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_user_medication ON medication_intakes (user_id, medication_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_medication_taken_at ON medication_intakes (medication_id, taken_at)",
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_medication_scheduled_at ON medication_intakes (medication_id, scheduled_at)",
+                    "CREATE INDEX IF NOT EXISTS ix_adherence_summaries_profile_med_window ON adherence_summaries (profile_id, medication_id, window_days)",
+                ]
+            )
+        else:
+            statements.extend(
+                [
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_user_medication ON medication_intakes (user_id, medication_id)",
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_medication_taken_at ON medication_intakes (medication_id, taken_at)",
+                    "CREATE INDEX IF NOT EXISTS ix_medication_intakes_medication_scheduled_at ON medication_intakes (medication_id, scheduled_at)",
+                    "CREATE INDEX IF NOT EXISTS ix_adherence_summaries_profile_med_window ON adherence_summaries (profile_id, medication_id, window_days)",
+                ]
+            )
+
+        with engine.begin() as conn:
+            for stmt in statements:
+                conn.execute(text(stmt))
+        print("DEBUG ensure_medication_performance_indexes: indices verificados")
+    except Exception as exc:
+        print(f"WARNING ensure_medication_performance_indexes: no se pudo completar: {exc}")
+
+
+ensure_medication_performance_indexes()
+
+
 def ensure_ai_conversation_schema():
     """
     Garantiza que ai_conversation_messages tenga columnas para conversaciones.
@@ -2034,32 +2068,62 @@ def _materialize_medication_adherence_events(db: Session, user: models.User, hor
 
 
 def _attach_medication_adherence(
-    db: Session, medications: list[models.Medication], current_user: models.User
+    db: Session,
+    medications: list[models.Medication],
+    current_user: models.User,
+    profile_id: int | None = None,
+    owner_user_id: int | None = None,
 ):
     if not medications:
         return medications
 
     now = datetime.now()
-    medication_ids = [m.id for m in medications]
+    medication_ids = [m.id for m in medications if getattr(m, "id", None)]
+    adherence_by_medication_id: dict[int, models.AdherenceSummary] = {}
+
+    if medication_ids and profile_id:
+        summary_rows = (
+            db.query(models.AdherenceSummary)
+            .filter(
+                models.AdherenceSummary.profile_id == profile_id,
+                models.AdherenceSummary.window_days == 30,
+                models.AdherenceSummary.medication_id.in_(medication_ids),
+            )
+            .all()
+        )
+        adherence_by_medication_id = {
+            int(row.medication_id): row
+            for row in summary_rows
+            if getattr(row, "medication_id", None) is not None
+        }
+
     taken_counts = {mid: 0 for mid in medication_ids}
-
-    intake_rows = (
-        db.query(
-            models.MedicationIntake.medication_id,
-            func.count(models.MedicationIntake.id),
+    if medication_ids and not adherence_by_medication_id:
+        intake_rows = (
+            db.query(
+                models.MedicationIntake.medication_id,
+                func.count(models.MedicationIntake.id),
+            )
+            .filter(
+                models.MedicationIntake.user_id == (owner_user_id or current_user.id),
+                models.MedicationIntake.medication_id.in_(medication_ids),
+            )
+            .group_by(models.MedicationIntake.medication_id)
+            .all()
         )
-        .filter(
-            models.MedicationIntake.user_id == current_user.id,
-            models.MedicationIntake.medication_id.in_(medication_ids),
-        )
-        .group_by(models.MedicationIntake.medication_id)
-        .all()
-    )
 
-    for medication_id, count in intake_rows:
-        taken_counts[medication_id] = int(count or 0)
+        for medication_id, count in intake_rows:
+            taken_counts[int(medication_id)] = int(count or 0)
 
     for med in medications:
+        summary_row = adherence_by_medication_id.get(int(med.id)) if getattr(med, "id", None) else None
+        if summary_row:
+            setattr(med, "expected_doses", int(summary_row.expected_doses or 0))
+            setattr(med, "taken_doses", int(summary_row.taken_doses or 0))
+            setattr(med, "missed_doses", int(summary_row.missed_count or 0))
+            setattr(med, "adherence_rate", float(summary_row.adherence_rate) if summary_row.adherence_rate is not None else None)
+            continue
+
         expected = _calculate_expected_doses_until(med, now)
         taken = int(taken_counts.get(med.id, 0))
         missed = max(expected - taken, 0)
@@ -9493,14 +9557,20 @@ async def list_medications(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user)
     medications = (
         db.query(models.Medication)
         .filter(models.Medication.user_id == target_user_id)
         .order_by(models.Medication.created_at.desc())
         .all()
     )
-    return _attach_medication_adherence(db, medications, current_user)
+    return _attach_medication_adherence(
+        db,
+        medications,
+        current_user,
+        profile_id=profile.id,
+        owner_user_id=target_user_id,
+    )
 
 
 @app.post("/medications", response_model=schemas.MedicationOut)
