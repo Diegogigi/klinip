@@ -1,5 +1,6 @@
-const CACHE_NAME = "klinip-cache-v13";
+const CACHE_NAME = "klinip-cache-v14";
 const ASSETS = [
+  "/",
   "/manifest.webmanifest",
   "/icons/apple-touch-icon.png",
   "/icons/android-chrome-192x192.png",
@@ -18,6 +19,16 @@ function fetchWithNetworkFallback(request, fallback = null) {
   return fetch(request).catch(() => {
     if (fallback) return fallback();
     return Response.error();
+  });
+}
+
+function offlineNavigationFallback() {
+  return caches.match("/").then((response) => {
+    if (response) return response;
+    return new Response("Sin conexion disponible.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   });
 }
 
@@ -108,9 +119,7 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() =>
-        caches.match(event.request).then((response) => response || caches.match("/"))
-      )
+      fetchWithNetworkFallback(event.request, offlineNavigationFallback)
     );
     return;
   }

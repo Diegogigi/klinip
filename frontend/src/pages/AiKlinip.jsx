@@ -799,7 +799,7 @@ export default function AiKlinip() {
                     </article>
                   ))}
 
-                  {(loading || historyLoading) ? (
+                  {loading ? (
                     <article className="ai-message is-assistant">
                       <div className="ai-message-avatar is-ai">KI</div>
                       <div className="ai-message-column">

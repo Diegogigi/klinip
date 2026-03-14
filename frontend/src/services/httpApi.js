@@ -219,7 +219,9 @@ export async function createProfileNote(profileId, payload) {
 }
 
 export async function sendAiChat(payload) {
-  const res = await api.post("/ai/chat", payload);
+  const res = await api.post("/ai/chat", payload, {
+    timeout: 45000,
+  });
   return res.data;
 }
 
