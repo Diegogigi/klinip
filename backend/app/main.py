@@ -1781,6 +1781,11 @@ def _resolve_user_tz(user: models.User | None) -> timezone | ZoneInfo:
     return _safe_zoneinfo(tz_name)
 
 
+def _resolve_user_tz_name(user: models.User | None) -> str:
+    tz_value = getattr(user, "timezone", None) or DEFAULT_TZ_NAME
+    return (tz_value or DEFAULT_TZ_NAME).strip() or DEFAULT_TZ_NAME
+
+
 def _normalize_dt_for_tz(value: datetime | None, tz: timezone | ZoneInfo) -> datetime | None:
     if not value:
         return None
@@ -6375,7 +6380,7 @@ def _ai_context_bundle_for_profile(
     include_family_context: bool = True,
 ) -> dict:
     plan_info = _build_plan_info(current_user, db)
-    timezone_name = _resolve_user_tz(current_user).key
+    timezone_name = _resolve_user_tz_name(current_user)
 
     appointments = (
         db.query(models.Appointment)

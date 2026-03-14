@@ -766,7 +766,7 @@ export default function AiKlinip() {
                           ) : null}
                         </div>
                         <div className="ai-message-time">
-                          {message.role === "user" ? "Tu" : "Klinip IA"} Â· {formatMessageTime(message.createdAt)}
+                          {message.role === "user" ? "Tu" : "Klinip IA"} - {formatMessageTime(message.createdAt)}
                         </div>
                       </div>
                     </article>
@@ -1051,7 +1051,7 @@ export default function AiKlinip() {
                     </strong>
                     <span>
                       {lowAdherenceItems.length
-                        ? lowAdherenceItems.slice(0, 2).map((item) => `${item.name}: ${item.adherence_rate}%`).join(" Â· ")
+                        ? lowAdherenceItems.slice(0, 2).map((item) => `${item.name}: ${item.adherence_rate}%`).join(" - ")
                         : "Puedo revisar patrones por horario, frecuencia y continuidad del tratamiento."}
                     </span>
                   </div>
@@ -1068,7 +1068,7 @@ export default function AiKlinip() {
                       <div className="ai-resource-badge tone-teal">MED</div>
                       <div className="ai-resource-copy">
                         <strong>{medication.name}</strong>
-                        <span>{medication.dose || "Sin dosis"} Â· {medication.frequency || "Sin frecuencia"}</span>
+                        <span>{medication.dose || "Sin dosis"} - {medication.frequency || "Sin frecuencia"}</span>
                       </div>
                     </div>
                   ))}
@@ -1162,7 +1162,7 @@ export default function AiKlinip() {
                       title={`Eliminar ${item.title || "conversacion"}`}
                       onClick={(event) => handleDeleteConversation(event, item.conversation_id)}
                     >
-                      Â·Â·Â·
+                      ...
                     </button>
                   </div>
                 ))}
