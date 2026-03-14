@@ -38,7 +38,7 @@ const RADAR_PERIOD_OPTIONS = [
 const INITIAL_MESSAGE = {
   id: "welcome",
   role: "assistant",
-  content: "Puedo ayudarte a revisar documentos, OCR, medicamentos, citas e historial usando el perfil activo de Klinip.",
+  content: "Hola, soy Klinip IA. Puedo revisar contigo documentos, medicamentos, citas e historial del perfil activo. Hazme una pregunta y partimos.",
   references: [],
   createdAt: null,
 };
@@ -204,6 +204,7 @@ export default function AiKlinip() {
   const fileTimerRef = useRef(null);
   const resourcesRequestRef = useRef(null);
   const conversationsRequestRef = useRef(null);
+  const insightsRequestRef = useRef(null);
 
   const mapHistoryToMessages = (items) => {
     if (!Array.isArray(items) || !items.length) return [INITIAL_MESSAGE];
@@ -236,6 +237,33 @@ export default function AiKlinip() {
     );
   };
 
+  const loadInsights = async (resolvedProfileId, mountedRef = () => true) => {
+    if (insightsRequestRef.current) {
+      return insightsRequestRef.current;
+    }
+    insightsRequestRef.current = (async () => {
+      const [radar, adherence, docIntel, reports] = await Promise.all([
+        getAiHealthRadar(resolvedProfileId || undefined).catch(() => []),
+        getAiAdherence().catch(() => ({})),
+        getAiDocumentIntelligence().catch(() => []),
+        getAiClinicalReports().catch(() => []),
+      ]);
+
+      if (!mountedRef()) return;
+
+      setHealthRadar(Array.isArray(radar) ? radar : []);
+      setAdherenceSummary(adherence || {});
+      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
+      setClinicalReports(Array.isArray(reports) ? reports : []);
+    })();
+
+    try {
+      await insightsRequestRef.current;
+    } finally {
+      insightsRequestRef.current = null;
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     const loadResources = async () => {
@@ -247,15 +275,10 @@ export default function AiKlinip() {
           getActiveHealthProfile().catch(() => null),
           getHealthProfiles().catch(() => []),
         ]);
-        const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
-        const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
+        const [appointments, documents, medications] = await Promise.all([
           getAppointments().catch(() => []),
           getDocuments().catch(() => []),
           getMedications().catch(() => []),
-          getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
-          getAiAdherence().catch(() => ({})),
-          getAiDocumentIntelligence().catch(() => []),
-          getAiClinicalReports().catch(() => []),
         ]);
         if (!mounted) return;
 
@@ -265,15 +288,18 @@ export default function AiKlinip() {
           documents: Array.isArray(documents) ? documents : [],
           medications: Array.isArray(medications) ? medications : [],
         });
-        setHealthRadar(Array.isArray(radar) ? radar : []);
-        setAdherenceSummary(adherence || {});
-        setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
-        setClinicalReports(Array.isArray(reports) ? reports : []);
         setRadarProfiles(Array.isArray(profiles) ? profiles : []);
 
         if (profile?.full_name) {
           setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
         }
+
+        const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+        window.setTimeout(() => {
+          loadInsights(resolvedRadarProfileId, () => mounted).catch((error) => {
+            console.error("No se pudieron cargar insights IA", error);
+          });
+        }, 150);
       })();
 
       try {
@@ -528,15 +554,10 @@ export default function AiKlinip() {
       const nextConversations = await getAiConversations().catch(() => []);
       setConversations(Array.isArray(nextConversations) ? nextConversations : []);
       const profile = await getActiveHealthProfile().catch(() => null);
-      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
-      const [appointments, documents, medications, radar, adherence, docIntel, reports] = await Promise.all([
+      const [appointments, documents, medications] = await Promise.all([
         getAppointments().catch(() => []),
         getDocuments().catch(() => []),
         getMedications().catch(() => []),
-        getAiHealthRadar(resolvedRadarProfileId || undefined).catch(() => []),
-        getAiAdherence().catch(() => ({})),
-        getAiDocumentIntelligence().catch(() => []),
-        getAiClinicalReports().catch(() => []),
       ]);
       setResources({
         profile,
@@ -544,10 +565,10 @@ export default function AiKlinip() {
         documents: Array.isArray(documents) ? documents : [],
         medications: Array.isArray(medications) ? medications : [],
       });
-      setHealthRadar(Array.isArray(radar) ? radar : []);
-      setAdherenceSummary(adherence || {});
-      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
-      setClinicalReports(Array.isArray(reports) ? reports : []);
+      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+      loadInsights(resolvedRadarProfileId).catch((refreshError) => {
+        console.error("No se pudieron refrescar insights IA", refreshError);
+      });
     } catch (error) {
       console.error("No se pudo consultar Klinip IA", error);
       setMessages((prev) => [
@@ -555,7 +576,10 @@ export default function AiKlinip() {
         {
           id: `assistant-error-${Date.now()}`,
           role: "assistant",
-          content: "No pude consultar Klinip IA en este momento. Revisa tu conexion o intenta nuevamente.",
+          content:
+            error?.code === "ECONNABORTED"
+              ? "Klinip IA esta tardando mas de lo normal en responder. Intenta de nuevo en unos segundos."
+              : "No pude consultar Klinip IA en este momento. Revisa tu conexion o intenta nuevamente.",
           references: [],
           createdAt: new Date().toISOString(),
         },

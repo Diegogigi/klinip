@@ -153,8 +153,14 @@ export async function removePushSubscription() {
   const reg = await navigator.serviceWorker.ready;
   const sub = await reg.pushManager.getSubscription();
   if (sub) {
-    await unsubscribePush({ endpoint: sub.endpoint });
-    await sub.unsubscribe();
+    try {
+      await unsubscribePush({ endpoint: sub.endpoint });
+    } catch (error) {
+      if (error?.response?.status !== 401) {
+        console.warn("No se pudo desregistrar la suscripcion push en backend", error);
+      }
+    }
+    await sub.unsubscribe().catch(() => false);
   }
   return true;
 }

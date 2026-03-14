@@ -1310,9 +1310,10 @@ export default function App() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     const registeredKey = getUserKey(PUSH_REGISTERED_KEY_BASE, user?.id);
     const endpointKey = getUserKey(PUSH_ENDPOINT_KEY_BASE, user?.id);
+    await removePushSubscription().catch(() => false);
     localStorage.removeItem("token");
     if (registeredKey) localStorage.removeItem(registeredKey);
     if (endpointKey) localStorage.removeItem(endpointKey);
@@ -1322,7 +1323,6 @@ export default function App() {
     }
     apiLogout?.();
     setUser(null);
-    removePushSubscription();
     if ("caches" in window) {
       caches.keys().then((keys) => {
         keys

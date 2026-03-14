@@ -17421,6 +17421,14 @@ body.theme-dark .ai-next-card em {
 }
 
 @media (max-width: 640px) {
+  .lp-page .brand-wordmark.responsive .brand-wordmark-full {
+    display: inline-block;
+  }
+
+  .lp-page .brand-wordmark.responsive .brand-wordmark-compact {
+    display: none;
+  }
+
   .brand-wordmark.responsive .brand-wordmark-full {
     display: none;
   }
