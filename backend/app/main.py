@@ -2679,11 +2679,16 @@ def _send_scheduled_push_reminders():
         ).delete()
         db.commit()
 
-        subscriptions = db.query(models.PushSubscription).all()
+        subscribed_user_ids = [
+            row[0]
+            for row in db.query(models.PushSubscription.user_id)
+            .distinct()
+            .all()
+            if row and row[0]
+        ]
 
-        for subscription in subscriptions:
-            user_id = subscription.user_id
-            user = subscription.user or db.query(models.User).filter(models.User.id == user_id).first()
+        for user_id in subscribed_user_ids:
+            user = db.query(models.User).filter(models.User.id == user_id).first()
             if not user:
                 continue
             user_settings = _user_notification_settings(user)
@@ -2712,7 +2717,7 @@ def _send_scheduled_push_reminders():
                             continue
 
                         label = offset["label"]
-                        tag = f"appointment-{appt.id}-{label}-sub-{subscription.id}"
+                        tag = f"appointment-{appt.id}-{label}-user-{user_id}"
                         if _notification_already_sent(db, tag):
                             continue
 
@@ -2730,8 +2735,9 @@ def _send_scheduled_push_reminders():
 
                         ok = False
                         if push_enabled:
-                            ok = send_web_push(
-                                subscription,
+                            ok = bool(_send_push_to_user(
+                                db,
+                                user_id,
                                 {
                                     "title": title,
                                     "body": body,
@@ -2742,7 +2748,7 @@ def _send_scheduled_push_reminders():
                                     "userId": user_id,
                                     "tag": tag,
                                 },
-                            )
+                            ))
                         if ok:
                             _record_sent(db, user_id, tag, "appointment", trigger_at, now)
 
@@ -2803,7 +2809,7 @@ def _send_scheduled_push_reminders():
                                 continue
 
                             tag = (
-                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}-sub-{subscription.id}"
+                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}-user-{user_id}"
                             )
                             if _notification_already_sent(db, tag):
                                 continue
@@ -2826,8 +2832,9 @@ def _send_scheduled_push_reminders():
 
                             ok = False
                             if push_enabled:
-                                ok = send_web_push(
-                                    subscription,
+                                ok = bool(_send_push_to_user(
+                                    db,
+                                    user_id,
                                     {
                                         "title": title,
                                         "body": body,
@@ -2838,7 +2845,7 @@ def _send_scheduled_push_reminders():
                                         "userId": user_id,
                                         "tag": tag,
                                     },
-                                )
+                                ))
                             if ok:
                                 _record_sent(db, user_id, tag, "medication", trigger_at, now)
                             if (
