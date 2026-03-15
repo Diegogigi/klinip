@@ -426,6 +426,20 @@ function deriveDoseHours(frequencyText = "") {
   return [9];
 }
 
+function deriveFrequencyIntervalHours(frequencyText = "") {
+  const text = String(frequencyText || "").toLowerCase();
+  const match = text.match(/cada\s+(\d{1,2})\s+hora/);
+  if (match) {
+    const hours = Number(match[1]);
+    if ([4, 6, 8, 12, 24].includes(hours)) return hours;
+  }
+  if ((text.includes("12") && text.includes("hora")) || text.includes("2 veces")) return 12;
+  if ((text.includes("8") && text.includes("hora")) || text.includes("3 veces")) return 8;
+  if ((text.includes("6") && text.includes("hora")) || text.includes("4 veces")) return 6;
+  if ((text.includes("24") && text.includes("hora")) || text.includes("una vez")) return 24;
+  return null;
+}
+
 function parseScheduleTime(value = "") {
   if (!value || typeof value !== "string") return null;
   const parts = value.split(":");
@@ -435,6 +449,77 @@ function parseScheduleTime(value = "") {
   if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
   if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
   return { hour, minute };
+}
+
+function parseDurationDays(value = "") {
+  const text = String(value || "").toLowerCase().trim();
+  const daysMatch = text.match(/(\d+)\s*d[ií]a/);
+  if (daysMatch) return Number(daysMatch[1]);
+  const weeksMatch = text.match(/(\d+)\s*semana/);
+  if (weeksMatch) return Number(weeksMatch[1]) * 7;
+  return null;
+}
+
+function getMedicationStartAt(med) {
+  return parseDate(med?.start_at || med?.created_at || Date.now());
+}
+
+function getMedicationEndAt(med) {
+  const explicitEnd = parseDate(med?.end_date);
+  if (explicitEnd) {
+    explicitEnd.setHours(23, 59, 59, 999);
+    return explicitEnd;
+  }
+  const startAt = getMedicationStartAt(med);
+  const durationDays = parseDurationDays(med?.duration || "");
+  if (!startAt || !durationDays) return null;
+  return new Date(startAt.getTime() + durationDays * dayMs);
+}
+
+function buildMedicationScheduleEventsBetween(med, windowStart, windowEnd) {
+  const startAt = getMedicationStartAt(med) || new Date(windowStart);
+  const effectiveStart = new Date(Math.max(startAt.getTime(), windowStart.getTime()));
+  const effectiveEnd = new Date(windowEnd);
+  const endAt = getMedicationEndAt(med);
+  if (endAt && endAt.getTime() < effectiveEnd.getTime()) {
+    effectiveEnd.setTime(endAt.getTime());
+  }
+  if (effectiveEnd.getTime() < effectiveStart.getTime()) return [];
+
+  const intervalHours = deriveFrequencyIntervalHours(med?.frequency || "");
+  if (intervalHours) {
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    const events = [];
+    let current = new Date(startAt);
+    if (current.getTime() < effectiveStart.getTime()) {
+      const jumpSteps = Math.floor((effectiveStart.getTime() - current.getTime()) / intervalMs);
+      current = new Date(current.getTime() + jumpSteps * intervalMs);
+      while (current.getTime() < effectiveStart.getTime()) {
+        current = new Date(current.getTime() + intervalMs);
+      }
+    }
+    while (current.getTime() <= effectiveEnd.getTime()) {
+      events.push(new Date(current));
+      current = new Date(current.getTime() + intervalMs);
+    }
+    return events;
+  }
+
+  const scheduleTime = parseScheduleTime(med?.schedule_time) || {
+    hour: startAt.getHours(),
+    minute: startAt.getMinutes(),
+  };
+  const current = new Date(effectiveStart);
+  current.setHours(scheduleTime.hour, scheduleTime.minute, 0, 0);
+  if (current.getTime() < effectiveStart.getTime()) {
+    current.setDate(current.getDate() + 1);
+  }
+  const events = [];
+  while (current.getTime() <= effectiveEnd.getTime()) {
+    events.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return events;
 }
 
 /**
@@ -447,77 +532,57 @@ export function scheduleMedicationNotifications(medications) {
   if (!medications?.length) return;
 
   const leadOffsets = [MEDICATION_LEAD_MINUTES, 0];
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const horizon = new Date(today.getTime() + 30 * dayMs);
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 30 * dayMs);
 
   medications.forEach((med) => {
     if (med?.completed) return;
-    if (!med?.end_date) return;
 
-    const end = parseDate(med.end_date);
-    if (!end) return;
+    buildMedicationScheduleEventsBetween(med, now, horizon).forEach((trigger) => {
+      const triggerExact = trigger.getTime();
 
-    const lastDay = end < horizon ? end : horizon;
-    const scheduleTime = parseScheduleTime(med.schedule_time);
-    const timeSlots = scheduleTime
-      ? [scheduleTime]
-      : deriveDoseHours(med.frequency).map((hour) => ({ hour, minute: 0 }));
+      leadOffsets.forEach((offsetMinutes) => {
+        const triggerAt = triggerExact - offsetMinutes * 60 * 1000;
+        const delay = triggerAt - Date.now();
+        if (delay <= 0) return;
 
-    // Programar para cada dia
-    for (let day = new Date(today); day <= lastDay; day.setDate(day.getDate() + 1)) {
-      timeSlots.forEach(({ hour, minute }) => {
-        const trigger = new Date(day);
-        trigger.setHours(hour, minute, 0, 0);
-        const triggerExact = trigger.getTime();
+        const notificationData = {
+          medicationId: med.id,
+          name: med.name,
+          dose: med.dose,
+          frequency: med.frequency,
+          leadMinutes: offsetMinutes,
+          type: "medication"
+        };
 
-        leadOffsets.forEach((offsetMinutes) => {
-          const triggerAt = triggerExact - offsetMinutes * 60 * 1000;
-          const delay = triggerAt - Date.now();
-
-          // Solo programar futuras notificaciones
-          if (delay <= 0) return;
-
-          const notificationData = {
-            medicationId: med.id,
-            name: med.name,
-            dose: med.dose,
-            frequency: med.frequency,
-            leadMinutes: offsetMinutes,
-            type: "medication"
-          };
-
-          const title = `Medicacion: ${med.name || "Tratamiento"}`;
-          const prefix = offsetMinutes === 0 ? "Ahora" : `En ${offsetMinutes} minutos`;
-          const body = `${prefix}
+        const title = `Medicación: ${med.name || "Tratamiento"}`;
+        const prefix = offsetMinutes === 0 ? "Ahora" : `En ${offsetMinutes} minutos`;
+        const body = `${prefix}
 ${med.dose ? `Dosis: ${med.dose}
 ` : ""}${med.frequency ? `Frecuencia: ${med.frequency}
-` : ""}${med.notes ? `${med.notes}` : "Tomar segun indicacion medica"}`;
+` : ""}${med.notes ? `${med.notes}` : "Tomar según indicación médica"}`;
 
-          const targetUrl =
-            offsetMinutes === 0
-              ? `/medications?notify=1&medicationId=${med.id}`
-              : "/medications";
+        const targetUrl =
+          offsetMinutes === 0
+            ? `/medications?notify=1&medicationId=${med.id}&trigger=${triggerExact}`
+            : "/medications";
 
-          // Guardar en persistencia
-          const created = notificationManager.addScheduledNotification({
-            triggerAt,
-            title,
-            body,
-            sound: "medication",
-            url: targetUrl,
-            tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
-            actions: [
-              { action: "done", title: "Realizado" },
-              { action: "open", title: "Ver detalles" }
-            ],
-            data: notificationData
-          });
+        const created = notificationManager.addScheduledNotification({
+          triggerAt,
+          title,
+          body,
+          sound: "medication",
+          url: targetUrl,
+          tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
+          actions: [
+            { action: "done", title: "Realizado" },
+            { action: "open", title: "Ver detalles" }
+          ],
+          data: notificationData
+        });
 
-          // Programar timeout
-          const timer = setTimeout(() => {
-            notificationManager.removeScheduledNotification(created.id);
+        const timer = setTimeout(() => {
+          notificationManager.removeScheduledNotification(created.id);
           showNotification(title, body, {
             sound: "medication",
             url: targetUrl,
@@ -529,12 +594,11 @@ ${med.dose ? `Dosis: ${med.dose}
             ],
             data: notificationData
           });
-          }, delay);
+        }, delay);
 
-          medicationTimers.push(timer);
-        });
+        medicationTimers.push(timer);
       });
-    }
+    });
   });
 
   notificationManager.cleanOldNotifications();

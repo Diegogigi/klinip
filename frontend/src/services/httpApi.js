@@ -218,6 +218,16 @@ export async function createProfileNote(profileId, payload) {
   return res.data;
 }
 
+export async function updateProfileNote(profileId, noteId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/notes/${noteId}`, payload);
+  return res.data;
+}
+
+export async function deleteProfileNote(profileId, noteId) {
+  const res = await api.delete(`/health-profiles/${profileId}/notes/${noteId}`);
+  return res.data;
+}
+
 export async function sendAiChat(payload) {
   const res = await api.post("/ai/chat", payload, {
     timeout: 90000,
@@ -360,8 +370,10 @@ export async function submitPrivacyRequest(payload) {
   return res.data;
 }
 
-export async function getAppointments() {
-  const res = await api.get("/appointments");
+export async function getAppointments(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/appointments", { params });
   return res.data;
 }
 
@@ -428,8 +440,10 @@ export async function getDocumentFile(documentId) {
 }
 
 // Medications
-export async function getMedications() {
-  const res = await api.get("/medications");
+export async function getMedications(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/medications", { params });
   return res.data;
 }
 

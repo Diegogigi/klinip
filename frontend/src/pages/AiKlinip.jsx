@@ -96,6 +96,18 @@ function cleanUiText(value, fallback = "") {
   return cleaned || fallback;
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo adjunto."));
+    reader.readAsDataURL(file);
+  });
+}
+
 function cleanAssistantText(value) {
   return repairMojibakeText(String(value || ""))
     .replace(/\*\*/g, "")
@@ -619,7 +631,6 @@ export default function AiKlinip() {
     if (!prompt || loading) return;
 
     const attachmentName = attachedFile?.name || "";
-    const finalPrompt = attachmentName ? `${prompt}\n\nReferencia local preparada: ${attachmentName}.` : prompt;
 
     const userMessageId = `user-${Date.now()}`;
     const nextUserMessage = {
@@ -644,10 +655,19 @@ export default function AiKlinip() {
     setLoading(true);
 
     try {
+      const attachmentPayload = attachedFile
+        ? {
+            filename: attachedFile.name,
+            content_type: attachedFile.type || "application/octet-stream",
+            size_bytes: attachedFile.size || 0,
+            data_base64: await fileToBase64(attachedFile),
+          }
+        : undefined;
       const response = await sendAiChat({
-        message: finalPrompt,
+        message: prompt,
         history: historyForApi,
         conversation_id: conversationId || undefined,
+        attachment: attachmentPayload,
       });
       const nextConversationId = response?.conversation_id || conversationId || "";
       const nextConversationTitle = response?.conversation_title || conversationTitle || prompt;

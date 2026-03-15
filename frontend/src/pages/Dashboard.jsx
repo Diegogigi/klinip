@@ -5,9 +5,13 @@ import {
   getAiAdherence,
   getAiHealthRadar,
   getAppointments,
+  createProfileNote,
+  deleteProfileNote,
   getDocuments,
   getHealthProfiles,
   getMedications,
+  getProfileNotes,
+  updateProfileNote,
 } from "../api";
 import { parseDate } from "../utils/dates";
 
@@ -211,6 +215,10 @@ export default function Dashboard({ user }) {
   const [noteDraft, setNoteDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -251,21 +259,52 @@ export default function Dashboard({ user }) {
     };
   }, []);
 
-  const notesStorageKey = `klinip:home-notes:${activeProfile?.id || user?.id || "guest"}`;
-
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(notesStorageKey);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setQuickNotes(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setQuickNotes([]);
+    let cancelled = false;
+    async function loadNotes() {
+      if (!activeProfile?.id) {
+        setQuickNotes([]);
+        return;
+      }
+      setNotesLoading(true);
+      try {
+        const response = await getProfileNotes(activeProfile.id).catch(() => []);
+        let nextNotes = Array.isArray(response) ? response.slice(0, 6) : [];
+        if (!nextNotes.length && notesStorageKey) {
+          try {
+            const raw = localStorage.getItem(notesStorageKey);
+            const legacyNotes = raw ? JSON.parse(raw) : [];
+            if (Array.isArray(legacyNotes) && legacyNotes.length) {
+              const migrated = [];
+              for (const legacyItem of legacyNotes.slice(0, 6)) {
+                const noteText = String(legacyItem?.text || legacyItem?.note || "").trim();
+                if (!noteText) continue;
+                const created = await createProfileNote(activeProfile.id, {
+                  note: noteText,
+                  visibility: "shared",
+                });
+                migrated.push(created);
+              }
+              nextNotes = migrated;
+              localStorage.removeItem(notesStorageKey);
+            }
+          } catch {
+            // Ignore legacy migration failures and keep server state.
+          }
+        }
+        if (cancelled) return;
+        setQuickNotes(nextNotes);
+      } catch {
+        if (!cancelled) setQuickNotes([]);
+      } finally {
+        if (!cancelled) setNotesLoading(false);
+      }
     }
-  }, [notesStorageKey]);
-
-  useEffect(() => {
-    localStorage.setItem(notesStorageKey, JSON.stringify(quickNotes.slice(0, 6)));
-  }, [notesStorageKey, quickNotes]);
+    loadNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProfile?.id, notesStorageKey]);
 
   const now = Date.now();
   const validAppointments = [...appointments]
@@ -479,17 +518,59 @@ export default function Dashboard({ user }) {
     },
   ];
 
-  const handleSaveNote = () => {
-    const value = noteDraft.trim();
-    if (!value) return;
-    const entry = {
-      id: `${Date.now()}`,
-      text: value,
-      created_at: new Date().toISOString(),
-    };
-    setQuickNotes((prev) => [entry, ...prev].slice(0, 6));
-    setNoteDraft("");
+  const handleCancelNote = () => {
     setComposerOpen(false);
+    setNoteDraft("");
+    setEditingNoteId(null);
+  };
+
+  const handleStartEditNote = (item) => {
+    setComposerOpen(true);
+    setEditingNoteId(item.id);
+    setNoteDraft(item.note || item.text || "");
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (!activeProfile?.id || !noteId) return;
+    const confirmed = window.confirm("¿Eliminar esta nota rápida?");
+    if (!confirmed) return;
+    try {
+      await deleteProfileNote(activeProfile.id, noteId);
+      setQuickNotes((prev) => prev.filter((item) => item.id !== noteId));
+      if (editingNoteId === noteId) {
+        handleCancelNote();
+      }
+    } catch {
+      window.alert("No pudimos eliminar la nota. Intenta nuevamente.");
+    }
+  };
+
+  const handleSaveNote = async () => {
+    const value = noteDraft.trim();
+    if (!value || !activeProfile?.id || noteSubmitting) return;
+    setNoteSubmitting(true);
+    try {
+      if (editingNoteId) {
+        const updated = await updateProfileNote(activeProfile.id, editingNoteId, {
+          note: value,
+          visibility: "shared",
+        });
+        setQuickNotes((prev) =>
+          prev.map((item) => (item.id === editingNoteId ? updated : item)).slice(0, 6)
+        );
+      } else {
+        const created = await createProfileNote(activeProfile.id, {
+          note: value,
+          visibility: "shared",
+        });
+        setQuickNotes((prev) => [created, ...prev].slice(0, 6));
+      }
+      handleCancelNote();
+    } catch {
+      window.alert("No pudimos guardar la nota. Intenta nuevamente.");
+    } finally {
+      setNoteSubmitting(false);
+    }
   };
 
   const userName = user?.name || activeProfile?.full_name || "tu cuenta";
@@ -677,7 +758,13 @@ export default function Dashboard({ user }) {
               <button
                 type="button"
                 className="home-panel-link"
-                onClick={() => setComposerOpen((prev) => !prev)}
+                onClick={() => {
+                  if (composerOpen) {
+                    handleCancelNote();
+                  } else {
+                    setComposerOpen(true);
+                  }
+                }}
               >
                 {composerOpen ? "Cerrar" : "Nueva nota"}
               </button>
@@ -695,36 +782,58 @@ export default function Dashboard({ user }) {
                   <button
                     type="button"
                     className="home-note-secondary"
-                    onClick={() => {
-                      setComposerOpen(false);
-                      setNoteDraft("");
-                    }}
+                    onClick={handleCancelNote}
                   >
                     Cancelar
                   </button>
-                  <button type="button" className="home-note-primary" onClick={handleSaveNote}>
-                    Guardar nota
+                  <button
+                    type="button"
+                    className="home-note-primary"
+                    onClick={handleSaveNote}
+                    disabled={noteSubmitting}
+                  >
+                    {noteSubmitting ? "Guardando..." : editingNoteId ? "Guardar cambios" : "Guardar nota"}
                   </button>
                 </div>
               </div>
             )}
             <div className="home-notes-list">
-              {quickNotes.length ? (
+              {notesLoading ? (
+                <div className="home-loading">Cargando notas rápidas...</div>
+              ) : quickNotes.length ? (
                 quickNotes.map((item, index) => (
-                  <button key={item.id} type="button" className="home-note-row">
-                    <span className={`home-note-dot tone-${["blue", "violet", "green", "amber"][index % 4]}`} />
-                    <span className="home-note-copy">
-                      <strong>{cleanUiText(item.text)}</strong>
-                      <small>
-                        {parseDate(item.created_at)?.toLocaleString("es-CL", {
-                          day: "2-digit",
-                          month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }) || "Reciente"}
-                      </small>
-                    </span>
-                  </button>
+                  <article key={item.id} className="home-note-row">
+                    <div className="home-note-row-main">
+                      <span className={`home-note-dot tone-${["blue", "violet", "green", "amber"][index % 4]}`} />
+                      <span className="home-note-copy">
+                        <strong>{cleanUiText(item.note || item.text)}</strong>
+                        <small>
+                          {parseDate(item.updated_at || item.created_at)?.toLocaleString("es-CL", {
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }) || "Reciente"}
+                        </small>
+                      </span>
+                    </div>
+                    <div className="home-note-row-actions">
+                      <button
+                        type="button"
+                        className="home-note-action-btn"
+                        onClick={() => handleStartEditNote(item)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="home-note-action-btn is-danger"
+                        onClick={() => handleDeleteNote(item.id)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </article>
                 ))
               ) : (
                 <div className="home-empty-state">Todavía no guardas notas rápidas.</div>

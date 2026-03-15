@@ -90,8 +90,12 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     relationship_type: "",
   });
   const plan = planInfo?.plan_type || "basico";
-  const normalizedPlan = String(planInfo?.plan_type || "basico").trim().toLowerCase();
-  const hasAdvancedFamilyPlan = normalizedPlan === "plus" || normalizedPlan === "familiar";
+  const familyRoleLabel = (role) => {
+    const normalizedRole = String(role || "viewer").trim().toLowerCase();
+    if (normalizedRole === "admin") return "Administrador";
+    if (normalizedRole === "caregiver") return "Editor";
+    return "Lector";
+  };
 
   const detectedTimezone = useMemo(() => {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago";
@@ -115,6 +119,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const isFamilyStandalone = (initialSection || "perfil") === "familia";
   const familyNameInputRef = useRef(null);
   const familyCreateCardRef = useRef(null);
+  const familyRolesCardRef = useRef(null);
 
   const normalizeCaregivers = (items) => {
     const seen = new Set();
@@ -195,11 +200,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       accessLabel:
         Number(item.owner_user_id) === Number(profile?.id)
           ? "Tu - Administrador"
-          : item.access_role === "admin"
-          ? "Gestion completa"
-          : item.access_role === "caregiver"
-          ? "Cuidador"
-          : "Visualizador",
+          : familyRoleLabel(item.access_role),
     };
   });
   const familyReportHighlight =
@@ -208,6 +209,40 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     null;
   const activeHealthProfile =
     familyProfiles.find((item) => Number(item.id) === Number(activeFamilyProfileId)) || familyProfiles[0] || null;
+  const collaboratorCards = (caregivers || []).map((row, index) => {
+    const tone = familyAccentTones[(familyMemberCards.length + index) % familyAccentTones.length];
+    return {
+      id: `collab-${row.id}`,
+      relationshipId: row.id,
+      tone,
+      initials: (row.user_name || row.user_email || "CO")
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || "")
+        .join(""),
+      name: row.user_name || row.user_email || `Usuario #${row.user_id}`,
+      email: row.user_email || "",
+      relationshipLabel: row.relationship_type || "Colaborador",
+      accessLabel: familyRoleLabel(row.role),
+      permissionSummary:
+        row.role === "admin"
+          ? "Puede ver, editar y gestionar colaboradores."
+          : row.role === "caregiver"
+          ? "Puede ver y editar datos clinicos."
+          : "Acceso de solo lectura.",
+      sharedProfileName: activeHealthProfile?.full_name || "Perfil activo",
+    };
+  });
+  const bannerParticipants = [...familyMemberCards, ...collaboratorCards];
+  const linkedMembersCount = familyMemberCards.length + collaboratorCards.length;
+  const activeHealthProfileRole = String(activeHealthProfile?.access_role || "").trim().toLowerCase();
+  const isActiveHealthProfileOwner =
+    !!activeHealthProfile && Number(activeHealthProfile.owner_user_id) === Number(profile?.id);
+  const canEditActiveFamilyProfile =
+    !!activeHealthProfile && (isActiveHealthProfileOwner || ["admin", "caregiver"].includes(activeHealthProfileRole));
+  const canManageActiveFamilyProfile =
+    !!activeHealthProfile && (isActiveHealthProfileOwner || activeHealthProfileRole === "admin");
   const chronicConditionTags = (chronicCondition || "")
     .split(",")
     .map((item) => item.trim())
@@ -630,6 +665,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setTimeout(() => {
       familyCreateCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       familyNameInputRef.current?.focus();
+    }, 10);
+  };
+  const focusFamilyRoles = () => {
+    setTimeout(() => {
+      familyRolesCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 10);
   };
 
@@ -1195,16 +1235,16 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             </span>
             <div>
               <p className="family-klinip-banner-title">
-                Plan {planInfo?.plan_type || "familiar"} - {planCurrentProfiles} miembro{planCurrentProfiles === 1 ? "" : "s"} activo{planCurrentProfiles === 1 ? "" : "s"} de {planMaxProfiles}
+                Plan {planInfo?.plan_type || "familiar"} - {planCurrentProfiles} perfil{planCurrentProfiles === 1 ? "" : "es"} activo{planCurrentProfiles === 1 ? "" : "s"} de {planMaxProfiles}
               </p>
               <p className="family-klinip-banner-subtitle">
-                Gestion coordinada para tu grupo de salud. Quedan {familySlotsRemaining} espacio{familySlotsRemaining === 1 ? "" : "s"} disponible{familySlotsRemaining === 1 ? "" : "s"}.
+                Gestion coordinada para tu grupo de salud. Hay {linkedMembersCount} miembro{linkedMembersCount === 1 ? "" : "s"} vinculado{linkedMembersCount === 1 ? "" : "s"} y quedan {familySlotsRemaining} espacio{familySlotsRemaining === 1 ? "" : "s"} de perfil disponible{familySlotsRemaining === 1 ? "" : "s"}.
               </p>
             </div>
           </div>
           <div className="family-klinip-banner-actions">
             <div className="family-klinip-avatar-cluster">
-              {familyMemberCards.slice(0, planMaxProfiles).map((item) => (
+              {bannerParticipants.slice(0, Math.max(planMaxProfiles, 5)).map((item) => (
                 <span
                   key={item.id}
                   className="family-klinip-avatar"
@@ -1304,6 +1344,57 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </div>
             </article>
           ))}
+          {collaboratorCards.map((item) => (
+            <article className="family-member-card family-member-card-collaborator" key={item.id}>
+              <div
+                className="family-member-accent"
+                style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
+              />
+              <div className="family-member-head">
+                <span
+                  className="family-member-avatar"
+                  style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
+                >
+                  {item.initials}
+                </span>
+                <div>
+                  <p className="family-member-name">{item.name}</p>
+                  <p className="family-member-meta">
+                    {item.relationshipLabel}
+                    {item.email ? ` - ${item.email}` : ""}
+                  </p>
+                  <span
+                    className="family-member-badge is-managed"
+                    style={{ background: item.tone.soft, borderColor: item.tone.border, color: item.tone.start }}
+                  >
+                    {item.accessLabel}
+                  </span>
+                </div>
+              </div>
+              <div className="family-member-collab-details">
+                <p className="family-member-collab-line">
+                  <strong>Perfil compartido:</strong> {item.sharedProfileName}
+                </p>
+                <p className="family-member-collab-line">{item.permissionSummary}</p>
+              </div>
+              <div className="family-member-actions">
+                <button
+                  className="family-member-btn family-member-btn-outline"
+                  type="button"
+                  onClick={focusFamilyRoles}
+                >
+                  Ver permisos
+                </button>
+                <button
+                  className="family-member-btn family-member-btn-solid"
+                  type="button"
+                  onClick={focusFamilyRoles}
+                >
+                  Gestionar acceso
+                </button>
+              </div>
+            </article>
+          ))}
           {familySlotsRemaining > 0 && (
             <button
               type="button"
@@ -1321,13 +1412,19 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
         <div className="family-lower-layout">
           <div className="family-lower-left">
-            <section className="family-collab-card family-canvas-card family-roles-card">
+            <section className="family-collab-card family-canvas-card family-roles-card" ref={familyRolesCardRef}>
               <div className="family-card-line tone-teal" />
               <div className="family-card-head">
                 <div>
                   <p className="family-card-kicker family-title-teal">Roles y accesos</p>
                   <p className="family-inline-muted">Gestiona permisos de cada colaborador</p>
                 </div>
+              </div>
+
+              <div className="family-roles-help">
+                <p className="family-inline-muted">Administrador: puede ver, editar y gestionar colaboradores y permisos.</p>
+                <p className="family-inline-muted">Editor: puede ver y editar datos clínicos, pero no invitar ni cambiar permisos.</p>
+                <p className="family-inline-muted">Lector: solo puede revisar la información del perfil compartido.</p>
               </div>
 
               <div className="family-roles-list">
@@ -1394,7 +1491,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                       <article className="family-inv-row" key={inv.id}>
                         <div className="family-role-body">
                           <p className="family-role-name">{inv.invitee_email}</p>
-                          <p className="family-role-meta">Rol: {inv.role}</p>
+                          <p className="family-role-meta">Rol: {familyRoleLabel(inv.role)}</p>
                         </div>
                         <div className="family-role-actions">
                           <span
@@ -1433,7 +1530,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                       <div className="family-role-body">
                         <p className="family-role-name">{inv.profile_name}</p>
                         <p className="family-role-meta">
-                          Invitado por {inv.inviter_name || `Usuario #${inv.inviter_user_id}`} · Rol: {inv.role}
+                          Invitado por {inv.inviter_name || `Usuario #${inv.inviter_user_id}`} · Rol: {familyRoleLabel(inv.role)}
                         </p>
                       </div>
                       <div className="family-role-actions">
@@ -1465,7 +1562,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 </button>
               </div>
 
-              {planInfo?.collaboration_enabled && !!activeFamilyProfileId ? (
+              {canEditActiveFamilyProfile ? (
                 <>
                   <textarea
                     className="textarea-field family-notes-textarea"
@@ -1677,7 +1774,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               )}
             </section>
 
-            {planInfo?.collaboration_enabled && !!activeFamilyProfileId ? (
+            {canEditActiveFamilyProfile ? (
               <section className="family-collab-card family-canvas-card family-automation-card">
                 <div className="family-card-line tone-violet" />
                 <div className="family-card-head">
@@ -1724,7 +1821,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         </div>
 
         <div className="family-secondary-stack">
-          {hasAdvancedFamilyPlan && planInfo?.collaboration_enabled && !!activeFamilyProfileId ? (
+          {canManageActiveFamilyProfile ? (
             <div className="family-create-card family-management-card">
               <div className="family-card-line tone-teal" />
               <div className="family-card-head">
@@ -1752,8 +1849,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                     onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value }))}
                   >
                     <option value="admin">Administrador</option>
-                    <option value="caregiver">Cuidador</option>
-                    <option value="viewer">Visualizador</option>
+                    <option value="caregiver">Editor</option>
+                    <option value="viewer">Lector</option>
                   </select>
                 </div>
                 <div className="input-group">
@@ -1829,7 +1926,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             </p>
           )}
 
-          <div className="family-create-card family-management-card">
+          <div className="family-create-card family-management-card family-profile-switcher-card">
             <div className="family-card-line tone-blue" />
             <div className="family-card-head">
               <div>
@@ -1845,13 +1942,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   <article
                     className={`family-item family-profile-row ${item.id === activeFamilyProfileId ? "is-active" : ""}`}
                     key={item.id}
-                  >
-                    <div>
-                      <p className="family-name">{item.full_name}</p>
-                      <p className="muted">
-                        {item.relation_with_owner || "Sin relacion"} - Rol: {item.access_role || "admin"}
-                      </p>
-                    </div>
+                    >
+                      <div>
+                        <p className="family-name">{item.full_name}</p>
+                        <p className="muted family-profile-row-meta">
+                          {item.relation_with_owner || "Sin relación"} · {familyRoleLabel(item.access_role || "admin")}
+                        </p>
+                      </div>
                     <button
                       className="secondary-btn"
                       type="button"
