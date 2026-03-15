@@ -140,6 +140,13 @@ class Medication(Base):
     frequency = Column(String, default="")
     duration = Column(String, default="")
     schedule_time = Column(String, default="")
+    start_at = Column(DateTime, nullable=True)
+    refill_enabled = Column(Boolean, default=False)
+    stock_total_doses = Column(Integer, default=0)
+    refill_alert_threshold_doses = Column(Integer, default=0)
+    refill_rotation_index = Column(Integer, default=0)
+    refill_last_notified_at = Column(DateTime, nullable=True)
+    refill_last_notified_remaining = Column(Integer, nullable=True)
     completed = Column(Boolean, default=False)
     end_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
@@ -353,6 +360,26 @@ class AiConversationMessage(Base):
     content = Column(Text, nullable=False)
     metadata_json = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.now)
+
+    profile = relationship("HealthProfile")
+    user = relationship("User")
+
+
+class AiConversationWorkflow(Base):
+    __tablename__ = "ai_conversation_workflows"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", name="uq_ai_conversation_workflows_conversation_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    conversation_id = Column(String, nullable=False, index=True, default="")
+    workflow_type = Column(String, nullable=False, default="")
+    status = Column(String, nullable=False, default="collecting")
+    payload_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     profile = relationship("HealthProfile")
     user = relationship("User")

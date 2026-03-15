@@ -2,8 +2,11 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   deleteMedication,
+  getActiveHealthProfile,
+  getMyPlan,
   getMedicationIntakes,
   getMedications,
+  getProfileCaregivers,
   recordMedicationIntake,
   saveMedication,
 } from "../api";
@@ -11,7 +14,13 @@ import {
   requestNotificationPermission,
   scheduleMedicationNotifications,
 } from "../services/notifications";
-import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
+import {
+  parseDate,
+  toIsoOrNull,
+  toLocalInputValue,
+  toLocaleDateOrEmpty,
+  toLocaleDateTimeOrEmpty,
+} from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
 
 const MED_ALERT_POLL_MS = 15000;
@@ -27,19 +36,134 @@ function parseScheduleTimeValue(value) {
   return { hour, minute };
 }
 
+function deriveFrequencyIntervalHours(frequencyText = "") {
+  const text = String(frequencyText || "").toLowerCase();
+  const match = text.match(/cada\s+(\d{1,2})\s+hora/);
+  if (match) {
+    const hours = Number(match[1]);
+    if ([4, 6, 8, 12, 24].includes(hours)) return hours;
+  }
+  if (text.includes("24") && text.includes("hora")) return 24;
+  if ((text.includes("12") && text.includes("hora")) || text.includes("2 veces")) return 12;
+  if ((text.includes("8") && text.includes("hora")) || text.includes("3 veces")) return 8;
+  if ((text.includes("6") && text.includes("hora")) || text.includes("4 veces")) return 6;
+  return null;
+}
+
+function parseDurationDays(value = "") {
+  const text = String(value || "").toLowerCase().trim();
+  const daysMatch = text.match(/(\d+)\s*d[ií]a/);
+  if (daysMatch) return Number(daysMatch[1]);
+  const weeksMatch = text.match(/(\d+)\s*semana/);
+  if (weeksMatch) return Number(weeksMatch[1]) * 7;
+  return null;
+}
+
+function getMedicationStartAt(med) {
+  return parseDate(med?.start_at || med?.created_at || null);
+}
+
+function getMedicationEndAt(med) {
+  const explicitEnd = parseDate(med?.end_date);
+  if (explicitEnd) {
+    explicitEnd.setHours(23, 59, 59, 999);
+    return explicitEnd;
+  }
+  const startAt = getMedicationStartAt(med);
+  const durationDays = parseDurationDays(med?.duration || "");
+  if (!startAt || !durationDays) return null;
+  return new Date(startAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
+}
+
+function buildMedicationPromptEventsBetween(med, windowStart, windowEnd) {
+  const startAt = getMedicationStartAt(med) || new Date(windowStart);
+  const effectiveStart = new Date(Math.max(startAt.getTime(), windowStart.getTime()));
+  const effectiveEnd = new Date(windowEnd);
+  const endAt = getMedicationEndAt(med);
+  if (endAt && endAt.getTime() < effectiveEnd.getTime()) {
+    effectiveEnd.setTime(endAt.getTime());
+  }
+  if (effectiveEnd.getTime() < effectiveStart.getTime()) return [];
+
+  const intervalHours = deriveFrequencyIntervalHours(med?.frequency || "");
+  if (intervalHours) {
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    const events = [];
+    let current = new Date(startAt);
+    if (current.getTime() < effectiveStart.getTime()) {
+      const jumpSteps = Math.floor((effectiveStart.getTime() - current.getTime()) / intervalMs);
+      current = new Date(current.getTime() + jumpSteps * intervalMs);
+      while (current.getTime() < effectiveStart.getTime()) {
+        current = new Date(current.getTime() + intervalMs);
+      }
+    }
+    while (current.getTime() <= effectiveEnd.getTime()) {
+      events.push(new Date(current));
+      current = new Date(current.getTime() + intervalMs);
+    }
+    return events;
+  }
+
+  const fixedSlot = parseScheduleTimeValue(med?.schedule_time || "") || {
+    hour: startAt.getHours(),
+    minute: startAt.getMinutes(),
+  };
+  const current = new Date(effectiveStart);
+  current.setHours(fixedSlot.hour, fixedSlot.minute, 0, 0);
+  if (current.getTime() < effectiveStart.getTime()) {
+    current.setDate(current.getDate() + 1);
+  }
+  const events = [];
+  while (current.getTime() <= effectiveEnd.getTime()) {
+    events.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+  return events;
+}
+
 function buildDosePromptKey(med, date) {
-  const day = date.toISOString().slice(0, 10);
-  const slot = med.schedule_time || "manual";
-  return `klinip_med_prompt_${med.id}_${day}_${slot}`;
+  const trigger = parseDate(date);
+  const stamp = trigger ? toLocalInputValue(trigger).replace("T", "_").replace(":", "-") : "manual";
+  return `klinip_med_prompt_${med.id}_${stamp}`;
+}
+
+function formatDoseClock(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return new Date().toTimeString().slice(0, 5);
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function getNextMedicationDose(med, now = new Date()) {
+  if (!med || med.completed) return null;
+  const events = buildMedicationPromptEventsBetween(
+    med,
+    now,
+    new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
+  );
+  return events.find((item) => item.getTime() >= now.getTime()) || null;
+}
+
+function formatMedicationDateTime(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin dato";
+  return new Intl.DateTimeFormat("es-CL", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
 }
 
 function isMedicationActiveToday(med, now) {
   if (med?.completed) return false;
-  if (!med?.end_date) return true;
-  const end = new Date(med.end_date);
-  if (Number.isNaN(end.getTime())) return true;
-  end.setHours(23, 59, 59, 999);
-  return now.getTime() <= end.getTime();
+  const startAt = getMedicationStartAt(med);
+  if (startAt && now.getTime() < startAt.getTime()) return false;
+  const endAt = getMedicationEndAt(med);
+  if (!endAt) return true;
+  return now.getTime() <= endAt.getTime();
 }
 
 function formatAlertDay(date) {
@@ -54,6 +178,9 @@ export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
   const [meds, setMeds] = useState([]);
+  const [planInfo, setPlanInfo] = useState(null);
+  const [activeProfile, setActiveProfile] = useState(null);
+  const [familyCaregivers, setFamilyCaregivers] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
@@ -78,11 +205,15 @@ export default function Medications() {
     frequency: "",
     frequency_initial: "",
     duration: "",
+    start_at: "",
     schedule_time: "",
     completed: false,
     end_date: "",
     notes: "",
     document_id: "",
+    refill_enabled: false,
+    stock_total_doses: "",
+    refill_alert_threshold_doses: "",
   });
   const [loading, setLoading] = useState(false);
 
@@ -102,6 +233,32 @@ export default function Medications() {
     scheduleMedicationNotifications(data || []);
   };
 
+  const loadFamilyContext = async () => {
+    try {
+      const [plan, profile] = await Promise.all([
+        getMyPlan(),
+        getActiveHealthProfile(),
+      ]);
+      setPlanInfo(plan || null);
+      setActiveProfile(profile || null);
+      if (plan?.collaboration_enabled && profile?.id) {
+        const caregivers = await getProfileCaregivers(profile.id);
+        setFamilyCaregivers(
+          Array.isArray(caregivers)
+            ? caregivers.filter((item) => item?.status === "accepted")
+            : []
+        );
+      } else {
+        setFamilyCaregivers([]);
+      }
+    } catch (error) {
+      console.error("No se pudo cargar el contexto familiar de medicamentos", error);
+      setPlanInfo(null);
+      setActiveProfile(null);
+      setFamilyCaregivers([]);
+    }
+  };
+
   const loadDetailIntakeItems = async (medicationId) => {
     if (!medicationId) {
       setDetailIntakes([]);
@@ -113,7 +270,7 @@ export default function Medications() {
       const response = await getMedicationIntakes(medicationId, 60);
       setDetailIntakes(Array.isArray(response?.items) ? response.items : []);
     } catch (error) {
-      console.error("No se pudo cargar la linea de tiempo de adherencia", error);
+      console.error("No se pudo cargar la línea de tiempo de adherencia", error);
       setDetailIntakes([]);
     } finally {
       setDetailIntakesLoading(false);
@@ -122,6 +279,7 @@ export default function Medications() {
 
   useEffect(() => {
     load();
+    loadFamilyContext();
     requestNotificationPermission();
     return () => scheduleMedicationNotifications([]);
   }, []);
@@ -151,17 +309,18 @@ export default function Medications() {
     const params = new URLSearchParams(location.search);
     const notify = params.get("notify") === "1";
     const notifyId = params.get("medicationId");
+    const triggerParam = params.get("trigger");
     if (!notify || !notifyId) return;
     const target = meds.find((m) => String(m.id) === String(notifyId));
     if (!target) return;
-    const now = new Date();
-    const key = buildDosePromptKey(target, now);
+    const trigger = triggerParam ? new Date(Number(triggerParam)) : new Date();
+    const key = buildDosePromptKey(target, trigger);
     if (!localStorage.getItem(key)) {
       localStorage.setItem(key, "prompted");
     }
     setNotifyQueue((prev) => {
       if (prev.some((item) => item.key === key)) return prev;
-      return [...prev, { med: target, key, triggeredAt: now }];
+      return [...prev, { med: target, key, triggeredAt: trigger }];
     });
     navigate("/medications", { replace: true });
   }, [location.search, meds, navigate]);
@@ -181,17 +340,20 @@ export default function Medications() {
       const lastCheckedAt = doseCheckRef.current;
       const nowTs = now.getTime();
 
-      const dueMeds = (meds || []).filter((med) => {
-        if (!med?.schedule_time) return false;
-        if (!isMedicationActiveToday(med, now)) return false;
-        const slot = parseScheduleTimeValue(med.schedule_time);
-        if (!slot) return false;
-        const trigger = new Date(now);
-        trigger.setHours(slot.hour, slot.minute, 0, 0);
-        const triggerTs = trigger.getTime();
-        if (triggerTs <= lastCheckedAt || triggerTs > nowTs) return false;
-        const key = buildDosePromptKey(med, now);
-        return !localStorage.getItem(key);
+      const dueMeds = [];
+      (meds || []).forEach((med) => {
+        if (!isMedicationActiveToday(med, now)) return;
+        buildMedicationPromptEventsBetween(
+          med,
+          new Date(lastCheckedAt + 1),
+          now
+        ).forEach((trigger) => {
+          const triggerTs = trigger.getTime();
+          if (triggerTs <= lastCheckedAt || triggerTs > nowTs) return;
+          const key = buildDosePromptKey(med, trigger);
+          if (localStorage.getItem(key)) return;
+          dueMeds.push({ med, key, triggeredAt: trigger });
+        });
       });
 
       if (!dueMeds.length) {
@@ -199,12 +361,11 @@ export default function Medications() {
         return;
       }
 
-      dueMeds.forEach((med) => {
-        const key = buildDosePromptKey(med, now);
-        localStorage.setItem(key, "prompted");
+      dueMeds.forEach((item) => {
+        localStorage.setItem(item.key, "prompted");
         setNotifyQueue((prev) => {
-          if (prev.some((item) => item.key === key)) return prev;
-          return [...prev, { med, key, triggeredAt: now }];
+          if (prev.some((queued) => queued.key === item.key)) return prev;
+          return [...prev, item];
         });
       });
       doseCheckRef.current = nowTs;
@@ -233,11 +394,15 @@ export default function Medications() {
         frequency: "",
         frequency_initial: "",
         duration: "",
+        start_at: "",
         schedule_time: "",
         completed: false,
         end_date: "",
         notes: "",
         document_id: "",
+        refill_enabled: false,
+        stock_total_doses: "",
+        refill_alert_threshold_doses: "",
     });
   };
 
@@ -251,11 +416,22 @@ export default function Medications() {
         dose: form.dose || "",
         frequency: form.frequency || "",
         duration: form.duration || "",
+        start_at: toIsoOrNull(form.start_at),
         schedule_time: form.schedule_time || "",
         completed: Boolean(form.completed),
         end_date: toIsoOrNull(form.end_date),
         notes: form.notes || "",
         document_id: form.document_id ? parseInt(form.document_id) : null,
+        refill_enabled:
+          Boolean(form.refill_enabled) &&
+          Boolean(planInfo?.collaboration_enabled) &&
+          familyCaregivers.length > 0,
+        stock_total_doses:
+          form.stock_total_doses === "" ? 0 : Math.max(parseInt(form.stock_total_doses, 10) || 0, 0),
+        refill_alert_threshold_doses:
+          form.refill_alert_threshold_doses === ""
+            ? 0
+            : Math.max(parseInt(form.refill_alert_threshold_doses, 10) || 0, 0),
       };
       
       // Si es edición, incluir el id
@@ -299,11 +475,21 @@ export default function Medications() {
       frequency: med.frequency,
       frequency_initial: med.frequency || "",
       duration: med.duration,
+      start_at: toLocalInputValue(med.start_at || med.created_at || ""),
       schedule_time: med.schedule_time || "",
       completed: Boolean(med.completed),
       end_date: med.end_date ? med.end_date.slice(0, 10) : "",
       notes: med.notes || "",
       document_id: med.document_id || "",
+      refill_enabled: Boolean(med.refill_enabled),
+      stock_total_doses:
+        med.stock_total_doses || med.stock_total_doses === 0
+          ? String(med.stock_total_doses)
+          : "",
+      refill_alert_threshold_doses:
+        med.refill_alert_threshold_doses || med.refill_alert_threshold_doses === 0
+          ? String(med.refill_alert_threshold_doses)
+          : "",
     });
   };
 
@@ -457,7 +643,7 @@ export default function Medications() {
       navigate("/medications", { replace: true });
     } catch (err) {
       console.error(err);
-      alert("No se pudo registrar la omision.");
+      alert("No se pudo registrar la omisión.");
     } finally {
       setNotifyActionLoading(false);
     }
@@ -504,6 +690,12 @@ export default function Medications() {
       (statusFilter === "scheduled" && Boolean(med.schedule_time));
     return matchesSearch && matchesStatus;
   });
+  const familyRefillAvailable =
+    Boolean(planInfo?.collaboration_enabled) && familyCaregivers.length > 0;
+  const familyRefillNames = familyCaregivers
+    .map((item) => item?.user_name || item?.user_email || "")
+    .filter(Boolean)
+    .slice(0, 4);
 
   const formatTimelineStamp = (value) => {
     if (!value) return "Sin fecha";
@@ -535,8 +727,8 @@ export default function Medications() {
         scheduled_at: item.scheduled_at || item.taken_at || item.created_at || new Date().toISOString(),
         notes:
           nextStatus === "late"
-            ? "Actualizado desde la linea de tiempo como tomado tarde."
-            : "Actualizado desde la linea de tiempo como omitido.",
+            ? "Actualizado desde la línea de tiempo como tomado tarde."
+            : "Actualizado desde la línea de tiempo como omitido.",
       });
       await Promise.all([load(), loadDetailIntakeItems(detailTarget.id)]);
       setIntakeFeedback(
@@ -593,7 +785,7 @@ export default function Medications() {
           <h3 className="card-title">Faltan indicaciones</h3>
           <p className="muted">
             {medsMissingFrequency.length} medicamento(s) no tienen frecuencia.
-            Completa la indicacion para activar recordatorios.
+            Completa la indicación para activar recordatorios.
           </p>
           <button
             className="primary-btn"
@@ -627,7 +819,7 @@ export default function Medications() {
             </div>
             <h3 className="med-dose-alert-title">
               Medicamento de las{" "}
-              {notifyTarget.schedule_time || new Date().toTimeString().slice(0, 5)}
+              {formatDoseClock(notifyTriggeredAt || notifyTarget.start_at || notifyTarget.schedule_time)}
             </h3>
             {notifyQueue.length > 0 && (
               <button
@@ -680,9 +872,9 @@ export default function Medications() {
           <div className="modal-card" onClick={(event) => event.stopPropagation()}>
             <h3>Falta frecuencia</h3>
             <p className="muted">
-              Se detecto el medicamento <strong>{missingFrequency.name}</strong>
+              Se detectó el medicamento <strong>{missingFrequency.name}</strong>
               {missingFrequency.dose ? ` (${missingFrequency.dose})` : ""} pero no
-              se pudo leer la frecuencia. Indicala para activar recordatorios.
+              se pudo leer la frecuencia. Indícala para activar recordatorios.
             </p>
             <div className="modal-actions">
               <button
@@ -770,6 +962,29 @@ export default function Medications() {
 
               <div className="form-row">
                 <div className="input-group">
+                  <label className="input-label">Inicio del tratamiento</label>
+                  <input
+                    className="input-field"
+                    type="datetime-local"
+                    value={form.start_at}
+                    required={Boolean((form.frequency || "").trim())}
+                    onChange={(e) => {
+                      const nextStartAt = e.target.value;
+                      setForm((current) => ({
+                        ...current,
+                        start_at: nextStartAt,
+                        schedule_time:
+                          (current.schedule_time || !nextStartAt)
+                            ? current.schedule_time
+                            : nextStartAt.slice(11, 16),
+                      }));
+                    }}
+                  />
+                  <small className="muted">
+                    Indica la fecha y hora de la primera dosis para calcular correctamente las siguientes.
+                  </small>
+                </div>
+                <div className="input-group">
                   <label className="input-label">Fecha término</label>
                   <input
                     className="input-field"
@@ -778,8 +993,11 @@ export default function Medications() {
                     onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="form-row">
                 <div className="input-group">
-                  <label className="input-label">Horario</label>
+                  <label className="input-label">Horario base</label>
                   <input
                     className="input-field"
                     type="time"
@@ -787,6 +1005,80 @@ export default function Medications() {
                     onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="med-refill-settings">
+                <div className="med-refill-settings-head">
+                  <div>
+                    <h4>Reposición familiar</h4>
+                    <p>
+                      Activa alertas para avisar quién debe comprar el medicamento
+                      cuando quede poco stock.
+                    </p>
+                  </div>
+                  <label className="med-refill-toggle">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.refill_enabled)}
+                      disabled={!familyRefillAvailable}
+                      onChange={(e) =>
+                        setForm((current) => ({
+                          ...current,
+                          refill_enabled: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span>Activar</span>
+                  </label>
+                </div>
+                {familyRefillAvailable ? (
+                  <>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Dosis del envase</label>
+                        <input
+                          className="input-field"
+                          type="number"
+                          min="0"
+                          value={form.stock_total_doses}
+                          onChange={(e) =>
+                            setForm((current) => ({
+                              ...current,
+                              stock_total_doses: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 30"
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Avisar cuando queden</label>
+                        <input
+                          className="input-field"
+                          type="number"
+                          min="0"
+                          value={form.refill_alert_threshold_doses}
+                          onChange={(e) =>
+                            setForm((current) => ({
+                              ...current,
+                              refill_alert_threshold_doses: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 8"
+                        />
+                      </div>
+                    </div>
+                    <p className="med-refill-helper">
+                      Rotación automática para el perfil activo
+                      {activeProfile?.name ? ` (${activeProfile.name})` : ""} entre:{" "}
+                      {familyRefillNames.join(", ")}.
+                    </p>
+                  </>
+                ) : (
+                  <p className="med-refill-helper">
+                    Esta automatización se habilita cuando el perfil activo tiene
+                    colaboración familiar y al menos un colaborador aceptado.
+                  </p>
+                )}
               </div>
 
               <div className="input-group">
@@ -850,10 +1142,27 @@ export default function Medications() {
                   </div>
                 </div>
                 <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🗓️</span>
+                  <div>
+                    <span className="detail-label">Primera dosis</span>
+                    <p>{toLocaleDateTimeOrEmpty(detailTarget.start_at || detailTarget.created_at) || "Sin inicio definido"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>🕒</span>
                   <div>
-                    <span className="detail-label">Horario</span>
+                    <span className="detail-label">Horario base</span>
                     <p>{detailTarget.schedule_time || "Sin horario"}</p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>⏭️</span>
+                  <div>
+                    <span className="detail-label">Próxima dosis</span>
+                    <p>{(() => {
+                      const nextDose = getNextMedicationDose(detailTarget);
+                      return nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis";
+                    })()}</p>
                   </div>
                 </div>
                 <div className="detail-field">
@@ -871,6 +1180,25 @@ export default function Medications() {
                   </div>
                 </div>
                 <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>📦</span>
+                  <div>
+                    <span className="detail-label">Dosis restantes</span>
+                    <p>
+                      {detailTarget.remaining_doses ?? "Sin stock configurado"}
+                    </p>
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>👥</span>
+                  <div>
+                    <span className="detail-label">Responsable actual</span>
+                    <p>
+                      {detailTarget.refill_current_assignee_name ||
+                        "Sin responsable asignado"}
+                    </p>
+                  </div>
+                </div>
+                <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>📝</span>
                   <div>
                     <span className="detail-label">Notas</span>
@@ -881,7 +1209,7 @@ export default function Medications() {
               <div className="medication-intake-timeline">
                 <div className="medication-intake-timeline-head">
                   <div>
-                    <h4>Linea de tiempo de adherencia</h4>
+                    <h4>Línea de tiempo de adherencia</h4>
                     <p>Eventos reales registrados para este medicamento.</p>
                   </div>
                   <span className="medication-intake-timeline-count">
@@ -935,7 +1263,7 @@ export default function Medications() {
                   </div>
                 ) : (
                   <div className="medication-intake-empty">
-                    Todavia no hay eventos explicitos de adherencia para este medicamento.
+                    Todavía no hay eventos explícitos de adherencia para este medicamento.
                   </div>
                 )}
               </div>
@@ -1008,73 +1336,93 @@ export default function Medications() {
                   <th>Nombre</th>
                   <th>Dosis</th>
                   <th>Frecuencia</th>
+                  <th>Inicio</th>
+                  <th>Próxima dosis</th>
                   <th>Duración</th>
-                  <th>Horario</th>
                   <th>Estado</th>
                   <th>Término</th>
                   <th>Tomas</th>
                   <th>Adherencia</th>
+                  <th>Reposición</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {filteredMeds.map((m) => (
-                  <tr
-                    key={m.id}
-                    className="table-row-clickable"
-                    onClick={() => handleOpenDetail(m)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleOpenDetail(m);
-                      }
-                    }}
-                  >
-                    <td>{m.name}</td>
-                    <td>{m.dose}</td>
-                    <td>{m.frequency}</td>
-                    <td>{m.duration}</td>
-                    <td>{m.schedule_time || "-"}</td>
-                    <td>{m.completed ? "Realizado" : "Activo"}</td>
-                    <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
-                    <td>
-                      {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
-                    </td>
-                    <td>
-                      {(() => {
-                        const taken = Number(m.taken_doses || 0);
-                        const expected = Number(m.expected_doses || 0);
-                        const apiRate = Number(m.adherence_rate);
-                        if (Number.isFinite(apiRate)) {
-                          return `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`;
+                {filteredMeds.map((m) => {
+                  const nextDose = getNextMedicationDose(m);
+                  return (
+                    <tr
+                      key={m.id}
+                      className="table-row-clickable"
+                      onClick={() => handleOpenDetail(m)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleOpenDetail(m);
                         }
-                        if (expected > 0) {
-                          return `${Math.round((taken / expected) * 100)}%`;
-                        }
-                        return "0%";
-                      })()}
-                    </td>
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <RowActionsMenu
-                        items={[
-                          {
-                            key: "edit",
-                            label: "Editar",
-                            onClick: () => handleEdit(m),
-                          },
-                          {
-                            key: "delete",
-                            label: "Eliminar",
-                            danger: true,
-                            onClick: () => handleDelete(m),
-                          },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
+                      }}
+                    >
+                      <td>{m.name}</td>
+                      <td>{m.dose}</td>
+                      <td>{m.frequency}</td>
+                      <td>{formatMedicationDateTime(m.start_at || m.created_at)}</td>
+                      <td>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</td>
+                      <td>{m.duration}</td>
+                      <td>{m.completed ? "Realizado" : "Activo"}</td>
+                      <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
+                      <td>
+                        {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
+                      </td>
+                       <td>
+                         {(() => {
+                           const taken = Number(m.taken_doses || 0);
+                          const expected = Number(m.expected_doses || 0);
+                          const apiRate = Number(m.adherence_rate);
+                          if (Number.isFinite(apiRate)) {
+                            return `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`;
+                          }
+                          if (expected > 0) {
+                            return `${Math.round((taken / expected) * 100)}%`;
+                          }
+                           return "0%";
+                         })()}
+                       </td>
+                       <td>
+                         {m.refill_enabled ? (
+                           <div className="med-refill-table-cell">
+                             <strong>
+                               {m.remaining_doses ?? "—"} dosis
+                             </strong>
+                             <span>
+                               {m.refill_current_assignee_name || "Sin asignar"}
+                             </span>
+                           </div>
+                         ) : (
+                           "—"
+                         )}
+                       </td>
+                       <td onClick={(event) => event.stopPropagation()}>
+                         <RowActionsMenu
+                          items={[
+                            {
+                              key: "edit",
+                              label: "Editar",
+                              onClick: () => handleEdit(m),
+                            },
+                            {
+                              key: "delete",
+                              label: "Eliminar",
+                              danger: true,
+                              onClick: () => handleDelete(m),
+                            },
+                          ]}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

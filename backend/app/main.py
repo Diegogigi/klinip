@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import text, inspect, func
+from sqlalchemy import text, inspect, func, or_
 from typing import List
 import os
 import mimetypes
@@ -450,10 +450,80 @@ def ensure_medication_schema():
                 statements.append("ALTER TABLE medications ADD COLUMN completed BOOLEAN DEFAULT 0")
             added_columns.append("completed")
 
+        if "start_at" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE medications ADD COLUMN IF NOT EXISTS start_at TIMESTAMP NULL"
+                )
+            else:
+                statements.append("ALTER TABLE medications ADD COLUMN start_at DATETIME")
+            added_columns.append("start_at")
+
+        def add_med_column(name: str, pg_stmt: str, sqlite_stmt: str):
+            if name in columns:
+                return
+            statements.append(pg_stmt if backend == "postgresql" else sqlite_stmt)
+            added_columns.append(name)
+
+        add_med_column(
+            "refill_enabled",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_enabled BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE medications ADD COLUMN refill_enabled BOOLEAN DEFAULT 0",
+        )
+        add_med_column(
+            "stock_total_doses",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS stock_total_doses INTEGER DEFAULT 0",
+            "ALTER TABLE medications ADD COLUMN stock_total_doses INTEGER DEFAULT 0",
+        )
+        add_med_column(
+            "refill_alert_threshold_doses",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_alert_threshold_doses INTEGER DEFAULT 0",
+            "ALTER TABLE medications ADD COLUMN refill_alert_threshold_doses INTEGER DEFAULT 0",
+        )
+        add_med_column(
+            "refill_rotation_index",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_rotation_index INTEGER DEFAULT 0",
+            "ALTER TABLE medications ADD COLUMN refill_rotation_index INTEGER DEFAULT 0",
+        )
+        add_med_column(
+            "refill_last_notified_at",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_last_notified_at TIMESTAMP NULL",
+            "ALTER TABLE medications ADD COLUMN refill_last_notified_at DATETIME",
+        )
+        add_med_column(
+            "refill_last_notified_remaining",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_last_notified_remaining INTEGER NULL",
+            "ALTER TABLE medications ADD COLUMN refill_last_notified_remaining INTEGER",
+        )
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
                     conn.execute(text(stmt))
+                if "start_at" in added_columns:
+                    conn.execute(
+                        text(
+                            "UPDATE medications SET start_at = COALESCE(start_at, created_at)"
+                        )
+                    )
+                if any(
+                    name in added_columns
+                    for name in [
+                        "refill_enabled",
+                        "stock_total_doses",
+                        "refill_alert_threshold_doses",
+                        "refill_rotation_index",
+                    ]
+                ):
+                    conn.execute(
+                        text(
+                            "UPDATE medications SET "
+                            "refill_enabled = COALESCE(refill_enabled, FALSE), "
+                            "stock_total_doses = COALESCE(stock_total_doses, 0), "
+                            "refill_alert_threshold_doses = COALESCE(refill_alert_threshold_doses, 0), "
+                            "refill_rotation_index = COALESCE(refill_rotation_index, 0)"
+                        )
+                    )
             print(
                 f"DEBUG ensure_medication_schema: columnas agregadas a medications: {', '.join(added_columns)}"
             )
@@ -937,6 +1007,8 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
 
 
 def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
+    if not (webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY):
+        return 0
     subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == user_id)
@@ -1772,6 +1844,34 @@ def _send_medication_reminder_email_safe(to_email: str, user_name: str, payload:
         print(f"ERROR sending medication reminder email async: {exc}")
 
 
+def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        is_assignee = bool(payload.get("is_assignee"))
+        subject = (
+            f"Te toca comprar {payload.get('medication_name') or 'un medicamento'}"
+            if is_assignee
+            else f"Reposicion de {payload.get('medication_name') or 'medicamento'} asignada"
+        )
+        _send_templated_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="medication_refill_assignment.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu familiar",
+                "medication_name": payload.get("medication_name") or "Medicamento",
+                "dose": payload.get("dose") or "",
+                "remaining_doses": int(payload.get("remaining_doses") or 0),
+                "threshold_doses": int(payload.get("threshold_doses") or 0),
+                "assignee_name": payload.get("assignee_name") or user_name or "Usuario",
+                "is_assignee": is_assignee,
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending medication refill email async: {exc}")
+
+
 def _send_health_alert_email_safe(to_email: str, user_name: str, payload: dict):
     try:
         _send_templated_email(
@@ -2014,6 +2114,50 @@ def _derive_dose_hours(frequency_text: str = ""):
         return [8, 20]
     return [9]
 
+
+def _frequency_interval_hours(frequency_text: str = "") -> int | None:
+    normalized = _normalize_text(frequency_text or "")
+    match = re.search(r"\bcada\s+(\d{1,2})\s+hora", normalized)
+    if match:
+        try:
+            hours = int(match.group(1))
+        except ValueError:
+            hours = 0
+        if hours in {4, 6, 8, 12, 24}:
+            return hours
+    if any(token in normalized for token in ["cada 24", "una vez", "1 vez", "diaria", "al dia"]):
+        return 24
+    if any(token in normalized for token in ["cada 12", "2 veces", "dos veces"]):
+        return 12
+    if any(token in normalized for token in ["cada 8", "3 veces", "tres veces"]):
+        return 8
+    if any(token in normalized for token in ["cada 6", "4 veces", "cuatro veces"]):
+        return 6
+    return None
+
+
+def _medication_start_at(med: models.Medication, fallback: datetime | None = None) -> datetime:
+    if getattr(med, "start_at", None):
+        return med.start_at
+    if getattr(med, "created_at", None):
+        return med.created_at
+    return fallback or datetime.now()
+
+
+def _medication_end_at(med: models.Medication) -> datetime | None:
+    end_at = getattr(med, "end_date", None)
+    if not end_at:
+        return None
+    if (
+        end_at.hour == 0
+        and end_at.minute == 0
+        and end_at.second == 0
+        and end_at.microsecond == 0
+    ):
+        return end_at.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return end_at
+
+
 def _parse_schedule_time(value: str | None):
     if not value:
         return None
@@ -2031,41 +2175,91 @@ def _parse_schedule_time(value: str | None):
 
 
 def _build_med_trigger(day: datetime, hour: int, minute: int = 0) -> datetime:
-    if hour == 24 and minute == 0:
-        return (day + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    return day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    return day_start + timedelta(hours=hour, minutes=minute)
+
+
+def _medication_schedule_events_between(
+    med: models.Medication,
+    window_start: datetime,
+    window_end: datetime,
+) -> list[datetime]:
+    if window_end < window_start:
+        return []
+    anchor = _medication_start_at(med, window_start)
+    effective_start = max(anchor, window_start)
+    effective_end = window_end
+    medication_end_at = _medication_end_at(med)
+    if medication_end_at and medication_end_at < effective_end:
+        effective_end = medication_end_at
+    if effective_end < effective_start:
+        return []
+
+    interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
+    if interval_hours:
+        interval = timedelta(hours=interval_hours)
+        current = anchor
+        if current < effective_start:
+            elapsed_seconds = max(0.0, (effective_start - current).total_seconds())
+            jump_steps = int(elapsed_seconds // interval.total_seconds())
+            current = current + (interval * jump_steps)
+            while current < effective_start:
+                current += interval
+        events = []
+        while current <= effective_end:
+            events.append(current)
+            current += interval
+        return events
+
+    schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    if schedule_slot:
+        hour, minute = schedule_slot
+    else:
+        hour, minute = _medication_start_at(med, effective_start).hour, _medication_start_at(med, effective_start).minute
+    day = effective_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    if day > anchor.replace(hour=0, minute=0, second=0, microsecond=0):
+        anchor_day = anchor.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        anchor_day = day
+    current = _build_med_trigger(anchor_day, hour, minute)
+    while current < effective_start:
+        current += timedelta(days=1)
+    events = []
+    while current <= effective_end:
+        events.append(current)
+        current += timedelta(days=1)
+    return events
 
 
 def _medication_time_slots(med: models.Medication):
+    anchor = _medication_start_at(med, datetime.now())
     schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    if not schedule_slot:
+        schedule_slot = (anchor.hour, anchor.minute)
+    interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
+    if schedule_slot and interval_hours and interval_hours < 24:
+        base_minutes = schedule_slot[0] * 60 + schedule_slot[1]
+        slots = []
+        current_minutes = base_minutes
+        while current_minutes < base_minutes + (24 * 60):
+            slots.append((current_minutes // 60, current_minutes % 60))
+            current_minutes += interval_hours * 60
+        return slots
     if schedule_slot:
         return [schedule_slot]
     return [(hour, 0) for hour in _derive_dose_hours(med.frequency)]
 
 
+def _calculate_expected_doses_between(
+    med: models.Medication,
+    window_start: datetime,
+    window_end: datetime,
+) -> int:
+    return len(_medication_schedule_events_between(med, window_start, window_end))
+
+
 def _calculate_expected_doses_until(med: models.Medication, now: datetime) -> int:
-    start = med.created_at or now
-    end = now
-    if med.end_date and med.end_date < end:
-        end = med.end_date
-    if end < start:
-        return 0
-
-    slots = _medication_time_slots(med)
-    day = start.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_day = end.replace(hour=0, minute=0, second=0, microsecond=0)
-    expected = 0
-
-    while day <= end_day:
-        for hour, minute in slots:
-            trigger_at = _build_med_trigger(day, hour, minute)
-            if trigger_at < start:
-                continue
-            if trigger_at <= end:
-                expected += 1
-        day += timedelta(days=1)
-
-    return expected
+    return _calculate_expected_doses_between(med, _medication_start_at(med, now), now)
 
 
 def _normalize_adherence_status(value: str | None) -> str:
@@ -2090,15 +2284,30 @@ def _build_medication_event_defaults(
     actual_taken_at = taken_at
     normalized_status = _normalize_adherence_status(status)
     if not schedule_dt:
-        slots = _medication_time_slots(med)
-        if slots:
-            hour, minute = slots[0]
-            schedule_dt = _build_med_trigger(now.replace(hour=0, minute=0, second=0, microsecond=0), hour, minute)
+        reference_dt = actual_taken_at or now
+        candidate_slots = _medication_schedule_events_between(
+            med,
+            reference_dt - timedelta(days=2),
+            reference_dt + timedelta(days=2),
+        )
+        if candidate_slots:
+            due_candidates = [
+                item for item in candidate_slots
+                if item <= reference_dt + timedelta(minutes=90)
+            ]
+            if due_candidates:
+                schedule_dt = max(due_candidates)
+            else:
+                schedule_dt = min(candidate_slots, key=lambda item: abs(item - reference_dt))
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
             normalized_status = "late"
+    if schedule_dt and getattr(schedule_dt, "tzinfo", None) is not None:
+        schedule_dt = schedule_dt.replace(tzinfo=None)
+    if actual_taken_at and getattr(actual_taken_at, "tzinfo", None) is not None:
+        actual_taken_at = actual_taken_at.replace(tzinfo=None)
     return schedule_dt, actual_taken_at, normalized_status
 
 
@@ -2113,39 +2322,267 @@ def _materialize_medication_adherence_events(db: Session, user: models.User, hor
         .all()
     )
     for med in meds:
-        start_day = (med.created_at or now) - timedelta(days=horizon_days - 1)
-        day = start_day.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        while day <= end_day:
-            for hour, minute in _medication_time_slots(med):
-                scheduled_at = _build_med_trigger(day, hour, minute)
-                if scheduled_at > now - timedelta(minutes=90):
-                    continue
-                if med.end_date and scheduled_at > med.end_date:
-                    continue
-                existing = (
-                    db.query(models.MedicationIntake)
-                    .filter(
-                        models.MedicationIntake.medication_id == med.id,
-                        models.MedicationIntake.user_id == user.id,
-                        models.MedicationIntake.scheduled_at == scheduled_at.replace(tzinfo=None),
-                    )
-                    .first()
+        for scheduled_at in _medication_schedule_events_between(
+            med,
+            now - timedelta(days=max(1, horizon_days)),
+            now - timedelta(minutes=90),
+        ):
+            existing = (
+                db.query(models.MedicationIntake)
+                .filter(
+                    models.MedicationIntake.medication_id == med.id,
+                    models.MedicationIntake.user_id == user.id,
+                    models.MedicationIntake.scheduled_at == scheduled_at.replace(tzinfo=None),
                 )
-                if existing:
-                    continue
-                db.add(
-                    models.MedicationIntake(
-                        user_id=user.id,
-                        medication_id=med.id,
-                        scheduled_at=scheduled_at.replace(tzinfo=None),
-                        taken_at=None,
-                        status="missed",
-                        source="scheduler",
-                        notes="Evento generado automaticamente por falta de registro.",
-                    )
+                .first()
+            )
+            if existing:
+                continue
+            db.add(
+                models.MedicationIntake(
+                    user_id=user.id,
+                    medication_id=med.id,
+                    scheduled_at=scheduled_at.replace(tzinfo=None),
+                    taken_at=None,
+                    status="missed",
+                    source="scheduler",
+                    notes="Evento generado automaticamente por falta de registro.",
                 )
-            day += timedelta(days=1)
+                )
+
+
+def _medication_remaining_doses(
+    med: models.Medication,
+    taken_doses: int | None = None,
+) -> int | None:
+    total = int(getattr(med, "stock_total_doses", 0) or 0)
+    if total <= 0:
+        return None
+    consumed = int(taken_doses if taken_doses is not None else getattr(med, "taken_doses", 0) or 0)
+    return max(total - max(consumed, 0), 0)
+
+
+def _primary_profile_for_owner_user(
+    db: Session,
+    owner_user_id: int | None,
+) -> models.HealthProfile | None:
+    if not owner_user_id:
+        return None
+    return (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == int(owner_user_id),
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(models.HealthProfile.is_primary_profile.desc(), models.HealthProfile.created_at.asc())
+        .first()
+    )
+
+
+def _medication_refill_contacts(
+    db: Session,
+    owner_user_id: int | None,
+) -> list[dict]:
+    if not owner_user_id:
+        return []
+    owner_user = db.query(models.User).filter(models.User.id == int(owner_user_id)).first()
+    if not owner_user or not _plan_allows_collaboration_for_user(owner_user):
+        return []
+    profile = _primary_profile_for_owner_user(db, owner_user_id)
+    if not profile:
+        return []
+    rows = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id == profile.id,
+            models.ProfileRelationship.status == "accepted",
+            models.ProfileRelationship.user_id != int(owner_user_id),
+        )
+        .order_by(models.ProfileRelationship.accepted_at.asc(), models.ProfileRelationship.created_at.asc())
+        .all()
+    )
+    contacts = []
+    for row in rows:
+        user = row.user or db.query(models.User).filter(models.User.id == row.user_id).first()
+        if not user:
+            continue
+        contacts.append(
+            {
+                "user_id": int(user.id),
+                "name": (user.name or user.email or f"Usuario #{user.id}").strip(),
+                "email": (user.email or "").strip(),
+                "role": _normalize_role(getattr(row, "role", "")),
+                "relationship_type": getattr(row, "relationship_type", "") or "",
+                "user": user,
+            }
+        )
+    return contacts
+
+
+def _medication_refill_current_assignee(
+    db: Session,
+    med: models.Medication,
+    contacts: list[dict] | None = None,
+) -> dict | None:
+    available_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    if not available_contacts:
+        return None
+    rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0)
+    return available_contacts[rotation_index % len(available_contacts)]
+
+
+def _populate_medication_refill_state(
+    db: Session,
+    med: models.Medication,
+    taken_doses: int | None = None,
+):
+    remaining = _medication_remaining_doses(med, taken_doses=taken_doses)
+    contacts = _medication_refill_contacts(db, getattr(med, "user_id", None))
+    assignee = _medication_refill_current_assignee(db, med, contacts=contacts) if contacts else None
+    threshold = int(getattr(med, "refill_alert_threshold_doses", 0) or 0)
+    alert_active = bool(
+        getattr(med, "refill_enabled", False)
+        and remaining is not None
+        and threshold > 0
+        and remaining <= threshold
+    )
+    setattr(med, "remaining_doses", remaining)
+    setattr(med, "refill_contacts_count", len(contacts))
+    setattr(med, "refill_current_assignee_user_id", assignee.get("user_id") if assignee else None)
+    setattr(med, "refill_current_assignee_name", assignee.get("name") if assignee else "")
+    setattr(med, "refill_alert_active", alert_active)
+    return med
+
+
+def _handle_medication_refill_notifications(
+    db: Session,
+    med: models.Medication,
+    owner_user: models.User | None = None,
+    taken_doses: int | None = None,
+) -> bool:
+    if not med or not bool(getattr(med, "refill_enabled", False)):
+        return False
+    total_doses = int(getattr(med, "stock_total_doses", 0) or 0)
+    threshold = int(getattr(med, "refill_alert_threshold_doses", 0) or 0)
+    if total_doses <= 0 or threshold <= 0:
+        return False
+    owner = owner_user
+    if not owner:
+        owner = db.query(models.User).filter(models.User.id == med.user_id).first()
+    if not owner or not _plan_allows_collaboration_for_user(owner):
+        return False
+    contacts = _medication_refill_contacts(db, getattr(med, "user_id", None))
+    if not contacts:
+        return False
+    _populate_medication_refill_state(db, med, taken_doses=taken_doses)
+    remaining = getattr(med, "remaining_doses", None)
+    if remaining is None:
+        return False
+    last_notified_at = getattr(med, "refill_last_notified_at", None)
+    if remaining > threshold:
+        if last_notified_at is not None or getattr(med, "refill_last_notified_remaining", None) is not None:
+            med.refill_last_notified_at = None
+            med.refill_last_notified_remaining = None
+            db.add(med)
+            db.commit()
+            db.refresh(med)
+        return False
+    if last_notified_at is not None:
+        return False
+
+    assignee = _medication_refill_current_assignee(db, med, contacts=contacts)
+    if not assignee:
+        return False
+
+    patient_profile = _primary_profile_for_owner_user(db, med.user_id)
+    patient_name = (
+        getattr(patient_profile, "name", None)
+        or getattr(owner, "name", None)
+        or "Perfil familiar"
+    )
+    cycle_key = (
+        f"{int(getattr(med, 'refill_rotation_index', 0) or 0)}"
+        f"-{max(int(remaining), 0)}"
+    )
+    sent_any = False
+
+    for contact in contacts:
+        is_assignee = int(contact["user_id"]) == int(assignee["user_id"])
+        push_tag = (
+            f"medication-refill-{med.id}-"
+            f"{'assignee' if is_assignee else 'family'}-{contact['user_id']}-{cycle_key}"
+        )
+        if not _notification_already_sent(db, push_tag):
+            title = "Reposicion de medicamento"
+            if is_assignee:
+                body = (
+                    f"Te toca comprar {med.name} para {patient_name}. "
+                    f"Quedan {remaining} dosis."
+                )
+            else:
+                body = (
+                    f"A {assignee['name']} le toca comprar {med.name} para {patient_name}. "
+                    f"Quedan {remaining} dosis."
+                )
+            payload = {
+                "title": title,
+                "body": body,
+                "url": "/medications",
+                "priority": "high",
+                "sound": "medication",
+                "medicationId": med.id,
+                "userId": int(contact["user_id"]),
+                "tag": push_tag,
+            }
+            sent = _send_push_to_user(db, int(contact["user_id"]), payload)
+            if sent:
+                _record_sent(
+                    db,
+                    int(contact["user_id"]),
+                    push_tag,
+                    "medication_refill",
+                    datetime.now(),
+                    datetime.now(),
+                )
+                sent_any = True
+
+        contact_user = contact.get("user")
+        email_tag = f"medication-refill-email-{med.id}-{contact['user_id']}-{cycle_key}"
+        if (
+            contact_user
+            and getattr(contact_user, "email", "")
+            and bool(getattr(contact_user, "email_reminders_enabled", False))
+            and not _notification_already_sent(db, email_tag)
+        ):
+            _send_medication_refill_email_safe(
+                contact_user.email,
+                contact.get("name") or "",
+                {
+                    "patient_name": patient_name,
+                    "medication_name": med.name or "Medicamento",
+                    "dose": med.dose or "",
+                    "remaining_doses": remaining,
+                    "threshold_doses": threshold,
+                    "assignee_name": assignee.get("name") or "",
+                    "is_assignee": is_assignee,
+                },
+            )
+            _record_sent(
+                db,
+                int(contact["user_id"]),
+                email_tag,
+                "medication_refill_email",
+                datetime.now(),
+                datetime.now(),
+            )
+            sent_any = True
+
+    med.refill_last_notified_at = datetime.now()
+    med.refill_last_notified_remaining = int(remaining)
+    db.add(med)
+    db.commit()
+    db.refresh(med)
+    return sent_any
 
 
 def _attach_medication_adherence(
@@ -2160,54 +2597,36 @@ def _attach_medication_adherence(
 
     now = datetime.now()
     medication_ids = [m.id for m in medications if getattr(m, "id", None)]
-    adherence_by_medication_id: dict[int, models.AdherenceSummary] = {}
-
-    if medication_ids and profile_id:
-        summary_rows = (
-            db.query(models.AdherenceSummary)
-            .filter(
-                models.AdherenceSummary.profile_id == profile_id,
-                models.AdherenceSummary.window_days == 30,
-                models.AdherenceSummary.medication_id.in_(medication_ids),
-            )
-            .all()
-        )
-        adherence_by_medication_id = {
-            int(row.medication_id): row
-            for row in summary_rows
-            if getattr(row, "medication_id", None) is not None
-        }
-
-    taken_counts = {mid: 0 for mid in medication_ids}
-    if medication_ids and not adherence_by_medication_id:
+    status_counts = {
+        int(mid): {"taken": 0, "late": 0, "missed": 0, "skipped": 0}
+        for mid in medication_ids
+    }
+    if medication_ids:
         intake_rows = (
             db.query(
                 models.MedicationIntake.medication_id,
-                func.count(models.MedicationIntake.id),
+                models.MedicationIntake.status,
             )
             .filter(
                 models.MedicationIntake.user_id == (owner_user_id or current_user.id),
                 models.MedicationIntake.medication_id.in_(medication_ids),
             )
-            .group_by(models.MedicationIntake.medication_id)
             .all()
         )
-
-        for medication_id, count in intake_rows:
-            taken_counts[int(medication_id)] = int(count or 0)
+        for medication_id, status in intake_rows:
+            key = _normalize_adherence_status(status)
+            if int(medication_id) not in status_counts:
+                continue
+            if key not in status_counts[int(medication_id)]:
+                key = "taken"
+            status_counts[int(medication_id)][key] += 1
 
     for med in medications:
-        summary_row = adherence_by_medication_id.get(int(med.id)) if getattr(med, "id", None) else None
-        if summary_row:
-            setattr(med, "expected_doses", int(summary_row.expected_doses or 0))
-            setattr(med, "taken_doses", int(summary_row.taken_doses or 0))
-            setattr(med, "missed_doses", int(summary_row.missed_count or 0))
-            setattr(med, "adherence_rate", float(summary_row.adherence_rate) if summary_row.adherence_rate is not None else None)
-            continue
-
         expected = _calculate_expected_doses_until(med, now)
-        taken = int(taken_counts.get(med.id, 0))
-        missed = max(expected - taken, 0)
+        med_counts = status_counts.get(int(med.id), {})
+        taken = int((med_counts.get("taken") or 0) + (med_counts.get("late") or 0))
+        explicit_missed = int((med_counts.get("missed") or 0) + (med_counts.get("skipped") or 0))
+        missed = max(explicit_missed, max(expected - taken, 0))
         adherence = None
         if expected > 0:
             adherence = round(min((taken / expected) * 100, 100), 1)
@@ -2215,6 +2634,7 @@ def _attach_medication_adherence(
         setattr(med, "taken_doses", taken)
         setattr(med, "missed_doses", missed)
         setattr(med, "adherence_rate", adherence)
+        _populate_medication_refill_state(db, med, taken_doses=taken)
 
     return medications
 
@@ -2249,9 +2669,7 @@ def _record_sent(db: Session, user_id: int, tag: str, kind: str, trigger_at: dat
 
 
 def _send_scheduled_push_reminders():
-    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
-        return
-
+    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
     db = SessionLocal()
     try:
         now_global = datetime.now(_resolve_user_tz(None))
@@ -2310,19 +2728,21 @@ def _send_scheduled_push_reminders():
                             body_lines.append(appt.notes)
                         body = "\n".join(body_lines)
 
-                        ok = send_web_push(
-                            subscription,
-                            {
-                                "title": title,
-                                "body": body,
-                                "url": "/appointments",
-                                "priority": offset["priority"],
-                                "sound": "appointment",
-                                "appointmentId": appt.id,
-                                "userId": user_id,
-                                "tag": tag,
-                            },
-                        )
+                        ok = False
+                        if push_enabled:
+                            ok = send_web_push(
+                                subscription,
+                                {
+                                    "title": title,
+                                    "body": body,
+                                    "url": "/appointments",
+                                    "priority": offset["priority"],
+                                    "sound": "appointment",
+                                    "appointmentId": appt.id,
+                                    "userId": user_id,
+                                    "tag": tag,
+                                },
+                            )
                         if ok:
                             _record_sent(db, user_id, tag, "appointment", trigger_at, now)
 
@@ -2357,8 +2777,10 @@ def _send_scheduled_push_reminders():
                 db.query(models.Medication)
                 .filter(
                     models.Medication.user_id == user_id,
-                    models.Medication.end_date.isnot(None),
-                    models.Medication.end_date >= now,
+                    or_(
+                        models.Medication.end_date.is_(None),
+                        models.Medication.end_date >= now,
+                    ),
                     models.Medication.completed.is_(False),
                 )
                 .all()
@@ -2367,31 +2789,13 @@ def _send_scheduled_push_reminders():
             if not medications:
                 continue
 
-            if not bool(user_settings.get("medicationReminders", True)):
-                continue
-
             for med in medications:
-                end_dt = _to_schedule_tz(med.end_date, user_tz)
-                if not end_dt:
-                    continue
-
-                schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
-                if schedule_slot:
-                    time_slots = [schedule_slot]
-                else:
-                    time_slots = [(hour, 0) for hour in _derive_dose_hours(med.frequency)]
-
-                today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-                for day_offset in [0, 1]:
-                    day = today + timedelta(days=day_offset)
-                    if day.date() > end_dt.date():
-                        continue
-
-                    for hour, minute in time_slots:
-                        trigger_exact = _build_med_trigger(day, hour, minute)
-                        if trigger_exact.date() > end_dt.date():
-                            continue
-
+                if bool(user_settings.get("medicationReminders", True)):
+                    for trigger_exact in _medication_schedule_events_between(
+                        med,
+                        now - timedelta(minutes=MEDICATION_LEAD_MINUTES + 5),
+                        now + timedelta(days=2),
+                    ):
                         trigger_exact_ms = int(trigger_exact.timestamp() * 1000)
                         for offset_minutes in [MEDICATION_LEAD_MINUTES, 0]:
                             trigger_at = trigger_exact - timedelta(minutes=offset_minutes)
@@ -2420,19 +2824,21 @@ def _send_scheduled_push_reminders():
                                 body_lines.append(med.notes)
                             body = "\n".join(body_lines)
 
-                            ok = send_web_push(
-                                subscription,
-                                {
-                                    "title": title,
-                                    "body": body,
-                                    "url": "/medications",
-                                    "priority": "high",
-                                    "sound": "medication",
-                                    "medicationId": med.id,
-                                    "userId": user_id,
-                                    "tag": tag,
-                                },
-                            )
+                            ok = False
+                            if push_enabled:
+                                ok = send_web_push(
+                                    subscription,
+                                    {
+                                        "title": title,
+                                        "body": body,
+                                        "url": f"/medications?notify=1&medicationId={med.id}&trigger={trigger_exact_ms}",
+                                        "priority": "high" if offset_minutes == 0 else "normal",
+                                        "sound": "medication",
+                                        "medicationId": med.id,
+                                        "userId": user_id,
+                                        "tag": tag,
+                                    },
+                                )
                             if ok:
                                 _record_sent(db, user_id, tag, "medication", trigger_at, now)
                             if (
@@ -2460,6 +2866,28 @@ def _send_scheduled_push_reminders():
                                     trigger_at,
                                     now,
                                 )
+        refill_candidates = (
+            db.query(models.Medication)
+            .filter(
+                models.Medication.refill_enabled.is_(True),
+                models.Medication.completed.is_(False),
+                models.Medication.stock_total_doses > 0,
+            )
+            .all()
+        )
+        for med in refill_candidates:
+            try:
+                owner_user = db.query(models.User).filter(models.User.id == med.user_id).first()
+                _handle_medication_refill_notifications(
+                    db,
+                    med,
+                    owner_user=owner_user,
+                )
+            except Exception as exc:
+                db.rollback()
+                print(
+                    f"WARNING medication refill notifications {getattr(med, 'id', '?')}: {exc}"
+                )
     finally:
         db.close()
 
@@ -4523,8 +4951,25 @@ def _build_plan_info(user: models.User, db: Session) -> dict:
     }
 
 
-def _assert_collaboration_enabled(current_user: models.User):
-    info = _plan_features(getattr(current_user, "plan_type", None))
+def _plan_allows_collaboration_for_user(user: models.User | None) -> bool:
+    if not user:
+        return False
+    info = _plan_features(getattr(user, "plan_type", None))
+    return bool(info.get("collaboration_enabled", False))
+
+
+def _assert_collaboration_enabled(
+    current_user: models.User,
+    db: Session | None = None,
+    owner_user_id: int | None = None,
+):
+    info = None
+    if db is not None and owner_user_id:
+        owner_user = db.query(models.User).filter(models.User.id == int(owner_user_id)).first()
+        if owner_user:
+            info = _plan_features(getattr(owner_user, "plan_type", None))
+    if info is None:
+        info = _plan_features(getattr(current_user, "plan_type", None))
     if not bool(info.get("collaboration_enabled", False)):
         raise HTTPException(
             status_code=403,
@@ -5233,12 +5678,16 @@ def _medication_to_ai_dict(item: models.Medication | None, tz_name: str) -> dict
         "dose": item.dose or "",
         "frequency": item.frequency or "",
         "schedule_time": item.schedule_time or "",
+        "start_at": _safe_iso_local(getattr(item, "start_at", None), tz_name),
         "completed": bool(item.completed),
         "status": "realizada" if bool(item.completed) else "activa",
         "end_date": _safe_iso_local(item.end_date, tz_name),
         "created_at": _safe_iso_local(item.created_at, tz_name),
         "notes": _clip_text(item.notes or "", 160),
         "adherence_rate": getattr(item, "adherence_rate", None),
+        "remaining_doses": getattr(item, "remaining_doses", None),
+        "refill_alert_active": bool(getattr(item, "refill_alert_active", False)),
+        "refill_current_assignee_name": getattr(item, "refill_current_assignee_name", "") or "",
     }
 
 
@@ -5399,6 +5848,764 @@ def _ai_recent_conversation_context(
             break
     return result
 
+
+AI_CHAT_WORKFLOW_CONFIG = {
+    "appointment": {
+        "resource_label": "cita médica",
+        "required_fields": ["type", "date", "time"],
+        "optional_fields": ["specialty", "center", "status", "notes"],
+    },
+    "medication": {
+        "resource_label": "medicamento",
+        "required_fields": ["name", "frequency", "start_at"],
+        "optional_fields": ["dose", "duration", "end_date", "notes"],
+    },
+    "document": {
+        "resource_label": "documento",
+        "required_fields": ["doc_type", "file"],
+        "optional_fields": ["date", "center", "notes"],
+    },
+}
+
+AI_CHAT_WORKFLOW_FIELD_LABELS = {
+    "type": "tipo",
+    "date": "fecha",
+    "time": "hora",
+    "specialty": "especialidad",
+    "center": "centro",
+    "status": "estado",
+    "notes": "notas",
+    "name": "nombre",
+    "dose": "dosis",
+    "frequency": "frecuencia",
+    "start_at": "inicio del tratamiento",
+    "schedule_time": "horario",
+    "duration": "duración",
+    "end_date": "fecha de término",
+    "doc_type": "tipo de documento",
+    "file": "archivo",
+}
+
+AI_CHAT_WORKFLOW_CANCEL_TOKENS = {
+    "cancelar",
+    "cancelalo",
+    "cancelar flujo",
+    "detener",
+    "salir",
+    "olvidalo",
+    "olvídalo",
+    "ya no",
+}
+
+AI_CHAT_WORKFLOW_SKIP_TOKENS = {
+    "omitir",
+    "omite",
+    "sin dato",
+    "sin datos",
+    "no se",
+    "no sé",
+    "ninguno",
+    "ninguna",
+    "no aplica",
+    "pasar",
+    "saltalo",
+    "sáltalo",
+}
+
+
+def _get_ai_conversation_workflow(
+    db: Session,
+    *,
+    profile_id: int,
+    conversation_id: str | None,
+):
+    conv_id = (conversation_id or "").strip()
+    if not conv_id:
+        return None
+    return (
+        db.query(models.AiConversationWorkflow)
+        .filter(
+            models.AiConversationWorkflow.profile_id == profile_id,
+            models.AiConversationWorkflow.conversation_id == conv_id,
+        )
+        .first()
+    )
+
+
+def _save_ai_conversation_workflow(
+    db: Session,
+    *,
+    profile_id: int,
+    user_id: int,
+    conversation_id: str,
+    workflow_type: str,
+    payload_json: dict | None = None,
+    status: str = "collecting",
+):
+    item = _get_ai_conversation_workflow(
+        db,
+        profile_id=profile_id,
+        conversation_id=conversation_id,
+    )
+    if item is None:
+        item = models.AiConversationWorkflow(
+            profile_id=profile_id,
+            user_id=user_id,
+            conversation_id=(conversation_id or "").strip(),
+            workflow_type=(workflow_type or "").strip(),
+            status=(status or "").strip() or "collecting",
+            payload_json=payload_json or {},
+        )
+        db.add(item)
+    else:
+        item.workflow_type = (workflow_type or "").strip()
+        item.status = (status or "").strip() or "collecting"
+        item.payload_json = payload_json or {}
+        item.updated_at = datetime.now()
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+def _clear_ai_conversation_workflow(
+    db: Session,
+    *,
+    profile_id: int,
+    conversation_id: str | None,
+):
+    item = _get_ai_conversation_workflow(
+        db,
+        profile_id=profile_id,
+        conversation_id=conversation_id,
+    )
+    if item is None:
+        return False
+    db.delete(item)
+    db.commit()
+    return True
+
+
+def _workflow_cancel_requested(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    return normalized in {_normalize_text(token) for token in AI_CHAT_WORKFLOW_CANCEL_TOKENS}
+
+
+def _workflow_skip_requested(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return False
+    return normalized in {_normalize_text(token) for token in AI_CHAT_WORKFLOW_SKIP_TOKENS}
+
+
+def _detect_chat_creation_target(message: str | None) -> str | None:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return None
+    appointment_tokens = [
+        "crear cita",
+        "crea una cita",
+        "agendar cita",
+        "agenda una cita",
+        "crear examen",
+        "agendar examen",
+        "crear hora",
+        "reservar hora",
+    ]
+    medication_tokens = [
+        "crear medicamento",
+        "crea un medicamento",
+        "agregar medicamento",
+        "agrega un medicamento",
+        "registrar medicamento",
+        "guardar medicamento",
+        "crear remedio",
+        "agregar remedio",
+    ]
+    document_tokens = [
+        "subir documento",
+        "guardar documento",
+        "crear documento",
+        "agregar documento",
+        "subir receta",
+        "subir resultado",
+        "subir informe",
+        "subir orden",
+    ]
+    if any(token in normalized for token in appointment_tokens):
+        return "appointment"
+    if any(token in normalized for token in medication_tokens):
+        return "medication"
+    if any(token in normalized for token in document_tokens):
+        return "document"
+    return None
+
+
+def _parse_chat_time_value(message: str | None) -> str | None:
+    raw = message or ""
+    match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", raw, re.IGNORECASE)
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2) or "0")
+    suffix = (match.group(3) or "").lower()
+    if suffix == "pm" and hour < 12:
+        hour += 12
+    if suffix == "am" and hour == 12:
+        hour = 0
+    if hour > 23 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _parse_chat_date_value(message: str | None, tz_name: str) -> str | None:
+    raw = (message or "").strip()
+    normalized = _normalize_text(raw)
+    now = datetime.now(_safe_zoneinfo(tz_name))
+    if "manana" in normalized:
+        target = now + timedelta(days=1)
+        return target.strftime("%Y-%m-%d")
+    if "hoy" in normalized:
+        return now.strftime("%Y-%m-%d")
+    iso_match = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", raw)
+    if iso_match:
+        year, month, day = [int(part) for part in iso_match.groups()]
+        try:
+            return datetime(year, month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    local_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", raw)
+    if local_match:
+        day, month, year = [int(part) for part in local_match.groups()]
+        if year < 100:
+            year += 2000
+        try:
+            return datetime(year, month, day).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_chat_datetime_parts(message: str | None, tz_name: str) -> tuple[str | None, str | None]:
+    return _parse_chat_date_value(message, tz_name), _parse_chat_time_value(message)
+
+
+def _parse_appointment_type(message: str | None):
+    normalized = _normalize_text(message or "")
+    if "examen" in normalized:
+        return models.AppointmentType.examen.value
+    if "tramite" in normalized or "trámite" in (message or "").lower():
+        return models.AppointmentType.tramite.value
+    if any(token in normalized for token in ["cita", "consulta", "hora", "medica", "medica"]):
+        return models.AppointmentType.cita.value
+    return None
+
+
+def _parse_appointment_status(message: str | None):
+    normalized = _normalize_text(message or "")
+    if "realizada" in normalized or "realizado" in normalized:
+        return models.AppointmentStatus.realizada.value
+    if "agendada" in normalized or "agendado" in normalized:
+        return models.AppointmentStatus.agendada.value
+    if "pendiente" in normalized:
+        return models.AppointmentStatus.pendiente.value
+    return None
+
+
+def _parse_document_type(message: str | None):
+    normalized = _normalize_text(message or "")
+    if "receta" in normalized:
+        return models.DocumentType.receta.value
+    if "orden" in normalized:
+        return models.DocumentType.orden.value
+    if "resultado" in normalized or "laboratorio" in normalized:
+        return models.DocumentType.resultado.value
+    if "informe" in normalized:
+        return models.DocumentType.informe.value
+    if "documento" in normalized or "archivo" in normalized:
+        return models.DocumentType.otro.value
+    return None
+
+
+def _strip_workflow_command_prefix(message: str | None) -> str:
+    text_value = (message or "").strip()
+    if not text_value:
+        return ""
+    cleaned = re.sub(
+        r"^(?:necesito|quiero|puedes|por favor|favor)?\s*(?:que\s+)?(?:me\s+)?(?:crees?|crear|agregues?|agregar|guardes?|guardar|registres?|registrar|subas?|subir|agendes?|agendar)\s+(?:una?|el|la)?\s*",
+        "",
+        text_value,
+        flags=re.IGNORECASE,
+    ).strip()
+    return cleaned or text_value
+
+
+def _extract_workflow_values(
+    workflow_type: str,
+    message: str,
+    *,
+    tz_name: str,
+    current_field: str | None = None,
+) -> dict:
+    text_value = (message or "").strip()
+    extracted: dict = {}
+    if workflow_type == "appointment":
+        appointment_type = _parse_appointment_type(text_value)
+        if appointment_type:
+            extracted["type"] = appointment_type
+        status_value = _parse_appointment_status(text_value)
+        if status_value:
+            extracted["status"] = status_value
+        date_value, time_value = _parse_chat_datetime_parts(text_value, tz_name)
+        if date_value:
+            extracted["date"] = date_value
+        if time_value:
+            extracted["time"] = time_value
+        if current_field == "specialty" and text_value:
+            extracted["specialty"] = text_value
+        if current_field == "center" and text_value:
+            extracted["center"] = text_value
+        if current_field == "notes" and text_value:
+            extracted["notes"] = text_value
+    elif workflow_type == "medication":
+        if current_field == "name" and text_value:
+            extracted["name"] = _strip_workflow_command_prefix(text_value)
+        if current_field == "dose" and text_value:
+            extracted["dose"] = text_value
+        if current_field == "frequency" and text_value:
+            extracted["frequency"] = text_value
+        if current_field == "start_at":
+            start_date_value, start_time_value = _parse_chat_datetime_parts(text_value, tz_name)
+            if start_date_value and start_time_value:
+                extracted["start_at"] = f"{start_date_value}T{start_time_value}:00"
+                extracted["schedule_time"] = start_time_value
+        if current_field == "schedule_time":
+            schedule_value = _parse_chat_time_value(text_value)
+            if schedule_value:
+                extracted["schedule_time"] = schedule_value
+            elif text_value:
+                extracted["schedule_time"] = text_value
+        if current_field == "duration" and text_value:
+            extracted["duration"] = text_value
+        if current_field == "end_date":
+            end_date_value = _parse_chat_date_value(text_value, tz_name)
+            if end_date_value:
+                extracted["end_date"] = end_date_value
+        if current_field == "notes" and text_value:
+            extracted["notes"] = text_value
+    elif workflow_type == "document":
+        doc_type = _parse_document_type(text_value)
+        if doc_type:
+            extracted["doc_type"] = doc_type
+        date_value = _parse_chat_date_value(text_value, tz_name)
+        if date_value:
+            extracted["date"] = date_value
+        if current_field == "center" and text_value:
+            extracted["center"] = text_value
+        if current_field == "notes" and text_value:
+            extracted["notes"] = text_value
+    return extracted
+
+
+def _workflow_prompt_for_field(workflow_type: str, field_name: str) -> str:
+    if workflow_type == "appointment":
+        prompts = {
+            "type": "¿Qué tipo de cita quieres crear: cita médica, examen o trámite?",
+            "date": "¿Qué fecha quieres registrar? Puedes decirme algo como 2026-03-20 o 20/03/2026.",
+            "time": "¿A qué hora quieres dejarla agendada? Por ejemplo 15:30.",
+            "specialty": "¿Qué especialidad o motivo quieres registrar? Si prefieres, escribe 'omitir'.",
+            "center": "¿En qué centro o clínica será? Si no lo sabes, escribe 'omitir'.",
+            "status": "¿Qué estado quieres guardar: pendiente, agendada o realizada? Si no quieres cambiarlo, escribe 'omitir'.",
+            "notes": "¿Quieres agregar notas adicionales? Si no, escribe 'omitir'.",
+        }
+        return prompts.get(field_name, "Falta un dato para crear la cita.")
+    if workflow_type == "medication":
+        prompts = {
+            "name": "¿Cómo se llama el medicamento?",
+            "start_at": "¿Cuándo fue la primera dosis? Indícame fecha y hora exactas, por ejemplo 2026-03-14 20:00 o 14/03/2026 20:00.",
+            "dose": "¿Qué dosis quieres registrar? Si no la sabes, escribe 'omitir'.",
+            "frequency": "¿Qué frecuencia de uso tendrá? Por ejemplo 'cada 8 horas' o 'cada 12 horas'.",
+            "duration": "¿Cuál es la duración del tratamiento? Si no la sabes, escribe 'omitir'.",
+            "end_date": "¿Hasta qué fecha aplica? Puedes decirme 2026-03-30. Si no quieres guardarla, escribe 'omitir'.",
+            "notes": "¿Quieres agregar notas del medicamento? Si no, escribe 'omitir'.",
+        }
+        return prompts.get(field_name, "Falta un dato para crear el medicamento.")
+    prompts = {
+        "doc_type": "¿Qué tipo de documento quieres guardar: receta, orden, resultado, informe u otro?",
+        "file": "Adjunta el archivo del documento y envíame cualquier mensaje breve para continuar.",
+        "date": "¿Qué fecha quieres asociar al documento? Si no la quieres indicar, escribe 'omitir'.",
+        "center": "¿Desde qué centro, clínica o laboratorio viene? Si no lo sabes, escribe 'omitir'.",
+        "notes": "¿Quieres agregar notas del documento? Si no, escribe 'omitir'.",
+    }
+    return prompts.get(field_name, "Falta un dato para guardar el documento.")
+
+
+def _workflow_next_field(workflow_type: str, values: dict | None, skipped_fields: list[str] | None) -> str | None:
+    config = AI_CHAT_WORKFLOW_CONFIG.get(workflow_type) or {}
+    values = values or {}
+    skipped = set(skipped_fields or [])
+    for field_name in config.get("required_fields", []):
+        if field_name == "file":
+            if not values.get("file_ready"):
+                return field_name
+            continue
+        if not values.get(field_name):
+            return field_name
+    for field_name in config.get("optional_fields", []):
+        if field_name in skipped:
+            continue
+        if not values.get(field_name):
+            return field_name
+    return None
+
+
+def _workflow_attachment_payload(attachment: schemas.AiChatAttachmentIn | None) -> dict | None:
+    if attachment is None or not (attachment.data_base64 or "").strip():
+        return None
+    raw_data = (attachment.data_base64 or "").strip()
+    if "," in raw_data and raw_data.lower().startswith("data:"):
+        raw_data = raw_data.split(",", 1)[1]
+    try:
+        binary = base64.b64decode(raw_data, validate=True)
+    except Exception:
+        raise HTTPException(status_code=400, detail="No pude leer el archivo adjunto del chat.")
+    if len(binary) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Archivo demasiado grande. Maximo permitido: 10 MB.")
+    filename = (attachment.filename or "").strip() or "documento"
+    content_type = (attachment.content_type or "").strip() or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    return {
+        "filename": filename,
+        "content_type": content_type,
+        "content": binary,
+    }
+
+
+def _workflow_confirmation_reply(workflow_type: str, created_item, timezone_name: str) -> str:
+    if workflow_type == "appointment":
+        type_label = getattr(created_item.type, "value", created_item.type or "cita")
+        when_label = _safe_iso_local(getattr(created_item, "date_time", None), timezone_name) or "sin fecha"
+        return (
+            f"Listo. Guardé la {type_label} para {when_label}. "
+            f"Centro: {getattr(created_item, 'center', '') or 'sin centro'}. "
+            "Si quieres, ahora puedo ayudarte a revisar esa cita."
+        )
+    if workflow_type == "medication":
+        return (
+            f"Listo. Guardé el medicamento {getattr(created_item, 'name', '') or 'sin nombre'}"
+            + (f" con dosis {created_item.dose}." if getattr(created_item, "dose", "") else ".")
+            + " Si quieres, también puedo resumirte el tratamiento."
+        )
+    return (
+        f"Listo. Guardé el documento {getattr(created_item, 'filename', '') or 'adjunto'}"
+        + (f" como {getattr(getattr(created_item, 'doc_type', None), 'value', getattr(created_item, 'doc_type', 'documento'))}." if created_item else ".")
+        + " El OCR quedará procesándose en segundo plano."
+    )
+
+
+def _create_appointment_from_workflow(
+    db: Session,
+    *,
+    profile,
+    target_user_id: int,
+    values: dict,
+    current_user: models.User,
+    background_tasks: BackgroundTasks | None = None,
+):
+    date_value = (values.get("date") or "").strip()
+    time_value = (values.get("time") or "").strip() or "09:00"
+    date_time_value = None
+    if date_value:
+        try:
+            date_time_value = datetime.fromisoformat(f"{date_value}T{time_value}:00")
+        except ValueError:
+            date_time_value = None
+    appt = models.Appointment(
+        user_id=target_user_id,
+        type=models.AppointmentType(values.get("type") or models.AppointmentType.cita.value),
+        specialty=(values.get("specialty") or "").strip(),
+        center=(values.get("center") or "").strip(),
+        date_time=date_time_value,
+        status=models.AppointmentStatus(values.get("status") or models.AppointmentStatus.pendiente.value),
+        notes=(values.get("notes") or "").strip(),
+        checklist=[],
+    )
+    db.add(appt)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(appt)
+    if background_tasks is not None and current_user.email:
+        background_tasks.add_task(
+            _send_appointment_confirmation_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "center": appt.center or "",
+                "specialty": appt.specialty or appt.type.value,
+                "date_label": appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente",
+                "notes": appt.notes or "",
+            },
+        )
+    return appt
+
+
+def _create_medication_from_workflow(
+    db: Session,
+    *,
+    profile,
+    target_user_id: int,
+    values: dict,
+    current_user: models.User,
+):
+    start_at_value = None
+    if values.get("start_at"):
+        try:
+            start_at_value = datetime.fromisoformat(str(values["start_at"]).strip())
+        except ValueError:
+            start_at_value = None
+    end_date_value = None
+    if values.get("end_date"):
+        try:
+            end_date_value = datetime.fromisoformat(f"{values['end_date']}T00:00:00")
+        except ValueError:
+            end_date_value = None
+    schedule_value = (values.get("schedule_time") or "").strip()
+    if not schedule_value and start_at_value:
+        schedule_value = start_at_value.strftime("%H:%M")
+    med = models.Medication(
+        user_id=target_user_id,
+        name=(values.get("name") or "").strip(),
+        dose=(values.get("dose") or "").strip(),
+        frequency=(values.get("frequency") or "").strip(),
+        duration=(values.get("duration") or "").strip(),
+        schedule_time=schedule_value,
+        start_at=start_at_value,
+        completed=False,
+        end_date=end_date_value,
+        notes=(values.get("notes") or "").strip(),
+        document_id=None,
+    )
+    db.add(med)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(med)
+    _attach_medication_adherence(db, [med], current_user)
+    return med
+
+
+def _create_document_from_workflow(
+    db: Session,
+    *,
+    profile,
+    target_user_id: int,
+    values: dict,
+    current_user: models.User,
+    attachment_payload: dict,
+    background_tasks: BackgroundTasks | None = None,
+):
+    parsed_date = None
+    if values.get("date"):
+        try:
+            parsed_date = datetime.fromisoformat(f"{values['date']}T00:00:00")
+        except ValueError:
+            parsed_date = None
+    original_filename = attachment_payload.get("filename") or "documento"
+    doc = models.Document(
+        user_id=target_user_id,
+        appointment_id=None,
+        doc_type=models.DocumentType(values.get("doc_type") or models.DocumentType.otro.value),
+        file_data=attachment_payload.get("content"),
+        filename=original_filename,
+        file_path="",
+        date=parsed_date,
+        center=(values.get("center") or "").strip(),
+        notes=(values.get("notes") or "").strip(),
+        ocr_status="pending",
+        ocr_lang=OCR_LANG_DEFAULT,
+    )
+    db.add(doc)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(doc)
+    if background_tasks is not None:
+        if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
+            background_tasks.add_task(
+                _send_medical_order_uploaded_email_safe,
+                current_user.email,
+                current_user.name or "",
+                {
+                    "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
+                    "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                },
+            )
+        background_tasks.add_task(_run_document_ocr, doc.id)
+    return doc
+
+
+def _handle_chat_creation_workflow(
+    db: Session,
+    *,
+    current_user: models.User,
+    profile,
+    target_user_id: int,
+    conversation_id: str,
+    message: str,
+    timezone_name: str,
+    attachment_payload: dict | None = None,
+    background_tasks: BackgroundTasks | None = None,
+):
+    profile_id = int(profile.id)
+    workflow_item = _get_ai_conversation_workflow(
+        db,
+        profile_id=profile_id,
+        conversation_id=conversation_id,
+    )
+    workflow_type = (workflow_item.workflow_type or "").strip() if workflow_item else ""
+    if _workflow_cancel_requested(message):
+        if workflow_item:
+            _clear_ai_conversation_workflow(db, profile_id=profile_id, conversation_id=conversation_id)
+            return {
+                "handled": True,
+                "reply": "Listo. Cancelé la creación en curso. Si quieres, puedes pedirme una nueva cita, medicamento o documento.",
+                "mode": "workflow-cancelled",
+                "model_name": "workflow-engine",
+                "references": [],
+            }
+        return {"handled": False}
+
+    if not workflow_item:
+        workflow_type = _detect_chat_creation_target(message)
+        if not workflow_type:
+            return {"handled": False}
+        payload_json = {"values": {}, "skipped_fields": []}
+        workflow_item = _save_ai_conversation_workflow(
+            db,
+            profile_id=profile_id,
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            workflow_type=workflow_type,
+            payload_json=payload_json,
+        )
+
+    values = dict((workflow_item.payload_json or {}).get("values") or {})
+    skipped_fields = list((workflow_item.payload_json or {}).get("skipped_fields") or [])
+    current_field = _workflow_next_field(workflow_type, values, skipped_fields)
+    if attachment_payload and workflow_type == "document":
+        values["file_ready"] = True
+        values["file_name"] = attachment_payload.get("filename") or ""
+    extracted = _extract_workflow_values(
+        workflow_type,
+        message,
+        tz_name=timezone_name,
+        current_field=current_field,
+    )
+    values.update({key: value for key, value in extracted.items() if value not in (None, "")})
+
+    current_field = _workflow_next_field(workflow_type, values, skipped_fields)
+    if current_field and current_field not in {"file"} and _workflow_skip_requested(message):
+        if current_field not in skipped_fields:
+            skipped_fields.append(current_field)
+        current_field = _workflow_next_field(workflow_type, values, skipped_fields)
+
+    if current_field is None:
+        if workflow_type == "appointment":
+            created_item = _create_appointment_from_workflow(
+                db,
+                profile=profile,
+                target_user_id=target_user_id,
+                values=values,
+                current_user=current_user,
+                background_tasks=background_tasks,
+            )
+            references = [
+                {
+                    "kind": "appointment-created",
+                    "label": "Cita guardada",
+                    "detail": getattr(created_item, "specialty", "") or getattr(created_item.type, "value", "cita"),
+                }
+            ]
+        elif workflow_type == "medication":
+            created_item = _create_medication_from_workflow(
+                db,
+                profile=profile,
+                target_user_id=target_user_id,
+                values=values,
+                current_user=current_user,
+            )
+            references = [
+                {
+                    "kind": "medication-created",
+                    "label": "Medicamento guardado",
+                    "detail": getattr(created_item, "name", "") or "medicamento",
+                }
+            ]
+        else:
+            if not attachment_payload:
+                values["file_ready"] = False
+                payload_json = {"values": values, "skipped_fields": skipped_fields}
+                _save_ai_conversation_workflow(
+                    db,
+                    profile_id=profile_id,
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    workflow_type=workflow_type,
+                    payload_json=payload_json,
+                )
+                return {
+                    "handled": True,
+                    "reply": _workflow_prompt_for_field(workflow_type, "file"),
+                    "mode": "workflow-awaiting-file",
+                    "model_name": "workflow-engine",
+                    "references": [],
+                }
+            created_item = _create_document_from_workflow(
+                db,
+                profile=profile,
+                target_user_id=target_user_id,
+                values=values,
+                current_user=current_user,
+                attachment_payload=attachment_payload,
+                background_tasks=background_tasks,
+            )
+            references = [
+                {
+                    "kind": "document-created",
+                    "label": "Documento guardado",
+                    "detail": getattr(created_item, "filename", "") or "documento",
+                }
+            ]
+        _clear_ai_conversation_workflow(db, profile_id=profile_id, conversation_id=conversation_id)
+        return {
+            "handled": True,
+            "reply": _workflow_confirmation_reply(workflow_type, created_item, timezone_name),
+            "mode": f"workflow-{workflow_type}-created",
+            "model_name": "workflow-engine",
+            "references": references,
+        }
+
+    payload_json = {"values": values, "skipped_fields": skipped_fields}
+    _save_ai_conversation_workflow(
+        db,
+        profile_id=profile_id,
+        user_id=current_user.id,
+        conversation_id=conversation_id,
+        workflow_type=workflow_type,
+        payload_json=payload_json,
+    )
+    references = []
+    if workflow_type == "document" and values.get("file_name"):
+        references.append(
+            {
+                "kind": "attachment-ready",
+                "label": "Archivo detectado",
+                "detail": values.get("file_name") or "",
+            }
+        )
+    return {
+        "handled": True,
+        "reply": _workflow_prompt_for_field(workflow_type, current_field),
+        "mode": f"workflow-{workflow_type}-collecting",
+        "model_name": "workflow-engine",
+        "references": references,
+    }
 
 def _clip_text(value: str | None, limit: int = 420) -> str:
     text_value = (value or "").strip()
@@ -5860,27 +7067,30 @@ def _upsert_adherence_summaries(
 
     for med in medications:
         daily_freq = _estimate_daily_frequency(med)
-        active_since = max((med.created_at or now), since)
-        active_days = max(1, (now.date() - active_since.date()).days + 1)
-        expected = max(1, daily_freq * active_days)
+        expected = _calculate_expected_doses_between(med, since, now)
         intake_rows = (
             db.query(models.MedicationIntake)
             .filter(
                 models.MedicationIntake.medication_id == med.id,
-                models.MedicationIntake.taken_at >= since,
+                or_(
+                    models.MedicationIntake.taken_at >= since,
+                    models.MedicationIntake.scheduled_at >= since,
+                ),
             )
             .all()
         )
-        explicit_rows = [row for row in intake_rows if getattr(row, "scheduled_at", None) or getattr(row, "status", "taken") != "taken"]
-        if explicit_rows:
-            expected = len(explicit_rows)
-            taken = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) in {"taken", "late"}])
-            late = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) == "late"])
-            missed = len([row for row in explicit_rows if _normalize_adherence_status(getattr(row, "status", "")) in {"missed", "skipped"}])
-        else:
-            taken = len(intake_rows)
-            late = 0
-            missed = max(expected - taken, 0)
+        taken = 0
+        late = 0
+        explicit_missed = 0
+        for row in intake_rows:
+            normalized_status = _normalize_adherence_status(getattr(row, "status", "taken"))
+            if normalized_status in {"taken", "late"}:
+                taken += 1
+            if normalized_status == "late":
+                late += 1
+            if normalized_status in {"missed", "skipped"}:
+                explicit_missed += 1
+        missed = max(explicit_missed, max(expected - taken, 0))
         adherence_rate = int(round(min((taken / max(expected, 1)) * 100, 100))) if expected else 0
         overall_rates.append(adherence_rate)
         if adherence_rate < 80 and not bool(med.completed):
@@ -6547,20 +7757,20 @@ def _build_health_alert_candidates(
     for med in medications:
         if bool(med.completed):
             continue
-        expected_end = _normalize_dt_for_tz(med.end_date, compare_tz)
+        expected_end = _normalize_dt_for_tz(_medication_end_at(med), compare_tz)
         if not expected_end:
             duration_days = _parse_duration_days(med.duration)
-            if duration_days and med.created_at:
-                created_at = _normalize_dt_for_tz(med.created_at, compare_tz)
-                expected_end = created_at + timedelta(days=duration_days) if created_at else None
+            if duration_days:
+                start_at = _normalize_dt_for_tz(_medication_start_at(med, now), compare_tz)
+                expected_end = start_at + timedelta(days=duration_days) if start_at else None
         if expected_end and 0 <= (expected_end - now).days <= 5:
             alerts.append(
                 {
                     "alert_type": "medication_running_out",
                     "severity": "medium",
-                    "title": f"{med.name or 'Medicamento'} prÃ³ximo a terminar",
-                    "description": f"El tratamiento podrÃ­a terminar alrededor de {_safe_iso(expected_end)}.",
-                    "recommended_action": "Revisar stock, continuidad del tratamiento o renovaciÃ³n de receta.",
+                    "title": f"{med.name or 'Medicamento'} próximo a terminar",
+                    "description": f"El tratamiento podría terminar alrededor de {_safe_iso(expected_end)}.",
+                    "recommended_action": "Revisar stock, continuidad del tratamiento o renovación de receta.",
                     "evidence_json": {"medication_id": med.id, "estimated_end_date": _safe_iso_client(expected_end)},
                 }
             )
@@ -6572,8 +7782,8 @@ def _build_health_alert_candidates(
                 "severity": "high",
                 "title": "Adherencia baja al tratamiento",
                 "description": (
-                    f"Se detectÃ³ baja adherencia en {top.get('name') or 'un medicamento'} "
-                    f"({top.get('adherence_rate') or 0}% en {adherence_summary.get('window_days', 30)} dÃ­as)."
+                    f"Se detectó baja adherencia en {top.get('name') or 'un medicamento'} "
+                    f"({top.get('adherence_rate') or 0}% en {adherence_summary.get('window_days', 30)} días)."
                 ),
                 "recommended_action": "Revisar recordatorios, horarios y posibles barreras para la toma.",
                 "evidence_json": adherence_summary,
@@ -6593,8 +7803,8 @@ def _build_health_alert_candidates(
                 "alert_type": "missed_appointment_followup",
                 "severity": "high",
                 "title": "Cita posiblemente olvidada o sin cierre",
-                "description": f"Existe una cita registrada para {_safe_iso(top.date_time)} aÃºn no marcada como realizada.",
-                "recommended_action": "Confirmar si se realizÃ³ la cita y actualizar su estado.",
+                "description": f"Existe una cita registrada para {_safe_iso(top.date_time)} aún no marcada como realizada.",
+                "recommended_action": "Confirmar si se realizó la cita y actualizar su estado.",
                 "evidence_json": {"appointment_id": top.id},
             }
         )
@@ -6604,8 +7814,8 @@ def _build_health_alert_candidates(
             {
                 "alert_type": "missing_lab_result",
                 "severity": "medium",
-                "title": "Faltan resultados asociados a Ã³rdenes mÃ©dicas",
-                "description": "Hay Ã³rdenes mÃ©dicas registradas, pero no aparecen resultados clÃ­nicos vinculados recientemente.",
+                "title": "Faltan resultados asociados a órdenes médicas",
+                "description": "Hay órdenes médicas registradas, pero no aparecen resultados clínicos vinculados recientemente.",
                 "recommended_action": "Subir o registrar los resultados del examen pendiente.",
                 "evidence_json": missing_flags,
             }
@@ -6614,8 +7824,8 @@ def _build_health_alert_candidates(
         med
         for med in medications
         if not bool(med.completed)
-        and _normalize_dt_for_tz(med.end_date, compare_tz)
-        and _normalize_dt_for_tz(med.end_date, compare_tz) < now
+        and _normalize_dt_for_tz(_medication_end_at(med), compare_tz)
+        and _normalize_dt_for_tz(_medication_end_at(med), compare_tz) < now
     ]
     if stale_active:
         alerts.append(
@@ -6623,8 +7833,8 @@ def _build_health_alert_candidates(
                 "alert_type": "incomplete_treatment",
                 "severity": "medium",
                 "title": "Tratamiento posiblemente incompleto",
-                "description": f"{stale_active[0].name or 'Un tratamiento'} ya superÃ³ su fecha estimada de tÃ©rmino y sigue marcado como activo.",
-                "recommended_action": "Revisar si el tratamiento terminÃ³ o si requiere continuidad.",
+                "description": f"{stale_active[0].name or 'Un tratamiento'} ya superó su fecha estimada de término y sigue marcado como activo.",
+                "recommended_action": "Revisar si el tratamiento terminó o si requiere continuidad.",
                 "evidence_json": {"medication_id": stale_active[0].id},
             }
         )
@@ -6937,6 +8147,15 @@ def _ai_context_bundle_for_profile(
 ) -> dict:
     plan_info = _build_plan_info(current_user, db)
     timezone_name = _resolve_user_tz_name(current_user)
+    family_access = (
+        _build_family_access_context(
+            db,
+            current_user,
+            preferred_owner_user_id=int(profile.owner_user_id or 0) if getattr(profile, "owner_user_id", None) else None,
+        )
+        if include_family_context
+        else {"available": False, "owner_user_id": None, "owner_name": "", "profiles": []}
+    )
 
     appointments = (
         db.query(models.Appointment)
@@ -6969,7 +8188,7 @@ def _ai_context_bundle_for_profile(
 
     profile_notes = []
     activity_log = []
-    if plan_info.get("collaboration_enabled"):
+    if plan_info.get("collaboration_enabled") or family_access.get("available"):
         profile_notes = (
             db.query(models.ProfileNote)
             .filter(models.ProfileNote.profile_id == profile.id)
@@ -7036,9 +8255,13 @@ def _ai_context_bundle_for_profile(
         documents,
         refresh=refresh_advanced,
     )
+    family_summary_user = None
+    family_owner_user_id = family_access.get("owner_user_id")
+    if family_owner_user_id:
+        family_summary_user = db.query(models.User).filter(models.User.id == int(family_owner_user_id)).first()
     family_context = (
-        _load_cached_family_ai_summary(db, current_user, 7)
-        if include_family_context and bool(plan_info.get("collaboration_enabled"))
+        _load_cached_family_ai_summary(db, current_user, 7, summary_user=family_summary_user)
+        if include_family_context and bool(family_access.get("available"))
         else None
     )
 
@@ -7062,7 +8285,7 @@ def _ai_context_bundle_for_profile(
             "key": "family",
             "label": "Perfil familiar",
             "count": len((family_context or {}).get("profiles") or []),
-            "enabled": bool(plan_info.get("collaboration_enabled")) and bool(family_context),
+            "enabled": bool(family_access.get("available")) and bool(family_context),
         },
         {
             "key": "adherence",
@@ -7092,6 +8315,7 @@ def _ai_context_bundle_for_profile(
             "is_primary": bool(profile.is_primary_profile),
         },
         "plan": plan_info,
+        "family_access": family_access,
         "sources": sources,
         "timezone_name": timezone_name,
         "appointments": appointments,
@@ -7370,12 +8594,14 @@ def _load_cached_family_ai_summary(
     db: Session,
     current_user: models.User,
     days: int = 30,
+    summary_user: models.User | None = None,
 ) -> dict | None:
     window_days = max(1, min(int(days or 30), 365))
+    target_user = summary_user or current_user
     row = (
         db.query(models.FamilyAiSummary)
         .filter(
-            models.FamilyAiSummary.user_id == current_user.id,
+            models.FamilyAiSummary.user_id == target_user.id,
             models.FamilyAiSummary.window_days == window_days,
         )
         .first()
@@ -7503,6 +8729,15 @@ def _build_chat_context_base(
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
+    family_access = (
+        _build_family_access_context(
+            db,
+            current_user,
+            preferred_owner_user_id=int(profile.owner_user_id or 0) if getattr(profile, "owner_user_id", None) else None,
+        )
+        if intent == "familiar" or bool(modules.get("family")) or include_family_context
+        else {"available": False, "owner_user_id": None, "owner_name": "", "profiles": []}
+    )
     if modules.get("appointments"):
         appointments = _safe_ai_context_query(
             db,
@@ -7660,17 +8895,26 @@ def _build_chat_context_base(
         medications=medications,
         upcoming=upcoming,
     )
+    family_summary_user = None
+    family_owner_user_id = family_access.get("owner_user_id")
+    if family_owner_user_id:
+        family_summary_user = db.query(models.User).filter(models.User.id == int(family_owner_user_id)).first()
     family_context = (
         _safe_ai_context_query(
             db,
             module_name="family-summary",
-            loader=lambda: _load_cached_family_ai_summary(db, current_user, 7),
+            loader=lambda: _load_cached_family_ai_summary(
+                db,
+                current_user,
+                7,
+                summary_user=family_summary_user,
+            ),
             default_value=None,
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
         )
-        if include_family_context and bool(plan_info.get("collaboration_enabled"))
+        if include_family_context and bool(family_access.get("available"))
         else None
     )
     context_build_ms = round((time.perf_counter() - context_started_at) * 1000, 1)
@@ -7685,7 +8929,7 @@ def _build_chat_context_base(
             "key": "family",
             "label": "Perfil familiar",
             "count": len((family_context or {}).get("profiles") or []),
-            "enabled": bool(modules.get("family")) and bool(plan_info.get("collaboration_enabled")) and bool(family_context),
+            "enabled": bool(modules.get("family")) and bool(family_access.get("available")) and bool(family_context),
         },
     ]
 
@@ -7704,6 +8948,7 @@ def _build_chat_context_base(
             "is_primary": bool(profile.is_primary_profile),
         },
         "plan": plan_info,
+        "family_access": family_access,
         "sources": sources,
         "timezone_name": timezone_name,
         "chat_intent": intent,
@@ -7748,6 +8993,7 @@ def _build_chat_context_base(
 def _serialize_ai_context(context: dict) -> dict:
     timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
     family_context = context.get("family_context") or {}
+    family_access = context.get("family_access") or {}
     enabled_modules = context.get("enabled_modules") or {}
     include_document_text = bool(context.get("include_document_text"))
     payload = {
@@ -7764,6 +9010,22 @@ def _serialize_ai_context(context: dict) -> dict:
             "max_profiles": context["plan"].get("max_profiles"),
             "collaboration_enabled": context["plan"].get("collaboration_enabled"),
             "family_panel_enabled": context["plan"].get("family_panel_enabled"),
+        },
+        "family_access": {
+            "available": bool(family_access.get("available")),
+            "owner_user_id": family_access.get("owner_user_id"),
+            "owner_name": family_access.get("owner_name") or "",
+            "profiles": [
+                {
+                    "profile_name": item.get("profile_name") or "",
+                    "relation_with_owner": item.get("relation_with_owner") or "",
+                    "role_label": item.get("role_label") or "",
+                    "can_view": bool(item.get("can_view")),
+                    "can_edit": bool(item.get("can_edit")),
+                    "can_manage_collaborators": bool(item.get("can_manage_collaborators")),
+                }
+                for item in (family_access.get("profiles") or [])[:5]
+            ],
         },
     }
     if enabled_modules.get("appointments"):
@@ -7884,6 +9146,11 @@ def _serialize_ai_context(context: dict) -> dict:
 
 
 def _ai_system_prompt(context: dict) -> str:
+    family_access = context.get("family_access") or {}
+    family_access_profiles = ", ".join(
+        f"{item.get('profile_name') or 'Perfil'} ({item.get('role_label') or item.get('role') or 'sin rol'})"
+        for item in (family_access.get("profiles") or [])[:4]
+    ) or "ninguno"
     return (
         "Eres Klinip IA, un asistente de salud orientativo integrado en Klinip.\n"
         "Reglas obligatorias:\n"
@@ -7910,10 +9177,12 @@ def _ai_system_prompt(context: dict) -> str:
         "21. Si el usuario pide preparar una cita, usa proximas citas, documentos y medicamentos activos para sugerir que llevar.\n"
         "22. Si interpretas resultados, usa document_summaries y abnormal_values_json; explica en lenguaje simple y sin diagnosticar.\n"
         "23. Si el usuario pide un reporte clÃ­nico, resume los bloques disponibles y sugiere generar el reporte estructurado.\n"
-        "24. Si el usuario pregunta por su familia o por que familiar necesita mas atencion, usa family_context y prioriza alertas activas, adherencia baja, citas proximas y documentos pendientes.\n"
+        "24. Si el usuario pregunta por su familia, primero usa family_access para explicar exactamente a que perfiles tiene acceso y con que rol. Usa family_context solo si existe y necesitas priorizar alertas activas, adherencia baja, citas proximas o documentos pendientes. Si family_access.available es verdadero, no respondas que no tiene acceso familiar aunque su plan personal sea basico.\n"
         "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
+        f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
+        f"Perfiles familiares accesibles: {_clip_text(family_access_profiles, 260)}\n"
         f"Resumen breve persistido del perfil: {_clip_text(context.get('brief_profile_summary') or '', 320)}\n"
         f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
         f"Disclaimer obligatorio: {AI_KLINIP_DISCLAIMER}"
@@ -8055,9 +9324,13 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     adherence_summary = context.get("adherence_summary") or {}
     health_alerts = context.get("health_alerts") or []
     document_summaries = context.get("document_summaries") or []
+    family_access = context.get("family_access") or {}
     family_context = context.get("family_context") or {}
     family_profiles = family_context.get("profiles") or []
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
+
+    if _message_asks_family_access(message):
+        return _build_family_access_reply(context)
 
     if family_profiles and any(
         token in normalized
@@ -8324,6 +9597,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     medication_insights = context.get("medication_insights") or {}
     adherence_summary = context.get("adherence_summary") or {}
     health_alerts = context.get("health_alerts") or []
+    family_access = context.get("family_access") or {}
     family_context = context.get("family_context") or {}
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
 
@@ -8406,6 +9680,19 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                         f"Alertas {item.get('active_alerts', 0)} | "
                         f"Adherencia baja {'si' if item.get('low_adherence') else 'no'} | "
                         f"Citas {item.get('upcoming_appointments', 0)}"
+                    ),
+                }
+            )
+
+    if family_access and _message_asks_family_access(message):
+        for item in (family_access.get("profiles") or [])[:3]:
+            refs.append(
+                {
+                    "kind": "family-access",
+                    "label": item.get("profile_name") or "Perfil compartido",
+                    "detail": (
+                        f"{item.get('role_label') or 'Lector'} | "
+                        f"{item.get('relation_with_owner') or 'Perfil compartido'}"
                     ),
                 }
             )
@@ -9114,8 +10401,8 @@ async def create_profile_invitation(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _assert_collaboration_enabled(current_user)
     profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
     _require_role(access_link, "admin")
 
     role = _normalize_role(payload.role)
@@ -9257,8 +10544,8 @@ async def list_profile_invitations(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _assert_collaboration_enabled(current_user)
-    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
     _require_role(access_link, "admin")
     invitations = (
         db.query(models.ProfileInvitation)
@@ -9455,8 +10742,8 @@ async def update_profile_relationship(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _assert_collaboration_enabled(current_user)
-    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
     _require_role(access_link, "admin")
 
     link = (
@@ -9501,8 +10788,8 @@ async def remove_profile_relationship(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _assert_collaboration_enabled(current_user)
-    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
     _require_role(access_link, "admin")
 
     link = (
@@ -9573,8 +10860,8 @@ async def revoke_profile_invitation(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _assert_collaboration_enabled(current_user)
-    _, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    profile, access_link = _get_profile_access_or_404(db, current_user, profile_id)
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
     _require_role(access_link, "admin")
 
     invitation = (
@@ -9858,9 +11145,86 @@ async def create_profile_note(
     return _profile_note_out(item)
 
 
+@app.put("/health-profiles/{profile_id}/notes/{note_id}", response_model=schemas.ProfileNoteOut)
+async def update_profile_note(
+    profile_id: int,
+    note_id: int,
+    payload: schemas.ProfileNoteUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    item = (
+        db.query(models.ProfileNote)
+        .filter(
+            models.ProfileNote.id == note_id,
+            models.ProfileNote.profile_id == profile_id,
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Nota no encontrada")
+
+    updated_note = (payload.note if payload.note is not None else item.note).strip()
+    if not updated_note:
+        raise HTTPException(status_code=400, detail="La nota no puede estar vacia")
+
+    item.note = updated_note
+    if payload.visibility is not None:
+        item.visibility = (payload.visibility or "shared").strip() or "shared"
+    item.updated_at = datetime.now()
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="note_updated",
+        description=f"{current_user.name or current_user.email} actualizo una nota colaborativa",
+        metadata_json={"note_id": item.id, "visibility": item.visibility},
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return _profile_note_out(item)
+
+
+@app.delete("/health-profiles/{profile_id}/notes/{note_id}")
+async def delete_profile_note(
+    profile_id: int,
+    note_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    item = (
+        db.query(models.ProfileNote)
+        .filter(
+            models.ProfileNote.id == note_id,
+            models.ProfileNote.profile_id == profile_id,
+        )
+        .first()
+    )
+    if not item:
+        raise HTTPException(status_code=404, detail="Nota no encontrada")
+
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="note_deleted",
+        description=f"{current_user.name or current_user.email} elimino una nota colaborativa",
+        metadata_json={"note_id": item.id, "visibility": item.visibility or "shared"},
+    )
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+
 @app.post("/ai/chat", response_model=schemas.AiChatResponse)
 async def ai_chat(
     payload: schemas.AiChatRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -9873,10 +11237,152 @@ async def ai_chat(
     chat_intent = detect_chat_intent(message)
     context_modules = select_context_modules(chat_intent)
     include_document_text = _should_include_document_text_for_chat(message)
+    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    timezone_name = _resolve_user_tz_name(current_user)
+    conversation_id = (payload.conversation_id or "").strip()
+    if not conversation_id:
+        conversation_id = _new_ai_conversation_id()
+    conversation_title = ""
+    existing_title_item = (
+        db.query(models.AiConversationMessage)
+        .filter(
+            models.AiConversationMessage.profile_id == int(profile.id),
+            models.AiConversationMessage.conversation_id == conversation_id,
+        )
+        .order_by(models.AiConversationMessage.id.asc())
+        .first()
+    )
+    if existing_title_item:
+        conversation_title = (existing_title_item.conversation_title or "").strip()
+    if not conversation_title:
+        conversation_title = _derive_ai_conversation_title(message)
+    attachment_payload = _workflow_attachment_payload(payload.attachment)
+    has_workflow = _get_ai_conversation_workflow(
+        db,
+        profile_id=int(profile.id),
+        conversation_id=conversation_id,
+    )
+    if has_workflow or _detect_chat_creation_target(message):
+        try:
+            writable_profile, _, writable_target_user_id = _get_active_profile_context(
+                db,
+                current_user,
+                require_write=True,
+            )
+            _assert_collaboration_enabled(
+                current_user,
+                db=db,
+                owner_user_id=writable_profile.owner_user_id,
+            )
+        except HTTPException as exc:
+            if exc.status_code == 403:
+                _clear_ai_conversation_workflow(
+                    db,
+                    profile_id=int(profile.id),
+                    conversation_id=conversation_id,
+                )
+                detail_text = str(getattr(exc, "detail", "") or "").lower()
+                if "plan familiar" in detail_text or "colaboracion familiar" in detail_text:
+                    reply = (
+                        "La creación asistida desde el chat está disponible solo en el plan familiar "
+                        "y sobre perfiles con colaboración habilitada."
+                    )
+                    mode = "workflow-plan-denied"
+                else:
+                    reply = "No tienes permisos de edición en el perfil activo para guardar esa información desde el chat."
+                    mode = "workflow-permission-denied"
+                model_name = "workflow-engine"
+                references = []
+                user_item = _persist_ai_message(
+                    db,
+                    profile_id=int(profile.id),
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    conversation_title=conversation_title,
+                    role="user",
+                    content=message,
+                    metadata_json={"mode": "input"},
+                )
+                assistant_item = _persist_ai_message(
+                    db,
+                    profile_id=int(profile.id),
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    conversation_title=conversation_title,
+                    role="assistant",
+                    content=reply,
+                    metadata_json={"model": model_name, "mode": mode, "references": references},
+                )
+                return {
+                    "reply": reply,
+                    "disclaimer": AI_KLINIP_DISCLAIMER,
+                    "model": model_name,
+                    "mode": mode,
+                    "active_profile_id": int(profile.id),
+                    "active_profile_name": profile.full_name or "",
+                    "sources": [],
+                    "references": references,
+                    "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
+                    "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
+                    "conversation_id": conversation_id,
+                    "conversation_title": conversation_title,
+                }
+            raise
+        workflow_result = _handle_chat_creation_workflow(
+            db,
+            current_user=current_user,
+            profile=writable_profile,
+            target_user_id=writable_target_user_id,
+            conversation_id=conversation_id,
+            message=message,
+            timezone_name=timezone_name,
+            attachment_payload=attachment_payload,
+            background_tasks=background_tasks,
+        )
+        if workflow_result.get("handled"):
+            reply = workflow_result.get("reply") or "No pude completar esa acción desde el chat."
+            model_name = workflow_result.get("model_name") or "workflow-engine"
+            mode = workflow_result.get("mode") or "workflow"
+            references = workflow_result.get("references") or []
+            user_item = _persist_ai_message(
+                db,
+                profile_id=int(profile.id),
+                user_id=current_user.id,
+                conversation_id=conversation_id,
+                conversation_title=conversation_title,
+                role="user",
+                content=message,
+                metadata_json={"mode": "input"},
+            )
+            assistant_item = _persist_ai_message(
+                db,
+                profile_id=int(profile.id),
+                user_id=current_user.id,
+                conversation_id=conversation_id,
+                conversation_title=conversation_title,
+                role="assistant",
+                content=reply,
+                metadata_json={"model": model_name, "mode": mode, "references": references},
+            )
+            return {
+                "reply": reply,
+                "disclaimer": AI_KLINIP_DISCLAIMER,
+                "model": model_name,
+                "mode": mode,
+                "active_profile_id": int(profile.id),
+                "active_profile_name": profile.full_name or "",
+                "sources": [],
+                "references": references,
+                "user_message_created_at": _safe_iso_client(user_item.created_at, timezone_name),
+                "assistant_message_created_at": _safe_iso_client(assistant_item.created_at, timezone_name),
+                "conversation_id": conversation_id,
+                "conversation_title": conversation_title,
+            }
     include_family_context = _should_include_family_context_for_chat(
         db,
         current_user,
         message,
+        preferred_owner_user_id=target_user_id,
     )
     if not include_family_context:
         context_modules["family"] = False
@@ -9888,7 +11394,6 @@ async def ai_chat(
         context_modules["adherence"] = True
         if direct_report_request.get("report_type") == "resumen_familiar" and include_family_context:
             context_modules["family"] = True
-    profile, link, target_user_id = _get_active_profile_context(db, current_user)
     profile_id = int(profile.id)
     limiter = _chat_profile_limiter(profile_id)
     limiter_acquired = limiter.acquire(blocking=False)
@@ -9917,9 +11422,7 @@ async def ai_chat(
             context["degraded_reasons"] = list(dict.fromkeys(current_reasons))
             timing_info["degraded_reasons"] = list(context["degraded_reasons"])
         timezone_name = context.get("timezone_name") or getattr(current_user, "timezone", None) or DEFAULT_TZ_NAME
-        conversation_id = (payload.conversation_id or "").strip()
         existing_items = []
-        conversation_title = ""
         if conversation_id:
             existing_items = _safe_ai_context_query(
                 db,
@@ -9936,8 +11439,6 @@ async def ai_chat(
             )
             if existing_items:
                 conversation_title = (existing_items[0].conversation_title or "").strip()
-        if not conversation_id:
-            conversation_id = _new_ai_conversation_id()
         if not conversation_title:
             conversation_title = _derive_ai_conversation_title(message)
 
@@ -9961,7 +11462,16 @@ async def ai_chat(
                 continue
             history.append({"role": role_value, "content": content_value})
             seen_pairs.add(key)
-        if direct_report_request and context.get("degraded_reasons"):
+        family_access_request = _message_asks_family_access(message)
+        if family_access_request:
+            references = _build_ai_references(message, context)
+            reply = _build_family_access_reply(context)
+            model_name = "access-policy"
+            mode = "family-access"
+            timing_info["openai_ms"] = 0.0
+            timing_info["prompt_history_messages"] = 0
+            timing_info["conversation_summary_chars"] = 0
+        elif direct_report_request and context.get("degraded_reasons"):
             references = _build_ai_references(message, context)
             reply = _prepend_degraded_notice(
                 "Todavia no genero el reporte porque faltan algunos datos secundarios. "
@@ -10182,6 +11692,142 @@ def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> 
     )
 
 
+def _accepted_collaboration_links_for_user(
+    db: Session,
+    current_user: models.User,
+    owner_user_id: int | None = None,
+) -> list[models.ProfileRelationship]:
+    links = _accepted_profile_links_for_user(db, current_user)
+    owner_ids = {
+        int(link.profile.owner_user_id)
+        for link in links
+        if getattr(link, "profile", None) and getattr(link.profile, "owner_user_id", None) is not None
+    }
+    if not owner_ids:
+        return []
+    owner_rows = (
+        db.query(models.User)
+        .filter(models.User.id.in_(sorted(owner_ids)))
+        .all()
+    )
+    eligible_owner_ids = {
+        int(row.id)
+        for row in owner_rows
+        if _plan_allows_collaboration_for_user(row)
+    }
+    if owner_user_id is not None:
+        owner_user_id = int(owner_user_id)
+        if owner_user_id not in eligible_owner_ids:
+            return []
+        eligible_owner_ids = {owner_user_id}
+    return [
+        link
+        for link in links
+        if getattr(link, "profile", None)
+        and int(getattr(link.profile, "owner_user_id", 0) or 0) in eligible_owner_ids
+    ]
+
+
+def _resolve_effective_family_scope(
+    db: Session,
+    current_user: models.User,
+    preferred_owner_user_id: int | None = None,
+) -> tuple[models.User | None, list[models.ProfileRelationship]]:
+    preferred_owner_id = int(preferred_owner_user_id) if preferred_owner_user_id else None
+    if preferred_owner_id:
+        preferred_links = _accepted_collaboration_links_for_user(
+            db,
+            current_user,
+            owner_user_id=preferred_owner_id,
+        )
+        if preferred_links:
+            owner_user = db.query(models.User).filter(models.User.id == preferred_owner_id).first()
+            if owner_user:
+                return owner_user, preferred_links
+
+    collaboration_links = _accepted_collaboration_links_for_user(db, current_user)
+    if not collaboration_links:
+        return None, []
+
+    links_by_owner: dict[int, list[models.ProfileRelationship]] = {}
+    for link in collaboration_links:
+        profile = getattr(link, "profile", None)
+        if not profile or getattr(profile, "owner_user_id", None) is None:
+            continue
+        links_by_owner.setdefault(int(profile.owner_user_id), []).append(link)
+    if not links_by_owner:
+        return None, []
+
+    sorted_owner_ids = sorted(
+        links_by_owner.keys(),
+        key=lambda owner_id: (
+            0 if owner_id == preferred_owner_id else 1,
+            -len(links_by_owner[owner_id]),
+            owner_id,
+        ),
+    )
+    selected_owner_id = sorted_owner_ids[0]
+    owner_user = db.query(models.User).filter(models.User.id == selected_owner_id).first()
+    return owner_user, links_by_owner.get(selected_owner_id, [])
+
+
+def _role_access_summary(role_value: str | None) -> dict:
+    role = _normalize_role(role_value)
+    return {
+        "role": role,
+        "label": "Administrador" if role == "admin" else "Editor" if role == "caregiver" else "Lector",
+        "can_view": True,
+        "can_edit": role in {"admin", "caregiver"},
+        "can_manage_collaborators": role == "admin",
+    }
+
+
+def _build_family_access_context(
+    db: Session,
+    current_user: models.User,
+    preferred_owner_user_id: int | None = None,
+) -> dict:
+    owner_user, links = _resolve_effective_family_scope(
+        db,
+        current_user,
+        preferred_owner_user_id=preferred_owner_user_id,
+    )
+    profiles: list[dict] = []
+    for link in links:
+        profile = getattr(link, "profile", None)
+        if not profile:
+            continue
+        role_meta = _role_access_summary(getattr(link, "role", None))
+        profiles.append(
+            {
+                "profile_id": int(profile.id),
+                "profile_name": profile.full_name or f"Perfil #{profile.id}",
+                "relation_with_owner": profile.relation_with_owner or link.relationship_type or "",
+                "owner_user_id": int(profile.owner_user_id),
+                "owner_name": (owner_user.name if owner_user else "") or "",
+                "role": role_meta["role"],
+                "role_label": role_meta["label"],
+                "can_view": role_meta["can_view"],
+                "can_edit": role_meta["can_edit"],
+                "can_manage_collaborators": role_meta["can_manage_collaborators"],
+                "is_primary_profile": bool(getattr(profile, "is_primary_profile", False)),
+            }
+        )
+    profiles.sort(
+        key=lambda item: (
+            0 if item.get("can_manage_collaborators") else 1,
+            0 if item.get("can_edit") else 1,
+            str(item.get("profile_name") or "").lower(),
+        )
+    )
+    return {
+        "available": bool(profiles),
+        "owner_user_id": int(owner_user.id) if owner_user else None,
+        "owner_name": (owner_user.name if owner_user else "") or "",
+        "profiles": profiles,
+    }
+
+
 def detect_chat_intent(message: str | None) -> str:
     normalized = _normalize_text(message or "")
     if _message_needs_family_context(message):
@@ -10278,18 +11924,71 @@ def _message_needs_family_context(message: str | None) -> bool:
     return any(token in normalized for token in family_tokens)
 
 
+def _message_asks_family_access(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    access_tokens = [
+        "de que familiar puedo revisar",
+        "de que familiar puedo ver",
+        "a que familiar puedo revisar",
+        "a que familiar puedo ver",
+        "que familiar puedo revisar",
+        "que familiar puedo ver",
+        "que perfiles familiares puedo revisar",
+        "que perfiles puedo revisar",
+        "que perfiles tengo acceso",
+        "a que perfiles tengo acceso",
+        "que familiares tengo vinculados",
+        "que familiares puedo revisar",
+    ]
+    return any(token in normalized for token in access_tokens)
+
+
 def _should_include_family_context_for_chat(
     db: Session,
     current_user: models.User,
     message: str | None,
+    preferred_owner_user_id: int | None = None,
 ) -> bool:
-    plan_info = _build_plan_info(current_user, db)
-    if not bool(plan_info.get("collaboration_enabled")):
-        return False
     if not _message_needs_family_context(message):
         return False
-    accepted_links = _accepted_profile_links_for_user(db, current_user)
-    return len(accepted_links) > 1
+    family_access = _build_family_access_context(
+        db,
+        current_user,
+        preferred_owner_user_id=preferred_owner_user_id,
+    )
+    return bool(family_access.get("available"))
+
+
+def _build_family_access_reply(context: dict) -> str:
+    family_access = context.get("family_access") or {}
+    profiles = list(family_access.get("profiles") or [])
+    if not profiles:
+        return (
+            "Hoy no tienes perfiles familiares compartidos disponibles para revisar desde esta cuenta. "
+            "Si esperabas ver un familiar, revisa que la invitacion este aceptada y que el perfil siga vinculado."
+        )
+
+    lines = [
+        "Hoy puedes revisar la informacion medica de estos perfiles vinculados:",
+    ]
+    for item in profiles[:5]:
+        role_label = item.get("role_label") or "Lector"
+        relation = item.get("relation_with_owner") or "Perfil compartido"
+        capability = (
+            "puedes ver, editar y administrar colaboradores"
+            if item.get("can_manage_collaborators")
+            else "puedes ver y editar"
+            if item.get("can_edit")
+            else "solo lectura"
+        )
+        lines.append(
+            f"- {item.get('profile_name') or 'Perfil'} ({relation}): rol {role_label}, {capability}."
+        )
+    lines.append(
+        "Regla de permisos: Lector solo ve; Editor puede ver y editar datos clinicos; "
+        "Administrador puede editar y ademas invitar, quitar o cambiar permisos de otros colaboradores."
+    )
+    return " ".join(lines)
 
 
 def _life_timeline_events_from_context(context: dict, include_alerts: bool = False) -> list[dict]:
@@ -10556,7 +12255,18 @@ async def get_ai_family_context(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    cached = _load_cached_family_ai_summary(db, current_user, days)
+    profile, _, owner_user_id = _get_active_profile_context(db, current_user)
+    owner_user, _ = _resolve_effective_family_scope(
+        db,
+        current_user,
+        preferred_owner_user_id=owner_user_id or getattr(profile, "owner_user_id", None),
+    )
+    cached = _load_cached_family_ai_summary(
+        db,
+        current_user,
+        days,
+        summary_user=owner_user,
+    )
     if cached:
         return cached
     return {
@@ -10732,6 +12442,8 @@ async def get_ai_adherence_summary(
         .order_by(models.Medication.created_at.desc())
         .all()
     )
+    if bool(getattr(profile, "ai_needs_refresh", False)):
+        return _upsert_adherence_summaries(db, profile, medications, window_days=30)
     return _load_adherence_summary_cached(db, profile, medications, window_days=30)
 
 
@@ -10839,6 +12551,10 @@ async def delete_ai_conversation(
         )
         .delete()
     )
+    db.query(models.AiConversationWorkflow).filter(
+        models.AiConversationWorkflow.profile_id == profile.id,
+        models.AiConversationWorkflow.conversation_id == conversation_id,
+    ).delete()
     if not deleted:
         raise HTTPException(status_code=404, detail="Conversacion no encontrada")
     _log_profile_activity(
@@ -10883,10 +12599,11 @@ async def clear_ai_history(
 # Appointments
 @app.get("/appointments", response_model=List[schemas.AppointmentOut])
 async def list_appointments(
+    profile_id: int | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user)
+    _, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
     return (
         db.query(models.Appointment)
         .filter(models.Appointment.user_id == target_user_id)
@@ -10986,10 +12703,11 @@ async def delete_appointment(
 # Medications
 @app.get("/medications", response_model=List[schemas.MedicationOut])
 async def list_medications(
+    profile_id: int | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, target_user_id = _get_active_profile_context(db, current_user)
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
     medications = (
         db.query(models.Medication)
         .filter(models.Medication.user_id == target_user_id)
@@ -11019,17 +12737,28 @@ async def create_medication(
             dose=med_in.dose or "",
             frequency=med_in.frequency or "",
             duration=med_in.duration or "",
-            schedule_time=med_in.schedule_time or "",
+            schedule_time=(med_in.schedule_time or (med_in.start_at.strftime("%H:%M") if med_in.start_at else "")),
+            start_at=med_in.start_at,
+            refill_enabled=bool(getattr(med_in, "refill_enabled", False)),
+            stock_total_doses=max(int(getattr(med_in, "stock_total_doses", 0) or 0), 0),
+            refill_alert_threshold_doses=max(
+                int(getattr(med_in, "refill_alert_threshold_doses", 0) or 0),
+                0,
+            ),
             completed=bool(med_in.completed) if med_in.completed is not None else False,
             end_date=med_in.end_date,
             notes=med_in.notes or "",
             document_id=med_in.document_id,
         )
+        if not med.refill_enabled or med.stock_total_doses <= 0:
+            med.refill_alert_threshold_doses = 0
+        elif med.refill_alert_threshold_doses > med.stock_total_doses:
+            med.refill_alert_threshold_doses = med.stock_total_doses
         db.add(med)
         _mark_profile_ai_dirty(db, profile, include_family=True)
         db.commit()
         db.refresh(med)
-        _attach_medication_adherence(db, [med], current_user)
+        _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
         return med
     except Exception as e:
         db.rollback()
@@ -11058,13 +12787,36 @@ async def update_medication(
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
-    for field, value in med_in.dict(exclude_unset=True).items():
+    previous_stock_total = int(getattr(med, "stock_total_doses", 0) or 0)
+    previous_last_notified_at = getattr(med, "refill_last_notified_at", None)
+    updated_fields = med_in.dict(exclude_unset=True)
+    for field, value in updated_fields.items():
         setattr(med, field, value)
+    if "start_at" in updated_fields and "schedule_time" not in updated_fields:
+        med.schedule_time = med.schedule_time or (med.start_at.strftime("%H:%M") if med.start_at else "")
+    med.stock_total_doses = max(int(getattr(med, "stock_total_doses", 0) or 0), 0)
+    med.refill_alert_threshold_doses = max(
+        int(getattr(med, "refill_alert_threshold_doses", 0) or 0),
+        0,
+    )
+    if not bool(getattr(med, "refill_enabled", False)) or med.stock_total_doses <= 0:
+        med.refill_alert_threshold_doses = 0
+        med.refill_last_notified_at = None
+        med.refill_last_notified_remaining = None
+    elif med.refill_alert_threshold_doses > med.stock_total_doses:
+        med.refill_alert_threshold_doses = med.stock_total_doses
+    elif (
+        previous_last_notified_at is not None
+        and med.stock_total_doses > previous_stock_total
+    ):
+        med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+        med.refill_last_notified_at = None
+        med.refill_last_notified_remaining = None
 
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(med)
-    _attach_medication_adherence(db, [med], current_user)
+    _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
     return med
 
 

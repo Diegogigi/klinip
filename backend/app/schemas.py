@@ -295,6 +295,11 @@ class ProfileNoteCreate(BaseModel):
     visibility: Optional[str] = "shared"
 
 
+class ProfileNoteUpdate(BaseModel):
+    note: Optional[str] = None
+    visibility: Optional[str] = None
+
+
 class ProfileNoteOut(BaseModel):
     id: int
     profile_id: int
@@ -404,6 +409,10 @@ class MedicationBase(BaseModel):
     frequency: Optional[str] = ""
     duration: Optional[str] = ""
     schedule_time: Optional[str] = ""
+    start_at: Optional[datetime] = None
+    refill_enabled: Optional[bool] = False
+    stock_total_doses: Optional[int] = 0
+    refill_alert_threshold_doses: Optional[int] = 0
     completed: Optional[bool] = False
     end_date: Optional[datetime] = None
     notes: Optional[str] = ""
@@ -420,6 +429,10 @@ class MedicationUpdate(BaseModel):
     frequency: Optional[str] = None
     duration: Optional[str] = None
     schedule_time: Optional[str] = None
+    start_at: Optional[datetime] = None
+    refill_enabled: Optional[bool] = None
+    stock_total_doses: Optional[int] = None
+    refill_alert_threshold_doses: Optional[int] = None
     completed: Optional[bool] = None
     end_date: Optional[datetime] = None
     notes: Optional[str] = None
@@ -434,8 +447,13 @@ class MedicationOut(MedicationBase):
     taken_doses: int = 0
     missed_doses: int = 0
     adherence_rate: Optional[float] = None
+    remaining_doses: Optional[int] = None
+    refill_current_assignee_user_id: Optional[int] = None
+    refill_current_assignee_name: Optional[str] = ""
+    refill_contacts_count: int = 0
+    refill_alert_active: bool = False
 
-    @field_serializer('end_date', 'created_at')
+    @field_serializer('start_at', 'end_date', 'created_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
@@ -784,10 +802,18 @@ class AiChatMessageIn(BaseModel):
     content: str
 
 
+class AiChatAttachmentIn(BaseModel):
+    filename: str
+    content_type: Optional[str] = None
+    data_base64: str
+    size_bytes: Optional[int] = 0
+
+
 class AiChatRequest(BaseModel):
     message: str
     history: list[AiChatMessageIn] = []
     conversation_id: str | None = None
+    attachment: AiChatAttachmentIn | None = None
 
 
 class AiContextSourceOut(BaseModel):
