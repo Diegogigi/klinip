@@ -1973,6 +1973,44 @@ SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
 AI_REFRESH_INTERVAL_SECONDS = 600
 AI_REFRESH_BATCH_SIZE = 4
+WORKER_JOB_TIMEOUT_SECONDS = max(
+    10,
+    int(os.getenv("WORKER_JOB_TIMEOUT_SECONDS", "25") or "25"),
+)
+WORKER_JOB_RETRIES = max(
+    0,
+    int(os.getenv("WORKER_JOB_RETRIES", "1") or "1"),
+)
+APPOINTMENT_REMINDER_BATCH_SIZE = max(
+    1,
+    int(os.getenv("APPOINTMENT_REMINDER_BATCH_SIZE", "12") or "12"),
+)
+APPOINTMENT_REMINDER_APPOINTMENT_LIMIT = max(
+    1,
+    int(os.getenv("APPOINTMENT_REMINDER_APPOINTMENT_LIMIT", "48") or "48"),
+)
+MEDICATION_REMINDER_BATCH_SIZE = max(
+    1,
+    int(os.getenv("MEDICATION_REMINDER_BATCH_SIZE", "10") or "10"),
+)
+MEDICATION_REMINDER_MEDICATION_LIMIT = max(
+    1,
+    int(os.getenv("MEDICATION_REMINDER_MEDICATION_LIMIT", "40") or "40"),
+)
+REFILL_ALERT_BATCH_SIZE = max(
+    1,
+    int(os.getenv("REFILL_ALERT_BATCH_SIZE", "12") or "12"),
+)
+FAMILY_AI_REFRESH_BATCH_SIZE = max(
+    1,
+    int(
+        os.getenv(
+            "FAMILY_AI_REFRESH_BATCH_SIZE",
+            str(AI_REFRESH_BATCH_SIZE),
+        )
+        or str(AI_REFRESH_BATCH_SIZE)
+    ),
+)
 _chat_profile_limiters_guard = threading.Lock()
 _chat_profile_limiters: dict[int, threading.BoundedSemaphore] = {}
 DEFAULT_TZ_NAME = "America/Santiago"
@@ -2668,117 +2706,347 @@ def _record_sent(db: Session, user_id: int, tag: str, kind: str, trigger_at: dat
         db.rollback()
 
 
-def _send_scheduled_push_reminders():
-    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
-    db = SessionLocal()
+def _job_batch_limit(job_name: str, default: int) -> int:
+    env_key = f"{job_name.upper()}_BATCH_SIZE"
+    raw = (os.getenv(env_key) or "").strip()
     try:
+        return max(1, int(raw or default))
+    except Exception:
+        return max(1, int(default or 1))
+
+
+def _job_item_limit(job_name: str, item_name: str, default: int) -> int:
+    env_key = f"{job_name.upper()}_{item_name.upper()}_LIMIT"
+    raw = (os.getenv(env_key) or "").strip()
+    try:
+        return max(1, int(raw or default))
+    except Exception:
+        return max(1, int(default or 1))
+
+
+def _job_timeout_seconds(job_name: str, default: int | None = None) -> int:
+    env_key = f"{job_name.upper()}_TIMEOUT_SECONDS"
+    raw = (os.getenv(env_key) or "").strip()
+    fallback = default if default is not None else WORKER_JOB_TIMEOUT_SECONDS
+    try:
+        return max(5, int(raw or fallback))
+    except Exception:
+        return max(5, int(fallback or WORKER_JOB_TIMEOUT_SECONDS))
+
+
+def _job_retry_count(job_name: str, default: int | None = None) -> int:
+    env_key = f"{job_name.upper()}_RETRIES"
+    raw = (os.getenv(env_key) or "").strip()
+    fallback = default if default is not None else WORKER_JOB_RETRIES
+    try:
+        return max(0, int(raw or fallback))
+    except Exception:
+        return max(0, int(fallback or WORKER_JOB_RETRIES))
+
+
+def _job_deadline_exceeded(deadline_at: float | None) -> bool:
+    return bool(deadline_at and time.time() >= float(deadline_at))
+
+
+def _format_job_metrics(metrics: dict) -> str:
+    parts = []
+    for key, value in (metrics or {}).items():
+        if isinstance(value, bool):
+            value = "yes" if value else "no"
+        parts.append(f"{key}={value}")
+    return " ".join(parts)
+
+
+def _record_observability_metric(
+    observability: dict | None,
+    *,
+    module_name: str,
+    elapsed_ms: float,
+    rollback: bool = False,
+):
+    if observability is None:
+        return
+    observability["db_query_ms"] = round(float(observability.get("db_query_ms", 0.0) or 0.0) + float(elapsed_ms or 0.0), 1)
+    observability["db_query_count"] = int(observability.get("db_query_count", 0) or 0) + 1
+    module_map = dict(observability.get("db_modules") or {})
+    module_map[module_name] = round(float(elapsed_ms or 0.0), 1)
+    observability["db_modules"] = module_map
+    if rollback:
+        observability["rollback_count"] = int(observability.get("rollback_count", 0) or 0) + 1
+
+
+def _prune_old_push_logs(db: Session, now_global: datetime | None = None):
+    now_value = now_global or datetime.now(_resolve_user_tz(None))
+    cutoff = now_value - timedelta(days=90)
+    db.query(models.PushNotificationLog).filter(
+        models.PushNotificationLog.sent_at < cutoff
+    ).delete()
+    db.commit()
+
+
+def _load_subscribed_user_ids(db: Session, limit: int | None = None) -> list[int]:
+    rows = (
+        db.query(models.PushSubscription.user_id)
+        .distinct()
+        .order_by(models.PushSubscription.user_id.asc())
+        .all()
+    )
+    user_ids = [row[0] for row in rows if row and row[0]]
+    if limit:
+        return user_ids[: max(1, int(limit))]
+    return user_ids
+
+
+def _load_notification_users(
+    db: Session,
+    *,
+    kind: str,
+    limit: int | None = None,
+) -> list[models.User]:
+    rows = (
+        db.query(models.User)
+        .outerjoin(
+            models.PushSubscription,
+            models.PushSubscription.user_id == models.User.id,
+        )
+        .filter(
+            models.User.deleted.is_(False),
+            or_(
+                models.User.email_reminders_enabled.is_(True),
+                models.PushSubscription.id.isnot(None),
+            ),
+        )
+        .order_by(models.User.id.asc())
+        .distinct()
+        .all()
+    )
+    enabled_users = []
+    for user in rows:
+        settings = _user_notification_settings(user)
+        if kind == "appointment" and not bool(settings.get("appointmentReminders", True)):
+            continue
+        if kind == "medication" and not bool(settings.get("medicationReminders", True)):
+            continue
+        enabled_users.append(user)
+        if limit and len(enabled_users) >= max(1, int(limit)):
+            break
+    return enabled_users
+
+
+def _active_refill_candidates(
+    db: Session,
+    *,
+    limit: int,
+    now: datetime | None = None,
+) -> list[models.Medication]:
+    current_dt = now or datetime.now()
+    return (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.refill_enabled.is_(True),
+            models.Medication.completed.is_(False),
+            models.Medication.stock_total_doses > 0,
+            models.Medication.refill_alert_threshold_doses > 0,
+            models.Medication.refill_last_notified_at.is_(None),
+            or_(
+                models.Medication.end_date.is_(None),
+                models.Medication.end_date >= current_dt,
+            ),
+        )
+        .order_by(models.Medication.updated_at.desc().nullslast(), models.Medication.id.asc())
+        .limit(max(1, int(limit)))
+        .all()
+    )
+
+
+def _job_send_appointment_reminders(
+    deadline_at: float | None = None,
+    user_limit: int | None = None,
+) -> dict:
+    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
+    user_batch = max(
+        1,
+        int(user_limit or _job_batch_limit("send_appointment_reminders", APPOINTMENT_REMINDER_BATCH_SIZE)),
+    )
+    appointment_limit = _job_item_limit(
+        "send_appointment_reminders",
+        "appointment",
+        APPOINTMENT_REMINDER_APPOINTMENT_LIMIT,
+    )
+    db = SessionLocal()
+    metrics = {
+        "job": "send_appointment_reminders",
+        "users": 0,
+        "appointments": 0,
+        "push_sent": 0,
+        "email_sent": 0,
+        "errors": 0,
+        "timed_out": False,
+        "limit_hit": False,
+        "db_query_ms": 0.0,
+        "rollback_count": 0,
+    }
+    try:
+        started_query_at = time.perf_counter()
         now_global = datetime.now(_resolve_user_tz(None))
-        cutoff = now_global - timedelta(days=90)
-        db.query(models.PushNotificationLog).filter(
-            models.PushNotificationLog.sent_at < cutoff
-        ).delete()
-        db.commit()
-
-        subscribed_user_ids = [
-            row[0]
-            for row in db.query(models.PushSubscription.user_id)
-            .distinct()
-            .all()
-            if row and row[0]
-        ]
-
-        for user_id in subscribed_user_ids:
-            user = db.query(models.User).filter(models.User.id == user_id).first()
-            if not user:
-                continue
-            user_settings = _user_notification_settings(user)
+        _prune_old_push_logs(db, now_global)
+        notification_users = _load_notification_users(
+            db,
+            kind="appointment",
+            limit=user_batch,
+        )
+        metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - started_query_at) * 1000), 1)
+        for user in notification_users:
+            if _job_deadline_exceeded(deadline_at):
+                metrics["timed_out"] = True
+                break
+            user_id = int(user.id)
+            metrics["users"] += 1
             user_tz = _resolve_user_tz(user)
             now = datetime.now(user_tz)
-
-            if bool(user_settings.get("appointmentReminders", True)):
-                appointments = (
-                    db.query(models.Appointment)
-                    .filter(
-                        models.Appointment.user_id == user_id,
-                        models.Appointment.date_time.isnot(None),
-                        models.Appointment.status != models.AppointmentStatus.realizada,
-                    )
-                    .all()
+            appointments_started_at = time.perf_counter()
+            appointments = (
+                db.query(models.Appointment)
+                .filter(
+                    models.Appointment.user_id == user_id,
+                    models.Appointment.date_time.isnot(None),
+                    models.Appointment.status != models.AppointmentStatus.realizada,
                 )
-
-                for appt in appointments:
-                    appt_dt = _to_schedule_tz(appt.date_time, user_tz)
-                    if not appt_dt:
+                .all()
+            )
+            metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - appointments_started_at) * 1000), 1)
+            for appt in appointments:
+                if _job_deadline_exceeded(deadline_at):
+                    metrics["timed_out"] = True
+                    break
+                if metrics["appointments"] >= appointment_limit:
+                    metrics["limit_hit"] = True
+                    break
+                metrics["appointments"] += 1
+                appt_dt = _to_schedule_tz(appt.date_time, user_tz)
+                if not appt_dt:
+                    continue
+                for offset in _appointment_offsets_for_user(user):
+                    trigger_at = appt_dt - offset["delta"]
+                    if not _is_due(now, trigger_at):
                         continue
+                    label = offset["label"]
+                    tag = f"appointment-{appt.id}-{label}-user-{user_id}"
+                    if _notification_already_sent(db, tag):
+                        continue
+                    category = _appointment_type_label(appt.type)
+                    title = f"{category} - Recordatorio: {label}"
+                    when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
+                    center = appt.center or "Centro medico"
+                    body_lines = [
+                        f"{appt.specialty or appt.type} en {center}",
+                        when_text,
+                    ]
+                    if appt.notes:
+                        body_lines.append(appt.notes)
+                    body = "\n".join(body_lines)
+                    ok = False
+                    if push_enabled:
+                        ok = bool(_send_push_to_user(
+                            db,
+                            user_id,
+                            {
+                                "title": title,
+                                "body": body,
+                                "url": "/appointments",
+                                "priority": offset["priority"],
+                                "sound": "appointment",
+                                "appointmentId": appt.id,
+                                "userId": user_id,
+                                "tag": tag,
+                            },
+                        ))
+                    if ok:
+                        _record_sent(db, user_id, tag, "appointment", trigger_at, now)
+                        metrics["push_sent"] += 1
+                    email_tag = f"appointment-email-{appt.id}-{label}"
+                    if (
+                        user.email
+                        and bool(getattr(user, "email_reminders_enabled", False))
+                        and not _notification_already_sent(db, email_tag)
+                    ):
+                        _send_appointment_reminder_email_safe(
+                            user.email,
+                            user.name or "",
+                            {
+                                "offset_label": label,
+                                "specialty": appt.specialty or appt.type,
+                                "center": center,
+                                "date_label": when_text,
+                                "notes": appt.notes or "",
+                            },
+                        )
+                        _record_sent(
+                            db,
+                            user_id,
+                            email_tag,
+                            "appointment_email",
+                            trigger_at,
+                            now,
+                        )
+                        metrics["email_sent"] += 1
+            if metrics["timed_out"]:
+                break
+            if metrics["limit_hit"]:
+                break
+        return metrics
+    except Exception:
+        metrics["errors"] += 1
+        metrics["rollback_count"] += 1
+        raise
+    finally:
+        db.close()
 
-                    for offset in _appointment_offsets_for_user(user):
-                        trigger_at = appt_dt - offset["delta"]
-                        if not _is_due(now, trigger_at):
-                            continue
 
-                        label = offset["label"]
-                        tag = f"appointment-{appt.id}-{label}-user-{user_id}"
-                        if _notification_already_sent(db, tag):
-                            continue
-
-                        category = _appointment_type_label(appt.type)
-                        title = f"{category} - Recordatorio: {label}"
-                        when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
-                        center = appt.center or "Centro medico"
-                        body_lines = [
-                            f"{appt.specialty or appt.type} en {center}",
-                            when_text,
-                        ]
-                        if appt.notes:
-                            body_lines.append(appt.notes)
-                        body = "\n".join(body_lines)
-
-                        ok = False
-                        if push_enabled:
-                            ok = bool(_send_push_to_user(
-                                db,
-                                user_id,
-                                {
-                                    "title": title,
-                                    "body": body,
-                                    "url": "/appointments",
-                                    "priority": offset["priority"],
-                                    "sound": "appointment",
-                                    "appointmentId": appt.id,
-                                    "userId": user_id,
-                                    "tag": tag,
-                                },
-                            ))
-                        if ok:
-                            _record_sent(db, user_id, tag, "appointment", trigger_at, now)
-
-                        email_tag = f"appointment-email-{appt.id}-{label}"
-                        if (
-                            user
-                            and user.email
-                            and bool(getattr(user, "email_reminders_enabled", False))
-                            and not _notification_already_sent(db, email_tag)
-                        ):
-                            _send_appointment_reminder_email_safe(
-                                user.email,
-                                user.name or "",
-                                {
-                                    "offset_label": label,
-                                    "specialty": appt.specialty or appt.type,
-                                    "center": center,
-                                    "date_label": when_text,
-                                    "notes": appt.notes or "",
-                                },
-                            )
-                            _record_sent(
-                                db,
-                                user_id,
-                                email_tag,
-                                "appointment_email",
-                                trigger_at,
-                                now,
-                            )
-
+def _job_send_medication_reminders(
+    deadline_at: float | None = None,
+    user_limit: int | None = None,
+) -> dict:
+    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
+    user_batch = max(
+        1,
+        int(user_limit or _job_batch_limit("send_medication_reminders", MEDICATION_REMINDER_BATCH_SIZE)),
+    )
+    medication_limit = _job_item_limit(
+        "send_medication_reminders",
+        "medication",
+        MEDICATION_REMINDER_MEDICATION_LIMIT,
+    )
+    db = SessionLocal()
+    metrics = {
+        "job": "send_medication_reminders",
+        "users": 0,
+        "medications": 0,
+        "push_sent": 0,
+        "email_sent": 0,
+        "errors": 0,
+        "timed_out": False,
+        "limit_hit": False,
+        "db_query_ms": 0.0,
+        "rollback_count": 0,
+    }
+    try:
+        users_started_at = time.perf_counter()
+        notification_users = _load_notification_users(
+            db,
+            kind="medication",
+            limit=user_batch,
+        )
+        metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - users_started_at) * 1000), 1)
+        for user in notification_users:
+            if _job_deadline_exceeded(deadline_at):
+                metrics["timed_out"] = True
+                break
+            user_id = int(user.id)
+            metrics["users"] += 1
+            user_tz = _resolve_user_tz(user)
+            now = datetime.now(user_tz)
+            medications_started_at = time.perf_counter()
             medications = (
                 db.query(models.Medication)
                 .filter(
@@ -2791,98 +3059,140 @@ def _send_scheduled_push_reminders():
                 )
                 .all()
             )
-
-            if not medications:
-                continue
-
+            metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - medications_started_at) * 1000), 1)
             for med in medications:
-                if bool(user_settings.get("medicationReminders", True)):
-                    for trigger_exact in _medication_schedule_events_between(
-                        med,
-                        now - timedelta(minutes=MEDICATION_LEAD_MINUTES + 5),
-                        now + timedelta(days=2),
-                    ):
-                        trigger_exact_ms = int(trigger_exact.timestamp() * 1000)
-                        for offset_minutes in [MEDICATION_LEAD_MINUTES, 0]:
-                            trigger_at = trigger_exact - timedelta(minutes=offset_minutes)
-                            if not _is_due(now, trigger_at):
-                                continue
-
-                            tag = (
-                                f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}-user-{user_id}"
+                if _job_deadline_exceeded(deadline_at):
+                    metrics["timed_out"] = True
+                    break
+                if metrics["medications"] >= medication_limit:
+                    metrics["limit_hit"] = True
+                    break
+                metrics["medications"] += 1
+                for trigger_exact in _medication_schedule_events_between(
+                    med,
+                    now - timedelta(minutes=MEDICATION_LEAD_MINUTES + 5),
+                    now + timedelta(days=2),
+                ):
+                    if _job_deadline_exceeded(deadline_at):
+                        metrics["timed_out"] = True
+                        break
+                    trigger_exact_ms = int(trigger_exact.timestamp() * 1000)
+                    for offset_minutes in [MEDICATION_LEAD_MINUTES, 0]:
+                        trigger_at = trigger_exact - timedelta(minutes=offset_minutes)
+                        if not _is_due(now, trigger_at):
+                            continue
+                        tag = (
+                            f"medication-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}-user-{user_id}"
+                        )
+                        if _notification_already_sent(db, tag):
+                            continue
+                        email_tag = (
+                            f"medication-email-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
+                        )
+                        title = f"Medicacion: {med.name}"
+                        prefix = (
+                            "Ahora" if offset_minutes == 0 else f"En {offset_minutes} minutos"
+                        )
+                        body_lines = [prefix]
+                        if med.dose:
+                            body_lines.append(f"Dosis: {med.dose}")
+                        if med.frequency:
+                            body_lines.append(f"Frecuencia: {med.frequency}")
+                        if med.notes:
+                            body_lines.append(med.notes)
+                        body = "\n".join(body_lines)
+                        ok = False
+                        if push_enabled:
+                            ok = bool(_send_push_to_user(
+                                db,
+                                user_id,
+                                {
+                                    "title": title,
+                                    "body": body,
+                                    "url": f"/medications?notify=1&medicationId={med.id}&trigger={trigger_exact_ms}",
+                                    "priority": "high" if offset_minutes == 0 else "normal",
+                                    "sound": "medication",
+                                    "medicationId": med.id,
+                                    "userId": user_id,
+                                    "tag": tag,
+                                },
+                            ))
+                        if ok:
+                            _record_sent(db, user_id, tag, "medication", trigger_at, now)
+                            metrics["push_sent"] += 1
+                        if (
+                            user.email
+                            and bool(getattr(user, "email_reminders_enabled", False))
+                            and not _notification_already_sent(db, email_tag)
+                        ):
+                            time_label = trigger_exact.strftime("%H:%M hrs")
+                            _send_medication_reminder_email_safe(
+                                user.email,
+                                user.name or "",
+                                {
+                                    "medication": med.name or "Medicamento",
+                                    "dose": med.dose or "",
+                                    "time_label": time_label,
+                                    "notes": med.notes or "",
+                                },
                             )
-                            if _notification_already_sent(db, tag):
-                                continue
-                            email_tag = (
-                                f"medication-email-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
+                            _record_sent(
+                                db,
+                                user_id,
+                                email_tag,
+                                "medication_email",
+                                trigger_at,
+                                now,
                             )
+                            metrics["email_sent"] += 1
+                    if metrics["timed_out"]:
+                        break
+                if metrics["timed_out"]:
+                    break
+                if metrics["limit_hit"]:
+                    break
+            if metrics["limit_hit"]:
+                break
+        return metrics
+    except Exception:
+        metrics["errors"] += 1
+        metrics["rollback_count"] += 1
+        raise
+    finally:
+        db.close()
 
-                            title = f"Medicacion: {med.name}"
-                            prefix = (
-                                "Ahora" if offset_minutes == 0 else f"En {offset_minutes} minutos"
-                            )
-                            body_lines = [prefix]
-                            if med.dose:
-                                body_lines.append(f"Dosis: {med.dose}")
-                            if med.frequency:
-                                body_lines.append(f"Frecuencia: {med.frequency}")
-                            if med.notes:
-                                body_lines.append(med.notes)
-                            body = "\n".join(body_lines)
 
-                            ok = False
-                            if push_enabled:
-                                ok = bool(_send_push_to_user(
-                                    db,
-                                    user_id,
-                                    {
-                                        "title": title,
-                                        "body": body,
-                                        "url": f"/medications?notify=1&medicationId={med.id}&trigger={trigger_exact_ms}",
-                                        "priority": "high" if offset_minutes == 0 else "normal",
-                                        "sound": "medication",
-                                        "medicationId": med.id,
-                                        "userId": user_id,
-                                        "tag": tag,
-                                    },
-                                ))
-                            if ok:
-                                _record_sent(db, user_id, tag, "medication", trigger_at, now)
-                            if (
-                                user
-                                and user.email
-                                and bool(getattr(user, "email_reminders_enabled", False))
-                                and not _notification_already_sent(db, email_tag)
-                            ):
-                                time_label = trigger_exact.strftime("%H:%M hrs")
-                                _send_medication_reminder_email_safe(
-                                    user.email,
-                                    user.name or "",
-                                    {
-                                        "medication": med.name or "Medicamento",
-                                        "dose": med.dose or "",
-                                        "time_label": time_label,
-                                        "notes": med.notes or "",
-                                    },
-                                )
-                                _record_sent(
-                                    db,
-                                    user_id,
-                                    email_tag,
-                                    "medication_email",
-                                    trigger_at,
-                                    now,
-                                )
-        refill_candidates = (
-            db.query(models.Medication)
-            .filter(
-                models.Medication.refill_enabled.is_(True),
-                models.Medication.completed.is_(False),
-                models.Medication.stock_total_doses > 0,
-            )
-            .all()
+def _job_send_refill_alerts(
+    deadline_at: float | None = None,
+    medication_limit: int | None = None,
+) -> dict:
+    medication_batch = max(
+        1,
+        int(medication_limit or _job_batch_limit("send_refill_alerts", REFILL_ALERT_BATCH_SIZE)),
+    )
+    db = SessionLocal()
+    metrics = {
+        "job": "send_refill_alerts",
+        "medications": 0,
+        "errors": 0,
+        "timed_out": False,
+        "limit_hit": False,
+        "db_query_ms": 0.0,
+        "rollback_count": 0,
+    }
+    try:
+        refill_started_at = time.perf_counter()
+        refill_candidates = _active_refill_candidates(
+            db,
+            limit=medication_batch,
         )
+        metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - refill_started_at) * 1000), 1)
+        if len(refill_candidates) >= medication_batch:
+            metrics["limit_hit"] = True
         for med in refill_candidates:
+            if _job_deadline_exceeded(deadline_at):
+                metrics["timed_out"] = True
+                break
             try:
                 owner_user = db.query(models.User).filter(models.User.id == med.user_id).first()
                 _handle_medication_refill_notifications(
@@ -2890,13 +3200,29 @@ def _send_scheduled_push_reminders():
                     med,
                     owner_user=owner_user,
                 )
+                metrics["medications"] += 1
             except Exception as exc:
                 db.rollback()
+                metrics["errors"] += 1
+                metrics["rollback_count"] += 1
                 print(
                     f"WARNING medication refill notifications {getattr(med, 'id', '?')}: {exc}"
                 )
+        return metrics
     finally:
         db.close()
+
+
+def _send_scheduled_push_reminders():
+    summaries = [
+        _job_send_appointment_reminders(),
+        _job_send_medication_reminders(),
+        _job_send_refill_alerts(),
+    ]
+    print(
+        "INFO scheduler reminders: "
+        + " | ".join(_format_job_metrics(item) for item in summaries if item)
+    )
 
 
 _scheduler_started = False
@@ -2997,6 +3323,34 @@ def _user_has_pending_profile_refresh(db: Session, user_id: int) -> bool:
     )
 
 
+def _family_ai_should_refresh_now(db: Session, user: models.User | None) -> bool:
+    if not user or not _family_ai_eligible(db, user):
+        return False
+    if _user_has_pending_profile_refresh(db, user.id):
+        return False
+    last_family_refresh = getattr(user, "family_ai_last_refreshed_at", None)
+    if not last_family_refresh:
+        return True
+    profile_rows = (
+        db.query(models.HealthProfile.ai_last_refreshed_at)
+        .join(
+            models.ProfileRelationship,
+            models.ProfileRelationship.profile_id == models.HealthProfile.id,
+        )
+        .filter(
+            models.ProfileRelationship.user_id == int(user.id),
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .all()
+    )
+    refreshed_values = [row[0] for row in profile_rows if row and row[0]]
+    if not refreshed_values:
+        return False
+    latest_profile_refresh = max(refreshed_values)
+    return bool(latest_profile_refresh and latest_profile_refresh > last_family_refresh)
+
+
 def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
     if not profile or bool(getattr(profile, "is_archived", False)):
         return
@@ -3046,21 +3400,90 @@ def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
     db.add(profile)
 
 
-def _run_scheduled_ai_refresh():
+def _job_refresh_profile_ai(
+    deadline_at: float | None = None,
+    batch_limit: int | None = None,
+) -> dict:
     db = SessionLocal()
+    profile_batch = max(
+        1,
+        int(batch_limit or _job_batch_limit("refresh_profile_ai", AI_REFRESH_BATCH_SIZE)),
+    )
+    metrics = {
+        "job": "refresh_profile_ai",
+        "queued": 0,
+        "refreshed": 0,
+        "errors": 0,
+        "timed_out": False,
+        "limit_hit": False,
+        "db_query_ms": 0.0,
+        "rollback_count": 0,
+    }
     try:
-        profiles = _load_dirty_profiles_for_refresh(db)
+        profiles_started_at = time.perf_counter()
+        profiles = _load_dirty_profiles_for_refresh(db, profile_batch)
+        metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - profiles_started_at) * 1000), 1)
+        metrics["queued"] = len(profiles)
+        if len(profiles) >= profile_batch:
+            metrics["limit_hit"] = True
         for profile in profiles:
+            if _job_deadline_exceeded(deadline_at):
+                metrics["timed_out"] = True
+                break
             try:
                 _refresh_profile_ai_analytics(db, profile)
                 db.commit()
+                metrics["refreshed"] += 1
             except Exception as exc:
                 db.rollback()
+                metrics["errors"] += 1
+                metrics["rollback_count"] += 1
                 print(f"WARNING ai_refresh profile {getattr(profile, 'id', 'unknown')}: {exc}")
-        family_users = _load_dirty_family_users_for_refresh(db)
+        return metrics
+    finally:
+        db.close()
+
+
+def _job_refresh_family_ai(
+    deadline_at: float | None = None,
+    batch_limit: int | None = None,
+) -> dict:
+    db = SessionLocal()
+    user_batch = max(
+        1,
+        int(batch_limit or _job_batch_limit("refresh_family_ai", FAMILY_AI_REFRESH_BATCH_SIZE)),
+    )
+    metrics = {
+        "job": "refresh_family_ai",
+        "queued": 0,
+        "refreshed": 0,
+        "skipped_pending_profile": 0,
+        "errors": 0,
+        "timed_out": False,
+        "limit_hit": False,
+        "db_query_ms": 0.0,
+        "rollback_count": 0,
+    }
+    try:
+        family_started_at = time.perf_counter()
+        family_users = _load_dirty_family_users_for_refresh(db, user_batch)
+        metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - family_started_at) * 1000), 1)
+        metrics["queued"] = len(family_users)
+        if len(family_users) >= user_batch:
+            metrics["limit_hit"] = True
         for user in family_users:
+            if _job_deadline_exceeded(deadline_at):
+                metrics["timed_out"] = True
+                break
             try:
                 if _user_has_pending_profile_refresh(db, user.id):
+                    metrics["skipped_pending_profile"] += 1
+                    continue
+                if not _family_ai_should_refresh_now(db, user):
+                    user.family_ai_needs_refresh = False
+                    user.family_ai_refresh_requested_at = None
+                    db.add(user)
+                    db.commit()
                     continue
                 if _family_ai_eligible(db, user):
                     _refresh_family_ai_summary(db, user, 7)
@@ -3070,36 +3493,42 @@ def _run_scheduled_ai_refresh():
                 user.family_ai_last_refreshed_at = datetime.now()
                 db.add(user)
                 db.commit()
+                metrics["refreshed"] += 1
             except Exception as exc:
                 db.rollback()
+                metrics["errors"] += 1
+                metrics["rollback_count"] += 1
                 print(f"WARNING family_ai_refresh user {getattr(user, 'id', 'unknown')}: {exc}")
+        return metrics
     finally:
         db.close()
-
-
-def _scheduler_loop():
-    while True:
-        try:
-            _send_scheduled_push_reminders()
-            _run_scheduled_ai_refresh()
-        except Exception as exc:
-            print(f"WARNING scheduler: {exc}")
-        time.sleep(SCHEDULE_INTERVAL_SECONDS)
 
 
 def _start_scheduler():
     global _scheduler_started
     if _scheduler_started:
         return
+    from app.jobs.registry import format_job_metrics, run_scheduled_jobs_once, schedule_interval_seconds
+    from app.jobs.runtime import start_embedded_scheduler
+
     _scheduler_started = True
-    thread = threading.Thread(target=_scheduler_loop, daemon=True)
-    thread.start()
+    start_embedded_scheduler(
+        run_once=run_scheduled_jobs_once,
+        format_metrics=format_job_metrics,
+        interval_seconds=schedule_interval_seconds(),
+    )
 
 app = FastAPI(title="MiRutaSalud API")
 
 @app.on_event("startup")
 def _startup_event():
-    _start_scheduler()
+    from app.jobs.registry import embedded_scheduler_enabled
+
+    if embedded_scheduler_enabled():
+        print("INFO startup: embedded scheduler enabled")
+        _start_scheduler()
+    else:
+        print("INFO startup: embedded scheduler disabled for web process")
 
 
 OCR_MAX_BYTES = 4 * 1024 * 1024
@@ -5459,6 +5888,22 @@ def _ai_chat_concurrency_limit() -> int:
     return max(1, min(4, value))
 
 
+def _ai_chat_prompt_pressure_threshold_ms(kind: str) -> int:
+    defaults = {
+        "lean_db_query": 900,
+        "minimal_db_query": 1700,
+        "lean_context": 1200,
+        "minimal_context": 2200,
+    }
+    fallback = int(defaults.get(kind, 1200))
+    raw = (os.getenv(f"AI_CHAT_{kind.upper()}_MS") or str(fallback)).strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return fallback
+    return max(100, min(10000, value))
+
+
 def _safe_iso(dt: datetime | None) -> str:
     if not dt:
         return ""
@@ -6644,6 +7089,7 @@ def _compact_history_for_prompt(
     history: list[dict],
     *,
     max_recent_messages: int = 6,
+    summary_char_limit: int = 900,
 ) -> tuple[list[dict], str]:
     cleaned: list[dict] = []
     for item in history or []:
@@ -6677,7 +7123,7 @@ def _compact_history_for_prompt(
         summary_parts.append(
             "Respuestas previas: " + " | ".join(prior_assistant_points[-3:])
         )
-    return recent, _clip_text(" ".join(summary_parts), 900)
+    return recent, _clip_text(" ".join(summary_parts), summary_char_limit)
 
 
 def _chat_profile_limiter(profile_id: int) -> threading.BoundedSemaphore:
@@ -6709,18 +7155,31 @@ def _safe_ai_context_query(
     degraded_reasons: list[str],
     statement_timeout_ms: int,
     context_deadline_ts: float | None = None,
+    observability: dict | None = None,
 ):
     if context_deadline_ts is not None and time.perf_counter() >= context_deadline_ts:
         degraded_reasons.append(f"{module_name}:budget")
         return default_value
+    started_at = time.perf_counter()
     try:
         _apply_ai_db_timeout(db, statement_timeout_ms)
         value = loader()
     except Exception as exc:
         db.rollback()
+        _record_observability_metric(
+            observability,
+            module_name=module_name,
+            elapsed_ms=round((time.perf_counter() - started_at) * 1000, 1),
+            rollback=True,
+        )
         degraded_reasons.append(f"{module_name}:error")
         print(f"WARNING ai_context {module_name}: {exc}")
         return default_value
+    _record_observability_metric(
+        observability,
+        module_name=module_name,
+        elapsed_ms=round((time.perf_counter() - started_at) * 1000, 1),
+    )
     if context_deadline_ts is not None and time.perf_counter() >= context_deadline_ts:
         degraded_reasons.append(f"{module_name}:partial")
     return value
@@ -8731,6 +9190,12 @@ def _build_chat_context_base(
     context_timeout_ms = _ai_context_timeout_ms()
     context_deadline_ts = time.perf_counter() + (context_timeout_ms / 1000.0)
     degraded_reasons: list[str] = []
+    query_observability = {
+        "db_query_ms": 0.0,
+        "db_query_count": 0,
+        "rollback_count": 0,
+        "db_modules": {},
+    }
     plan_info = _build_plan_info(current_user, db)
     timezone_name = _resolve_user_tz_name(current_user)
     appointments: list[models.Appointment] = []
@@ -8760,6 +9225,7 @@ def _build_chat_context_base(
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
         )
     if modules.get("documents"):
         documents = _safe_ai_context_query(
@@ -8776,6 +9242,7 @@ def _build_chat_context_base(
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
         )
     if modules.get("medications"):
         medications = _safe_ai_context_query(
@@ -8796,6 +9263,7 @@ def _build_chat_context_base(
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
         )
     brief_profile_summary = _safe_ai_context_query(
         db,
@@ -8805,6 +9273,7 @@ def _build_chat_context_base(
         degraded_reasons=degraded_reasons,
         statement_timeout_ms=statement_timeout_ms,
         context_deadline_ts=context_deadline_ts,
+        observability=query_observability,
     )
     db_load_ms = round((time.perf_counter() - db_started_at) * 1000, 1)
 
@@ -8847,6 +9316,7 @@ def _build_chat_context_base(
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
         )
         if modules.get("adherence")
         else {}
@@ -8868,6 +9338,7 @@ def _build_chat_context_base(
                 degraded_reasons=degraded_reasons,
                 statement_timeout_ms=statement_timeout_ms,
                 context_deadline_ts=context_deadline_ts,
+                observability=query_observability,
             )
             summaries_by_document = {row.document_id: row for row in summary_rows}
             document_summaries = [
@@ -8891,6 +9362,7 @@ def _build_chat_context_base(
                 degraded_reasons=degraded_reasons,
                 statement_timeout_ms=statement_timeout_ms,
                 context_deadline_ts=context_deadline_ts,
+                observability=query_observability,
             )
             for entity in entity_rows:
                 document_entities_by_document.setdefault(entity.document_id, []).append(entity)
@@ -8905,7 +9377,16 @@ def _build_chat_context_base(
     family_summary_user = None
     family_owner_user_id = family_access.get("owner_user_id")
     if family_owner_user_id:
-        family_summary_user = db.query(models.User).filter(models.User.id == int(family_owner_user_id)).first()
+        family_summary_user = _safe_ai_context_query(
+            db,
+            module_name="family-summary-user",
+            loader=lambda: db.query(models.User).filter(models.User.id == int(family_owner_user_id)).first(),
+            default_value=None,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
     family_context = (
         _safe_ai_context_query(
             db,
@@ -8920,6 +9401,7 @@ def _build_chat_context_base(
             degraded_reasons=degraded_reasons,
             statement_timeout_ms=statement_timeout_ms,
             context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
         )
         if include_family_context and bool(family_access.get("available"))
         else None
@@ -8990,6 +9472,10 @@ def _build_chat_context_base(
         "db_load_ms": db_load_ms,
         "context_build_ms": context_build_ms,
         "chat_context_ms": round(db_load_ms + context_build_ms, 1),
+        "db_query_ms": round(float(query_observability.get("db_query_ms", 0.0) or 0.0), 1),
+        "db_query_count": int(query_observability.get("db_query_count", 0) or 0),
+        "rollback_count": int(query_observability.get("rollback_count", 0) or 0),
+        "db_modules": dict(query_observability.get("db_modules") or {}),
         "db_statement_timeout_ms": statement_timeout_ms,
         "context_timeout_ms": context_timeout_ms,
         "degraded_reasons": degraded_reasons,
@@ -8997,15 +9483,118 @@ def _build_chat_context_base(
     return context, timing_info
 
 
-def _serialize_ai_context(context: dict) -> dict:
+def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) -> dict:
+    info = timing_info or {}
+    db_query_ms = float(info.get("db_query_ms", 0.0) or 0.0)
+    chat_context_ms = float(info.get("chat_context_ms", 0.0) or 0.0)
+    rollback_count = int(info.get("rollback_count", 0) or 0)
+    degraded = bool((context or {}).get("degraded_reasons"))
+    intent = (context or {}).get("chat_intent") or "general"
+
+    profile = {
+        "name": "normal",
+        "history_messages": 6,
+        "summary_chars": 900,
+        "appointments_limit": 6,
+        "documents_limit": 4,
+        "document_summaries_limit": 4,
+        "document_diagnoses_limit": 4,
+        "medications_limit": 6,
+        "family_profiles_limit": 4,
+        "document_ocr_first_chars": 1200,
+        "document_ocr_other_chars": 320,
+        "notes_chars": 180,
+        "memory_chars": 1500,
+        "brief_summary_chars": 320,
+        "family_summary_chars": 520,
+    }
+
+    if (
+        rollback_count > 0
+        or db_query_ms >= _ai_chat_prompt_pressure_threshold_ms("minimal_db_query")
+        or chat_context_ms >= _ai_chat_prompt_pressure_threshold_ms("minimal_context")
+    ):
+        profile.update(
+            {
+                "name": "minimal",
+                "history_messages": 2,
+                "summary_chars": 260,
+                "appointments_limit": 2,
+                "documents_limit": 1,
+                "document_summaries_limit": 1,
+                "document_diagnoses_limit": 1,
+                "medications_limit": 3,
+                "family_profiles_limit": 1,
+                "document_ocr_first_chars": 0,
+                "document_ocr_other_chars": 0,
+                "notes_chars": 90,
+                "memory_chars": 420,
+                "brief_summary_chars": 180,
+                "family_summary_chars": 220,
+            }
+        )
+    elif (
+        degraded
+        or db_query_ms >= _ai_chat_prompt_pressure_threshold_ms("lean_db_query")
+        or chat_context_ms >= _ai_chat_prompt_pressure_threshold_ms("lean_context")
+    ):
+        profile.update(
+            {
+                "name": "lean",
+                "history_messages": 4,
+                "summary_chars": 520,
+                "appointments_limit": 4,
+                "documents_limit": 2,
+                "document_summaries_limit": 2,
+                "document_diagnoses_limit": 2,
+                "medications_limit": 4,
+                "family_profiles_limit": 2,
+                "document_ocr_first_chars": 420,
+                "document_ocr_other_chars": 0,
+                "notes_chars": 120,
+                "memory_chars": 900,
+                "brief_summary_chars": 220,
+                "family_summary_chars": 320,
+            }
+        )
+
+    if intent == "documentos":
+        profile["documents_limit"] = max(profile["documents_limit"], 2)
+        profile["document_summaries_limit"] = max(profile["document_summaries_limit"], 2)
+        if profile["name"] != "minimal":
+            profile["document_ocr_first_chars"] = max(profile["document_ocr_first_chars"], 420)
+    elif intent == "medicamentos":
+        profile["medications_limit"] = max(profile["medications_limit"], 4)
+    elif intent == "citas":
+        profile["appointments_limit"] = max(profile["appointments_limit"], 3)
+    elif intent == "familiar":
+        profile["family_profiles_limit"] = max(profile["family_profiles_limit"], 2)
+
+    return profile
+
+
+def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> dict:
     timezone_name = context.get("timezone_name") or DEFAULT_TZ_NAME
     family_context = context.get("family_context") or {}
     family_access = context.get("family_access") or {}
     enabled_modules = context.get("enabled_modules") or {}
     include_document_text = bool(context.get("include_document_text"))
+    prompt_profile = prompt_profile or {}
+    appointments_limit = max(1, int(prompt_profile.get("appointments_limit", 6) or 6))
+    documents_limit = max(1, int(prompt_profile.get("documents_limit", 4) or 4))
+    document_summaries_limit = max(1, int(prompt_profile.get("document_summaries_limit", 4) or 4))
+    document_diagnoses_limit = max(1, int(prompt_profile.get("document_diagnoses_limit", 4) or 4))
+    medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
+    family_profiles_limit = max(1, int(prompt_profile.get("family_profiles_limit", 4) or 4))
+    notes_chars = max(60, int(prompt_profile.get("notes_chars", 180) or 180))
+    memory_chars = max(120, int(prompt_profile.get("memory_chars", 1500) or 1500))
+    brief_summary_chars = max(100, int(prompt_profile.get("brief_summary_chars", 320) or 320))
+    family_summary_chars = max(120, int(prompt_profile.get("family_summary_chars", 520) or 520))
+    document_ocr_first_chars = max(0, int(prompt_profile.get("document_ocr_first_chars", 1200) or 0))
+    document_ocr_other_chars = max(0, int(prompt_profile.get("document_ocr_other_chars", 320) or 0))
     payload = {
         "profile": context["profile"],
-        "learned_profile_context": context.get("learned_profile_context") or "",
+        "learned_profile_context": _clip_text(context.get("learned_profile_context") or "", memory_chars),
         "brief_profile_summary": context.get("brief_profile_summary")
         or (context.get("profile") or {}).get("brief_profile_summary")
         or "",
@@ -9031,7 +9620,7 @@ def _serialize_ai_context(context: dict) -> dict:
                     "can_edit": bool(item.get("can_edit")),
                     "can_manage_collaborators": bool(item.get("can_manage_collaborators")),
                 }
-                for item in (family_access.get("profiles") or [])[:5]
+                for item in (family_access.get("profiles") or [])[:family_profiles_limit]
             ],
         },
     }
@@ -9045,9 +9634,9 @@ def _serialize_ai_context(context: dict) -> dict:
                 "date_time": _safe_iso_local(item.date_time, timezone_name),
                 "created_at": _safe_iso_local(item.created_at, timezone_name),
                 "status": str(getattr(item.status, "value", item.status)),
-                "notes": _clip_text(item.notes or "", 180),
+                "notes": _clip_text(item.notes or "", notes_chars),
             }
-            for item in context["appointments"][:6]
+            for item in context["appointments"][:appointments_limit]
         ]
     if enabled_modules.get("documents"):
         payload["document_insights"] = context.get("document_insights") or {}
@@ -9058,7 +9647,7 @@ def _serialize_ai_context(context: dict) -> dict:
                 "date": _safe_iso_local(item.date, timezone_name),
                 "created_at": _safe_iso_local(item.created_at, timezone_name),
                 "center": item.center or "",
-                "notes": _clip_text(item.notes or "", 180),
+                "notes": _clip_text(item.notes or "", notes_chars),
                 "ocr_status": item.ocr_status or "",
                 "filename": item.filename or "",
                 "file_format": _document_file_format(item),
@@ -9066,26 +9655,28 @@ def _serialize_ai_context(context: dict) -> dict:
                     {
                         "ocr_excerpt": _clip_text(
                             item.ocr_text or "",
-                            1200 if index == 0 else 320,
+                            document_ocr_first_chars if index == 0 else document_ocr_other_chars,
                         )
                     }
-                    if include_document_text and (item.ocr_text or "").strip()
+                    if include_document_text
+                    and (item.ocr_text or "").strip()
+                    and ((document_ocr_first_chars if index == 0 else document_ocr_other_chars) > 0)
                     else {}
                 ),
             }
-            for index, item in enumerate(context["documents"][:4])
+            for index, item in enumerate(context["documents"][:documents_limit])
         ]
     if enabled_modules.get("document_summaries"):
         payload["document_summaries"] = [
             {
                 "document_id": item.document_id,
                 "document_type_inferred": item.document_type_inferred,
-                "summary_plain": _clip_text(item.summary_plain, 240),
-                "patient_friendly_explanation": _clip_text(item.patient_friendly_explanation, 320),
-                "abnormal_values_json": item.abnormal_values_json or [],
-                "key_points_json": (item.key_points_json or [])[:4],
+                "summary_plain": _clip_text(item.summary_plain, max(180, brief_summary_chars)),
+                "patient_friendly_explanation": _clip_text(item.patient_friendly_explanation, max(220, family_summary_chars)),
+                "abnormal_values_json": (item.abnormal_values_json or [])[: max(2, document_summaries_limit)],
+                "key_points_json": (item.key_points_json or [])[: max(2, document_summaries_limit)],
             }
-            for item in (context.get("document_summaries") or [])[:4]
+            for item in (context.get("document_summaries") or [])[:document_summaries_limit]
         ]
         payload["document_diagnoses"] = [
             {
@@ -9098,9 +9689,9 @@ def _serialize_ai_context(context: dict) -> dict:
                     }
                     for entity in entities
                     if getattr(entity, "entity_type", "") == "diagnosis"
-                ][:3],
+                ][: max(1, min(3, document_diagnoses_limit))],
             }
-            for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:4]
+            for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:document_diagnoses_limit]
             if any(getattr(entity, "entity_type", "") == "diagnosis" for entity in entities)
         ]
     if enabled_modules.get("medications"):
@@ -9115,18 +9706,18 @@ def _serialize_ai_context(context: dict) -> dict:
                 "completed": bool(item.completed),
                 "end_date": _safe_iso_local(item.end_date, timezone_name),
                 "created_at": _safe_iso_local(item.created_at, timezone_name),
-                "notes": _clip_text(item.notes or "", 160),
+                "notes": _clip_text(item.notes or "", notes_chars),
                 "adherence_rate": getattr(item, "adherence_rate", None),
                 "expected_doses": getattr(item, "expected_doses", 0),
                 "taken_doses": getattr(item, "taken_doses", 0),
             }
-            for item in context["medications"][:6]
+            for item in context["medications"][:medications_limit]
         ]
     if enabled_modules.get("adherence"):
         payload["adherence_summary"] = context.get("adherence_summary") or {}
     if enabled_modules.get("family") and family_context:
         payload["family_context"] = {
-            "summary": family_context.get("summary") or "",
+            "summary": _clip_text(family_context.get("summary") or "", family_summary_chars),
             "family_size": family_context.get("family_size", 0),
             "active_alerts_total": family_context.get("active_alerts_total", 0),
             "low_adherence_profiles": family_context.get("low_adherence_profiles", 0),
@@ -9146,14 +9737,18 @@ def _serialize_ai_context(context: dict) -> dict:
                     "key_alerts": item.get("key_alerts") or [],
                     "key_risks": item.get("key_risks") or [],
                 }
-                for item in (family_context.get("profiles") or [])[:4]
+                for item in (family_context.get("profiles") or [])[:family_profiles_limit]
             ],
         }
+    payload["brief_profile_summary"] = _clip_text(payload.get("brief_profile_summary") or "", brief_summary_chars)
     return payload
 
 
-def _ai_system_prompt(context: dict) -> str:
+def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
     family_access = context.get("family_access") or {}
+    prompt_profile = prompt_profile or {}
+    memory_chars = max(120, int(prompt_profile.get("memory_chars", 1500) or 1500))
+    brief_summary_chars = max(100, int(prompt_profile.get("brief_summary_chars", 320) or 320))
     family_access_profiles = ", ".join(
         f"{item.get('profile_name') or 'Perfil'} ({item.get('role_label') or item.get('role') or 'sin rol'})"
         for item in (family_access.get("profiles") or [])[:4]
@@ -9190,8 +9785,8 @@ def _ai_system_prompt(context: dict) -> str:
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
         f"Perfiles familiares accesibles: {_clip_text(family_access_profiles, 260)}\n"
-        f"Resumen breve persistido del perfil: {_clip_text(context.get('brief_profile_summary') or '', 320)}\n"
-        f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', 1500)}\n"
+        f"Resumen breve persistido del perfil: {_clip_text(context.get('brief_profile_summary') or '', brief_summary_chars)}\n"
+        f"Memoria clinica del perfil: {_clip_text(context.get('learned_profile_context') or '', memory_chars)}\n"
         f"Disclaimer obligatorio: {AI_KLINIP_DISCLAIMER}"
     )
 
@@ -9767,12 +10362,23 @@ def _build_ai_reply(
     context: dict,
     timing_info: dict | None = None,
 ) -> tuple[str, str, str, list[dict]]:
-    compact_history, conversation_summary = _compact_history_for_prompt(history)
-    serialized_context = _serialize_ai_context(context)
-    system_prompt = _ai_system_prompt(context) + "\n\nContexto clinico JSON:\n" + json.dumps(
-        serialized_context, ensure_ascii=False
+    prompt_profile = _select_ai_prompt_profile(context, timing_info)
+    compact_history, conversation_summary = _compact_history_for_prompt(
+        history,
+        max_recent_messages=int(prompt_profile.get("history_messages", 6) or 6),
+        summary_char_limit=int(prompt_profile.get("summary_chars", 900) or 900),
     )
+    serialized_context = _serialize_ai_context(context, prompt_profile=prompt_profile)
+    serialized_context_json = json.dumps(
+        serialized_context,
+        ensure_ascii=False,
+    )
+    system_prompt = _ai_system_prompt(context, prompt_profile=prompt_profile) + "\n\nContexto clinico JSON:\n" + serialized_context_json
     references = _build_ai_references(message, context)
+    if timing_info is not None:
+        timing_info["prompt_profile"] = prompt_profile.get("name") or "normal"
+        timing_info["prompt_context_chars"] = len(serialized_context_json)
+        timing_info["prompt_system_chars"] = len(system_prompt)
     openai_started_at = time.perf_counter()
     provider_reply = _call_openai_ai(
         system_prompt,
@@ -11443,6 +12049,7 @@ async def ai_chat(
                 default_value=[],
                 degraded_reasons=context["degraded_reasons"],
                 statement_timeout_ms=_ai_db_statement_timeout_ms(),
+                observability=timing_info,
             )
             if existing_items:
                 conversation_title = (existing_items[0].conversation_title or "").strip()
@@ -11531,18 +12138,34 @@ async def ai_chat(
             metadata_json={"model": model_name, "mode": mode, "references": references},
         )
         timing_info["total_ms"] = round((time.perf_counter() - total_started_at) * 1000, 1)
+        db_modules = timing_info.get("db_modules") or {}
+        slow_modules = ",".join(
+            f"{name}:{value}"
+            for name, value in sorted(
+                db_modules.items(),
+                key=lambda item: float(item[1] or 0),
+                reverse=True,
+            )[:5]
+        ) or "none"
         print(
             "INFO ai_chat_timing "
             f"profile {profile_id}: "
             f"db_load_ms={timing_info.get('db_load_ms', 0)} "
             f"context_build_ms={timing_info.get('context_build_ms', 0)} "
             f"chat_context_ms={timing_info.get('chat_context_ms', 0)} "
+            f"db_query_ms={timing_info.get('db_query_ms', 0)} "
+            f"db_query_count={timing_info.get('db_query_count', 0)} "
+            f"rollback_count={timing_info.get('rollback_count', 0)} "
             f"openai_ms={timing_info.get('openai_ms', 0)} "
             f"total_ms={timing_info.get('total_ms', 0)} "
             f"db_statement_timeout_ms={timing_info.get('db_statement_timeout_ms', 0)} "
             f"context_timeout_ms={timing_info.get('context_timeout_ms', 0)} "
             f"prompt_history_messages={timing_info.get('prompt_history_messages', 0)} "
             f"conversation_summary_chars={timing_info.get('conversation_summary_chars', 0)} "
+            f"prompt_profile={timing_info.get('prompt_profile', 'n/a')} "
+            f"prompt_context_chars={timing_info.get('prompt_context_chars', 0)} "
+            f"prompt_system_chars={timing_info.get('prompt_system_chars', 0)} "
+            f"slow_db_modules={slow_modules} "
             f"intent={chat_intent} "
             f"modules={','.join(sorted(key for key, enabled in context_modules.items() if enabled)) or 'base'} "
             f"family_context={'yes' if include_family_context else 'no'} "
@@ -11565,6 +12188,20 @@ async def ai_chat(
             "conversation_id": conversation_id,
             "conversation_title": conversation_title,
         }
+    except Exception as exc:
+        failure_total_ms = round((time.perf_counter() - total_started_at) * 1000, 1)
+        print(
+            "ERROR ai_chat_failure "
+            f"profile {profile_id}: "
+            f"intent={chat_intent} "
+            f"conversation_id={conversation_id or 'new'} "
+            f"total_ms={failure_total_ms} "
+            f"db_query_ms={timing_info.get('db_query_ms', 0) if 'timing_info' in locals() else 0} "
+            f"prompt_profile={timing_info.get('prompt_profile', 'n/a') if 'timing_info' in locals() else 'n/a'} "
+            f"prompt_context_chars={timing_info.get('prompt_context_chars', 0) if 'timing_info' in locals() else 0} "
+            f"error={exc}"
+        )
+        raise
     finally:
         if limiter_acquired:
             limiter.release()
@@ -12201,31 +12838,112 @@ def _build_family_ai_summary(db: Session, current_user: models.User, days: int =
     }
 
 
+def _empty_adherence_summary(window_days: int = 30) -> dict:
+    return {
+        "window_days": window_days,
+        "overall_adherence_rate": None,
+        "low_adherence": False,
+        "low_adherence_items": [],
+        "medication_items": [],
+        "pattern_summary": {
+            "most_consistent_day": "",
+            "lowest_recorded_time_slot": "",
+        },
+    }
+
+
+def _build_cached_ai_health_context_response(
+    db: Session,
+    current_user: models.User,
+    profile: models.HealthProfile,
+    link: models.ProfileRelationship,
+) -> dict:
+    plan_info = _build_plan_info(current_user, db)
+    target_user_id = int(getattr(profile, "owner_user_id", 0) or 0)
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.user_id == target_user_id)
+        .order_by(models.Medication.created_at.desc())
+        .all()
+    )
+    adherence_summary = (
+        _load_adherence_summary_cached(db, profile, medications, window_days=30)
+        if medications
+        else _empty_adherence_summary(30)
+    )
+    health_alerts = (
+        db.query(models.HealthAlert)
+        .filter(
+            models.HealthAlert.profile_id == profile.id,
+            models.HealthAlert.status == "active",
+        )
+        .order_by(models.HealthAlert.detected_at.desc())
+        .all()
+    )
+    document_summaries = (
+        db.query(models.DocumentSummary)
+        .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
+        .filter(models.Document.user_id == target_user_id)
+        .order_by(models.Document.created_at.desc(), models.DocumentSummary.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+    profile_features = (
+        db.query(models.ProfileHealthFeature)
+        .filter(models.ProfileHealthFeature.profile_id == profile.id)
+        .first()
+    )
+    cached_summary = _load_cached_profile_ai_summary(db, profile) or {}
+    pending_refresh = bool(getattr(profile, "ai_needs_refresh", False))
+    return {
+        "profile": {
+            "id": profile.id,
+            "name": profile.full_name,
+            "owner_user_id": target_user_id,
+            "relation_with_owner": profile.relation_with_owner or "",
+            "gender": profile.gender or "",
+            "age_years": _profile_age_years(profile),
+            "access_role": (link.role or "").lower(),
+            "is_primary": bool(profile.is_primary_profile),
+            "brief_profile_summary": cached_summary.get("summary") or "",
+        },
+        "plan": plan_info,
+        "adherence_summary": adherence_summary,
+        "health_alerts": health_alerts,
+        "document_summaries": document_summaries,
+        "profile_health_features": (
+            {
+                "next_appointment_at": _safe_iso_client(getattr(profile_features, "next_appointment_at", None)),
+                "last_appointment_at": _safe_iso_client(getattr(profile_features, "last_appointment_at", None)),
+                "active_medications_count": getattr(profile_features, "active_medications_count", 0),
+                "low_adherence_risk": getattr(profile_features, "low_adherence_risk", False),
+                "treatment_completion_score": getattr(profile_features, "treatment_completion_score", 0),
+                "missing_documents_flags_json": getattr(profile_features, "missing_documents_flags_json", {}) or {},
+                "updated_at": _safe_iso_client(getattr(profile_features, "updated_at", None)),
+            }
+            if profile_features
+            else {}
+        ),
+        "context": {
+            "cache_source": "persistent",
+            "pending_refresh": pending_refresh,
+            "profile_summary": cached_summary,
+            "summary_updated_at": _safe_iso_client(cached_summary.get("updated_at")),
+            "alerts_cached": True,
+            "adherence_cached": True,
+            "documents_cached": True,
+        },
+    }
+
+
 @app.get("/ai/context/profile/{profile_id}", response_model=schemas.AiHealthContextOut)
 async def get_ai_profile_context(
     profile_id: int,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    context = _requested_or_active_profile_context(db, current_user, profile_id)
-    return {
-        "profile": context.get("profile") or {},
-        "plan": context.get("plan") or {},
-        "adherence_summary": context.get("adherence_summary") or {},
-        "health_alerts": context.get("health_alerts") or [],
-        "document_summaries": context.get("document_summaries") or [],
-        "profile_health_features": (
-            {
-                "next_appointment_at": _safe_iso_client(getattr(context.get("profile_health_features"), "next_appointment_at", None)),
-                "last_appointment_at": _safe_iso_client(getattr(context.get("profile_health_features"), "last_appointment_at", None)),
-                "active_medications_count": getattr(context.get("profile_health_features"), "active_medications_count", 0),
-                "low_adherence_risk": getattr(context.get("profile_health_features"), "low_adherence_risk", False),
-                "treatment_completion_score": getattr(context.get("profile_health_features"), "treatment_completion_score", 0),
-                "missing_documents_flags_json": getattr(context.get("profile_health_features"), "missing_documents_flags_json", {}) or {},
-            }
-        ),
-        "context": _serialize_ai_context(context),
-    }
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    return _build_cached_ai_health_context_response(db, current_user, profile, link)
 
 
 @app.get("/ai/context/profile/{profile_id}/summary")
@@ -12252,6 +12970,7 @@ async def get_ai_profile_context_summary(
             "treatment_completion_score": int(cached_summary.get("treatment_completion_score") or 0),
             "key_risks": cached_summary.get("key_risks") or [],
             "updated_at": _safe_iso_client(cached_summary.get("updated_at")),
+            "pending_refresh": bool(getattr(profile, "ai_needs_refresh", False)),
         },
     }
 
@@ -12449,9 +13168,14 @@ async def get_ai_adherence_summary(
         .order_by(models.Medication.created_at.desc())
         .all()
     )
-    if bool(getattr(profile, "ai_needs_refresh", False)):
-        return _upsert_adherence_summaries(db, profile, medications, window_days=30)
-    return _load_adherence_summary_cached(db, profile, medications, window_days=30)
+    summary = (
+        _load_adherence_summary_cached(db, profile, medications, window_days=30)
+        if medications
+        else _empty_adherence_summary(30)
+    )
+    summary["pending_refresh"] = bool(getattr(profile, "ai_needs_refresh", False))
+    summary["cache_source"] = "persistent"
+    return summary
 
 
 @app.get("/ai/documents/intelligence", response_model=List[schemas.DocumentSummaryOut])

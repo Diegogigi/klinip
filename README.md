@@ -1,28 +1,46 @@
 # Klinip - MiRutaSalud
 
-Aplicación de gestión de salud personal.
+Aplicacion de gestion de salud personal.
 
 ## Despliegue en Railway
 
-Esta aplicación usa **Nixpacks** para el build y deployment.
+Esta aplicacion usa **Nixpacks** para build y deployment.
 
-### Configuración:
-- **Frontend**: React + Vite
-- **Backend**: FastAPI + Python 3.11
-- **Base de datos**: SQLite (SQLAlchemy)
+### Stack
+- Frontend: React + Vite
+- Backend: FastAPI + Python 3.11
+- Base de datos: PostgreSQL en Railway o SQLite local
 
-### Archivo de configuración:
-- `nixpacks.toml` - Define todas las fases de build y start
+### Configuracion principal
+- `nixpacks.toml` define el build y el proceso web
+- `backend/app/worker.py` ejecuta el worker de background
 
-### Variables de entorno necesarias en Railway:
+### Variables de entorno utiles
+```txt
+PORT
+ENABLE_EMBEDDED_SCHEDULER=false
+WORKER_INTERVAL_SECONDS=60
 ```
-PORT - (auto configurado por Railway)
+
+### Arquitectura recomendada
+Usa dos servicios en Railway:
+
+1. Web
+```txt
+cd backend && venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-### Proceso de deployment:
-1. **Install**: Instala dependencias de Node y Python
-2. **Build**: Construye el frontend y lo copia a `backend/static/`
-3. **Start**: Ejecuta uvicorn con el backend
+2. Worker
+```txt
+cd backend && venv/bin/python -m app.worker
+```
 
-El frontend se sirve desde el backend como archivos estáticos.
+### Regla
+- El proceso web debe responder rutas HTTP.
+- El worker debe ejecutar recordatorios, refresh IA y automatizaciones programadas.
 
+### Flujo
+1. Install: instala dependencias de Node y Python
+2. Build: construye el frontend y lo copia a `backend/static/`
+3. Web: sirve la aplicacion
+4. Worker: procesa tareas de background
