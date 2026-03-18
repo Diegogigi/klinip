@@ -471,6 +471,13 @@ export async function getMedicationIntakes(id, limit = 40) {
   return res.data;
 }
 
+export async function markMedicationRefillPurchased(id, newStockTotalDoses) {
+  const res = await api.post(`/medications/${id}/mark-purchased`, {
+    new_stock_total_doses: newStockTotalDoses || 0,
+  });
+  return res.data;
+}
+
 // Push subscriptions
 export async function subscribePush(payload) {
   const res = await api.post("/push/subscribe", payload);

@@ -411,6 +411,10 @@ class MedicationBase(BaseModel):
     schedule_time: Optional[str] = ""
     start_at: Optional[datetime] = None
     refill_enabled: Optional[bool] = False
+    refill_mode: Optional[str] = "rotativo"
+    refill_fixed_user_id: Optional[int] = None
+    doses_per_intake: Optional[float] = 1.0
+    frequency_per_day: Optional[float] = 1.0
     stock_total_doses: Optional[int] = 0
     refill_alert_threshold_doses: Optional[int] = 0
     completed: Optional[bool] = False
@@ -431,6 +435,10 @@ class MedicationUpdate(BaseModel):
     schedule_time: Optional[str] = None
     start_at: Optional[datetime] = None
     refill_enabled: Optional[bool] = None
+    refill_mode: Optional[str] = None
+    refill_fixed_user_id: Optional[int] = None
+    doses_per_intake: Optional[float] = None
+    frequency_per_day: Optional[float] = None
     stock_total_doses: Optional[int] = None
     refill_alert_threshold_doses: Optional[int] = None
     completed: Optional[bool] = None
@@ -448,8 +456,11 @@ class MedicationOut(MedicationBase):
     missed_doses: int = 0
     adherence_rate: Optional[float] = None
     remaining_doses: Optional[int] = None
+    days_remaining: Optional[float] = None
+    refill_status: Optional[str] = "normal"  # normal | alert | critical
     refill_current_assignee_user_id: Optional[int] = None
     refill_current_assignee_name: Optional[str] = ""
+    refill_next_assignee_name: Optional[str] = ""
     refill_contacts_count: int = 0
     refill_alert_active: bool = False
 

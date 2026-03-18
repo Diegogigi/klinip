@@ -495,6 +495,26 @@ def ensure_medication_schema():
             "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_last_notified_remaining INTEGER NULL",
             "ALTER TABLE medications ADD COLUMN refill_last_notified_remaining INTEGER",
         )
+        add_med_column(
+            "refill_mode",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_mode VARCHAR DEFAULT 'rotativo'",
+            "ALTER TABLE medications ADD COLUMN refill_mode VARCHAR DEFAULT 'rotativo'",
+        )
+        add_med_column(
+            "refill_fixed_user_id",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_fixed_user_id INTEGER NULL",
+            "ALTER TABLE medications ADD COLUMN refill_fixed_user_id INTEGER",
+        )
+        add_med_column(
+            "doses_per_intake",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS doses_per_intake REAL DEFAULT 1.0",
+            "ALTER TABLE medications ADD COLUMN doses_per_intake REAL DEFAULT 1.0",
+        )
+        add_med_column(
+            "frequency_per_day",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS frequency_per_day REAL DEFAULT 1.0",
+            "ALTER TABLE medications ADD COLUMN frequency_per_day REAL DEFAULT 1.0",
+        )
 
         if statements:
             with engine.begin() as conn:
@@ -2465,8 +2485,58 @@ def _medication_refill_current_assignee(
     available_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
     if not available_contacts:
         return None
+    mode = str(getattr(med, "refill_mode", None) or "rotativo")
+    if mode == "fijo":
+        fixed_uid = getattr(med, "refill_fixed_user_id", None)
+        if fixed_uid:
+            match = next((c for c in available_contacts if int(c["user_id"]) == int(fixed_uid)), None)
+            if match:
+                return match
+    # rotativo (default) o manual sin configurar
     rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0)
     return available_contacts[rotation_index % len(available_contacts)]
+
+
+def _medication_refill_next_assignee(
+    db: Session,
+    med: models.Medication,
+    contacts: list[dict] | None = None,
+) -> dict | None:
+    available_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    if not available_contacts:
+        return None
+    mode = str(getattr(med, "refill_mode", None) or "rotativo")
+    if mode == "fijo":
+        return _medication_refill_current_assignee(db, med, contacts=available_contacts)
+    rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0)
+    return available_contacts[(rotation_index + 1) % len(available_contacts)]
+
+
+def _medication_days_remaining(med: models.Medication, remaining: int | None) -> float | None:
+    if remaining is None:
+        return None
+    dpi = float(getattr(med, "doses_per_intake", None) or 1.0)
+    fpd = float(getattr(med, "frequency_per_day", None) or 1.0)
+    daily = max(dpi * fpd, 0.01)
+    return round(remaining / daily, 1)
+
+
+def _medication_refill_status(
+    med: models.Medication,
+    remaining: int | None,
+    threshold: int,
+) -> str:
+    if not getattr(med, "refill_enabled", False) or remaining is None:
+        return "normal"
+    total = int(getattr(med, "stock_total_doses", 0) or 0)
+    pct_20 = (total * 0.20) if total > 0 else 0
+    if threshold > 0 and remaining <= max(threshold * 0.5, 1):
+        return "critical"
+    if threshold > 0 and remaining <= threshold:
+        return "alert"
+    if total > 0 and remaining <= pct_20:
+        return "alert"
+    return "normal"
 
 
 def _populate_medication_refill_state(
@@ -2477,17 +2547,27 @@ def _populate_medication_refill_state(
     remaining = _medication_remaining_doses(med, taken_doses=taken_doses)
     contacts = _medication_refill_contacts(db, getattr(med, "user_id", None))
     assignee = _medication_refill_current_assignee(db, med, contacts=contacts) if contacts else None
+    next_assignee = _medication_refill_next_assignee(db, med, contacts=contacts) if contacts else None
     threshold = int(getattr(med, "refill_alert_threshold_doses", 0) or 0)
+    total = int(getattr(med, "stock_total_doses", 0) or 0)
+    pct_20 = (total * 0.20) if total > 0 else 0
     alert_active = bool(
         getattr(med, "refill_enabled", False)
         and remaining is not None
-        and threshold > 0
-        and remaining <= threshold
+        and (
+            (threshold > 0 and remaining <= threshold)
+            or (total > 0 and remaining <= pct_20)
+        )
     )
+    refill_status = _medication_refill_status(med, remaining, threshold)
+    days_remaining = _medication_days_remaining(med, remaining)
     setattr(med, "remaining_doses", remaining)
+    setattr(med, "days_remaining", days_remaining)
+    setattr(med, "refill_status", refill_status)
     setattr(med, "refill_contacts_count", len(contacts))
     setattr(med, "refill_current_assignee_user_id", assignee.get("user_id") if assignee else None)
     setattr(med, "refill_current_assignee_name", assignee.get("name") if assignee else "")
+    setattr(med, "refill_next_assignee_name", next_assignee.get("name") if next_assignee else "")
     setattr(med, "refill_alert_active", alert_active)
     return med
 
@@ -2516,8 +2596,12 @@ def _handle_medication_refill_notifications(
     remaining = getattr(med, "remaining_doses", None)
     if remaining is None:
         return False
+    # Condición de alerta: umbral de dosis O stock <= 20%
+    total_doses = int(getattr(med, "stock_total_doses", 0) or 0)
+    pct_20 = (total_doses * 0.20) if total_doses > 0 else 0
+    alert_triggered = (threshold > 0 and remaining <= threshold) or (total_doses > 0 and remaining <= pct_20)
     last_notified_at = getattr(med, "refill_last_notified_at", None)
-    if remaining > threshold:
+    if not alert_triggered:
         if last_notified_at is not None or getattr(med, "refill_last_notified_remaining", None) is not None:
             med.refill_last_notified_at = None
             med.refill_last_notified_remaining = None
@@ -2614,6 +2698,38 @@ def _handle_medication_refill_notifications(
                 datetime.now(),
             )
             sent_any = True
+
+    # Notificar al paciente (owner) que el medicamento está por agotarse y quién es el responsable
+    if owner:
+        patient_push_tag = f"medication-refill-patient-{med.id}-{owner.id}-{cycle_key}"
+        if not _notification_already_sent(db, patient_push_tag):
+            days_rem = getattr(med, "days_remaining", None)
+            days_str = f" (~{int(days_rem)} días)" if days_rem is not None and days_rem >= 1 else ""
+            patient_body = (
+                f"{med.name} está por agotarse: quedan {remaining} dosis{days_str}. "
+                f"{assignee['name']} fue notificado para la compra."
+            )
+            patient_payload = {
+                "title": "Medicamento por agotarse",
+                "body": patient_body,
+                "url": "/medications",
+                "priority": "high",
+                "sound": "medication",
+                "medicationId": med.id,
+                "userId": int(owner.id),
+                "tag": patient_push_tag,
+            }
+            sent_patient = _send_push_to_user(db, int(owner.id), patient_payload)
+            if sent_patient:
+                _record_sent(
+                    db,
+                    int(owner.id),
+                    patient_push_tag,
+                    "medication_refill_patient",
+                    datetime.now(),
+                    datetime.now(),
+                )
+                sent_any = True
 
     med.refill_last_notified_at = datetime.now()
     med.refill_last_notified_remaining = int(remaining)
@@ -6731,6 +6847,91 @@ def _workflow_attachment_payload(attachment: schemas.AiChatAttachmentIn | None) 
     }
 
 
+_CHAT_ATTACHMENT_OCR_MAX_BYTES = 5 * 1024 * 1024  # 5 MB límite para OCR inline en chat
+_CHAT_ATTACHMENT_OCR_CLIP = 3200                   # chars máximos del texto OCR en contexto IA
+
+
+def _classify_document_type_from_ocr(text: str, filename: str) -> str:
+    """Clasifica el tipo de documento clínico a partir de texto OCR y nombre de archivo.
+    Usa solo coincidencia de keywords — sin llamadas a APIs."""
+    combined = _normalize_text(f"{filename} {text}")[:2000]
+    if any(w in combined for w in ["receta", "prescripcion", "prescripcion medica", "medicamento prescrito", "rp "]):
+        return "receta"
+    if any(w in combined for w in ["resultado", "laboratorio", "hemograma", "glucosa", "colesterol", "examen de sangre",
+                                    "creatinina", "hematocrito", "leucocitos", "plaquetas", "glicemia"]):
+        return "examen"
+    if any(w in combined for w in ["informe", "epicrisis", "alta medica", "resumen clinico", "diagnostico principal",
+                                    "evolucion clinica", "anamnesis", "antecedentes"]):
+        return "informe"
+    if any(w in combined for w in ["orden", "solicitud de examen", "solicito", "se solicita", "indicacion", "indicaciones"]):
+        return "orden"
+    return "otro"
+
+
+def _extract_chat_attachment_ocr(attachment_payload: dict | None) -> tuple[str, str]:
+    """Extrae texto OCR de un attachment de chat de forma sincrónica.
+    Devuelve (ocr_text, doc_type_inferred). Nunca lanza excepción."""
+    if not attachment_payload:
+        return "", "otro"
+    binary = attachment_payload.get("content") or b""
+    filename = attachment_payload.get("filename") or "documento"
+    if not binary or len(binary) > _CHAT_ATTACHMENT_OCR_MAX_BYTES:
+        return "", "otro"
+    try:
+        raw_text = _extract_ocr_text(binary, filename)
+    except Exception:
+        return "", "otro"
+    if not raw_text or not raw_text.strip():
+        return "", "otro"
+    clipped = _clip_text(raw_text.strip(), _CHAT_ATTACHMENT_OCR_CLIP)
+    doc_type = _classify_document_type_from_ocr(raw_text, filename)
+    return clipped, doc_type
+
+
+def _save_document_from_chat_attachment(
+    db: Session,
+    *,
+    user_id: int,
+    attachment_payload: dict,
+    ocr_text: str,
+    doc_type_inferred: str,
+    profile,
+) -> None:
+    """Guarda el documento adjunto del chat como registro DB.
+    Llamar siempre desde background_tasks para no bloquear la respuesta."""
+    try:
+        binary = attachment_payload.get("content") or b""
+        filename = attachment_payload.get("filename") or "documento"
+        if not binary:
+            return
+        doc_type_map = {
+            "receta": models.DocumentType.receta,
+            "examen": models.DocumentType.resultado,
+            "informe": models.DocumentType.informe,
+            "orden": models.DocumentType.orden,
+        }
+        doc_type_enum = doc_type_map.get(doc_type_inferred, models.DocumentType.otro)
+        doc = models.Document(
+            user_id=int(user_id),
+            doc_type=doc_type_enum,
+            filename=filename,
+            file_data=binary,
+            ocr_text=ocr_text or None,
+            ocr_status="done" if ocr_text else "pending",
+            ocr_lang=OCR_LANG_DEFAULT,
+            notes="Subido desde el chat de Klinip IA",
+        )
+        db.add(doc)
+        _mark_profile_ai_dirty(db, profile, include_family=False)
+        db.commit()
+    except Exception as exc:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        print(f"WARNING _save_document_from_chat_attachment: {exc}")
+
+
 def _workflow_confirmation_reply(workflow_type: str, created_item, timezone_name: str) -> str:
     if workflow_type == "appointment":
         type_label = getattr(created_item.type, "value", created_item.type or "cita")
@@ -7081,6 +7282,33 @@ def _should_include_document_text_for_chat(message: str | None) -> bool:
         "copia el texto",
         "que dice exactamente",
         "lee el documento",
+        # análisis e interpretación de documentos clínicos
+        "explicame este",
+        "explicame el documento",
+        "explicame el examen",
+        "explicame la receta",
+        "explicame el informe",
+        "que significa",
+        "que dice el",
+        "analiza el",
+        "analiza este",
+        "interpreta el",
+        "interpreta este",
+        "resume el",
+        "resume este",
+        "que contiene",
+        "esta normal",
+        "esta alterado",
+        "valores alterados",
+        "que debo hacer",
+        "es grave",
+        "que medicamento",
+        "que diagnostico",
+        "que hallazgos",
+        "examen que subi",
+        "documento que subi",
+        "receta que subi",
+        "informe que subi",
     ]
     return any(token in normalized for token in explicit_tokens)
 
@@ -9741,6 +9969,14 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             ],
         }
     payload["brief_profile_summary"] = _clip_text(payload.get("brief_profile_summary") or "", brief_summary_chars)
+    # Texto OCR extraído del documento adjunto directamente en el chat
+    chat_attachment_text = (context.get("chat_attachment_text") or "").strip()
+    if chat_attachment_text:
+        payload["chat_attachment"] = {
+            "filename": context.get("chat_attachment_filename") or "",
+            "doc_type_inferred": context.get("chat_attachment_doc_type") or "otro",
+            "ocr_text": _clip_text(chat_attachment_text, _CHAT_ATTACHMENT_OCR_CLIP),
+        }
     return payload
 
 
@@ -9781,6 +10017,9 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "23. Si el usuario pide un reporte clÃ­nico, resume los bloques disponibles y sugiere generar el reporte estructurado.\n"
         "24. Si el usuario pregunta por su familia, primero usa family_access para explicar exactamente a que perfiles tiene acceso y con que rol. Usa family_context solo si existe y necesitas priorizar alertas activas, adherencia baja, citas proximas o documentos pendientes. Si family_access.available es verdadero, no respondas que no tiene acceso familiar aunque su plan personal sea basico.\n"
         "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
+        "26. Si el contexto incluye 'chat_attachment' con ocr_text, analiza ese documento prioritariamente: identifica su tipo (receta, examen, informe, orden), extrae la informacion clave (medicamentos y dosis si es receta; valores y rangos si es examen; diagnostico y hallazgos si es informe), entrega primero un resumen en lenguaje simple y luego responde la pregunta del usuario. Advierte si la calidad del OCR puede afectar la lectura.\n"
+        "27. Para documentos de tipo examen en chat_attachment: indica explicitamente si los valores parecen normales o alterados segun los rangos de referencia del documento, sin diagnosticar. Para recetas: lista medicamentos, dosis y frecuencia. Para informes: resume diagnostico principal y recomendaciones.\n"
+        "28. Si el usuario pregunta sobre un documento que subio previamente (no en este chat), busca en 'documents' y 'document_summaries' del contexto clinico para responder con datos reales.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -12076,6 +12315,27 @@ async def ai_chat(
                 continue
             history.append({"role": role_value, "content": content_value})
             seen_pairs.add(key)
+        # --- Lectura inteligente de documentos adjuntos en chat ---
+        # Si el usuario adjuntó un archivo directamente en el chat (y no fue manejado
+        # por workflow), extrae el texto OCR de forma sincrónica y lo inyecta en el
+        # contexto de la IA. El guardado en DB se delega a background_tasks.
+        if attachment_payload and not degraded_busy:
+            chat_ocr_text, chat_doc_type = _extract_chat_attachment_ocr(attachment_payload)
+            if chat_ocr_text:
+                context["chat_attachment_text"] = chat_ocr_text
+                context["chat_attachment_filename"] = attachment_payload.get("filename") or ""
+                context["chat_attachment_doc_type"] = chat_doc_type
+                include_document_text = True  # forzar inclusión de OCR en contexto
+                background_tasks.add_task(
+                    _save_document_from_chat_attachment,
+                    db,
+                    user_id=int(target_user_id),
+                    attachment_payload=attachment_payload,
+                    ocr_text=chat_ocr_text,
+                    doc_type_inferred=chat_doc_type,
+                    profile=profile,
+                )
+
         family_access_request = _message_asks_family_access(message)
         if family_access_request:
             references = _build_ai_references(message, context)
@@ -13471,6 +13731,10 @@ async def create_medication(
             schedule_time=(med_in.schedule_time or (med_in.start_at.strftime("%H:%M") if med_in.start_at else "")),
             start_at=med_in.start_at,
             refill_enabled=bool(getattr(med_in, "refill_enabled", False)),
+            refill_mode=str(getattr(med_in, "refill_mode", None) or "rotativo"),
+            refill_fixed_user_id=getattr(med_in, "refill_fixed_user_id", None),
+            doses_per_intake=max(float(getattr(med_in, "doses_per_intake", None) or 1.0), 0.01),
+            frequency_per_day=max(float(getattr(med_in, "frequency_per_day", None) or 1.0), 0.01),
             stock_total_doses=max(int(getattr(med_in, "stock_total_doses", 0) or 0), 0),
             refill_alert_threshold_doses=max(
                 int(getattr(med_in, "refill_alert_threshold_doses", 0) or 0),
@@ -13636,6 +13900,45 @@ async def list_medication_intakes(
         .all()
     )
     return {"medication_id": medication_id, "items": items}
+
+
+@app.post("/medications/{medication_id}/mark-purchased", response_model=schemas.MedicationOut)
+async def mark_medication_refill_purchased(
+    medication_id: int,
+    payload: dict = {},
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Marca un medicamento como reabastecido. Actualiza el stock total,
+    avanza el índice de rotación (siguiente responsable en turno)
+    y limpia el estado de notificación para permitir nuevo ciclo.
+    """
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    med = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.id == medication_id,
+            models.Medication.user_id == target_user_id,
+        )
+        .first()
+    )
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+    new_stock = int((payload or {}).get("new_stock_total_doses", 0) or 0)
+    if new_stock > 0:
+        med.stock_total_doses = new_stock
+    # Avanzar rotación y limpiar ciclo de notificación
+    med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+    med.refill_last_notified_at = None
+    med.refill_last_notified_remaining = None
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.add(med)
+    db.commit()
+    db.refresh(med)
+    _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
+    return med
+
 
 
 @app.delete("/medications/{medication_id}")

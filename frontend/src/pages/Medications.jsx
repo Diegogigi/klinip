@@ -7,6 +7,7 @@ import {
   getMedicationIntakes,
   getMedications,
   getProfileCaregivers,
+  markMedicationRefillPurchased,
   recordMedicationIntake,
   saveMedication,
 } from "../api";
@@ -224,9 +225,17 @@ export default function Medications() {
     notes: "",
     document_id: "",
     refill_enabled: false,
+    refill_mode: "rotativo",
+    refill_fixed_user_id: "",
+    doses_per_intake: "1",
+    frequency_per_day: "1",
     stock_total_doses: "",
     refill_alert_threshold_doses: "",
   });
+  const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [purchaseTarget, setPurchaseTarget] = useState(null);
+  const [purchaseNewStock, setPurchaseNewStock] = useState("");
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -405,22 +414,26 @@ export default function Medications() {
   }, [notifyOpen, notifyQueue, notifyTarget]);
 
   const resetForm = () => {
-      setForm({
-        id: null,
-        name: "",
-        dose: "",
-        frequency: "",
-        frequency_initial: "",
-        duration: "",
-        start_at: "",
-        schedule_time: "",
-        completed: false,
-        end_date: "",
-        notes: "",
-        document_id: "",
-        refill_enabled: false,
-        stock_total_doses: "",
-        refill_alert_threshold_doses: "",
+    setForm({
+      id: null,
+      name: "",
+      dose: "",
+      frequency: "",
+      frequency_initial: "",
+      duration: "",
+      start_at: "",
+      schedule_time: "",
+      completed: false,
+      end_date: "",
+      notes: "",
+      document_id: "",
+      refill_enabled: false,
+      refill_mode: "rotativo",
+      refill_fixed_user_id: "",
+      doses_per_intake: "1",
+      frequency_per_day: "1",
+      stock_total_doses: "",
+      refill_alert_threshold_doses: "",
     });
   };
 
@@ -448,6 +461,10 @@ export default function Medications() {
           Boolean(form.refill_enabled) &&
           Boolean(planInfo?.collaboration_enabled) &&
           familyCaregivers.length > 0,
+        refill_mode: form.refill_mode || "rotativo",
+        refill_fixed_user_id: form.refill_fixed_user_id ? parseInt(form.refill_fixed_user_id, 10) : null,
+        doses_per_intake: Math.max(parseFloat(form.doses_per_intake) || 1.0, 0.01),
+        frequency_per_day: Math.max(parseFloat(form.frequency_per_day) || 1.0, 0.01),
         stock_total_doses:
           form.stock_total_doses === "" ? 0 : Math.max(parseInt(form.stock_total_doses, 10) || 0, 0),
         refill_alert_threshold_doses:
@@ -509,6 +526,10 @@ export default function Medications() {
       notes: med.notes || "",
       document_id: med.document_id || "",
       refill_enabled: Boolean(med.refill_enabled),
+      refill_mode: med.refill_mode || "rotativo",
+      refill_fixed_user_id: med.refill_fixed_user_id ? String(med.refill_fixed_user_id) : "",
+      doses_per_intake: med.doses_per_intake != null ? String(med.doses_per_intake) : "1",
+      frequency_per_day: med.frequency_per_day != null ? String(med.frequency_per_day) : "1",
       stock_total_doses:
         med.stock_total_doses || med.stock_total_doses === 0
           ? String(med.stock_total_doses)
@@ -518,6 +539,29 @@ export default function Medications() {
           ? String(med.refill_alert_threshold_doses)
           : "",
     });
+  };
+
+  const handleMarkPurchased = (med) => {
+    setPurchaseTarget(med);
+    setPurchaseNewStock(String(med.stock_total_doses || ""));
+    setPurchaseOpen(true);
+  };
+
+  const handleConfirmPurchase = async () => {
+    if (!purchaseTarget) return;
+    setPurchaseLoading(true);
+    try {
+      await markMedicationRefillPurchased(purchaseTarget.id, parseInt(purchaseNewStock, 10) || 0);
+      await load();
+      notifyClinicalDataChanged({ profileId: activeProfile?.id, sources: ["medications"] });
+      setPurchaseOpen(false);
+      setPurchaseTarget(null);
+      setPurchaseNewStock("");
+    } catch (err) {
+      alert("No se pudo registrar la compra: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setPurchaseLoading(false);
+    }
   };
 
   const handleRecordIntake = async (med) => {
@@ -1140,10 +1184,74 @@ export default function Medications() {
                         />
                       </div>
                     </div>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Dosis por toma</label>
+                        <input
+                          className="input-field"
+                          type="number"
+                          min="0.01"
+                          step="0.5"
+                          value={form.doses_per_intake}
+                          onChange={(e) =>
+                            setForm((current) => ({ ...current, doses_per_intake: e.target.value }))
+                          }
+                          placeholder="Ej: 1"
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Tomas por día</label>
+                        <input
+                          className="input-field"
+                          type="number"
+                          min="0.01"
+                          step="0.5"
+                          value={form.frequency_per_day}
+                          onChange={(e) =>
+                            setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
+                          }
+                          placeholder="Ej: 2"
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Modo de asignación</label>
+                        <select
+                          className="select-field"
+                          value={form.refill_mode}
+                          onChange={(e) =>
+                            setForm((current) => ({ ...current, refill_mode: e.target.value }))
+                          }
+                        >
+                          <option value="rotativo">Rotativo (turno automático)</option>
+                          <option value="fijo">Fijo (siempre el mismo)</option>
+                        </select>
+                      </div>
+                      {form.refill_mode === "fijo" && (
+                        <div className="input-group">
+                          <label className="input-label">Responsable fijo</label>
+                          <select
+                            className="select-field"
+                            value={form.refill_fixed_user_id}
+                            onChange={(e) =>
+                              setForm((current) => ({ ...current, refill_fixed_user_id: e.target.value }))
+                            }
+                          >
+                            <option value="">Selecciona responsable</option>
+                            {familyCaregivers.map((c) => (
+                              <option key={c.user_id} value={String(c.user_id)}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                     <p className="med-refill-helper">
-                      Rotación automática para el perfil activo
-                      {activeProfile?.name ? ` (${activeProfile.name})` : ""} entre:{" "}
-                      {familyRefillNames.join(", ")}.
+                      {form.refill_mode === "fijo"
+                        ? `Responsable fijo para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""}.`
+                        : `Rotación automática para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""} entre: ${familyRefillNames.join(", ")}.`}
                     </p>
                   </>
                 ) : (
@@ -1255,10 +1363,25 @@ export default function Medications() {
                 <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>📦</span>
                   <div>
-                    <span className="detail-label">Dosis restantes</span>
+                    <span className="detail-label">Stock restante</span>
                     <p>
-                      {detailTarget.remaining_doses ?? "Sin stock configurado"}
+                      {detailTarget.remaining_doses != null
+                        ? `${detailTarget.remaining_doses} dosis${detailTarget.days_remaining != null ? ` (~${Math.ceil(detailTarget.days_remaining)} días)` : ""}`
+                        : "Sin stock configurado"}
+                      {detailTarget.refill_enabled && detailTarget.refill_status && (
+                        <span className={`med-refill-status-badge is-${detailTarget.refill_status} ml-1`}>
+                          {detailTarget.refill_status === "critical" ? " · Crítico" : detailTarget.refill_status === "alert" ? " · Alerta" : ""}
+                        </span>
+                      )}
                     </p>
+                    {detailTarget.refill_enabled && detailTarget.stock_total_doses > 0 && detailTarget.remaining_doses != null && (
+                      <div className="med-stock-bar-wrap">
+                        <div
+                          className={`med-stock-bar-fill is-${detailTarget.refill_status || "normal"}`}
+                          style={{ width: `${Math.min(100, Math.round((detailTarget.remaining_doses / detailTarget.stock_total_doses) * 100))}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="detail-field">
@@ -1266,9 +1389,20 @@ export default function Medications() {
                   <div>
                     <span className="detail-label">Responsable actual</span>
                     <p>
-                      {detailTarget.refill_current_assignee_name ||
-                        "Sin responsable asignado"}
+                      {detailTarget.refill_current_assignee_name || "Sin responsable asignado"}
+                      {detailTarget.refill_mode !== "fijo" && detailTarget.refill_next_assignee_name &&
+                       detailTarget.refill_next_assignee_name !== detailTarget.refill_current_assignee_name
+                        ? ` · Próximo: ${detailTarget.refill_next_assignee_name}` : ""}
                     </p>
+                    {canEditActiveProfile && detailTarget.refill_enabled && (
+                      <button
+                        type="button"
+                        className="med-mark-purchased-btn"
+                        onClick={() => { handleMarkPurchased(detailTarget); }}
+                      >
+                        Marcar como comprado
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="detail-field">
@@ -1465,11 +1599,23 @@ export default function Medications() {
                         <td>
                           {m.refill_enabled ? (
                             <div className="med-refill-table-cell">
-                              <strong>
-                                {m.remaining_doses ?? "—"} dosis
-                              </strong>
+                              <div className="med-refill-table-top">
+                                <span className={`med-refill-status-badge is-${m.refill_status || "normal"}`}>
+                                  {m.refill_status === "critical" ? "Crítico" : m.refill_status === "alert" ? "Alerta" : "Normal"}
+                                </span>
+                                <strong>{m.remaining_doses ?? "—"} dosis</strong>
+                              </div>
+                              {m.stock_total_doses > 0 && m.remaining_doses != null && (
+                                <div className="med-stock-bar-wrap">
+                                  <div
+                                    className={`med-stock-bar-fill is-${m.refill_status || "normal"}`}
+                                    style={{ width: `${Math.min(100, Math.round((m.remaining_doses / m.stock_total_doses) * 100))}%` }}
+                                  />
+                                </div>
+                              )}
                               <span>
                                 {m.refill_current_assignee_name || "Sin asignar"}
+                                {m.days_remaining != null ? ` · ~${Math.ceil(m.days_remaining)}d` : ""}
                               </span>
                             </div>
                           ) : (
@@ -1485,6 +1631,13 @@ export default function Medications() {
                                   label: "Editar",
                                   onClick: () => handleEdit(m),
                                 },
+                                m.refill_enabled
+                                  ? {
+                                      key: "purchased",
+                                      label: "Marcar como comprado",
+                                      onClick: () => handleMarkPurchased(m),
+                                    }
+                                  : null,
                                 {
                                   key: "delete",
                                   label: "Eliminar",
@@ -1581,8 +1734,38 @@ export default function Medications() {
                     </div>
 
                     {m.refill_enabled ? (
-                      <div className="records-mobile-note">
-                        Reposición: {m.remaining_doses ?? "—"} dosis · {m.refill_current_assignee_name || "Sin asignar"}
+                      <div className="med-refill-mobile-block">
+                        <div className="med-refill-mobile-row">
+                          <span className={`med-refill-status-badge is-${m.refill_status || "normal"}`}>
+                            {m.refill_status === "critical" ? "Crítico" : m.refill_status === "alert" ? "Alerta" : "Normal"}
+                          </span>
+                          <span className="med-refill-mobile-meta">
+                            {m.remaining_doses != null ? `${m.remaining_doses} dosis` : "Sin stock"}
+                            {m.days_remaining != null ? ` · ~${Math.ceil(m.days_remaining)} días` : ""}
+                          </span>
+                        </div>
+                        {m.stock_total_doses > 0 && m.remaining_doses != null && (
+                          <div className="med-stock-bar-wrap">
+                            <div
+                              className={`med-stock-bar-fill is-${m.refill_status || "normal"}`}
+                              style={{ width: `${Math.min(100, Math.round((m.remaining_doses / m.stock_total_doses) * 100))}%` }}
+                            />
+                          </div>
+                        )}
+                        <span className="med-refill-assignee-line">
+                          Responsable: {m.refill_current_assignee_name || "Sin asignar"}
+                          {m.refill_mode !== "fijo" && m.refill_next_assignee_name && m.refill_next_assignee_name !== m.refill_current_assignee_name
+                            ? ` · Próximo: ${m.refill_next_assignee_name}` : ""}
+                        </span>
+                        {canEditActiveProfile && (m.refill_status === "alert" || m.refill_status === "critical") && (
+                          <button
+                            type="button"
+                            className="med-mark-purchased-btn"
+                            onClick={(event) => { event.stopPropagation(); handleMarkPurchased(m); }}
+                          >
+                            Marcar como comprado
+                          </button>
+                        )}
                       </div>
                     ) : null}
 
@@ -1605,6 +1788,55 @@ export default function Medications() {
           </>
         )}
       </div>
+
+      {purchaseOpen && purchaseTarget && (
+        <div className="modal-overlay" onClick={() => setPurchaseOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Marcar como comprado</h3>
+              <button className="modal-close" onClick={() => setPurchaseOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p className="muted">
+                Medicamento: <strong>{purchaseTarget.name}</strong>
+              </p>
+              <div className="input-group">
+                <label className="input-label">Nuevo total de dosis del envase</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  min="0"
+                  value={purchaseNewStock}
+                  onChange={(e) => setPurchaseNewStock(e.target.value)}
+                  placeholder={`Actual: ${purchaseTarget.stock_total_doses || 0}`}
+                  autoFocus
+                />
+                <p className="med-refill-helper">
+                  Ingresa la cantidad de dosis del nuevo envase. El responsable del próximo ciclo será{" "}
+                  <strong>{purchaseTarget.refill_next_assignee_name || purchaseTarget.refill_current_assignee_name || "el siguiente en rotación"}</strong>.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={handleConfirmPurchase}
+                disabled={purchaseLoading}
+              >
+                {purchaseLoading ? "Guardando..." : "Confirmar compra"}
+              </button>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setPurchaseOpen(false)}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

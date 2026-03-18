@@ -2,6 +2,7 @@ from datetime import datetime
 from sqlalchemy import (
     Column,
     Integer,
+    Float,
     String,
     DateTime,
     Enum,
@@ -142,6 +143,10 @@ class Medication(Base):
     schedule_time = Column(String, default="")
     start_at = Column(DateTime, nullable=True)
     refill_enabled = Column(Boolean, default=False)
+    refill_mode = Column(String, default="rotativo")  # rotativo | fijo | manual
+    refill_fixed_user_id = Column(Integer, nullable=True)
+    doses_per_intake = Column(Float, default=1.0)
+    frequency_per_day = Column(Float, default=1.0)
     stock_total_doses = Column(Integer, default=0)
     refill_alert_threshold_doses = Column(Integer, default=0)
     refill_rotation_index = Column(Integer, default=0)

@@ -115,8 +115,18 @@ function cleanAssistantText(value) {
     .trim();
 }
 
+function normalizeServerTimestamp(value) {
+  if (!value) return null;
+  const s = String(value).trim();
+  // El backend devuelve datetimes sin zona horaria (UTC naive). Si no tiene
+  // sufijo Z ni offset, se añade Z para que el navegador lo interprete como UTC
+  // y Intl.DateTimeFormat lo convierta correctamente a hora local.
+  if (s && !/Z$/i.test(s) && !/[+-]\d{2}:\d{2}$/.test(s)) return s + "Z";
+  return s;
+}
+
 function formatMessageTime(value) {
-  const parsed = parseDate(value);
+  const parsed = parseDate(normalizeServerTimestamp(value));
   if (!parsed) return "Ahora";
   return new Intl.DateTimeFormat("es-CL", { hour: "2-digit", minute: "2-digit" }).format(parsed);
 }
@@ -298,7 +308,7 @@ export default function AiKlinip() {
       role: item.role === "user" ? "user" : "assistant",
       content: item.content,
       references: Array.isArray(item?.metadata_json?.references) ? item.metadata_json.references : [],
-      createdAt: item.created_at || null,
+      createdAt: normalizeServerTimestamp(item.created_at) || null,
       conversationId: item.conversation_id || "",
       conversationTitle: item.conversation_title || "",
     }));
