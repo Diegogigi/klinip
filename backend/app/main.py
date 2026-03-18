@@ -15284,11 +15284,13 @@ def _sanitize_filename(filename: str) -> str:
     return name or "document"
 
 
-def _validate_upload(content: bytes, filename: str, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[str, str]:
+def _validate_upload(content: bytes, filename: str, max_bytes: int | None = None) -> tuple[str, str]:
     """
     Valida el archivo subido: tamaño, magic bytes, extensión, firmas peligrosas.
     Devuelve (mime_type, safe_filename) o lanza HTTPException.
     """
+    if max_bytes is None:
+        max_bytes = MAX_UPLOAD_BYTES
     if not content:
         raise HTTPException(status_code=400, detail="El archivo está vacío.")
 
