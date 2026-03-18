@@ -35,12 +35,32 @@ import {
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
 const WAITLIST_ONLY_MODE = String(import.meta.env.VITE_WAITLIST_ONLY ?? "true").toLowerCase() !== "false";
-const INTERNAL_LOGIN_PATH = (() => {
-  const raw = String(import.meta.env.VITE_INTERNAL_LOGIN_PATH ?? "/acceso-interno").trim();
-  if (!raw) return "/acceso-interno";
-  return raw.startsWith("/") ? raw : `/${raw}`;
-})();
-const INTERNAL_WAITLIST_PATH = `${INTERNAL_LOGIN_PATH}/fila`;
+
+function normalizeInternalPath(rawValue, fallback = "/") {
+  let raw = String(rawValue ?? fallback).trim();
+  if (!raw) raw = fallback;
+  raw = raw.split("?")[0].split("#")[0];
+  if (!raw.startsWith("/")) raw = `/${raw}`;
+  raw = raw.replace(/\/{2,}/g, "/");
+  if (raw.length > 1) raw = raw.replace(/\/+$/, "");
+  return raw || fallback;
+}
+
+function matchesPath(currentPath, expectedPath) {
+  if (!currentPath || !expectedPath) return false;
+  return currentPath === expectedPath || currentPath === `${expectedPath}/`;
+}
+
+const INTERNAL_LOGIN_PATH = normalizeInternalPath(
+  import.meta.env.VITE_INTERNAL_LOGIN_PATH ?? "/acceso-interno",
+  "/acceso-interno"
+);
+const INTERNAL_WAITLIST_PATH = normalizeInternalPath(
+  `${INTERNAL_LOGIN_PATH}/fila`,
+  "/acceso-interno/fila"
+);
+const INTERNAL_LOGIN_PATH_TRAILING = `${INTERNAL_LOGIN_PATH}/`;
+const INTERNAL_WAITLIST_PATH_TRAILING = `${INTERNAL_WAITLIST_PATH}/`;
 
 const icons = {
   home: (
@@ -137,7 +157,7 @@ function Sidebar({
   const location = useLocation();
   const isPublicAuthRoute =
     location.pathname === "/login" ||
-    location.pathname === INTERNAL_LOGIN_PATH ||
+    matchesPath(location.pathname, INTERNAL_LOGIN_PATH) ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -317,7 +337,7 @@ function Topbar({
 
   const isAuthRoute =
     location.pathname === "/login" ||
-    location.pathname === INTERNAL_LOGIN_PATH ||
+    matchesPath(location.pathname, INTERNAL_LOGIN_PATH) ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -337,9 +357,9 @@ function Topbar({
     "/settings": "Perfil",
     [INTERNAL_WAITLIST_PATH]: "Fila",
   };
-  const title = titles[location.pathname] || "Klinip";
+  const title = titles[matchesPath(location.pathname, INTERNAL_WAITLIST_PATH) ? INTERNAL_WAITLIST_PATH : location.pathname] || "Klinip";
   const subtitle =
-    location.pathname === INTERNAL_WAITLIST_PATH
+    matchesPath(location.pathname, INTERNAL_WAITLIST_PATH)
       ? "Acceso interno"
       : location.pathname === "/"
       ? "Panel general"
@@ -1912,6 +1932,7 @@ export default function App() {
                   user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
                 }
               />
+              <Route path={INTERNAL_LOGIN_PATH_TRAILING} element={<Navigate to={INTERNAL_LOGIN_PATH} replace />} />
               <Route
                 path="/login"
                 element={
@@ -1970,6 +1991,7 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path={INTERNAL_WAITLIST_PATH_TRAILING} element={<Navigate to={INTERNAL_WAITLIST_PATH} replace />} />
               <Route
                 path="/appointments"
                 element={
