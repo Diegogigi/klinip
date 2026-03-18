@@ -46,6 +46,7 @@ _RATE_LIMITS: dict = {
     "register":         {"max":  5, "window": 60},
     "forgot-password":  {"max":  5, "window": 60},
     "ai-transcribe":    {"max": 12, "window": 60},
+    "waitlist":         {"max":  8, "window": 300},
 }
 
 # Bloqueo de cuenta por intentos fallidos
@@ -5597,6 +5598,61 @@ def public_stats(db: Session = Depends(auth.get_db)):
         "appointments": appointments,
         "reminders": reminders,
         "satisfaction": satisfaction,
+    }
+
+
+@app.post("/public/waitlist", response_model=schemas.WaitlistLeadOut)
+def join_public_waitlist(
+    payload: schemas.WaitlistLeadIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+):
+    _check_rate_limit(request, "waitlist")
+
+    full_name = (payload.full_name or "").strip()
+    email = (payload.email or "").strip().lower()
+    phone = re.sub(r"[^\d+()\-\s]", "", (payload.phone or "").strip())[:40]
+    role = (payload.role or "persona").strip().lower()
+    notes = (payload.notes or "").strip()[:600]
+    source = (payload.source or "www").strip().lower()[:80]
+
+    if len(full_name) < 2:
+        raise HTTPException(status_code=400, detail="Ingresa tu nombre para sumarte a la fila.")
+    if not payload.consent_updates:
+        raise HTTPException(status_code=400, detail="Debes autorizar el envío de información para inscribirte.")
+
+    valid_roles = {"persona", "familiar", "profesional", "institucion"}
+    if role not in valid_roles:
+        role = "persona"
+
+    lead = (
+        db.query(models.WaitlistLead)
+        .filter(func.lower(models.WaitlistLead.email) == email)
+        .first()
+    )
+    already_registered = lead is not None
+    if not lead:
+        lead = models.WaitlistLead(email=email)
+
+    lead.full_name = full_name
+    lead.phone = phone
+    lead.role = role
+    lead.notes = notes
+    lead.source = source or "www"
+    lead.status = "pending"
+    lead.consent_updates = True
+    lead.updated_at = datetime.now()
+    db.add(lead)
+    db.commit()
+
+    return {
+        "ok": True,
+        "already_registered": already_registered,
+        "message": (
+            "Ya estabas inscrito. Actualizamos tus datos para seguir informándote."
+            if already_registered
+            else "Quedaste inscrito en la fila de Klinip. Te avisaremos cuando abramos el acceso."
+        ),
     }
 
 

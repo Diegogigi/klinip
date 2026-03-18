@@ -12,6 +12,7 @@ export const getMe = api.getMe;
 export const updateMe = api.updateMe;
 export const getMyPlan = api.getMyPlan;
 export const getPublicPlans = api.getPublicPlans;
+export const joinWaitlist = api.joinWaitlist;
 export const getHealthProfiles = api.getHealthProfiles;
 export const getActiveHealthProfile = api.getActiveHealthProfile;
 export const createHealthProfile = api.createHealthProfile;

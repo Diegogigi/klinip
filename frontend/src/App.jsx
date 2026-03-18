@@ -15,6 +15,7 @@ import Stats from "./pages/Stats";
 import AiKlinip from "./pages/AiKlinip";
 import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
+import WaitlistLanding from "./pages/WaitlistLanding";
 import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
@@ -31,6 +32,13 @@ import {
   setActiveHealthProfile,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
+
+const WAITLIST_ONLY_MODE = String(import.meta.env.VITE_WAITLIST_ONLY ?? "true").toLowerCase() !== "false";
+const INTERNAL_LOGIN_PATH = (() => {
+  const raw = String(import.meta.env.VITE_INTERNAL_LOGIN_PATH ?? "/acceso-interno").trim();
+  if (!raw) return "/acceso-interno";
+  return raw.startsWith("/") ? raw : `/${raw}`;
+})();
 
 const icons = {
   home: (
@@ -127,6 +135,7 @@ function Sidebar({
   const location = useLocation();
   const isPublicAuthRoute =
     location.pathname === "/login" ||
+    location.pathname === INTERNAL_LOGIN_PATH ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -306,6 +315,7 @@ function Topbar({
 
   const isAuthRoute =
     location.pathname === "/login" ||
+    location.pathname === INTERNAL_LOGIN_PATH ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -654,7 +664,7 @@ const getPathFromNotification = (item) => {
 
 function ProtectedRoute({ user, children }) {
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={INTERNAL_LOGIN_PATH} replace />;
   }
   return children;
 }
@@ -1327,7 +1337,7 @@ export default function App() {
     }
     setUser(null);
     setBooting(false);
-    navigate("/login", { replace: true });
+    navigate(INTERNAL_LOGIN_PATH, { replace: true });
     try {
       await pushCleanup;
     } catch (_) {
@@ -1889,6 +1899,12 @@ export default function App() {
           >
             <Routes>
               <Route
+                path={INTERNAL_LOGIN_PATH}
+                element={
+                  user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
+                }
+              />
+              <Route
                 path="/login"
                 element={
                   user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
@@ -1905,15 +1921,27 @@ export default function App() {
               <Route
                 path="/register"
                 element={
-                  user ? <Navigate to="/" replace /> : <Register onRegistered={setUser} />
+                  user ? (
+                    <Navigate to="/" replace />
+                  ) : WAITLIST_ONLY_MODE ? (
+                    <Navigate to="/" replace />
+                  ) : (
+                    <Register onRegistered={setUser} />
+                  )
                 }
               />
               <Route path="/legal/privacy" element={<LegalPrivacy />} />
               <Route path="/legal/terms" element={<LegalTerms />} />
               <Route path="/legal/consent" element={<LegalConsent />} />
               <Route path="/legal/notificaciones" element={<LegalNotifications />} />
-              <Route path="/planes" element={<Plans user={user} />} />
-              <Route path="/planes/:planSlug" element={<Plans user={user} />} />
+              <Route
+                path="/planes"
+                element={WAITLIST_ONLY_MODE && !user ? <Navigate to="/" replace /> : <Plans user={user} />}
+              />
+              <Route
+                path="/planes/:planSlug"
+                element={WAITLIST_ONLY_MODE && !user ? <Navigate to="/" replace /> : <Plans user={user} />}
+              />
               <Route
                 path="/"
                 element={
@@ -1922,7 +1950,7 @@ export default function App() {
                       <Dashboard key={`dashboard-${activeHealthProfileId || "none"}`} user={user} />
                     </ProtectedRoute>
                   ) : (
-                    <Landing />
+                    WAITLIST_ONLY_MODE ? <WaitlistLanding /> : <Landing />
                   )
                 }
               />

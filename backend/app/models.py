@@ -253,6 +253,22 @@ class PrivacyExportLog(Base):
     user = relationship("User")
 
 
+class WaitlistLead(Base):
+    __tablename__ = "waitlist_leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False, default="")
+    email = Column(String, nullable=False, unique=True, index=True)
+    phone = Column(String, default="")
+    role = Column(String, default="persona")
+    notes = Column(Text, default="")
+    source = Column(String, default="www")
+    status = Column(String, default="pending", index=True)
+    consent_updates = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class HealthProfile(Base):
     __tablename__ = "health_profiles"
 
