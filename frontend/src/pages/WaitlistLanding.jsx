@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { joinWaitlist } from "../api";
+import React, { useEffect, useMemo, useState } from "react";
+import { joinWaitlist, trackWaitlistVisit } from "../api";
 
 const roleOptions = [
   {
@@ -12,7 +12,7 @@ const roleOptions = [
   {
     value: "familia",
     label: "Mi familia",
-    helper: "Gestion familiar",
+    helper: "Gestión familiar",
     icon: "Fa",
     apiRole: "familiar",
   },
@@ -84,6 +84,30 @@ export default function WaitlistLanding() {
     [form.first_name, form.last_name]
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const visitKey = "klinip_waitlist_visit_tracked";
+    const existing = window.sessionStorage.getItem(visitKey);
+    if (existing) return undefined;
+
+    const sessionIdKey = "klinip_waitlist_session_id";
+    let sessionId = window.sessionStorage.getItem(sessionIdKey);
+    if (!sessionId) {
+      sessionId = `wl-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      window.sessionStorage.setItem(sessionIdKey, sessionId);
+    }
+
+    window.sessionStorage.setItem(visitKey, "1");
+    trackWaitlistVisit({
+      source: `waitlist-${getSourceLabel()}`,
+      path: window.location.pathname + (window.location.hash || ""),
+      session_id: sessionId,
+    }).catch(() => {});
+
+    return undefined;
+  }, []);
+
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
     setForm((current) => ({
@@ -112,7 +136,7 @@ export default function WaitlistLanding() {
         type: response?.already_registered ? "info" : "success",
         message:
           response?.message ||
-          "Tu lugar quedo registrado. Te avisaremos cuando Klinip abra nuevos accesos.",
+          "Tu lugar quedó registrado. Te avisaremos cuando Klinip abra nuevos accesos.",
       });
       setForm((current) => ({
         ...initialForm,
@@ -121,7 +145,7 @@ export default function WaitlistLanding() {
     } catch (error) {
       const detail =
         error?.response?.data?.detail ||
-        "No pudimos registrar tu solicitud ahora. Intentalo nuevamente en unos minutos.";
+          "No pudimos registrar tu solicitud ahora. Inténtalo nuevamente en unos minutos.";
       setServerState({ type: "error", message: detail });
     } finally {
       setSubmitting(false);
@@ -134,19 +158,19 @@ export default function WaitlistLanding() {
       <div className="wl-orb wl-orb-two" aria-hidden="true" />
 
       <main className="wl-shell">
-        <section className="wl-copy" aria-label="Presentacion de la lista de espera">
+        <section className="wl-copy" aria-label="Presentación de la lista de espera">
           <div className="wl-pill">
             <span className="wl-pill-dot" aria-hidden="true" />
-            Lanzamiento proximo
+            Lanzamiento próximo
           </div>
 
           <h1 className="wl-title">
-            Klinip esta casi lista
+            Klinip está casi lista
             <span>para abrir su siguiente etapa.</span>
           </h1>
 
           <p className="wl-description">
-            Mientras pulimos los ultimos detalles, la entrada publica sera por fila. Deja tus
+            Mientras pulimos los últimos detalles, la entrada pública será por fila. Deja tus
             datos y te escribiremos cuando abramos acceso, demos noticias importantes o activemos
             nuevos cupos.
           </p>
@@ -171,7 +195,7 @@ export default function WaitlistLanding() {
               <span>PS</span>
             </div>
             <p>
-              Pensada para personas, familias y equipos que necesitan una forma mas clara de
+              Pensada para personas, familias y equipos que necesitan una forma más clara de
               coordinar salud y seguimiento.
             </p>
           </div>
@@ -199,12 +223,12 @@ export default function WaitlistLanding() {
                 Reserva tu lugar en <em>Klinip</em>
               </h2>
               <p>
-                Completa tus datos y te avisaremos cuando la aplicacion abra acceso publico o
+                Completa tus datos y te avisaremos cuando la aplicación abra acceso público o
                 habilitemos nuevos cupos.
               </p>
               <div className="wl-counter">
                 <span className="wl-counter-dot" aria-hidden="true" />
-                Acceso por invitacion mientras seguimos afinando el lanzamiento
+                Acceso por invitación mientras seguimos afinando el lanzamiento
               </div>
             </div>
 
@@ -253,7 +277,7 @@ export default function WaitlistLanding() {
               </label>
 
               <label className="wl-field">
-                <span>Telefono</span>
+                <span>Teléfono</span>
                 <input
                   name="phone"
                   type="tel"
@@ -265,7 +289,7 @@ export default function WaitlistLanding() {
               </label>
 
               <label className="wl-field">
-                <span>Como gestionas tu salud hoy?</span>
+                <span>¿Cómo gestionas tu salud hoy?</span>
                 <select name="journey" value={form.journey} onChange={handleChange} required>
                   {journeyOptions.map((option) => (
                     <option key={option.value || "placeholder"} value={option.value} disabled={!option.value}>
@@ -276,7 +300,7 @@ export default function WaitlistLanding() {
               </label>
 
               <fieldset className="wl-role-group">
-                <legend>Quien usara Klinip?</legend>
+                <legend>¿Quién usará Klinip?</legend>
                 <div className="wl-role-grid">
                   {roleOptions.map((option) => {
                     const checked = form.role === option.value;
@@ -319,7 +343,7 @@ export default function WaitlistLanding() {
                 />
                 <span>
                   Acepto recibir novedades de Klinip por correo. Puedes darte de baja en cualquier
-                  momento. Consulta nuestra <span className="wl-consent-policy">politica de privacidad.</span>
+                  momento. Consulta nuestra <span className="wl-consent-policy">política de privacidad.</span>
                 </span>
               </label>
 

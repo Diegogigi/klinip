@@ -32,7 +32,7 @@ export default function Login({ onAuthenticated }) {
     const me = await getMe();
     if (me?.email && me.email.toLowerCase() !== email.trim().toLowerCase()) {
       localStorage.removeItem("token");
-      throw new Error("La sesion no coincide con el usuario ingresado. Intenta de nuevo.");
+      throw new Error("La sesión no coincide con el usuario ingresado. Intenta de nuevo.");
     }
     onAuthenticated(me);
   };
@@ -47,7 +47,6 @@ export default function Login({ onAuthenticated }) {
       const res = await login({ email, password });
 
       if (res?.mfa_required) {
-        // Guardar refresh_token si viene (no hay aquí, pero por si acaso)
         if (res.refresh_token) localStorage.setItem("refresh_token", res.refresh_token);
         setMfaToken(res.mfa_token);
         setMfaRequired(true);
@@ -142,7 +141,6 @@ export default function Login({ onAuthenticated }) {
           )}
 
           {mfaRequired ? (
-            /* ── MFA step ── */
             <form onSubmit={handleMfaSubmit} className="auth-form">
               <div className="auth-input-group">
                 <label className="auth-label">Código de autenticación</label>
@@ -191,14 +189,17 @@ export default function Login({ onAuthenticated }) {
                   type="button"
                   className="auth-link"
                   style={{ background: "none", border: "none", cursor: "pointer" }}
-                  onClick={() => { setMfaRequired(false); setMfaCode(""); setError(""); }}
+                  onClick={() => {
+                    setMfaRequired(false);
+                    setMfaCode("");
+                    setError("");
+                  }}
                 >
                   ← Volver al inicio de sesión
                 </button>
               </p>
             </form>
           ) : (
-            /* ── Credentials step ── */
             <>
               <form onSubmit={handleSubmit} className="auth-form">
                 <div className="auth-input-group">

@@ -47,6 +47,7 @@ _RATE_LIMITS: dict = {
     "forgot-password":  {"max":  5, "window": 60},
     "ai-transcribe":    {"max": 12, "window": 60},
     "waitlist":         {"max":  8, "window": 300},
+    "waitlist-visit":   {"max": 20, "window": 300},
 }
 
 # Bloqueo de cuenta por intentos fallidos
@@ -884,41 +885,41 @@ PLAN_DEFINITIONS = {
         },
         "public": {
             "slug": "basico",
-            "name": "BÃ¡sico",
+            "name": "Básico",
             "price_monthly": "Gratis",
             "price_yearly": "Gratis",
             "yearly_equivalent": "Sin costo",
             "note": "Salud personal",
-            "summary": "Para organizar tu propia salud con lo esencial desde el primer dÃ­a.",
+            "summary": "Para organizar tu propia salud con lo esencial desde el primer día.",
             "recommended": False,
             "cta": "Empezar gratis",
             "features": [
                 "1 perfil de salud",
                 "Medicamentos, citas y calendario",
-                "Documentos mÃ©dicos con OCR bÃ¡sico",
+                "Documentos médicos con OCR básico",
                 "Recordatorios esenciales",
-                "Acceso mÃ³vil y escritorio",
+                "Acceso móvil y escritorio",
             ],
             "detail_sections": [
                 {
                     "title": "Ideal para",
                     "items": [
-                        "Personas que quieren centralizar su informaciÃ³n mÃ©dica",
+                        "Personas que quieren centralizar su información médica",
                         "Usuarios que necesitan recordatorios y documentos en un solo lugar",
                     ],
                 },
                 {
                     "title": "Incluye",
                     "items": [
-                        "GestiÃ³n de citas, medicamentos y documentos",
-                        "Historial bÃ¡sico de salud",
-                        "Panel individual simple y rÃ¡pido",
+                        "Gestión de citas, medicamentos y documentos",
+                        "Historial básico de salud",
+                        "Panel individual simple y rápido",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "1"},
-                {"label": "ColaboraciÃ³n", "value": "No"},
+                {"label": "Colaboración", "value": "No"},
                 {"label": "Panel familiar", "value": "No"},
             ],
         },
@@ -933,10 +934,10 @@ PLAN_DEFINITIONS = {
             "slug": "plus",
             "name": "Plus",
             "price_monthly": "$3.990 / mes",
-            "price_yearly": "$39.990 / aÃ±o",
+            "price_yearly": "$39.990 / año",
             "yearly_equivalent": "$3.332 / mes",
             "note": "Individual ampliado",
-            "summary": "MÃ¡s capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
+            "summary": "Más capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
             "recommended": True,
             "cta": "Probar Plus",
             "features": [
@@ -944,28 +945,28 @@ PLAN_DEFINITIONS = {
                 "OCR mejorado",
                 "Historial completo y reportes",
                 "Recordatorios avanzados",
-                "GestiÃ³n personal y de dependientes",
+                "Gestión personal y de dependientes",
             ],
             "detail_sections": [
                 {
                     "title": "Ideal para",
                     "items": [
                         "Usuarios que manejan su salud y la de hijos o adultos mayores",
-                        "Personas que necesitan mÃ¡s trazabilidad y reportes",
+                        "Personas que necesitan más trazabilidad y reportes",
                     ],
                 },
                 {
                     "title": "Incluye",
                     "items": [
-                        "MÃ¡s perfiles para centralizar seguimiento",
+                        "Más perfiles para centralizar seguimiento",
                         "Mayor profundidad en historial y documentos",
-                        "AutomatizaciÃ³n de recordatorios con mÃ¡s contexto",
+                        "Automatización de recordatorios con más contexto",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "3"},
-                {"label": "ColaboraciÃ³n", "value": "Parcial"},
+                {"label": "Colaboración", "value": "Parcial"},
                 {"label": "Panel familiar", "value": "No"},
             ],
         },
@@ -980,7 +981,7 @@ PLAN_DEFINITIONS = {
             "slug": "familiar",
             "name": "Familiar",
             "price_monthly": "$6.990 / mes",
-            "price_yearly": "$69.990 / aÃ±o",
+            "price_yearly": "$69.990 / año",
             "yearly_equivalent": "$5.832 / mes",
             "note": "Ecosistema colaborativo",
             "summary": "Pensado para familias y cuidadores que coordinan la salud de varias personas.",
@@ -990,7 +991,7 @@ PLAN_DEFINITIONS = {
                 "Hasta 5 perfiles de salud",
                 "Panel familiar y calendarios compartidos",
                 "Recordatorios por perfil",
-                "Roles por cuidador y colaboraciÃ³n multiusuario",
+                "Roles por cuidador y colaboración multiusuario",
                 "Historial y actividad por persona",
             ],
             "detail_sections": [
@@ -1005,15 +1006,15 @@ PLAN_DEFINITIONS = {
                     "title": "Incluye",
                     "items": [
                         "Panel familiar con contexto por integrante",
-                        "ColaboraciÃ³n entre cuidadores y responsables",
+                        "Colaboración entre cuidadores y responsables",
                         "Seguimiento diferenciado por perfil y actividad",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "5"},
-                {"label": "ColaboraciÃ³n", "value": "SÃ­"},
-                {"label": "Panel familiar", "value": "SÃ­"},
+                {"label": "Colaboración", "value": "Sí"},
+                {"label": "Panel familiar", "value": "Sí"},
             ],
         },
     },
@@ -1493,7 +1494,7 @@ def _resend_send_message(msg: EmailMessage):
     html_body = _msg_html_body(msg)
 
     if not (from_email and to_email and subject):
-        raise RuntimeError("Mensaje invalido para Resend (From/To/Subject)")
+        raise RuntimeError("Mensaje inválido para Resend (From/To/Subject)")
 
     payload = {
         "from": from_email,
@@ -1732,7 +1733,7 @@ def _send_privacy_support_email(payload: dict):
           <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
             <tr>
               <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
-                <h2 style="margin:0;font-size:20px;">Klinip Â· Nueva solicitud de privacidad</h2>
+                <h2 style="margin:0;font-size:20px;">Klinip · Nueva solicitud de privacidad</h2>
               </td>
             </tr>
             <tr>
@@ -1752,7 +1753,7 @@ def _send_privacy_support_email(payload: dict):
             </tr>
             <tr>
               <td style="padding:12px 22px;color:#64748b;font-size:12px;border-top:1px solid #e2e8f0;">
-                Klinip Â· Canal interno de soporte de privacidad
+                Klinip · Canal interno de soporte de privacidad
               </td>
             </tr>
           </table>
@@ -1814,7 +1815,7 @@ def _send_privacy_user_ack_email(to_email: str, payload: dict):
           <table role="presentation" width="620" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
             <tr>
               <td style="padding:18px 22px;background:linear-gradient(135deg,#2563eb,#22c55e);color:#ffffff;">
-                <h2 style="margin:0;font-size:20px;">Klinip Â· Solicitud recibida</h2>
+                <h2 style="margin:0;font-size:20px;">Klinip · Solicitud recibida</h2>
               </td>
             </tr>
             <tr>
@@ -1897,7 +1898,7 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
     try:
         _send_templated_email(
             to_email=to_email,
-            subject=f"Recordatorio de cita - {payload.get('offset_label') or 'proxima cita'}",
+            subject=f"Recordatorio de cita - {payload.get('offset_label') or 'próxima cita'}",
             template_name="appointment_reminder.html",
             context={
                 "user_name": user_name or "Usuario",
@@ -2036,7 +2037,7 @@ def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: d
         subject = (
             f"Te toca comprar {payload.get('medication_name') or 'un medicamento'}"
             if is_assignee
-            else f"Reposicion de {payload.get('medication_name') or 'medicamento'} asignada"
+            else f"Reposición de {payload.get('medication_name') or 'medicamento'} asignada"
         )
         _send_templated_email(
             to_email=to_email,
@@ -2252,9 +2253,9 @@ def _appointment_type_label(appt_type) -> str:
 
 def _appointment_offsets():
     return [
-        {"label": "7 dias antes", "delta": timedelta(days=7), "priority": "low"},
-        {"label": "3 dias antes", "delta": timedelta(days=3), "priority": "normal"},
-        {"label": "1 dia antes", "delta": timedelta(days=1), "priority": "high"},
+        {"label": "7 días antes", "delta": timedelta(days=7), "priority": "low"},
+        {"label": "3 días antes", "delta": timedelta(days=3), "priority": "normal"},
+        {"label": "1 día antes", "delta": timedelta(days=1), "priority": "high"},
         {"label": "2 horas antes", "delta": timedelta(hours=2), "priority": "urgent"},
         {"label": "30 minutos antes", "delta": timedelta(minutes=30), "priority": "urgent"},
         {"label": "5 minutos antes", "delta": timedelta(minutes=5), "priority": "urgent"},
@@ -2306,9 +2307,9 @@ def _appointment_offsets_for_user(user: models.User):
     custom = prefs.get("customOffsets", {})
     all_offsets = _appointment_offsets()
     mapping = {
-        "7 dias antes": "days7",
-        "3 dias antes": "days3",
-        "1 dia antes": "days1",
+        "7 días antes": "days7",
+        "3 días antes": "days3",
+        "1 día antes": "days1",
         "2 horas antes": "hours2",
         "30 minutos antes": "minutes30",
         "5 minutos antes": "minutes5",
@@ -2801,7 +2802,7 @@ def _handle_medication_refill_notifications(
             f"{'assignee' if is_assignee else 'family'}-{contact['user_id']}-{cycle_key}"
         )
         if not _notification_already_sent(db, push_tag):
-            title = "Reposicion de medicamento"
+            title = "Reposición de medicamento"
             if is_assignee:
                 body = (
                     f"Te toca comprar {med.name} para {patient_name}. "
@@ -5656,6 +5657,202 @@ def join_public_waitlist(
     }
 
 
+def _parse_csv_list_env(raw_value: str | None) -> list[str]:
+    return [item.strip() for item in (raw_value or "").split(",") if item and item.strip()]
+
+
+def _waitlist_dashboard_allowed_emails() -> set[str]:
+    return {
+        item.strip().lower()
+        for item in _parse_csv_list_env(os.getenv("WAITLIST_DASHBOARD_EMAILS"))
+        if item.strip()
+    }
+
+
+def _waitlist_dashboard_allowed_user_ids() -> set[int]:
+    values: set[int] = set()
+    for item in _parse_csv_list_env(os.getenv("WAITLIST_DASHBOARD_USER_IDS")):
+        try:
+            values.add(int(item))
+        except Exception:
+            continue
+    return values
+
+
+def _require_waitlist_dashboard_access(current_user: models.User) -> None:
+    allowed_emails = _waitlist_dashboard_allowed_emails()
+    allowed_user_ids = _waitlist_dashboard_allowed_user_ids()
+    if not allowed_emails and not allowed_user_ids:
+        return
+
+    user_email = (current_user.email or "").strip().lower()
+    if user_email in allowed_emails or int(current_user.id or 0) in allowed_user_ids:
+        return
+
+    raise HTTPException(status_code=403, detail="No tienes acceso a este panel interno.")
+
+
+def _format_waitlist_role_label(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    labels = {
+        "persona": "Solo yo",
+        "familiar": "Familia o cuidado",
+        "profesional": "Profesional",
+        "institucion": "Institucion",
+    }
+    return labels.get(normalized, normalized or "Sin dato")
+
+
+def _format_waitlist_source_label(value: str | None) -> str:
+    source = (value or "").strip().lower()
+    if not source:
+        return "Sin origen"
+    source = source.replace("waitlist-", "")
+    if source in {"www", "www.klinip.cl"}:
+        return "www.klinip.cl"
+    return source
+
+
+@app.post("/public/waitlist/visit")
+def track_public_waitlist_visit(
+    payload: schemas.WaitlistVisitIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+):
+    _check_rate_limit(request, "waitlist-visit")
+
+    source = (payload.source or "www").strip().lower()[:80]
+    path = (payload.path or "/").strip()[:120] or "/"
+    session_id = re.sub(r"[^a-zA-Z0-9_-]", "", (payload.session_id or "").strip())[:80]
+    user_agent = (request.headers.get("user-agent") or "").strip()[:280]
+
+    view = models.WaitlistPageView(
+        source=source or "www",
+        path=path,
+        session_id=session_id,
+        user_agent=user_agent,
+        created_at=datetime.now(),
+    )
+    db.add(view)
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/internal/waitlist/dashboard", response_model=schemas.WaitlistDashboardOut)
+def get_waitlist_dashboard(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _require_waitlist_dashboard_access(current_user)
+
+    leads = (
+        db.query(models.WaitlistLead)
+        .order_by(models.WaitlistLead.created_at.desc(), models.WaitlistLead.id.desc())
+        .all()
+    )
+    views = (
+        db.query(models.WaitlistPageView)
+        .order_by(models.WaitlistPageView.created_at.desc(), models.WaitlistPageView.id.desc())
+        .all()
+    )
+
+    now = datetime.now()
+    today_start = datetime(now.year, now.month, now.day)
+    week_start = today_start - timedelta(days=6)
+    timeline_start = today_start - timedelta(days=13)
+
+    leads_today = [item for item in leads if (item.created_at or now) >= today_start]
+    leads_week = [item for item in leads if (item.created_at or now) >= week_start]
+    views_today = [item for item in views if (item.created_at or now) >= today_start]
+    views_week = [item for item in views if (item.created_at or now) >= week_start]
+    unique_sessions_week = {
+        item.session_id.strip()
+        for item in views_week
+        if (item.session_id or "").strip()
+    }
+    conversion_base = len(unique_sessions_week) or len(views_week)
+    conversion_rate = (len(leads_week) / conversion_base * 100.0) if conversion_base else 0.0
+
+    role_breakdown = collections.Counter(
+        _format_waitlist_role_label(item.role)
+        for item in leads
+    )
+    source_breakdown = collections.Counter(
+        _format_waitlist_source_label(item.source)
+        for item in leads
+    )
+    journey_breakdown = collections.Counter(
+        (item.notes or "").strip() or "Sin dato"
+        for item in leads
+    )
+
+    timeline_map: dict[str, dict[str, int]] = {}
+    for offset in range(14):
+        day_value = timeline_start + timedelta(days=offset)
+        key = day_value.strftime("%Y-%m-%d")
+        timeline_map[key] = {"visits": 0, "signups": 0}
+
+    for item in views:
+        created_at = item.created_at or now
+        if created_at < timeline_start:
+            continue
+        key = created_at.strftime("%Y-%m-%d")
+        if key in timeline_map:
+            timeline_map[key]["visits"] += 1
+
+    for item in leads:
+        created_at = item.created_at or now
+        if created_at < timeline_start:
+            continue
+        key = created_at.strftime("%Y-%m-%d")
+        if key in timeline_map:
+            timeline_map[key]["signups"] += 1
+
+    recent_leads = [
+        {
+            "id": item.id,
+            "full_name": item.full_name or "",
+            "email": item.email or "",
+            "phone": item.phone or "",
+            "role": _format_waitlist_role_label(item.role),
+            "notes": (item.notes or "").strip(),
+            "source": _format_waitlist_source_label(item.source),
+            "status": item.status or "",
+            "consent_updates": bool(item.consent_updates),
+            "created_at": item.created_at or now,
+        }
+        for item in leads
+    ]
+
+    return {
+        "summary": [
+            {"label": "Inscritos", "value": str(len(leads)), "hint": "Total acumulado en la fila"},
+            {"label": "Nuevos hoy", "value": str(len(leads_today)), "hint": "Inscripciones del día"},
+            {"label": "Visitas hoy", "value": str(len(views_today)), "hint": "Cargas registradas en el día"},
+            {"label": "Nuevos 7 días", "value": str(len(leads_week)), "hint": "Última semana"},
+            {"label": "Visitas 7 días", "value": str(len(views_week)), "hint": "Cargas registradas de la waitlist"},
+            {"label": "Conversión 7 días", "value": f"{conversion_rate:.1f}%", "hint": "Inscritos sobre visitas o sesiones"},
+        ],
+        "role_breakdown": [
+            {"label": label, "count": count}
+            for label, count in role_breakdown.most_common(6)
+        ],
+        "source_breakdown": [
+            {"label": label, "count": count}
+            for label, count in source_breakdown.most_common(6)
+        ],
+        "journey_breakdown": [
+            {"label": label, "count": count}
+            for label, count in journey_breakdown.most_common(6)
+        ],
+        "timeline": [
+            {"day": day, "visits": values["visits"], "signups": values["signups"]}
+            for day, values in timeline_map.items()
+        ],
+        "recent_leads": recent_leads,
+    }
+
+
 # Debug endpoints — solo disponibles en entorno de desarrollo
 def _require_dev_env():
     if is_production:
@@ -5900,9 +6097,9 @@ def _generate_smart_alerts_for_profile(
                     profile_name=profile.full_name,
                     severity="high",
                     category="appointment",
-                    title="Cita proxima en menos de 24 horas",
+                    title="Cita próxima en menos de 24 horas",
                     message=(
-                        f"{upcoming.specialty or 'Atencion medica'} en "
+                        f"{upcoming.specialty or 'Atención médica'} en "
                         f"{upcoming.center or 'Centro de salud'}"
                     ),
                     suggested_action="Confirmar asistencia y documentos necesarios",
@@ -11394,15 +11591,15 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             reply_parts.append(f"Radar de salud: {len(health_alerts)} alerta(s) activa(s).")
         return " ".join(reply_parts)
 
-    if any(token in normalized for token in ["que debo llevar a mi cita", "que llevar a mi cita", "cita de manana", "cita de maÃ±ana"]):
+    if any(token in normalized for token in ["que debo llevar a mi cita", "que llevar a mi cita", "cita de manana", "cita de mañana"]):
         next_item = next((item for item in upcoming if item.date_time), None)
         if not next_item:
-            return "No encuentro una cita prÃ³xima registrada para preparar."
-        checklist = ["documento de identidad", "orden mÃ©dica o motivo de consulta", "lista de medicamentos actuales"]
+            return "No encuentro una cita próxima registrada para preparar."
+        checklist = ["documento de identidad", "orden médica o motivo de consulta", "lista de medicamentos actuales"]
         if latest_document:
-            checklist.append("resultados o documentos clÃ­nicos recientes")
+            checklist.append("resultados o documentos clínicos recientes")
         return (
-            f"Para tu prÃ³xima cita del {_safe_iso(next_item.date_time)}, te sugiero llevar: "
+            f"Para tu próxima cita del {_safe_iso(next_item.date_time)}, te sugiero llevar: "
             + ", ".join(checklist)
             + ". Si corresponde, confirma el centro y la especialidad antes de salir."
         )
@@ -11415,10 +11612,10 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             parts.append(f"{alert.title}: {alert.description}")
         return " ".join(parts)
 
-    if any(token in normalized for token in ["reporte clinico", "reporte clÃ­nico", "genera un reporte", "reporte medico", "reporte mÃ©dico"]):
+    if any(token in normalized for token in ["reporte clinico", "reporte clínico", "genera un reporte", "reporte medico", "reporte médico"]):
         overall = adherence_summary.get("overall_adherence_rate")
         return (
-            f"Puedo generar un reporte clÃ­nico estructurado del perfil activo {context['profile']['name']}. "
+            f"Puedo generar un reporte clínico estructurado del perfil activo {context['profile']['name']}. "
             f"Hoy veo {len(active_medications)} medicamento(s) activo(s), {len(appointments)} cita(s), "
             f"{len(documents)} documento(s) y adherencia estimada de {overall if overall is not None else 'sin datos'}%."
         )
@@ -11459,7 +11656,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         ]
         if last_doc:
             detail = (
-                f"Ultimo documento: {last_doc.get('detected_doc_type') or last_doc.get('doc_type') or 'otro'} "
+                f"Último documento: {last_doc.get('detected_doc_type') or last_doc.get('doc_type') or 'otro'} "
                 f"({last_doc.get('file_format') or 'desconocido'})"
             )
             if last_doc.get("date"):
@@ -11479,12 +11676,12 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         if not latest_document:
             return (
                 "No encuentro documentos registrados para el perfil activo. "
-                "Si subes un documento, podre ayudarte a resumirlo."
+                "Si subes un documento, podré ayudarte a resumirlo."
             )
         doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
         detected_type = _infer_document_type(latest_document)
         file_format = _document_file_format(latest_document)
-        parts = [f"El ultimo documento registrado es de tipo {doc_type} (detectado: {detected_type}) en formato {file_format}."]
+        parts = [f"El último documento registrado es de tipo {doc_type} (detectado: {detected_type}) en formato {file_format}."]
         if latest_document.date:
             parts.append(f"Fecha registrada: {_safe_iso(latest_document.date)}.")
         if latest_document.center:
@@ -11495,10 +11692,10 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             parts.append(f"Resumen OCR orientativo: {_clip_text(latest_document.ocr_text, 900)}")
             parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
         else:
-            parts.append("Todavia no hay texto OCR disponible para ese documento.")
+            parts.append("Todavía no hay texto OCR disponible para ese documento.")
         summary_row = document_summaries[0] if document_summaries else None
         if summary_row and summary_row.patient_friendly_explanation:
-            parts.append("Explicacion simple: " + _clip_text(summary_row.patient_friendly_explanation, 280))
+            parts.append("Explicación simple: " + _clip_text(summary_row.patient_friendly_explanation, 280))
         return " ".join(parts)
 
     if any(token in normalized for token in ["resumen de medicamentos", "mis medicamentos", "estado de medicamentos"]):
@@ -11513,7 +11710,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             f"Frecuencia: con frecuencia {frequency_counts.get('con_frecuencia', 0)}, sin frecuencia {frequency_counts.get('sin_frecuencia', 0)}.",
         ]
         if last_active:
-            detail = f"Ultimo medicamento activo agregado: {last_active.get('name') or 'Medicamento'}"
+            detail = f"Último medicamento activo agregado: {last_active.get('name') or 'Medicamento'}"
             if last_active.get("dose"):
                 detail += f" ({last_active.get('dose')})"
             if last_active.get("frequency"):
@@ -11543,11 +11740,11 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     if any(token in normalized for token in ["proxima cita", "proxima actividad", "cuando es mi proxima cita", "cita proxima"]):
         next_item = next((item for item in upcoming if item.date_time), None)
         if not next_item:
-            return "No encuentro una cita proxima con fecha registrada para el perfil activo."
+            return "No encuentro una cita próxima con fecha registrada para el perfil activo."
         appt_type = str(getattr(next_item.type, "value", next_item.type))
         status = str(getattr(next_item.status, "value", next_item.status))
         return (
-            f"La proxima actividad registrada es una {appt_type} el {_safe_iso(next_item.date_time)}"
+            f"La próxima actividad registrada es una {appt_type} el {_safe_iso(next_item.date_time)}"
             + (f" en {next_item.center}" if next_item.center else "")
             + (f", especialidad {next_item.specialty}" if next_item.specialty else "")
             + f". Estado actual: {status}."
@@ -11557,14 +11754,14 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         latest_doc_text = ""
         if latest_document:
             latest_doc_text = (
-                f" Ultimo documento: {str(getattr(latest_document.doc_type, 'value', latest_document.doc_type))}"
+                f" Último documento: {str(getattr(latest_document.doc_type, 'value', latest_document.doc_type))}"
                 + (f" del {_safe_iso(latest_document.date)}." if latest_document.date else ".")
             )
         next_item = next((item for item in upcoming if item.date_time), None)
         next_appt_text = (
-            f" Proxima cita: {_safe_iso(next_item.date_time)}."
+            f" Próxima cita: {_safe_iso(next_item.date_time)}."
             if next_item
-            else " No hay proxima cita fechada."
+            else " No hay próxima cita fechada."
         )
         diagnosis_text = ""
         if diagnosis_mentions:
@@ -11580,10 +11777,10 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         return (
             f"Claro, te ayudo con el perfil activo {context['profile']['name']}. "
             + (f"Contexto relevante detectado: {learned_context}. " if learned_context else "")
-        + "Puedo revisar documentos, medicamentos, citas, historial, adherencia, radar de salud y reportes clÃ­nicos. "
+        + "Puedo revisar documentos, medicamentos, citas, historial, adherencia, radar de salud y reportes clínicos. "
         + "Si quieres, partimos con una de estas: "
-        + "'Explicame mi ultimo documento', 'Que medicamentos estoy tomando', "
-        + "'Como va mi tratamiento', 'Que debo llevar a mi cita de maÃ±ana' o 'Genera un reporte clinico'."
+        + "'Explícame mi último documento', 'Qué medicamentos estoy tomando', "
+        + "'Cómo va mi tratamiento', 'Qué debo llevar a mi cita de mañana' o 'Genera un reporte clínico'."
         )
 
 
@@ -11653,7 +11850,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
             {
                 "kind": "adherence",
                 "label": "Resumen de adherencia",
-                "detail": f"{adherence_summary.get('overall_adherence_rate') or 'sin datos'}% en {adherence_summary.get('window_days', 30)} dÃ­as",
+                "detail": f"{adherence_summary.get('overall_adherence_rate') or 'sin datos'}% en {adherence_summary.get('window_days', 30)} días",
             }
         )
 
@@ -11930,7 +12127,7 @@ def register(
     try:
         existing = auth.get_user_by_email(db, user_in.email)
         if existing:
-            raise HTTPException(status_code=400, detail="El correo ya estÃ¡ registrado")
+            raise HTTPException(status_code=400, detail="El correo ya está registrado")
 
         user = models.User(
             email=user_in.email,
@@ -12005,7 +12202,7 @@ def login(
                          user_id=user.id if user else None,
                          ip_address=_get_client_ip(request),
                          user_agent=request.headers.get("user-agent", ""))
-        raise HTTPException(status_code=400, detail="Correo o contrasena incorrectos")
+        raise HTTPException(status_code=400, detail="Correo o contraseña incorrectos")
 
     # 4. Exito: resetear contador
     user.failed_login_attempts = 0
@@ -12088,7 +12285,7 @@ def forgot_password(
 def reset_password(payload: schemas.ResetPasswordIn, db: Session = Depends(auth.get_db)):
     new_password = payload.new_password.strip()
     if len(new_password) < 6:
-        raise HTTPException(status_code=400, detail="La contrasena debe tener al menos 6 caracteres")
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
 
     token_hash = _hash_token(payload.token)
     token = (
@@ -12101,7 +12298,7 @@ def reset_password(payload: schemas.ResetPasswordIn, db: Session = Depends(auth.
         .first()
     )
     if not token:
-        raise HTTPException(status_code=400, detail="Token invalido o expirado")
+        raise HTTPException(status_code=400, detail="Token inválido o expirado")
 
     user = db.query(models.User).filter(models.User.id == token.user_id).first()
     if not user or getattr(user, "deleted", False):
@@ -13492,7 +13689,7 @@ async def remove_profile_relationship(
             "title": "Acceso removido",
             "body": (
                 f"{remover_name} te quito del perfil {removed_profile_name}. "
-                "Ya no podras ver ni editar su informacion."
+                "Ya no podrás ver ni editar su información."
             ),
             "url": "/family",
             "priority": "high",
@@ -13588,7 +13785,7 @@ async def revoke_profile_invitation(
                 "title": "Acceso removido",
                 "body": (
                     f"{remover_name} revoco tu acceso al perfil {profile_name}. "
-                    "Ya no podras ver ni editar su informacion."
+                    "Ya no podrás ver ni editar su información."
                 ),
                 "url": "/family",
                 "priority": "high",
@@ -16138,7 +16335,7 @@ async def send_reminders(
             priority = "high"
         elif days_until == 3:
             should_send = True
-            message = "Tu cita es en 3 dias"
+            message = "Tu cita es en 3 días"
             priority = "normal"
         elif days_until == 7:
             should_send = True

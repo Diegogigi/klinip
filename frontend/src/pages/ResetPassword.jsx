@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resetPassword } from "../api";
 
@@ -21,25 +21,25 @@ export default function ResetPassword() {
     setError("");
     setNotice("");
     if (!token) {
-      setError("Token invalido o expirado.");
+      setError("Token inválido o expirado.");
       return;
     }
     if (password !== confirm) {
-      setError("Las contrasenas no coinciden.");
+      setError("Las contraseñas no coinciden.");
       return;
     }
     if (password.length < 6) {
-      setError("La contrasena debe tener al menos 6 caracteres.");
+      setError("La contraseña debe tener al menos 6 caracteres.");
       return;
     }
     setLoading(true);
     try {
       await resetPassword({ token, new_password: password });
-      setNotice("Contrasena actualizada. Ya puedes iniciar sesion.");
+      setNotice("Contraseña actualizada. Ya puedes iniciar sesión.");
       setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
       console.error(err);
-      setError(err?.response?.data?.detail || "No se pudo restablecer la contrasena.");
+      setError(err?.response?.data?.detail || "No se pudo restablecer la contraseña.");
     } finally {
       setLoading(false);
     }
@@ -62,9 +62,9 @@ export default function ResetPassword() {
                 <span className="brand-wordmark-compact">K</span>
               </h1>
             </div>
-            <h2 className="auth-welcome">Nueva contrasena</h2>
+            <h2 className="auth-welcome">Nueva contraseña</h2>
             <p className="auth-description">
-              Crea una nueva contrasena segura para tu cuenta.
+              Crea una nueva contraseña segura para tu cuenta.
             </p>
           </div>
 
@@ -91,7 +91,7 @@ export default function ResetPassword() {
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="auth-input-group">
-              <label className="auth-label">Nueva contrasena</label>
+              <label className="auth-label">Nueva contraseña</label>
               <div className="auth-input-wrapper">
                 <svg className="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
@@ -103,13 +103,13 @@ export default function ResetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  placeholder="Minimo 6 caracteres"
+                  placeholder="Mínimo 6 caracteres"
                 />
               </div>
             </div>
 
             <div className="auth-input-group">
-              <label className="auth-label">Confirmar contrasena</label>
+              <label className="auth-label">Confirmar contraseña</label>
               <div className="auth-input-wrapper">
                 <svg className="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
@@ -121,19 +121,19 @@ export default function ResetPassword() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   required
-                  placeholder="Repite tu contrasena"
+                  placeholder="Repite tu contraseña"
                 />
               </div>
             </div>
 
             <button className="auth-submit" type="submit" disabled={loading}>
-              {loading ? "Guardando..." : "Guardar nueva contrasena"}
+              {loading ? "Guardando..." : "Guardar nueva contraseña"}
             </button>
           </form>
 
           <p className="auth-footer" style={{ marginTop: "1rem" }}>
             <Link to="/login" className="auth-link">
-              Volver a iniciar sesion
+              Volver a iniciar sesión
             </Link>
           </p>
         </div>
@@ -141,6 +141,3 @@ export default function ResetPassword() {
     </div>
   );
 }
-
-
-

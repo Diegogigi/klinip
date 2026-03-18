@@ -16,14 +16,14 @@ export default function ForgotPassword() {
     try {
       await forgotPassword({ email });
       setNotice(
-        "Si el correo existe, enviaremos un enlace para restablecer la contrasena."
+        "Si el correo existe, enviaremos un enlace para restablecer la contraseña."
       );
     } catch (err) {
       console.error(err);
-      setError(
-        err?.response?.data?.detail ||
-          "No se pudo enviar el correo de recuperacion."
-      );
+        setError(
+          err?.response?.data?.detail ||
+          "No se pudo enviar el correo de recuperación."
+        );
     } finally {
       setLoading(false);
     }
@@ -53,9 +53,9 @@ export default function ForgotPassword() {
                 <span className="brand-wordmark-compact">K</span>
               </h1>
             </div>
-            <h2 className="auth-welcome">Recuperar contrasena</h2>
+            <h2 className="auth-welcome">Recuperar contraseña</h2>
             <p className="auth-description">
-              Escribe tu correo para enviar el enlace de recuperacion.
+              Escribe tu correo para enviar el enlace de recuperación.
             </p>
           </div>
 
@@ -82,7 +82,7 @@ export default function ForgotPassword() {
 
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="auth-input-group">
-              <label className="auth-label">Correo electronico</label>
+              <label className="auth-label">Correo electrónico</label>
               <div className="auth-input-wrapper">
                 <svg className="auth-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
@@ -107,7 +107,7 @@ export default function ForgotPassword() {
 
           <p className="auth-footer" style={{ marginTop: "1rem" }}>
             <Link to="/login" className="auth-link">
-              Volver a iniciar sesion
+              Volver a iniciar sesión
             </Link>
           </p>
         </div>

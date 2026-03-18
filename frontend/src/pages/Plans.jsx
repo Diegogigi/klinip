@@ -17,22 +17,22 @@ const PLAN_PAGE_COPY = {
         <polyline points="20 6 9 17 4 12" />
       </svg>
     ),
-    subtitle: "Salud personal · Sin tarjeta de credito",
+    subtitle: "Salud personal · Sin tarjeta de crédito",
     description:
       "Todo lo que necesitas para empezar a organizar tu salud de forma digital. Ideal para personas que quieren tener sus citas, medicamentos y documentos en un solo lugar.",
     primaryCta: "Empezar gratis",
     secondaryCta: "Ver planes de pago",
-    note: "Sin limite de tiempo. Sin tarjeta requerida.",
+    note: "Sin límite de tiempo. Sin tarjeta requerida.",
     ctaEyebrow: "Empieza hoy",
     ctaTitle: "Comienza gratis, sin compromisos",
     ctaTitleEm: "gratis",
-    ctaSub: "Sin tarjeta de credito. Sin limite de tiempo. Solo tu salud, organizada.",
+    ctaSub: "Sin tarjeta de crédito. Sin límite de tiempo. Solo tu salud, organizada.",
     ctaPrimary: "Crear cuenta gratis",
     ctaSecondary: "Ver plan Plus",
     features: [
       {
         title: "1 perfil de salud",
-        desc: "Gestiona tu propio perfil con toda tu informacion medica centralizada y siempre accesible.",
+        desc: "Gestiona tu propio perfil con toda tu información médica centralizada y siempre accesible.",
         tone: "green",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -55,8 +55,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Documentos con OCR basico",
-        desc: "Sube recetas, resultados y ordenes. El OCR basico extrae texto automaticamente para busquedas rapidas.",
+        title: "Documentos con OCR básico",
+        desc: "Sube recetas, resultados y órdenes. El OCR básico extrae texto automáticamente para búsquedas rápidas.",
         tone: "amber",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -67,7 +67,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Recordatorios esenciales",
-        desc: "Alertas para tomar medicamentos y recordatorios de citas proximas por correo electronico.",
+        desc: "Alertas para tomar medicamentos y recordatorios de citas próximas por correo electrónico.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -77,8 +77,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Acceso movil y escritorio",
-        desc: "Disponible en cualquier dispositivo. Tu informacion sincronizada siempre en tiempo real.",
+        title: "Acceso móvil y escritorio",
+        desc: "Disponible en cualquier dispositivo. Tu información sincronizada siempre en tiempo real.",
         tone: "violet",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -90,7 +90,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Privacidad y seguridad",
-        desc: "Tus datos cifrados y protegidos. Control total sobre tu informacion medica sin compartir con terceros.",
+        desc: "Tus datos cifrados y protegidos. Control total sobre tu información médica sin compartir con terceros.",
         tone: "teal",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -101,46 +101,46 @@ const PLAN_PAGE_COPY = {
     ],
     faqs: [
       {
-        q: "El plan Basico es realmente gratis para siempre?",
-        a: "Si. El plan Basico no tiene fecha de vencimiento ni requiere tarjeta de credito. Puedes usarlo de forma permanente con todas sus funciones incluidas.",
+        q: "¿El plan Básico es realmente gratis para siempre?",
+        a: "Sí. El plan Básico no tiene fecha de vencimiento ni requiere tarjeta de crédito. Puedes usarlo de forma permanente con todas sus funciones incluidas.",
       },
       {
-        q: "Puedo actualizar mi plan en cualquier momento?",
-        a: "Si. Puedes subir de plan cuando quieras desde la configuracion de tu cuenta. El cambio es inmediato y solo pagas la diferencia proporcional del mes.",
+        q: "¿Puedo actualizar mi plan en cualquier momento?",
+        a: "Sí. Puedes subir de plan cuando quieras desde la configuración de tu cuenta. El cambio es inmediato y solo pagas la diferencia proporcional del mes.",
       },
       {
-        q: "Mis datos estan seguros en Klinip?",
-        a: "Tu informacion esta cifrada en transito y en reposo. Nunca compartimos ni vendemos datos a terceros. Puedes exportar o eliminar tu informacion cuando quieras.",
+        q: "¿Mis datos están seguros en Klinip?",
+        a: "Tu información está cifrada en tránsito y en reposo. Nunca compartimos ni vendemos datos a terceros. Puedes exportar o eliminar tu información cuando quieras.",
       },
       {
-        q: "Que pasa si cancelo un plan de pago?",
-        a: "Si cancelas, tu cuenta se mantiene activa hasta el fin del periodo pagado. Luego, pasa automaticamente al plan Basico sin perder tus datos historicos.",
+        q: "¿Qué pasa si cancelo un plan de pago?",
+        a: "Si cancelas, tu cuenta se mantiene activa hasta el fin del periodo pagado. Luego, pasa automáticamente al plan Básico sin perder tus datos históricos.",
       },
     ],
   },
   plus: {
-    badge: "Mas popular",
+    badge: "Más popular",
     badgeIcon: (
       <svg viewBox="0 0 24 24">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
-    subtitle: "Individual ampliado · Facturacion mensual",
+    subtitle: "Individual ampliado · Facturación mensual",
     description:
-      "Para quienes quieren llevar el control total de su salud con inteligencia artificial. Incluye historial completo, OCR mejorado y el copiloto de IA para anticiparte a cualquier situacion.",
+      "Para quienes quieren llevar el control total de su salud con inteligencia artificial. Incluye historial completo, OCR mejorado y el copiloto de IA para anticiparte a cualquier situación.",
     primaryCta: "Probar Plus gratis",
     secondaryCta: "Ver detalle completo",
-    note: "14 dias de prueba gratis · Sin tarjeta requerida",
-    ctaEyebrow: "14 dias gratis",
+    note: "14 días de prueba gratis · Sin tarjeta requerida",
+    ctaEyebrow: "14 días gratis",
     ctaTitle: "Prueba Plus sin riesgos",
     ctaTitleEm: "Plus",
-    ctaSub: "14 dias completos sin tarjeta. Acceso a todas las funciones de IA desde el primer dia.",
+    ctaSub: "14 días completos sin tarjeta. Acceso a todas las funciones de IA desde el primer día.",
     ctaPrimary: "Probar Plus gratis",
     ctaSecondary: "Ver plan Familiar",
     features: [
       {
         title: "Hasta 3 perfiles de salud",
-        desc: "Gestiona tu salud y la de hasta 2 personas mas desde una sola cuenta.",
+        desc: "Gestiona tu salud y la de hasta 2 personas más desde una sola cuenta.",
         tone: "blue",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -152,7 +152,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "OCR mejorado",
-        desc: "Extrae automaticamente fecha, medico, diagnostico y medicamentos desde fotos o PDFs.",
+        desc: "Extrae automáticamente fecha, médico, diagnóstico y medicamentos desde fotos o PDFs.",
         tone: "teal",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -164,7 +164,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Historial completo y reportes",
-        desc: "Linea de tiempo completa de tu salud con reportes exportables para compartir con tu medico.",
+        desc: "Línea de tiempo completa de tu salud con reportes exportables para compartir con tu médico.",
         tone: "violet",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -174,7 +174,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Recordatorios avanzados con IA",
-        desc: "El sistema aprende tus patrones y envia alertas inteligentes antes de que algo se escape.",
+        desc: "El sistema aprende tus patrones y envía alertas inteligentes antes de que algo se escape.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -186,7 +186,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Copiloto IA en salud",
-        desc: "Pregunta por medicamentos, historial o proximas citas y recibe respuestas en lenguaje natural.",
+        desc: "Pregunta por medicamentos, historial o próximas citas y recibe respuestas en lenguaje natural.",
         tone: "indigo",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -195,7 +195,7 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Gestion de dependientes",
+        title: "Gestión de dependientes",
         desc: "Administra la salud de menores o personas a tu cargo con perfiles independientes.",
         tone: "amber",
         icon: (
@@ -207,16 +207,16 @@ const PLAN_PAGE_COPY = {
     ],
     faqs: [
       {
-        q: "Como funciona la prueba gratis de 14 dias?",
-        a: "Puedes probar el plan Plus completo durante 14 dias sin ingresar tarjeta de credito. Al terminar, puedes continuar con Plus o volver al plan Basico.",
+        q: "¿Cómo funciona la prueba gratis de 14 días?",
+        a: "Puedes probar el plan Plus completo durante 14 días sin ingresar tarjeta de crédito. Al terminar, puedes continuar con Plus o volver al plan Básico.",
       },
       {
-        q: "Que es el copiloto de IA?",
-        a: "Es un asistente conversacional que conoce tu historial de salud. Puedes preguntarle por medicamentos, resumenes para consultas o adherencia.",
+        q: "¿Qué es el copiloto de IA?",
+        a: "Es un asistente conversacional que conoce tu historial de salud. Puedes preguntarle por medicamentos, resúmenes para consultas o adherencia.",
       },
       {
-        q: "Puedo cancelar en cualquier momento?",
-        a: "Si. Puedes cancelar desde tu perfil sin penalidades. La cuenta sigue activa hasta el fin del periodo pagado y luego baja a Basico.",
+        q: "¿Puedo cancelar en cualquier momento?",
+        a: "Sí. Puedes cancelar desde tu perfil sin penalidades. La cuenta sigue activa hasta el fin del periodo pagado y luego baja a Básico.",
       },
     ],
   },
@@ -229,16 +229,16 @@ const PLAN_PAGE_COPY = {
         <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
-    subtitle: "Hasta 5 perfiles · Facturacion mensual",
+    subtitle: "Hasta 5 perfiles · Facturación mensual",
     description:
-      "El plan completo para familias que quieren gestionar la salud de todos en un solo lugar. Panel familiar compartido, roles por cuidador, alertas inteligentes por perfil y colaboracion total.",
+      "El plan completo para familias que quieren gestionar la salud de todos en un solo lugar. Panel familiar compartido, roles por cuidador, alertas inteligentes por perfil y colaboración total.",
     primaryCta: "Elegir Familiar",
     secondaryCta: "Comparar con Plus",
-    note: "14 dias de prueba gratis · Cancela cuando quieras",
+    note: "14 días de prueba gratis · Cancela cuando quieras",
     ctaEyebrow: "Para toda la familia",
     ctaTitle: "La salud de todos, en un solo lugar",
     ctaTitleEm: "en un solo lugar",
-    ctaSub: "14 dias gratis para toda tu familia. Sin tarjeta. Sin complicaciones.",
+    ctaSub: "14 días gratis para toda tu familia. Sin tarjeta. Sin complicaciones.",
     ctaPrimary: "Elegir Familiar",
     ctaSecondary: "Comparar planes",
     features: [
@@ -256,7 +256,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Panel familiar y calendarios",
-        desc: "Vista centralizada de toda la familia para coordinar citas, examenes y medicamentos.",
+        desc: "Vista centralizada de toda la familia para coordinar citas, exámenes y medicamentos.",
         tone: "blue",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -268,7 +268,7 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Roles y colaboracion",
+        title: "Roles y colaboración",
         desc: "Asigna roles de administrador, editor o lector a cada cuidador con control total de permisos.",
         tone: "green",
         icon: (
@@ -279,7 +279,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Alertas inteligentes por perfil",
-        desc: "Alertas individualizadas para cada miembro de la familia cuando alguien necesita atencion.",
+        desc: "Alertas individualizadas para cada miembro de la familia cuando alguien necesita atención.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -311,20 +311,20 @@ const PLAN_PAGE_COPY = {
     ],
     faqs: [
       {
-        q: "Quien puede ser parte del plan Familiar?",
-        a: "Cualquier persona que invites: pareja, hijos, padres, abuelos o personas a tu cuidado. Cada miembro puede tener su propio acceso con los permisos que tu definas.",
+        q: "¿Quién puede ser parte del plan Familiar?",
+        a: "Cualquier persona que invites: pareja, hijos, padres, abuelos o personas a tu cuidado. Cada miembro puede tener su propio acceso con los permisos que tú definas.",
       },
       {
-        q: "Puedo controlar que ve cada miembro?",
-        a: "Si. Puedes asignar roles: administrador, editor o lector. Cada perfil puede tener restricciones de privacidad segun tu configuracion.",
+        q: "¿Puedo controlar qué ve cada miembro?",
+        a: "Sí. Puedes asignar roles: administrador, editor o lector. Cada perfil puede tener restricciones de privacidad según tu configuración.",
       },
       {
-        q: "Que pasa si un miembro quiere su propia cuenta?",
+        q: "¿Qué pasa si un miembro quiere su propia cuenta?",
         a: "Puede crearla cuando quiera. Sus datos del perfil familiar pueden exportarse para continuar de forma independiente.",
       },
       {
-        q: "Se puede agregar mas de 5 perfiles?",
-        a: "El plan Familiar incluye hasta 5 perfiles. Si necesitas mas, puedes contactarnos para opciones ampliadas.",
+        q: "¿Se puede agregar más de 5 perfiles?",
+        a: "El plan Familiar incluye hasta 5 perfiles. Si necesitas más, puedes contactarnos para opciones ampliadas.",
       },
     ],
   },
@@ -336,7 +336,7 @@ const COMPARISON_ROWS = [
     rows: [
       { label: "Perfiles de salud", basico: "1", plus: "Hasta 3", familiar: "Hasta 5" },
       { label: "Panel familiar", basico: false, plus: false, familiar: true },
-      { label: "Roles y colaboracion", basico: false, plus: false, familiar: true },
+      { label: "Roles y colaboración", basico: false, plus: false, familiar: true },
     ],
   },
   {
@@ -351,7 +351,7 @@ const COMPARISON_ROWS = [
     group: "Documentos",
     rows: [
       { label: "Subir documentos", basico: true, plus: true, familiar: true },
-      { label: "OCR automatico", basico: "Basico", plus: "Mejorado", familiar: "Mejorado" },
+      { label: "OCR automático", basico: "Básico", plus: "Mejorado", familiar: "Mejorado" },
       { label: "Historial completo", basico: false, plus: true, familiar: true },
     ],
   },
@@ -455,7 +455,7 @@ export default function Plans({ user }) {
           </nav>
 
           <div className="pp-nav-right">
-            <Link to="/login" className="pp-btn-ghost">Iniciar sesion</Link>
+            <Link to="/login" className="pp-btn-ghost">Iniciar sesión</Link>
             <Link to={ctaTarget} className="pp-btn-primary-nav">{navCtaLabel}</Link>
           </div>
         </div>
@@ -473,7 +473,7 @@ export default function Plans({ user }) {
               type="button"
               className={`pp-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
               onClick={() => setBilling((prev) => (prev === "monthly" ? "yearly" : "monthly"))}
-              aria-label="Cambiar facturacion"
+              aria-label="Cambiar facturación"
             >
               <span className="pp-billing-track" />
               <span className="pp-billing-thumb" />
@@ -534,7 +534,7 @@ export default function Plans({ user }) {
             </div>
 
             <section className="pp-feature-section">
-              <h3>Que incluye el plan <em>{selectedPlan.name}</em></h3>
+              <h3>Qué incluye el plan <em>{selectedPlan.name}</em></h3>
               <div className="pp-feature-grid">
                 {detailCopy.features.map((item) => (
                   <article key={item.title} className="pp-feature-card">
@@ -548,13 +548,13 @@ export default function Plans({ user }) {
             </section>
 
             <section className="pp-comparison-section">
-              <h3>Comparacion de <em>todos los planes</em></h3>
+              <h3>Comparación de <em>todos los planes</em></h3>
               <div className="pp-table-wrap">
                 <table className="pp-table">
                   <thead>
                     <tr>
-                      <th>Funcion</th>
-                      <th className={activeSlug === "basico" ? "is-highlight" : ""}>Basico</th>
+                      <th>Función</th>
+                      <th className={activeSlug === "basico" ? "is-highlight" : ""}>Básico</th>
                       <th className={activeSlug === "plus" ? "is-highlight" : ""}>Plus</th>
                       <th className={activeSlug === "familiar" ? "is-highlight" : ""}>Familiar</th>
                     </tr>

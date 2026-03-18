@@ -16,6 +16,7 @@ import AiKlinip from "./pages/AiKlinip";
 import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
 import WaitlistLanding from "./pages/WaitlistLanding";
+import WaitlistDashboard from "./pages/WaitlistDashboard";
 import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
@@ -39,6 +40,7 @@ const INTERNAL_LOGIN_PATH = (() => {
   if (!raw) return "/acceso-interno";
   return raw.startsWith("/") ? raw : `/${raw}`;
 })();
+const INTERNAL_WAITLIST_PATH = `${INTERNAL_LOGIN_PATH}/fila`;
 
 const icons = {
   home: (
@@ -193,7 +195,7 @@ function Sidebar({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan Basico";
+      : "Plan Básico";
   const getProfileAccessLabelMobile = (item) => {
     if (!item) return "";
     const isOwner = Number(item.owner_user_id) === Number(user?.id);
@@ -333,9 +335,15 @@ function Topbar({
     "/family": "Mi familia",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
+    [INTERNAL_WAITLIST_PATH]: "Fila",
   };
   const title = titles[location.pathname] || "Klinip";
-  const subtitle = location.pathname === "/" ? "Panel general" : "Tu ruta de salud";
+  const subtitle =
+    location.pathname === INTERNAL_WAITLIST_PATH
+      ? "Acceso interno"
+      : location.pathname === "/"
+      ? "Panel general"
+      : "Tu ruta de salud";
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
@@ -383,7 +391,7 @@ function Topbar({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan Basico";
+      : "Plan Básico";
   const getProfileAccessLabel = (item) => {
     if (!item) return "";
     const isOwner = Number(item.owner_user_id) === Number(user?.id);
@@ -1575,10 +1583,10 @@ export default function App() {
             </p>
             <div className="consent-links">
               <Link to="/legal/terms" className="secondary-btn">
-                Terminos de uso
+                Términos de uso
               </Link>
               <Link to="/legal/privacy" className="secondary-btn">
-                Politica de privacidad
+                Política de privacidad
               </Link>
               <Link to="/legal/consent" className="secondary-btn">
                 Consentimiento informado
@@ -1590,10 +1598,10 @@ export default function App() {
                 checked={consentChecked}
                 onChange={(e) => setConsentChecked(e.target.checked)}
               />
-              <span>
-                He leido y acepto los Terminos, Politica de Privacidad y
-                Consentimiento informado.
-              </span>
+                <span>
+                 He leído y acepto los Términos, la Política de Privacidad y el
+                 Consentimiento informado.
+                </span>
             </label>
             <button
               className="primary-btn"
@@ -1602,7 +1610,7 @@ export default function App() {
               disabled={!consentChecked}
               style={{ width: "100%" }}
             >
-              Aceptar terminos
+              Aceptar términos
             </button>
           </div>
         </div>
@@ -1613,8 +1621,8 @@ export default function App() {
             <p className="consent-kicker">Recordatorios</p>
             <h2 className="consent-title">Te ayudamos a recordar tus cuidados de salud</h2>
             <p className="consent-text">
-              Activa las notificaciones para medicamentos, citas y examenes.
-              Puedes cambiar esta configuracion desde tu perfil cuando quieras.
+              Activa las notificaciones para medicamentos, citas y exámenes.
+              Puedes cambiar esta configuración desde tu perfil cuando quieras.
             </p>
             <div className="consent-switch-row">
               <div>
@@ -1644,10 +1652,10 @@ export default function App() {
             ) : null}
             <div className="consent-actions">
               <button className="secondary-btn" type="button" onClick={handleLaterNotifications}>
-                {notifSwitchChecked ? "Cerrar" : "Configurar despues"}
+                  {notifSwitchChecked ? "Cerrar" : "Configurar después"}
               </button>
               <button className="ghost-btn" type="button" onClick={handleLearnMoreNotifications}>
-                Aprender mas
+                 Aprender más
               </button>
             </div>
           </div>
@@ -1767,7 +1775,7 @@ export default function App() {
                       onChange={(event) =>
                         setOnboardingData((prev) => ({ ...prev, chronicCondition: event.target.value }))
                       }
-                      placeholder="Ej: hipertension, diabetes, asma..."
+                      placeholder="Ej: hipertensión, diabetes, asma..."
                     />
                   </div>
                 )}
@@ -1952,6 +1960,14 @@ export default function App() {
                   ) : (
                     WAITLIST_ONLY_MODE ? <WaitlistLanding /> : <Landing />
                   )
+                }
+              />
+              <Route
+                path={INTERNAL_WAITLIST_PATH}
+                element={
+                  <ProtectedRoute user={user}>
+                    <WaitlistDashboard />
+                  </ProtectedRoute>
                 }
               />
               <Route
