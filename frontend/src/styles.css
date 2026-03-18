@@ -22425,9 +22425,9 @@ body.theme-dark .waitlist-feedback-error {
 
 .wl-role-card {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  min-height: 86px;
+  min-height: 78px;
   padding: 13px;
   border: 1.5px solid rgba(28, 28, 30, 0.1);
   border-radius: 16px;
@@ -22456,25 +22456,53 @@ body.theme-dark .waitlist-feedback-error {
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
 }
 
-.wl-role-badge {
+.wl-role-radio {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 12px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
   flex-shrink: 0;
-  background: linear-gradient(135deg, #2563eb, #4f46e5);
-  color: #ffffff;
-  font-family: "Poppins", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  border: 2px solid rgba(161, 161, 170, 0.72);
+  background: #ffffff;
+}
+
+.wl-role-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2563eb;
+  opacity: 0;
+  transition: opacity 0.18s ease;
 }
 
 .wl-role-copy {
   display: grid;
   gap: 5px;
+  min-width: 0;
+}
+
+.wl-role-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wl-role-emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 
 .wl-role-copy strong {
@@ -22492,11 +22520,22 @@ body.theme-dark .waitlist-feedback-error {
   line-height: 1.45;
 }
 
+.wl-role-card.is-selected .wl-role-radio {
+  border-color: #2563eb;
+}
+
+.wl-role-card.is-selected .wl-role-radio-dot {
+  opacity: 1;
+}
+
 .wl-consent {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 4px 2px 0;
+  gap: 12px;
+  padding: 14px 15px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
   color: #52525b;
   font-family: "Poppins", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 12.5px;
@@ -22504,11 +22543,16 @@ body.theme-dark .waitlist-feedback-error {
 }
 
 .wl-consent input {
-  width: 16px;
-  height: 16px;
-  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
   accent-color: #2563eb;
   flex-shrink: 0;
+}
+
+.wl-consent-policy {
+  color: #2563eb;
+  font-weight: 700;
 }
 
 .wl-feedback {
@@ -22539,6 +22583,10 @@ body.theme-dark .waitlist-feedback-error {
 }
 
 .wl-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   min-height: 50px;
   border: none;
   border-radius: 16px;
@@ -22554,6 +22602,24 @@ body.theme-dark .waitlist-feedback-error {
     transform 0.18s ease,
     box-shadow 0.18s ease,
     opacity 0.18s ease;
+}
+
+.wl-submit-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.wl-submit-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .wl-submit:hover,
@@ -22581,26 +22647,6 @@ body.theme-dark .waitlist-feedback-error {
 
 .wl-card-foot p {
   margin: 0;
-}
-
-.wl-card-foot a,
-.wl-foot-links a {
-  color: #1d4ed8;
-  text-decoration: none;
-  font-weight: 700;
-}
-
-.wl-card-foot a:hover,
-.wl-card-foot a:focus-visible,
-.wl-foot-links a:hover,
-.wl-foot-links a:focus-visible {
-  text-decoration: underline;
-}
-
-.wl-foot-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
 }
 
 .wl-selected-role {
@@ -22719,6 +22765,29 @@ body.theme-dark .wl-role-card.is-selected {
 body.theme-dark .wl-role-card.is-selected {
   border-color: rgba(96, 165, 250, 0.44);
   box-shadow: 0 12px 26px rgba(2, 6, 23, 0.32);
+}
+
+body.theme-dark .wl-consent {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(15, 23, 42, 0.86);
+}
+
+body.theme-dark .wl-consent-policy {
+  color: #93c5fd;
+}
+
+body.theme-dark .wl-role-radio {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.86);
+}
+
+body.theme-dark .wl-role-card.is-selected .wl-role-radio {
+  border-color: #60a5fa;
+}
+
+body.theme-dark .wl-role-emoji {
+  background: rgba(96, 165, 250, 0.16);
+  color: #93c5fd;
 }
 
 body.theme-dark .wl-feedback-success {
@@ -22891,6 +22960,7 @@ body.theme-dark .wl-feedback-error {
 
   .wl-consent {
     gap: 8px;
+    padding: 12px 13px;
     font-size: 12px;
   }
 

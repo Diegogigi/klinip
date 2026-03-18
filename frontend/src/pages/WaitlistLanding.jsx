@@ -1,19 +1,44 @@
 import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { joinWaitlist } from "../api";
 
 const roleOptions = [
-  { value: "persona", label: "Paciente o usuario", badge: "P" },
-  { value: "familiar", label: "Familiar o cuidador", badge: "F" },
-  { value: "profesional", label: "Profesional de salud", badge: "S" },
-  { value: "institucion", label: "Centro o institucion", badge: "C" },
+  {
+    value: "solo",
+    label: "Solo yo",
+    helper: "Cuenta personal",
+    icon: "Yo",
+    apiRole: "persona",
+  },
+  {
+    value: "familia",
+    label: "Mi familia",
+    helper: "Gestion familiar",
+    icon: "Fa",
+    apiRole: "familiar",
+  },
+  {
+    value: "cuidador",
+    label: "Cuido a alguien",
+    helper: "Apoyo y seguimiento",
+    icon: "Cu",
+    apiRole: "familiar",
+  },
+  {
+    value: "profesional",
+    label: "Soy profesional",
+    helper: "Uso profesional",
+    icon: "Pr",
+    apiRole: "profesional",
+  },
 ];
 
 const journeyOptions = [
-  { value: "medicamentos", label: "Ordenar medicamentos y recordatorios" },
-  { value: "citas", label: "Mantener citas y documentos al dia" },
-  { value: "acompanamiento", label: "Acompanamiento familiar o de cuidado" },
-  { value: "equipo", label: "Coordinacion con un equipo de salud" },
+  { value: "", label: "Selecciona una opcion" },
+  { value: "libretas", label: "Libretas o papel" },
+  { value: "whatsapp", label: "WhatsApp / fotos del celular" },
+  { value: "carpetas", label: "Carpetas fisicas" },
+  { value: "otra_app", label: "Otra app (Notion, Excel, etc.)" },
+  { value: "sin_sistema", label: "No tengo un sistema" },
 ];
 
 const credibilityItems = [
@@ -34,8 +59,8 @@ const initialForm = {
   last_name: "",
   email: "",
   phone: "",
-  role: "persona",
-  journey: "medicamentos",
+  role: "solo",
+  journey: "",
   consent_updates: true,
 };
 
@@ -77,7 +102,7 @@ export default function WaitlistLanding() {
         full_name: fullName,
         email: form.email,
         phone: form.phone,
-        role: form.role,
+        role: selectedRole.apiRole,
         notes: journeyOptions.find((option) => option.value === form.journey)?.label || "",
         consent_updates: form.consent_updates,
         source: `waitlist-${getSourceLabel()}`,
@@ -227,33 +252,31 @@ export default function WaitlistLanding() {
                 />
               </label>
 
-              <div className="wl-grid-two">
-                <label className="wl-field">
-                  <span>Telefono</span>
-                  <input
-                    name="phone"
-                    type="tel"
-                    value={form.phone}
-                    onChange={handleChange}
-                    placeholder="+56 9 1234 5678"
-                    autoComplete="tel"
-                  />
-                </label>
+              <label className="wl-field">
+                <span>Telefono</span>
+                <input
+                  name="phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={handleChange}
+                  placeholder="+56 9 1234 5678"
+                  autoComplete="tel"
+                />
+              </label>
 
-                <label className="wl-field">
-                  <span>Hoy te interesa mas</span>
-                  <select name="journey" value={form.journey} onChange={handleChange}>
-                    {journeyOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
+              <label className="wl-field">
+                <span>Como gestionas tu salud hoy?</span>
+                <select name="journey" value={form.journey} onChange={handleChange} required>
+                  {journeyOptions.map((option) => (
+                    <option key={option.value || "placeholder"} value={option.value} disabled={!option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <fieldset className="wl-role-group">
-                <legend>Tu relacion con Klinip</legend>
+                <legend>Quien usara Klinip?</legend>
                 <div className="wl-role-grid">
                   {roleOptions.map((option) => {
                     const checked = form.role === option.value;
@@ -269,14 +292,17 @@ export default function WaitlistLanding() {
                           checked={checked}
                           onChange={handleChange}
                         />
-                        <span className="wl-role-badge" aria-hidden="true">
-                          {option.badge}
+                        <span className="wl-role-radio" aria-hidden="true">
+                          <span className="wl-role-radio-dot" />
                         </span>
                         <span className="wl-role-copy">
-                          <strong>{option.label}</strong>
-                          <small>
-                            {checked ? "Seleccionado para tus avisos" : "Elegir este perfil"}
-                          </small>
+                          <span className="wl-role-line">
+                            <span className="wl-role-emoji" aria-hidden="true">
+                              {option.icon}
+                            </span>
+                            <strong>{option.label}</strong>
+                          </span>
+                          <small>{option.helper}</small>
                         </span>
                       </label>
                     );
@@ -292,8 +318,8 @@ export default function WaitlistLanding() {
                   onChange={handleChange}
                 />
                 <span>
-                  Quiero recibir noticias de lanzamiento, nuevos cupos y avisos importantes de
-                  Klinip.
+                  Acepto recibir novedades de Klinip por correo. Puedes darte de baja en cualquier
+                  momento. Consulta nuestra <span className="wl-consent-policy">politica de privacidad.</span>
                 </span>
               </label>
 
@@ -304,16 +330,17 @@ export default function WaitlistLanding() {
               ) : null}
 
               <button className="wl-submit" type="submit" disabled={submitting}>
-                {submitting ? "Guardando tu lugar..." : "Quiero entrar a la fila"}
+                <span className="wl-submit-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M12 3l6 2.4v5.7c0 4.2-2.5 8-6 9.9-3.5-1.9-6-5.7-6-9.9V5.4L12 3z" />
+                  </svg>
+                </span>
+                <span>{submitting ? "Guardando tu lugar..." : "Unirme a la lista de espera"}</span>
               </button>
             </form>
 
             <div className="wl-card-foot">
               <p>Te avisaremos por correo cuando activemos nuevos accesos y novedades importantes.</p>
-              <div className="wl-foot-links">
-                <Link to="/legal/privacy">Privacidad</Link>
-                <Link to="/legal/terms">Terminos</Link>
-              </div>
               <div className="wl-selected-role">
                 Perfil elegido: <strong>{selectedRole.label}</strong>
               </div>
