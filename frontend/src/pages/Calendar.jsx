@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getAppointments,
@@ -22,21 +22,21 @@ const typeColors = {
 const profileToneClasses = ["profile-blue", "profile-violet", "profile-teal", "profile-amber"];
 
 const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
+  ["ÃƒÂ¡", "Ã¡"],
+  ["ÃƒÂ©", "Ã©"],
+  ["ÃƒÂ­", "Ã­"],
+  ["ÃƒÂ³", "Ã³"],
+  ["ÃƒÂº", "Ãº"],
+  ["ÃƒÂ±", "Ã±"],
+  ["ÃƒÂ", "Ã"],
+  ["Ãƒâ€°", "Ã‰"],
+  ["ÃƒÂ", "Ã"],
+  ["Ãƒâ€œ", "Ã“"],
+  ["ÃƒÅ¡", "Ãš"],
+  ["Ãƒâ€˜", "Ã‘"],
+  ["Ã‚Â¿", "Â¿"],
+  ["Ã‚Â¡", "Â¡"],
+  ["Ã‚Â·", "Â·"],
 ];
 
 function cleanUiText(value, fallback = "") {
@@ -398,13 +398,12 @@ export default function Calendar() {
           <div>
             <h2 className="card-title">Calendario de salud</h2>
             <p className="muted calendar-intro-copy">
-              Vista mensual para citas, exámenes, trámites y medicación. Pulsa un día para ver el
+              Vista mensual para citas, exÃ¡menes, trÃ¡mites y medicaciÃ³n. Pulsa un dÃ­a para ver el
               detalle.
             </p>
-            <p className="muted calendar-intro-copy-clean">
-              Vista mensual para citas, examenes, tramites y medicacion. Pulsa un dia para ver el
-              detalle.
-            </p>
+              <p className="muted calendar-intro-copy-clean">
+                {"Vista mensual para citas, ex\u00E1menes, tr\u00E1mites y medicaci\u00F3n. Pulsa un d\u00EDa para ver el detalle."}
+              </p>
           </div>
           <div className="calendar-controls">
             <button
@@ -432,9 +431,7 @@ export default function Calendar() {
                 type="button"
                 className={`calendar-scope-btn ${calendarScope === "mine" ? "is-active" : ""}`}
                 onClick={() => setCalendarScope("mine")}
-              >
-                Mio
-              </button>
+              >{"M\u00EDo"}</button>
               <button
                 type="button"
                 className={`calendar-scope-btn ${calendarScope === "shared" ? "is-active" : ""}`}
@@ -487,15 +484,15 @@ export default function Calendar() {
 
         <div className="legend">
           <span className="legend-dot event-green" /> Citas
-          <span className="legend-dot event-blue" /> Exámenes
-          <span className="legend-dot event-yellow" /> Trámites
-          <span className="legend-dot event-purple" /> Medicación
+          <span className="legend-dot event-blue" /> ExÃ¡menes
+          <span className="legend-dot event-yellow" /> TrÃ¡mites
+          <span className="legend-dot event-purple" /> MedicaciÃ³n
         </div>
         <div className="calendar-legend-clean">
           <span><span className="legend-dot event-green" /> Citas</span>
-          <span><span className="legend-dot event-blue" /> Examenes</span>
-          <span><span className="legend-dot event-yellow" /> Tramites</span>
-          <span><span className="legend-dot event-purple" /> Medicacion</span>
+          <span><span className="legend-dot event-blue" /> {"Ex\u00E1menes"}</span>
+          <span><span className="legend-dot event-yellow" /> {"Tr\u00E1mites"}</span>
+          <span><span className="legend-dot event-purple" /> {"Medicaci\u00F3n"}</span>
         </div>
 
         {loading ? (
@@ -584,7 +581,7 @@ export default function Calendar() {
                     <div className="timeline-main calendar-timeline-main">
                       <span className={`chip ${eventItem.type}`}>
                         {eventItem.type === "medication"
-                          ? "Medicacion"
+                          ? "Medicaci\u00F3n"
                           : cleanUiText(eventItem.type, "Actividad")}
                       </span>
                       {eventItem.status ? (
@@ -624,7 +621,7 @@ export default function Calendar() {
               {calendarScope === "both" ? (
                 <>
                 <p className="muted calendar-helper-note calendar-helper-note-legacy">
-                  Elige “Mio” o “Compartido” para crear una actividad en un perfil especifico.
+                  Elige â€œMioâ€ o â€œCompartidoâ€ para crear una actividad en un perfil especifico.
                 </p>
                 <p className="muted calendar-helper-note calendar-helper-note-clean">
                   Elige "Mio" o "Compartido" para crear una actividad en un perfil especifico.
@@ -653,3 +650,4 @@ export default function Calendar() {
     </>
   );
 }
+

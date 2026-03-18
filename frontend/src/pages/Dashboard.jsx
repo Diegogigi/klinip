@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
+import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getActiveHealthProfile,
@@ -14,6 +15,10 @@ import {
   updateProfileNote,
 } from "../api";
 import { parseDate } from "../utils/dates";
+import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
+import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
+
+const RADAR_REFRESH_POLL_LIMIT = 8;
 
 const typeLabels = {
   cita: "Cita",
@@ -28,21 +33,21 @@ const kindToneMap = {
 };
 
 const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â©", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â­", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Âº", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âº"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â°", "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â", "ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“", "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡", "ÃƒÆ’Ã†â€™Ãƒâ€¦Ã‚Â¡"],
+  ["ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ", "ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“"],
+  ["ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿", "ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿"],
+  ["ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡", "ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡"],
+  ["ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·", "ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â·"],
 ];
 
 function cleanUiText(value, fallback = "") {
@@ -204,6 +209,9 @@ function renderIcon(name) {
 
 export default function Dashboard({ user }) {
   const navigate = useNavigate();
+  const isMountedRef = useRef(false);
+  const activeProfileIdRef = useRef(null);
+  const radarPollTimeoutRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -219,43 +227,126 @@ export default function Dashboard({ user }) {
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
+  const canEditActiveProfile = canWriteProfile(activeProfile);
+  const isReadOnlyProfile = isViewerProfile(activeProfile);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadHome() {
-      try {
-        const [
-          activeProfileResponse,
-          profilesResponse,
-          appointmentsResponse,
-          documentsResponse,
-          medicationsResponse,
-          radarResponse,
-          adherenceResponse,
-        ] = await Promise.all([
-          getActiveHealthProfile().catch(() => null),
-          getHealthProfiles().catch(() => []),
-          getAppointments().catch(() => []),
-          getDocuments().catch(() => []),
-          getMedications().catch(() => []),
-          getAiHealthRadar().catch(() => []),
-          getAiAdherence().catch(() => ({})),
-        ]);
-        if (cancelled) return;
-        setActiveProfile(activeProfileResponse || null);
-        setHealthProfiles(Array.isArray(profilesResponse) ? profilesResponse : []);
-        setAppointments(Array.isArray(appointmentsResponse) ? appointmentsResponse : []);
-        setDocuments(Array.isArray(documentsResponse) ? documentsResponse : []);
-        setMedications(Array.isArray(medicationsResponse) ? medicationsResponse : []);
-        setHealthRadar(Array.isArray(radarResponse) ? radarResponse : []);
-        setAdherenceSummary(adherenceResponse || {});
-      } finally {
-        if (!cancelled) setLoading(false);
+    activeProfileIdRef.current = activeProfile?.id ? Number(activeProfile.id) : null;
+  }, [activeProfile?.id]);
+
+  async function loadHealthInsights(profileId) {
+    const resolvedProfileId = profileId ? Number(profileId) : undefined;
+    const [radarResponse, adherenceResponse] = await Promise.all([
+      getAiHealthRadar(resolvedProfileId).catch(() => []),
+      getAiAdherence(resolvedProfileId).catch(() => ({})),
+    ]);
+    if (!isMountedRef.current) {
+      return adherenceResponse || {};
+    }
+    setHealthRadar(Array.isArray(radarResponse) ? radarResponse : []);
+    setAdherenceSummary(adherenceResponse || {});
+    return adherenceResponse || {};
+  }
+
+  function queueHealthInsightsRefresh(profileId, attempt = 1) {
+    if (!profileId || attempt > RADAR_REFRESH_POLL_LIMIT) {
+      return;
+    }
+    if (radarPollTimeoutRef.current) {
+      window.clearTimeout(radarPollTimeoutRef.current);
+    }
+    const delayMs = attempt <= 3 ? 1800 : 3200;
+    radarPollTimeoutRef.current = window.setTimeout(async () => {
+      const summary = await loadHealthInsights(profileId);
+      if (summary?.pending_refresh) {
+        queueHealthInsightsRefresh(profileId, attempt + 1);
+      }
+    }, delayMs);
+  }
+
+  async function loadHomeSnapshot({ silent = false } = {}) {
+    if (!silent && isMountedRef.current) {
+      setLoading(true);
+    }
+    try {
+      const [
+        activeProfileResponse,
+        profilesResponse,
+        appointmentsResponse,
+        documentsResponse,
+        medicationsResponse,
+      ] = await Promise.all([
+        getActiveHealthProfile().catch(() => null),
+        getHealthProfiles().catch(() => []),
+        getAppointments().catch(() => []),
+        getDocuments().catch(() => []),
+        getMedications().catch(() => []),
+      ]);
+      const resolvedProfileId = activeProfileResponse?.id ? Number(activeProfileResponse.id) : null;
+      const adherenceResponse = await loadHealthInsights(resolvedProfileId);
+      if (!isMountedRef.current) {
+        return {
+          profileId: resolvedProfileId,
+          pendingRefresh: Boolean(adherenceResponse?.pending_refresh),
+        };
+      }
+      setActiveProfile(activeProfileResponse || null);
+      setHealthProfiles(Array.isArray(profilesResponse) ? profilesResponse : []);
+      setAppointments(Array.isArray(appointmentsResponse) ? appointmentsResponse : []);
+      setDocuments(Array.isArray(documentsResponse) ? documentsResponse : []);
+      setMedications(Array.isArray(medicationsResponse) ? medicationsResponse : []);
+      return {
+        profileId: resolvedProfileId,
+        pendingRefresh: Boolean(adherenceResponse?.pending_refresh),
+      };
+    } finally {
+      if (!silent && isMountedRef.current) {
+        setLoading(false);
       }
     }
-    loadHome();
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadHomeSnapshot().then((result) => {
+      if (result?.pendingRefresh) {
+        queueHealthInsightsRefresh(result.profileId, 1);
+      }
+    });
+
+    const unsubscribe = subscribeClinicalDataChanged(async (detail) => {
+      const currentProfileId = activeProfileIdRef.current;
+      const eventProfileId = detail?.profileId ? Number(detail.profileId) : null;
+      if (currentProfileId && eventProfileId && currentProfileId !== eventProfileId) {
+        return;
+      }
+      const result = await loadHomeSnapshot({ silent: true });
+      if (result?.pendingRefresh) {
+        queueHealthInsightsRefresh(result.profileId || currentProfileId || eventProfileId, 1);
+      }
+    });
+
+    const handleWindowSync = async () => {
+      if (document.visibilityState === "hidden") {
+        return;
+      }
+      const result = await loadHomeSnapshot({ silent: true });
+      if (result?.pendingRefresh) {
+        queueHealthInsightsRefresh(result.profileId || activeProfileIdRef.current, 1);
+      }
+    };
+
+    window.addEventListener("focus", handleWindowSync);
+    document.addEventListener("visibilitychange", handleWindowSync);
+
     return () => {
-      cancelled = true;
+      isMountedRef.current = false;
+      unsubscribe();
+      window.removeEventListener("focus", handleWindowSync);
+      document.removeEventListener("visibilitychange", handleWindowSync);
+      if (radarPollTimeoutRef.current) {
+        window.clearTimeout(radarPollTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -270,7 +361,7 @@ export default function Dashboard({ user }) {
       try {
         const response = await getProfileNotes(activeProfile.id).catch(() => []);
         let nextNotes = Array.isArray(response) ? response.slice(0, 6) : [];
-        if (!nextNotes.length && notesStorageKey) {
+        if (canEditActiveProfile && !nextNotes.length && notesStorageKey) {
           try {
             const raw = localStorage.getItem(notesStorageKey);
             const legacyNotes = raw ? JSON.parse(raw) : [];
@@ -304,7 +395,7 @@ export default function Dashboard({ user }) {
     return () => {
       cancelled = true;
     };
-  }, [activeProfile?.id, notesStorageKey]);
+  }, [activeProfile?.id, notesStorageKey, canEditActiveProfile]);
 
   const now = Date.now();
   const validAppointments = [...appointments]
@@ -398,7 +489,7 @@ export default function Dashboard({ user }) {
       kind: item.type === "examen" ? "exam" : "appointment",
       tag: cleanUiText(typeLabels[item.type] || "Cita"),
       title: cleanUiText(item.specialty, typeLabels[item.type] || "Actividad"),
-      meta: cleanUiText([item.center, item.notes].filter(Boolean).join(" - "), "Sin detalle adicional"),
+      meta: cleanUiText([item.center, item.notes].filter(Boolean).join(" \u00B7 "), "Sin detalle adicional"),
       urgent:
         parseDate(item.date_time) &&
         new Date(parseDate(item.date_time)).toDateString() === new Date().toDateString(),
@@ -517,6 +608,9 @@ export default function Dashboard({ user }) {
       onClick: () => navigate("/ai"),
     },
   ];
+  const visibleQuickActions = canEditActiveProfile
+    ? quickActions
+    : quickActions.filter((item) => item.id === "ai");
 
   const handleCancelNote = () => {
     setComposerOpen(false);
@@ -525,14 +619,15 @@ export default function Dashboard({ user }) {
   };
 
   const handleStartEditNote = (item) => {
+    if (!canEditActiveProfile) return;
     setComposerOpen(true);
     setEditingNoteId(item.id);
     setNoteDraft(item.note || item.text || "");
   };
 
   const handleDeleteNote = async (noteId) => {
-    if (!activeProfile?.id || !noteId) return;
-    const confirmed = window.confirm("¿Eliminar esta nota rápida?");
+    if (!canEditActiveProfile || !activeProfile?.id || !noteId) return;
+    const confirmed = window.confirm("\u00BFEliminar esta nota r\u00E1pida?");
     if (!confirmed) return;
     try {
       await deleteProfileNote(activeProfile.id, noteId);
@@ -546,6 +641,7 @@ export default function Dashboard({ user }) {
   };
 
   const handleSaveNote = async () => {
+    if (!canEditActiveProfile) return;
     const value = noteDraft.trim();
     if (!value || !activeProfile?.id || noteSubmitting) return;
     setNoteSubmitting(true);
@@ -580,7 +676,7 @@ export default function Dashboard({ user }) {
     <section className="home-editorial">
       <div className="home-editorial-layout">
         <div className="home-editorial-left">
-          <article className="home-greeting-card">
+          <article className="home-greeting-card home-summary-card">
             <div className="home-greeting-copy">
               <p className="home-greeting-eyebrow">Resumen personal</p>
               <h1 className="home-greeting-title">
@@ -616,7 +712,17 @@ export default function Dashboard({ user }) {
             </div>
           </article>
 
-          <article className="home-panel-card">
+          {isReadOnlyProfile ? (
+            <div className="card">
+              <div className="alert-info">
+                <p>
+                  <strong>Perfil en modo lectura.</strong> Puedes revisar el resumen y los registros, pero no crear ni editar elementos desde Inicio.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <article className="home-panel-card home-radar-card">
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Radar de salud</h2>
@@ -671,7 +777,7 @@ export default function Dashboard({ user }) {
                         lowAdherenceItems
                           .slice(0, 2)
                           .map((item) => `${item.name}: ${item.adherence_rate}%`)
-                          .join(" · ")
+                          .join(" \u00B7 ")
                       )}
                     </span>
                 </div>
@@ -679,10 +785,10 @@ export default function Dashboard({ user }) {
             </div>
           </article>
 
-          <article className="home-panel-card">
+          <article className="home-panel-card home-upcoming-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Actividad próxima</h2>
+                <h2 className="home-panel-title">{"Actividad pr\u00F3xima"}</h2>
                 <p className="home-panel-subtitle">Lo que viene en tu agenda</p>
               </div>
               <button type="button" className="home-panel-link" onClick={() => navigate("/calendar")}>
@@ -712,7 +818,7 @@ export default function Dashboard({ user }) {
                     <span className="home-upcoming-divider" />
                     <span className="home-upcoming-copy">
                       <strong>{cleanUiText(item.title)}</strong>
-                      <span>{cleanUiText([toTimeLabel(item.date), item.meta].filter(Boolean).join(" · "))}</span>
+                      <span>{cleanUiText([toTimeLabel(item.date), item.meta].filter(Boolean).join(" \u00B7 "))}</span>
                     </span>
                     <span className={`home-upcoming-tag tone-${item.kind === "medication" ? "amber" : item.kind === "exam" ? "teal" : "blue"}`}>
                       {item.tag}
@@ -720,20 +826,20 @@ export default function Dashboard({ user }) {
                   </button>
                 ))
               ) : (
-                <div className="home-empty-state">Sin actividad próxima registrada.</div>
+                <div className="home-empty-state">{"Sin actividad pr\u00F3xima registrada."}</div>
               )}
             </div>
           </article>
 
-          <article className="home-panel-card">
+          <article className="home-panel-card home-actions-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Acciones rápidas</h2>
-                <p className="home-panel-subtitle">Ejecuta tareas comunes sin navegar por menús.</p>
+                <h2 className="home-panel-title">{"Accesos r\u00E1pidos"}</h2>
+                <p className="home-panel-subtitle">Acciones frecuentes de Klinip al alcance de tu mano.</p>
               </div>
             </div>
             <div className="home-actions-grid">
-              {quickActions.map((item) => (
+              {visibleQuickActions.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -752,7 +858,7 @@ export default function Dashboard({ user }) {
           <article className="home-panel-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Notas rápidas</h2>
+                <h2 className="home-panel-title">{"Notas r\u00E1pidas"}</h2>
                 <p className="home-panel-subtitle">Pendientes e ideas de tu cuidado.</p>
               </div>
               <button
@@ -761,15 +867,15 @@ export default function Dashboard({ user }) {
                 onClick={() => {
                   if (composerOpen) {
                     handleCancelNote();
-                  } else {
+                  } else if (canEditActiveProfile) {
                     setComposerOpen(true);
                   }
                 }}
               >
-                {composerOpen ? "Cerrar" : "Nueva nota"}
+                {canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura"}
               </button>
             </div>
-            {composerOpen && (
+            {composerOpen && canEditActiveProfile && (
               <div className="home-note-composer">
                 <textarea
                   className="home-note-textarea"
@@ -799,7 +905,7 @@ export default function Dashboard({ user }) {
             )}
             <div className="home-notes-list">
               {notesLoading ? (
-                <div className="home-loading">Cargando notas rápidas...</div>
+                <div className="home-loading">{"Cargando notas r\u00E1pidas..."}</div>
               ) : quickNotes.length ? (
                 quickNotes.map((item, index) => (
                   <article key={item.id} className="home-note-row">
@@ -818,25 +924,29 @@ export default function Dashboard({ user }) {
                       </span>
                     </div>
                     <div className="home-note-row-actions">
-                      <button
-                        type="button"
-                        className="home-note-action-btn"
-                        onClick={() => handleStartEditNote(item)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="home-note-action-btn is-danger"
-                        onClick={() => handleDeleteNote(item.id)}
-                      >
-                        Eliminar
-                      </button>
+                      {canEditActiveProfile ? (
+                        <>
+                          <button
+                            type="button"
+                            className="home-note-action-btn"
+                            onClick={() => handleStartEditNote(item)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="home-note-action-btn is-danger"
+                            onClick={() => handleDeleteNote(item.id)}
+                          >
+                            Eliminar
+                          </button>
+                        </>
+                      ) : null}
                     </div>
                   </article>
                 ))
               ) : (
-                <div className="home-empty-state">Todavía no guardas notas rápidas.</div>
+                <div className="home-empty-state">{"Todav\u00EDa no guardas notas r\u00E1pidas."}</div>
               )}
             </div>
           </article>
@@ -845,7 +955,7 @@ export default function Dashboard({ user }) {
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Actividad reciente</h2>
-                <p className="home-panel-subtitle">Últimas acciones en la aplicación.</p>
+                <p className="home-panel-subtitle">{"\u00DAltimas acciones en la aplicaci\u00F3n."}</p>
               </div>
               <button type="button" className="home-panel-link" onClick={() => navigate("/timeline")}>
                 Ver historial
@@ -871,7 +981,7 @@ export default function Dashboard({ user }) {
                   </div>
                 ))
               ) : (
-                <div className="home-empty-state">Aún no hay actividad reciente.</div>
+                <div className="home-empty-state">{"A\u00FAn no hay actividad reciente."}</div>
               )}
             </div>
           </article>
@@ -892,7 +1002,7 @@ export default function Dashboard({ user }) {
                   </button>
                 ))
               ) : (
-                <div className="home-empty-state">Tu resumen está al día por ahora.</div>
+                <div className="home-empty-state">{"Tu resumen est\u00E1 al d\u00EDa por ahora."}</div>
               )}
             </div>
           </article>
@@ -903,4 +1013,5 @@ export default function Dashboard({ user }) {
     </section>
   );
 }
+
 

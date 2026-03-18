@@ -2,6 +2,35 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getActiveHealthProfile, getAiLifeTimeline, getHealthProfiles } from "../api";
 import { toLocaleDateOrEmpty } from "../utils/dates";
 
+const MOJIBAKE_FALLBACKS = [
+  ["Ã¡", "á"],
+  ["Ã©", "é"],
+  ["Ã­", "í"],
+  ["Ã³", "ó"],
+  ["Ãº", "ú"],
+  ["Ã±", "ñ"],
+  ["Ã", "Á"],
+  ["Ã‰", "É"],
+  ["Ã", "Í"],
+  ["Ã“", "Ó"],
+  ["Ãš", "Ú"],
+  ["Ã‘", "Ñ"],
+  ["Â¿", "¿"],
+  ["Â¡", "¡"],
+  ["Â·", "·"],
+];
+
+const SUMMARY_TOKEN_LABELS = [
+  [/health_alerts?/gi, "alertas de salud"],
+  [/diagnostic_results?/gi, "resultados clínicos"],
+  [/external_records?/gi, "registros externos"],
+  [/appointments?/gi, "citas"],
+  [/documents?/gi, "documentos"],
+  [/medications?/gi, "medicamentos"],
+  [/treatments?/gi, "tratamientos"],
+  [/results?/gi, "resultados"],
+];
+
 const typeLabels = {
   appointment: "Cita",
   document: "Documento",
@@ -21,6 +50,15 @@ const filterMap = {
   results: "diagnostic_result",
 };
 
+function cleanUiText(value, fallback = "") {
+  const text = String(value ?? "");
+  const cleaned = MOJIBAKE_FALLBACKS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    text
+  ).trim();
+  return cleaned || fallback;
+}
+
 function getTimelineIcon(eventType) {
   if (eventType === "appointment") return "📅";
   if (eventType === "document") return "📄";
@@ -29,6 +67,41 @@ function getTimelineIcon(eventType) {
   if (eventType === "external_record") return "🔗";
   if (eventType === "health_alert") return "⚠️";
   return "📌";
+}
+
+function humanizeTimelineSummary(summary) {
+  let text = cleanUiText(summary, "");
+  if (!text) return { lead: "", detail: "", highlights: [] };
+
+  SUMMARY_TOKEN_LABELS.forEach(([pattern, replacement]) => {
+    text = text.replace(pattern, replacement);
+  });
+
+  text = text
+    .replace(/\bEvolucion\b/g, "Evolución")
+    .replace(/\bclinicos\b/g, "clínicos")
+    .replace(/\bUltimos\b/g, "Últimos")
+    .replace(/\bmedica\b/g, "médica")
+    .replace(/\bcronologico\b/g, "cronológico");
+
+  const [leadPart = "", detailPart = ""] = text.split(/Últimos hitos:\s*/i);
+  const lead = leadPart.trim().replace(/\s+/g, " ");
+  const highlights = detailPart
+    .split(/\s*,\s*/)
+    .map((item) => cleanUiText(item))
+    .filter(Boolean)
+    .slice(0, 4);
+
+  const leadSentences = lead
+    .split(/(?<=\.)\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return {
+    lead: leadSentences[0] || lead,
+    detail: leadSentences.slice(1).join(" "),
+    highlights,
+  };
 }
 
 export default function Timeline() {
@@ -75,10 +148,10 @@ export default function Timeline() {
     return (Array.isArray(timeline.events) ? timeline.events : []).filter((item) => {
       const matchesType = !filterMap[filter] || item.event_type === filterMap[filter];
       const haystack = [
-        item.title,
-        item.summary,
-        item.category,
-        item.profile_name,
+        cleanUiText(item.title),
+        cleanUiText(item.summary),
+        cleanUiText(item.category),
+        cleanUiText(item.profile_name),
       ]
         .filter(Boolean)
         .join(" ")
@@ -98,15 +171,39 @@ export default function Timeline() {
     return base;
   }, [events]);
 
+  const summaryView = useMemo(
+    () => humanizeTimelineSummary(timeline.summary || ""),
+    [timeline.summary]
+  );
+
   return (
     <>
       <div className="card timeline-overview-card">
-        <h2 className="card-title">Mi Historia Clinica</h2>
+        <h2 className="card-title">{"Mi Historia Clínica"}</h2>
         <p className="muted">
-          Linea de vida medica construida desde tu contexto clinico real. Resume citas, documentos, tratamientos,
-          resultados y eventos relevantes en orden cronologico.
+          {
+            "Línea de vida médica construida desde tu contexto clínico real. Resume citas, documentos, tratamientos, resultados y eventos relevantes en orden cronológico."
+          }
         </p>
-        <p className="timeline-ai-summary">{timeline.summary || "Cargando resumen evolutivo..."}</p>
+        <div className="timeline-ai-summary">
+          {summaryView.lead ? (
+            <>
+              <p className="timeline-ai-summary-lead">{summaryView.lead}</p>
+              {summaryView.detail ? <p className="timeline-ai-summary-detail">{summaryView.detail}</p> : null}
+              {summaryView.highlights.length ? (
+                <div className="timeline-ai-summary-highlights">
+                  {summaryView.highlights.map((item) => (
+                    <span key={item} className="timeline-ai-summary-pill">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="timeline-ai-summary-lead">{"Cargando resumen evolutivo..."}</p>
+          )}
+        </div>
         <div className="timeline-stats">
           <div className="timeline-stat-card is-appointments">
             <div className="timeline-stat-number">{stats.appointments}</div>
@@ -136,17 +233,17 @@ export default function Timeline() {
                 <option value="active">Perfil activo</option>
                 {profiles.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.full_name || `Perfil ${item.id}`}
+                    {cleanUiText(item.full_name, `Perfil ${item.id}`)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="input-group">
-              <label className="input-label">Periodo</label>
+              <label className="input-label">{"Período"}</label>
               <select className="input-field" value={periodDays} onChange={(e) => setPeriodDays(e.target.value)}>
-                <option value="30">30 dias</option>
-                <option value="90">90 dias</option>
-                <option value="180">180 dias</option>
+                <option value="30">30 días</option>
+                <option value="90">90 días</option>
+                <option value="180">180 días</option>
                 <option value="365">12 meses</option>
               </select>
             </div>
@@ -160,7 +257,7 @@ export default function Timeline() {
             <input
               type="text"
               className="input-field timeline-search-input"
-              placeholder="Buscar en la linea de vida medica..."
+              placeholder={"Buscar en la línea de vida médica..."}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -188,11 +285,11 @@ export default function Timeline() {
 
       <div className="card timeline-list-card">
         {loading ? (
-          <div className="home-empty-state">Cargando linea de vida medica...</div>
+          <div className="home-empty-state">{"Cargando línea de vida médica..."}</div>
         ) : events.length === 0 ? (
           <div style={{ textAlign: "center", padding: "2rem" }}>
             <p className="muted" style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
-              {searchTerm ? "No se encontraron resultados" : "Aun no hay eventos en tu linea de vida medica"}
+              {searchTerm ? "No se encontraron resultados" : "Aún no hay eventos en tu línea de vida médica"}
             </p>
           </div>
         ) : (
@@ -203,34 +300,38 @@ export default function Timeline() {
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "1.4rem" }}>{getTimelineIcon(item.event_type)}</span>
                     <span className={`chip ${item.event_type === "document" ? "doc" : item.event_type}`}>
-                      {typeLabels[item.event_type] || item.event_type}
+                      {typeLabels[item.event_type] || cleanUiText(item.event_type, "Evento")}
                     </span>
-                    {includeFamily ? <span className="timeline-related-pill">{item.profile_name}</span> : null}
+                    {includeFamily ? (
+                      <span className="timeline-related-pill">
+                        {cleanUiText(item.profile_name, "Perfil relacionado")}
+                      </span>
+                    ) : null}
                   </div>
                   <span className="timeline-meta" style={{ fontSize: "0.875rem", whiteSpace: "nowrap" }}>
                     {item.event_at ? toLocaleDateOrEmpty(item.event_at) : ""}
                   </span>
                 </div>
                 <p className="timeline-title" style={{ fontWeight: "600", marginBottom: "0.5rem", fontSize: "1rem" }}>
-                  {item.title}
+                  {cleanUiText(item.title, "Evento clínico")}
                 </p>
                 {item.summary ? (
                   <p className="timeline-notes" style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>
-                    {item.summary}
+                    {cleanUiText(item.summary)}
                   </p>
                 ) : null}
                 {item.category ? (
                   <div className="timeline-related-panel">
-                    <div className="timeline-related-title">Categoria</div>
-                    <div className="timeline-related-item is-document">{item.category}</div>
+                    <div className="timeline-related-title">Categoría</div>
+                    <div className="timeline-related-item is-document">{cleanUiText(item.category)}</div>
                     {item.metadata_json?.status ? (
                       <div className="timeline-related-item is-appointment">
-                        Estado: {item.metadata_json.status}
+                        Estado: {cleanUiText(item.metadata_json.status)}
                       </div>
                     ) : null}
                     {item.metadata_json?.filename ? (
                       <div className="timeline-related-item is-medication">
-                        Archivo: {item.metadata_json.filename}
+                        Archivo: {cleanUiText(item.metadata_json.filename)}
                       </div>
                     ) : null}
                   </div>

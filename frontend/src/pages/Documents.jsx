@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDocuments, uploadDocument, deleteDocument } from "../api";
+import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile } from "../api";
+import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { getDocumentFile } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
+import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 
 const docLabels = {
   receta: "Receta",
@@ -13,6 +15,14 @@ const docLabels = {
   otro: "Otro",
 };
 
+function getNewestDocumentRank(item) {
+  const createdAt = new Date(item?.created_at || "");
+  if (!Number.isNaN(createdAt.getTime())) return createdAt.getTime();
+  const documentDate = new Date(item?.date || "");
+  if (!Number.isNaN(documentDate.getTime())) return documentDate.getTime();
+  return Number(item?.id || 0);
+}
+
 const ocrLabels = {
   pending: "OCR pendiente",
   processing: "OCR en proceso",
@@ -20,27 +30,98 @@ const ocrLabels = {
   skipped_size: "OCR omitido",
 };
 
+const MOJIBAKE_FALLBACKS = [
+  ["Ã¡", "á"],
+  ["Ã©", "é"],
+  ["Ã­", "í"],
+  ["Ã³", "ó"],
+  ["Ãº", "ú"],
+  ["Ã±", "ñ"],
+  ["Ã", "Á"],
+  ["Ã‰", "É"],
+  ["Ã", "Í"],
+  ["Ã“", "Ó"],
+  ["Ãš", "Ú"],
+  ["Ã‘", "Ñ"],
+  ["Â¿", "¿"],
+  ["Â¡", "¡"],
+  ["Â·", "·"],
+  ["â€”", "—"],
+  ["â€“", "–"],
+  ["âˆ’", "-"],
+  ["Ã—", "×"],
+];
+
+function cleanUiText(value, fallback = "") {
+  const text = String(value ?? "");
+  const cleaned = MOJIBAKE_FALLBACKS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    text
+  ).trim();
+  return cleaned || fallback;
+}
+
+function inferViewerKind(doc) {
+  const filename = String(doc?.filename || "").toLowerCase();
+  if (filename.endsWith(".pdf")) return "pdf";
+  if (/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(filename)) return "image";
+  return "other";
+}
+
+const initialForm = {
+  doc_type: "receta",
+  date: "",
+  center: "",
+  notes: "",
+  send_email_backup: false,
+};
+
 export default function Documents() {
   const navigate = useNavigate();
   const [docs, setDocs] = useState([]);
+  const [activeProfile, setActiveProfile] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerTarget, setViewerTarget] = useState(null);
+  const [viewerUrl, setViewerUrl] = useState("");
+  const [viewerKind, setViewerKind] = useState("other");
+  const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerZoom, setViewerZoom] = useState(1);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [form, setForm] = useState({
-    doc_type: "receta",
-    date: "",
-    center: "",
-    notes: "",
-    send_email_backup: false,
-  });
+  const [form, setForm] = useState(initialForm);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
 
+  const canEditActiveProfile = canWriteProfile(activeProfile);
+  const isReadOnlyProfile = isViewerProfile(activeProfile);
+
+  const resetForm = () => {
+    setForm(initialForm);
+    setFile(null);
+  };
+
+  const releaseViewerUrl = () => {
+    if (viewerUrl) {
+      window.URL.revokeObjectURL(viewerUrl);
+    }
+  };
+
+  const closeViewer = () => {
+    releaseViewerUrl();
+    setViewerOpen(false);
+    setViewerTarget(null);
+    setViewerUrl("");
+    setViewerKind("other");
+    setViewerZoom(1);
+    setViewerLoading(false);
+  };
+
   const handleFormClose = () => {
     if (uploading) {
-      alert("Espera a que termine la subida antes de cerrar.");
+      window.alert("Espera a que termine la subida antes de cerrar.");
       return;
     }
     const hasChanges =
@@ -51,53 +132,72 @@ export default function Documents() {
       form.send_email_backup ||
       form.doc_type !== "receta";
     if (hasChanges) {
-      const shouldClose = window.confirm(
-        "¿Cerrar sin guardar? Se perderán los cambios."
-      );
+      const shouldClose = window.confirm("¿Cerrar sin guardar? Se perderán los cambios.");
       if (!shouldClose) return;
     }
-    setForm({
-      doc_type: "receta",
-      date: "",
-      center: "",
-      notes: "",
-      send_email_backup: false,
-    });
-    setFile(null);
+    resetForm();
     setShowForm(false);
   };
 
   async function load() {
-    const data = await getDocuments();
-    setDocs(data);
+    const [data, profile] = await Promise.all([
+      getDocuments(),
+      getActiveHealthProfile().catch(() => null),
+    ]);
+    setActiveProfile(profile || null);
+    setDocs(
+      Array.isArray(data)
+        ? [...data].sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a))
+        : []
+    );
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  useEffect(() => () => releaseViewerUrl(), [viewerUrl]);
+
+  const filteredDocs = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+    return docs.filter((item) => {
+      const matchesSearch =
+        !normalizedSearch ||
+        cleanUiText(item.center).toLowerCase().includes(normalizedSearch) ||
+        cleanUiText(item.notes).toLowerCase().includes(normalizedSearch) ||
+        cleanUiText(item.filename).toLowerCase().includes(normalizedSearch);
+      const matchesType = typeFilter === "all" || item.doc_type === typeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [docs, search, typeFilter]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!canEditActiveProfile) {
+      window.alert("Este perfil está en modo solo lectura. No puedes subir documentos.");
+      return;
+    }
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("Debes iniciar sesion para subir documentos.");
+      window.alert("Debes iniciar sesión para subir documentos.");
       navigate("/login");
       return;
     }
     if (!file) {
-      alert("Debes seleccionar un archivo (foto o PDF)");
+      window.alert("Debes seleccionar un archivo, ya sea imagen o PDF.");
       return;
     }
     const maxBytes = 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      alert("El archivo supera el limite de 10 MB. Reduce el tamanio e intenta de nuevo.");
+      window.alert("El archivo supera el límite de 10 MB. Reduce el tamaño e intenta de nuevo.");
       return;
     }
 
     setUploading(true);
+    let timeoutId;
     try {
-      const timeoutId = setTimeout(() => {
-        alert("La subida esta tardando mas de lo esperado. Mantente en esta pantalla.");
+      timeoutId = window.setTimeout(() => {
+        window.alert("La subida está tardando más de lo esperado. Mantente en esta pantalla.");
       }, 8000);
       await uploadDocument({
         doc_type: form.doc_type,
@@ -107,67 +207,74 @@ export default function Documents() {
         send_email_backup: form.send_email_backup,
         file,
       });
-      clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId);
       await load();
-      handleFormClose();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["documents", "health-radar"],
+      });
+      resetForm();
+      setShowForm(false);
     } catch (err) {
       console.error(err);
+      window.clearTimeout(timeoutId);
       if (err?.response?.status === 401) {
-        alert("Tu sesion expiro. Inicia sesion nuevamente.");
+        window.alert("Tu sesión expiró. Inicia sesión nuevamente.");
         navigate("/login");
         return;
       }
       if (err?.response?.status === 524) {
-        alert("El servidor demoro demasiado en responder. Intenta nuevamente.");
+        window.alert("El servidor demoró demasiado en responder. Intenta nuevamente.");
         return;
       }
-      alert("No se pudo subir el documento");
+      window.alert("No se pudo subir el documento.");
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (doc) => {
+    if (!canEditActiveProfile) {
+      window.alert("Este perfil está en modo solo lectura. No puedes eliminar documentos.");
+      return;
+    }
     if (!window.confirm("¿Eliminar este documento?")) return;
     try {
       await deleteDocument(doc.id);
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["documents", "health-radar"],
+      });
+      if (detailTarget?.id === doc.id) {
+        setDetailOpen(false);
+        setDetailTarget(null);
+      }
+      if (viewerTarget?.id === doc.id) {
+        closeViewer();
+      }
     } catch (err) {
       console.error(err);
-      alert("No se pudo eliminar");
+      window.alert("No se pudo eliminar el documento.");
     }
   };
 
-  const handleView = async (doc) => {
+  const handleOpenViewer = async (doc) => {
+    setViewerLoading(true);
+    setViewerOpen(true);
+    setViewerTarget(doc);
+    setViewerKind(inferViewerKind(doc));
+    setViewerZoom(1);
     try {
-      // Obtener el archivo con autenticaci?n
       const url = await getDocumentFile(doc.id);
-
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-      if (isMobile) {
-        window.location.assign(url);
-      } else {
-        // Abrir en nueva pesta?a para no romper el estado de la PWA
-        const newWindow = window.open(url, "_blank", "noopener");
-        if (!newWindow) {
-          const link = document.createElement("a");
-          link.href = url;
-          link.target = "_blank";
-          link.rel = "noopener";
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        }
-      }
-
-      // Liberar la URL temporal
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 2000);
+      releaseViewerUrl();
+      setViewerUrl(url);
     } catch (err) {
       console.error("Error al abrir documento:", err);
-      alert("No se pudo abrir el documento. " + (err.response?.data?.detail || err.message));
+      closeViewer();
+      window.alert(`No se pudo abrir el documento. ${err.response?.data?.detail || err.message}`);
+    } finally {
+      setViewerLoading(false);
     }
   };
 
@@ -176,16 +283,14 @@ export default function Documents() {
       const url = await getDocumentFile(doc.id);
       const link = document.createElement("a");
       link.href = url;
-      link.download = doc.filename || `documento-${doc.id}`;
+      link.download = cleanUiText(doc.filename, `documento-${doc.id}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 2000);
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
     } catch (err) {
       console.error("Error al descargar documento:", err);
-      alert("No se pudo descargar el documento.");
+      window.alert("No se pudo descargar el documento.");
     }
   };
 
@@ -199,49 +304,41 @@ export default function Documents() {
     setDetailTarget(null);
   };
 
-  const filteredDocs = docs.filter((d) => {
-    const matchesSearch =
-      !search ||
-      (d.center || "").toLowerCase().includes(search.toLowerCase()) ||
-      (d.notes || "").toLowerCase().includes(search.toLowerCase()) ||
-      (d.filename || "").toLowerCase().includes(search.toLowerCase());
-    const matchesType = typeFilter === "all" || d.doc_type === typeFilter;
-    return matchesSearch && matchesType;
-  });
+  const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
 
   return (
     <>
       <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDFs de recetas, ordenes, resultados e informes. Se almacenan seguros en el backend.
+          Guarda fotos o PDFs de recetas, órdenes, resultados e informes. Se almacenan de forma segura en Klinip.
         </p>
       </div>
 
-      <div className="card documents-surface-free documents-create">
-        <button
-          className="primary-btn"
-          type="button"
-          style={{ width: "100%" }}
-          onClick={() => setShowForm(true)}
-        >
-          Agregar documento
-        </button>
-      </div>
+      {isReadOnlyProfile ? (
+        <div className="card">
+          <div className="alert-info">
+            <p>
+              <strong>Perfil en modo lectura.</strong> Puedes revisar y descargar documentos, pero no subir ni eliminar archivos.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
-      {showForm && (
+      {canEditActiveProfile ? (
+        <div className="card documents-surface-free documents-create">
+          <button className="primary-btn" type="button" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
+            Agregar documento
+          </button>
+        </div>
+      ) : null}
+
+      {showForm && canEditActiveProfile && (
         <div className="floating-form-backdrop" onClick={handleFormClose}>
-          <div
-            className="floating-form-card"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="floating-form-card" onClick={(event) => event.stopPropagation()}>
             <div className="card-header" style={{ marginBottom: "0.75rem" }}>
               <h3 className="card-title" style={{ marginBottom: 0 }}>Nuevo documento</h3>
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={handleFormClose}
-              >
+              <button className="secondary-btn" type="button" onClick={handleFormClose}>
                 Cerrar
               </button>
             </div>
@@ -252,7 +349,7 @@ export default function Documents() {
                   <select
                     className="select-field"
                     value={form.doc_type}
-                    onChange={(e) => setForm({ ...form, doc_type: e.target.value })}
+                    onChange={(event) => setForm({ ...form, doc_type: event.target.value })}
                   >
                     <option value="receta">Receta</option>
                     <option value="orden">Orden</option>
@@ -267,7 +364,7 @@ export default function Documents() {
                     className="input-field"
                     type="date"
                     value={form.date}
-                    onChange={(e) => setForm({ ...form, date: e.target.value })}
+                    onChange={(event) => setForm({ ...form, date: event.target.value })}
                   />
                 </div>
               </div>
@@ -278,7 +375,7 @@ export default function Documents() {
                   <input
                     className="input-field"
                     value={form.center}
-                    onChange={(e) => setForm({ ...form, center: e.target.value })}
+                    onChange={(event) => setForm({ ...form, center: event.target.value })}
                     placeholder="CESFAM, hospital, laboratorio..."
                   />
                 </div>
@@ -289,44 +386,38 @@ export default function Documents() {
                 <textarea
                   className="textarea-field"
                   value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Ej: Receta vence en 3 meses, control con médico X, etc."
+                  onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                  placeholder="Ej: Receta vence en 3 meses, control con médico tratante, etc."
                 />
               </div>
 
               <div className="input-group">
-                <label className="input-label">Archivo (foto o PDF)</label>
+                <label className="input-label">Archivo</label>
                 <input
                   className="input-field"
                   type="file"
                   accept="image/*,application/pdf"
-                  onChange={(e) => setFile(e.target.files[0] || null)}
+                  onChange={(event) => setFile(event.target.files?.[0] || null)}
                 />
-                <span className="tiny-note">Ten en cuenta el tama?o soportado por tu navegador y conexi?n.</span>
+                <span className="tiny-note">Puedes cargar imágenes o PDF de hasta 10 MB.</span>
               </div>
 
               <label className="auth-consent-label" style={{ marginBottom: "0.75rem" }}>
                 <input
                   type="checkbox"
                   checked={form.send_email_backup}
-                  onChange={(e) =>
-                    setForm({ ...form, send_email_backup: e.target.checked })
+                  onChange={(event) =>
+                    setForm({ ...form, send_email_backup: event.target.checked })
                   }
                 />
-                <span>
-                  Enviarme una copia de respaldo por correo (documento adjunto)
-                </span>
+                <span>Enviarme una copia de respaldo por correo.</span>
               </label>
 
               <div className="floating-actions">
                 <button className="primary-btn" type="submit" disabled={uploading}>
                   {uploading ? "Subiendo..." : "Guardar documento"}
                 </button>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={handleFormClose}
-                >
+                <button type="button" className="secondary-btn" onClick={handleFormClose}>
                   Cancelar
                 </button>
               </div>
@@ -346,33 +437,29 @@ export default function Documents() {
             </div>
             <div className="detail-modal-content">
               <div className="detail-highlight">
-                <span className="detail-chip detail-chip-type resultado">
-                  {docLabels[detailTarget.doc_type] || detailTarget.doc_type}
+                <span className={`detail-chip detail-chip-type ${detailTarget.doc_type || "otro"}`}>
+                  {docLabels[detailTarget.doc_type] || cleanUiText(detailTarget.doc_type, "Documento")}
                 </span>
                 <span className="detail-chip detail-chip-muted">
-                  {ocrLabels[detailTarget.ocr_status] ||
-                    (detailTarget.ocr_status ? "OCR con error" : "Sin OCR")}
+                  {ocrLabels[detailTarget.ocr_status] || (detailTarget.ocr_status ? "OCR con error" : "Sin OCR")}
                 </span>
               </div>
               <div className="detail-grid">
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>📄</span>
                   <div>
-                    <span className="detail-label">Nombre archivo</span>
-                    <p>{detailTarget.filename || `documento-${detailTarget.id}`}</p>
+                    <span className="detail-label">Nombre del archivo</span>
+                    <p>{cleanUiText(detailTarget.filename, `documento-${detailTarget.id}`)}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>🏥</span>
                   <div>
                     <span className="detail-label">Centro médico</span>
-                    <p>{detailTarget.center || "Sin centro"}</p>
+                    <p>{cleanUiText(detailTarget.center, "Sin centro registrado")}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>🗓️</span>
                   <div>
-                    <span className="detail-label">Fecha documento</span>
+                    <span className="detail-label">Fecha del documento</span>
                     <p>
                       {detailTarget.date
                         ? toLocaleDateOrEmpty(detailTarget.date)
@@ -381,20 +468,91 @@ export default function Documents() {
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>📝</span>
                   <div>
                     <span className="detail-label">Notas</span>
-                    <p>{detailTarget.notes || "Sin notas"}</p>
+                    <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
                   </div>
                 </div>
               </div>
             </div>
             <div className="modal-actions">
-              <button className="secondary-btn" type="button" onClick={() => handleView(detailTarget)}>
-                Ver documento
+              <button className="secondary-btn" type="button" onClick={() => handleOpenViewer(detailTarget)}>
+                Visualizar
               </button>
               <button className="primary-btn" type="button" onClick={() => handleDownload(detailTarget)}>
                 Descargar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewerOpen && viewerTarget && (
+        <div className="modal-backdrop document-viewer-backdrop" onClick={closeViewer}>
+          <div className="modal-card document-viewer-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="document-viewer-header">
+              <div>
+                <h3>Visualización de documento</h3>
+                <p>{cleanUiText(viewerTarget.filename, `documento-${viewerTarget.id}`)}</p>
+              </div>
+              <button className="detail-close-btn" type="button" onClick={closeViewer} aria-label="Cerrar">
+                ×
+              </button>
+            </div>
+
+            <div className="document-viewer-stage">
+              {viewerLoading ? (
+                <div className="document-viewer-empty">Cargando documento...</div>
+              ) : viewerUrl && viewerKind === "pdf" ? (
+                <div className="document-viewer-canvas" style={{ "--viewer-scale": viewerZoom }}>
+                  <iframe
+                    className="document-viewer-frame"
+                    src={`${viewerUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                    title={cleanUiText(viewerTarget.filename, "Documento PDF")}
+                  />
+                </div>
+              ) : viewerUrl && viewerKind === "image" ? (
+                <div className="document-viewer-canvas" style={{ "--viewer-scale": viewerZoom }}>
+                  <img
+                    className="document-viewer-image"
+                    src={viewerUrl}
+                    alt={cleanUiText(viewerTarget.filename, "Documento")}
+                  />
+                </div>
+              ) : (
+                <div className="document-viewer-empty">
+                  <strong>No hay vista previa disponible</strong>
+                  <span>Este tipo de archivo se puede descargar, pero no visualizar dentro de Klinip todavía.</span>
+                </div>
+              )}
+            </div>
+
+            <div className="document-viewer-toolbar">
+              <button
+                className="document-viewer-zoom-btn"
+                type="button"
+                onClick={() => setViewerZoom((current) => Math.max(0.75, Number((current - 0.1).toFixed(2))))}
+                disabled={viewerKind === "other" || viewerLoading}
+              >
+                Zoom -
+              </button>
+              <span className="document-viewer-zoom-value">{zoomLabel}</span>
+              <button
+                className="document-viewer-zoom-btn"
+                type="button"
+                onClick={() => setViewerZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
+                disabled={viewerKind === "other" || viewerLoading}
+              >
+                Zoom +
+              </button>
+            </div>
+
+            <div className="document-viewer-actions">
+              <button className="primary-btn" type="button" onClick={() => handleDownload(viewerTarget)}>
+                {viewerKind === "pdf" ? "Descargar PDF" : "Descargar archivo"}
+              </button>
+              <button className="secondary-btn" type="button" onClick={closeViewer}>
+                Cerrar
               </button>
             </div>
           </div>
@@ -410,7 +568,7 @@ export default function Documents() {
               className="input-field documents-filter-field"
               placeholder="Centro, notas o nombre de archivo"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(event) => setSearch(event.target.value)}
             />
           </div>
           <div className="input-group">
@@ -418,7 +576,7 @@ export default function Documents() {
             <select
               className="select-field documents-filter-field"
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
+              onChange={(event) => setTypeFilter(event.target.value)}
             >
               <option value="all">Todos</option>
               <option value="receta">Receta</option>
@@ -432,6 +590,7 @@ export default function Documents() {
         {docs.length === 0 ? (
           <p className="muted">Aún no has guardado documentos.</p>
         ) : (
+          <>
           <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
             <table className="table">
               <thead>
@@ -441,63 +600,62 @@ export default function Documents() {
                   <th>Fecha</th>
                   <th>Centro</th>
                   <th>Notas</th>
-                  <th></th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {filteredDocs.map((d) => (
+                {filteredDocs.map((doc) => (
                   <tr
-                    key={d.id}
+                    key={doc.id}
                     className="table-row-clickable"
-                    onClick={() => handleOpenDetail(d)}
+                    onClick={() => handleOpenDetail(doc)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        handleOpenDetail(d);
+                        handleOpenDetail(doc);
                       }
                     }}
                   >
                     <td>
                       <span className="badge">
-                        {docLabels[d.doc_type] || d.doc_type}
+                        {docLabels[doc.doc_type] || cleanUiText(doc.doc_type, "Documento")}
                       </span>
                     </td>
                     <td>
                       <span className="badge">
-                        {ocrLabels[d.ocr_status] ||
-                          (d.ocr_status ? "OCR con error" : "sin OCR")}
+                        {ocrLabels[doc.ocr_status] || (doc.ocr_status ? "OCR con error" : "Sin OCR")}
                       </span>
                     </td>
                     <td>
-                      {d.date
-                        ? toLocaleDateOrEmpty(d.date)
-                        : toLocaleDateOrEmpty(d.created_at)}
+                      {doc.date ? toLocaleDateOrEmpty(doc.date) : toLocaleDateOrEmpty(doc.created_at)}
                     </td>
-                    <td>{d.center}</td>
+                    <td>{cleanUiText(doc.center)}</td>
                     <td style={{ maxWidth: "240px" }}>
-                      <span style={{ fontSize: "0.85rem" }}>{d.notes}</span>
+                      <span style={{ fontSize: "0.85rem" }}>{cleanUiText(doc.notes)}</span>
                     </td>
                     <td onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu
                         items={[
                           {
-                            key: "view",
-                            label: "Ver",
-                            onClick: () => handleView(d),
+                            key: "preview",
+                            label: "Visualizar",
+                            onClick: () => handleOpenViewer(doc),
                           },
                           {
                             key: "download",
                             label: "Descargar",
-                            onClick: () => handleDownload(d),
+                            onClick: () => handleDownload(doc),
                           },
-                          {
-                            key: "delete",
-                            label: "Eliminar",
-                            danger: true,
-                            onClick: () => handleDelete(d),
-                          },
+                          canEditActiveProfile
+                            ? {
+                                key: "delete",
+                                label: "Eliminar",
+                                danger: true,
+                                onClick: () => handleDelete(doc),
+                              }
+                            : null,
                         ]}
                       />
                     </td>
@@ -506,6 +664,103 @@ export default function Documents() {
               </tbody>
             </table>
           </div>
+          <div className="records-mobile-list documents-mobile-list">
+            {filteredDocs.map((doc) => (
+              <article
+                key={`mobile-${doc.id}`}
+                className="records-mobile-card documents-mobile-card"
+                onClick={() => handleOpenDetail(doc)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleOpenDetail(doc);
+                  }
+                }}
+              >
+                <div className="records-mobile-head">
+                  <div className="records-mobile-head-main">
+                    <span className={`records-mobile-icon-badge is-${doc.doc_type || "document"}`}>
+                      {cleanUiText(docLabels[doc.doc_type] || "Documento").slice(0, 1)}
+                    </span>
+                    <div className="records-mobile-title-group">
+                      <strong>{cleanUiText(docLabels[doc.doc_type] || "Documento")}</strong>
+                      <span>{cleanUiText(doc.filename || "Archivo sin nombre")}</span>
+                    </div>
+                  </div>
+                  <div className="records-mobile-head-side">
+                    <span className="badge">
+                      {ocrLabels[doc.ocr_status] || (doc.ocr_status ? "OCR con error" : "Sin OCR")}
+                    </span>
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <RowActionsMenu
+                        items={[
+                          {
+                            key: "preview",
+                            label: "Visualizar",
+                            onClick: () => handleOpenViewer(doc),
+                          },
+                          {
+                            key: "download",
+                            label: "Descargar",
+                            onClick: () => handleDownload(doc),
+                          },
+                          canEditActiveProfile
+                            ? {
+                                key: "delete",
+                                label: "Eliminar",
+                                danger: true,
+                                onClick: () => handleDelete(doc),
+                              }
+                            : null,
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="records-mobile-meta-grid">
+                  <div className="records-mobile-meta-item">
+                    <span className="records-mobile-meta-label">Fecha</span>
+                    <span>{doc.date ? toLocaleDateOrEmpty(doc.date) : toLocaleDateOrEmpty(doc.created_at)}</span>
+                  </div>
+                  <div className="records-mobile-meta-item">
+                    <span className="records-mobile-meta-label">Centro</span>
+                    <span>{cleanUiText(doc.center, "Sin centro")}</span>
+                  </div>
+                </div>
+
+                {cleanUiText(doc.notes) ? (
+                  <div className="records-mobile-note">{cleanUiText(doc.notes)}</div>
+                ) : null}
+
+                <div className="records-mobile-footer">
+                  <button
+                    type="button"
+                    className="records-mobile-link"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenViewer(doc);
+                    }}
+                  >
+                    Visualizar
+                  </button>
+                  <button
+                    type="button"
+                    className="records-mobile-link"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleOpenDetail(doc);
+                    }}
+                  >
+                    Más detalle
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+          </>
         )}
       </div>
     </>

@@ -5,6 +5,7 @@ import {
   createAppointment,
   updateAppointment,
   deleteAppointment,
+  getActiveHealthProfile,
 } from "../api";
 import {
   parseDate,
@@ -13,12 +14,24 @@ import {
   toLocalInputValue,
 } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
+import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
+import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 
 const typeLabels = {
   cita: "Cita médica",
   examen: "Examen",
   tramite: "Trámite",
 };
+
+function getNewestAppointmentRank(item) {
+  const createdAt = parseDate(item?.created_at);
+  if (createdAt) return createdAt.getTime();
+  const updatedAt = parseDate(item?.updated_at);
+  if (updatedAt) return updatedAt.getTime();
+  const scheduledAt = parseDate(item?.date_time);
+  if (scheduledAt) return scheduledAt.getTime();
+  return Number(item?.id || 0);
+}
 
 const statusLabels = {
   pendiente: "Pendiente",
@@ -53,10 +66,16 @@ function cleanUiText(value, fallback = "") {
   return cleaned || fallback;
 }
 
+function formatAppointmentDateLabel(item) {
+  if (!item?.date_time) return "Por agendar";
+  return toLocaleDateTimeOrEmpty(item.date_time) || "Por agendar";
+}
+
 export default function Appointments() {
   const location = useLocation();
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
+  const [activeProfile, setActiveProfile] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [notifyTarget, setNotifyTarget] = useState(null);
@@ -77,16 +96,17 @@ export default function Appointments() {
   });
   const [loading, setLoading] = useState(false);
 
+  const canEditActiveProfile = canWriteProfile(activeProfile);
+  const isReadOnlyProfile = isViewerProfile(activeProfile);
+
   async function load() {
-    const data = await getAppointments();
+    const [data, profile] = await Promise.all([
+      getAppointments(),
+      getActiveHealthProfile().catch(() => null),
+    ]);
+    setActiveProfile(profile || null);
     setAppointments(
-      data.sort((a, b) => {
-        const aDate = parseDate(a.date_time);
-        const bDate = parseDate(b.date_time);
-        if (!aDate) return 1;
-        if (!bDate) return -1;
-        return aDate - bDate;
-      })
+      [...data].sort((a, b) => getNewestAppointmentRank(b) - getNewestAppointmentRank(a))
     );
   }
 
@@ -95,6 +115,7 @@ export default function Appointments() {
   }, []);
 
   useEffect(() => {
+    if (!canEditActiveProfile) return;
     if (!location.search) return;
     const params = new URLSearchParams(location.search);
     const id = params.get("complete");
@@ -114,7 +135,7 @@ export default function Appointments() {
       .finally(() => {
         navigate("/appointments", { replace: true });
       });
-  }, [location.search, appointments, navigate]);
+  }, [location.search, appointments, navigate, canEditActiveProfile]);
 
   useEffect(() => {
     if (!location.search) return;
@@ -142,6 +163,10 @@ export default function Appointments() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes modificar citas.");
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -158,6 +183,10 @@ export default function Appointments() {
         await createAppointment(payload);
       }
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["appointments", "health-radar"],
+      });
       resetForm();
       setShowForm(false);
     } catch (err) {
@@ -169,6 +198,7 @@ export default function Appointments() {
   };
 
   const handleEdit = (appt) => {
+    if (!canEditActiveProfile) return;
     setShowForm(true);
     setForm({
       id: appt.id,
@@ -182,10 +212,18 @@ export default function Appointments() {
   };
 
   const handleDelete = async (appt) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes eliminar citas.");
+      return;
+    }
     if (!window.confirm("¿Eliminar esta cita/examen?")) return;
     try {
       await deleteAppointment(appt.id);
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["appointments", "health-radar"],
+      });
     } catch (err) {
       console.error(err);
       alert("No se pudo eliminar");
@@ -193,6 +231,10 @@ export default function Appointments() {
   };
 
   const handleMarkCompleted = async (appt) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes modificar el estado de la cita.");
+      return;
+    }
     try {
       await updateAppointment(appt.id, {
         type: appt.type,
@@ -204,6 +246,10 @@ export default function Appointments() {
         checklist: appt.checklist || []
       });
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["appointments", "health-radar"],
+      });
     } catch (err) {
       console.error(err);
       alert("No se pudo marcar como realizada");
@@ -261,6 +307,16 @@ export default function Appointments() {
         </p>
       </div>
 
+      {isReadOnlyProfile ? (
+        <div className="card">
+          <div className="alert-info">
+            <p>
+              <strong>Perfil en modo lectura.</strong> Puedes revisar citas y exámenes, pero no crear, editar ni marcar actividades.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {hasUndatedAppointments && (
         <div className="card">
           <div className="alert-info">
@@ -294,40 +350,44 @@ export default function Appointments() {
                   </option>
                 ))}
               </select>
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={() => {
-                  const target =
-                    undatedAppointments.find(
-                      (a) => String(a.id) === String(selectedUndatedId)
-                    ) || undatedAppointments[0];
-                  if (target) {
-                    handleEdit(target);
-                  } else {
-                    resetForm();
-                    setShowForm(true);
-                  }
-                }}
-                style={{ whiteSpace: "nowrap" }}
-              >
-                Agregar fecha
-              </button>
+              {canEditActiveProfile ? (
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    const target =
+                      undatedAppointments.find(
+                        (a) => String(a.id) === String(selectedUndatedId)
+                      ) || undatedAppointments[0];
+                    if (target) {
+                      handleEdit(target);
+                    } else {
+                      resetForm();
+                      setShowForm(true);
+                    }
+                  }}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  Agregar fecha
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
-      <div className="card appointments-surface-free appointments-create">
-        <button
-          className="primary-btn"
-          type="button"
-          style={{ width: "100%" }}
-          onClick={() => setShowForm(true)}
-        >
-          {form.id ? "Editar actividad" : "Nueva actividad"}
-        </button>
-      </div>
+      {canEditActiveProfile ? (
+        <div className="card appointments-surface-free appointments-create">
+          <button
+            className="primary-btn"
+            type="button"
+            style={{ width: "100%" }}
+            onClick={() => setShowForm(true)}
+          >
+            {form.id ? "Editar actividad" : "Nueva actividad"}
+          </button>
+        </div>
+      ) : null}
 
       {notifyOpen && notifyTarget && (
         <div className="modal-backdrop" onClick={() => {
@@ -347,27 +407,29 @@ export default function Appointments() {
                 className="secondary-btn"
                 type="button"
                 onClick={() => {
-                  handleEdit(notifyTarget);
                   setNotifyOpen(false);
                   setNotifyTarget(null);
                   navigate("/appointments", { replace: true });
+                  handleOpenDetail(notifyTarget);
                 }}
               >
                 Ver detalle
               </button>
-              <button
-                className="primary-btn"
-                type="button"
-                onClick={() => {
-                  handleMarkCompleted(notifyTarget).finally(() => {
-                    setNotifyOpen(false);
-                    setNotifyTarget(null);
-                    navigate("/appointments", { replace: true });
-                  });
-                }}
-              >
-                Marcar realizada
-              </button>
+              {canEditActiveProfile ? (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleMarkCompleted(notifyTarget).finally(() => {
+                      setNotifyOpen(false);
+                      setNotifyTarget(null);
+                      navigate("/appointments", { replace: true });
+                    });
+                  }}
+                >
+                  Marcar realizada
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -427,17 +489,19 @@ export default function Appointments() {
               </div>
             </div>
             <div className="modal-actions">
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={() => {
-                  handleEdit(detailTarget);
-                  handleCloseDetail();
-                }}
-              >
-                Editar
-              </button>
-              {detailTarget.status !== "realizada" && (
+              {canEditActiveProfile ? (
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleEdit(detailTarget);
+                    handleCloseDetail();
+                  }}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canEditActiveProfile && detailTarget.status !== "realizada" ? (
                 <button
                   className="primary-btn"
                   type="button"
@@ -447,13 +511,13 @@ export default function Appointments() {
                 >
                   Marcar realizada
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
-      {showForm && (
+      {showForm && canEditActiveProfile && (
         <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
           <div
             className="floating-form-card"
@@ -605,80 +669,167 @@ export default function Appointments() {
         </div>
         {appointments.length === 0 ? (
           <p className="muted">Aún no has registrado actividades.</p>
+        ) : filteredAppointments.length === 0 ? (
+          <p className="muted">No hay actividades que coincidan con los filtros.</p>
         ) : (
-          <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Tipo</th>
-                  <th>Especialidad</th>
-                  <th>Centro</th>
-                  <th>Fecha y hora</th>
-                  <th>Estado</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredAppointments.map((a) => (
-                  <tr
-                    key={a.id}
-                    className="table-row-clickable"
-                    onClick={() => handleOpenDetail(a)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        handleOpenDetail(a);
-                      }
-                    }}
-                  >
-                    <td>
-                      <span className={`chip ${a.type}`}>
-                        {cleanUiText(typeLabels[a.type] || a.type)}
+          <>
+            <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Especialidad</th>
+                    <th>Centro</th>
+                    <th>Fecha y hora</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAppointments.map((a) => (
+                    <tr
+                      key={a.id}
+                      className="table-row-clickable"
+                      onClick={() => handleOpenDetail(a)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleOpenDetail(a);
+                        }
+                      }}
+                    >
+                      <td>
+                        <span className={`chip ${a.type}`}>
+                          {cleanUiText(typeLabels[a.type] || a.type)}
+                        </span>
+                      </td>
+                      <td>{cleanUiText(a.specialty)}</td>
+                      <td>{cleanUiText(a.center)}</td>
+                      <td>{formatAppointmentDateLabel(a)}</td>
+                      <td>
+                        <span className={`chip-status-${a.status}`}>
+                          {cleanUiText(statusLabels[a.status] || a.status)}
+                        </span>
+                      </td>
+                      <td onClick={(event) => event.stopPropagation()}>
+                        {canEditActiveProfile ? (
+                          <RowActionsMenu
+                            items={[
+                              a.status !== "realizada"
+                                ? {
+                                    key: "complete",
+                                    label: "Marcar realizada",
+                                    onClick: () => handleMarkCompleted(a),
+                                  }
+                                : null,
+                              {
+                                key: "edit",
+                                label: "Editar",
+                                onClick: () => handleEdit(a),
+                              },
+                              {
+                                key: "delete",
+                                label: "Eliminar",
+                                danger: true,
+                                onClick: () => handleDelete(a),
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="records-mobile-list appointments-mobile-list">
+              {filteredAppointments.map((a) => (
+                <article
+                  key={`mobile-${a.id}`}
+                  className="records-mobile-card appointments-mobile-card"
+                  onClick={() => handleOpenDetail(a)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleOpenDetail(a);
+                    }
+                  }}
+                >
+                  <div className="records-mobile-head">
+                    <div className="records-mobile-head-main">
+                      <span className={`records-mobile-icon-badge is-${a.type}`}>
+                        {cleanUiText(typeLabels[a.type] || a.type).slice(0, 1)}
                       </span>
-                    </td>
-                    <td>{cleanUiText(a.specialty)}</td>
-                    <td>{cleanUiText(a.center)}</td>
-                    <td>
-                      {a.date_time
-                        ? toLocaleDateTimeOrEmpty(a.date_time) || "Por agendar"
-                        : "Por agendar"}
-                    </td>
-                    <td>
+                      <div className="records-mobile-title-group">
+                        <strong>{cleanUiText(a.specialty || typeLabels[a.type] || "Actividad")}</strong>
+                        <span>{cleanUiText(a.center || "Centro por confirmar")}</span>
+                      </div>
+                    </div>
+                    <div className="records-mobile-head-side">
                       <span className={`chip-status-${a.status}`}>
                         {cleanUiText(statusLabels[a.status] || a.status)}
                       </span>
-                    </td>
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <RowActionsMenu
-                        items={[
-                          a.status !== "realizada"
-                            ? {
-                                key: "complete",
-                                label: "Marcar realizada",
-                                onClick: () => handleMarkCompleted(a),
-                              }
-                            : null,
-                          {
-                            key: "edit",
-                            label: "Editar",
-                            onClick: () => handleEdit(a),
-                          },
-                          {
-                            key: "delete",
-                            label: "Eliminar",
-                            danger: true,
-                            onClick: () => handleDelete(a),
-                          },
-                        ]}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      {canEditActiveProfile ? (
+                        <div onClick={(event) => event.stopPropagation()}>
+                          <RowActionsMenu
+                            items={[
+                              a.status !== "realizada"
+                                ? {
+                                    key: "complete",
+                                    label: "Marcar realizada",
+                                    onClick: () => handleMarkCompleted(a),
+                                  }
+                                : null,
+                              {
+                                key: "edit",
+                                label: "Editar",
+                                onClick: () => handleEdit(a),
+                              },
+                              {
+                                key: "delete",
+                                label: "Eliminar",
+                                danger: true,
+                                onClick: () => handleDelete(a),
+                              },
+                            ]}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="records-mobile-meta-grid">
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Tipo</span>
+                      <span>{cleanUiText(typeLabels[a.type] || a.type)}</span>
+                    </div>
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Fecha</span>
+                      <span>{formatAppointmentDateLabel(a)}</span>
+                    </div>
+                  </div>
+
+                  <div className="records-mobile-footer">
+                    <button
+                      type="button"
+                      className="records-mobile-link"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenDetail(a);
+                      }}
+                    >
+                      Más detalle
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </>

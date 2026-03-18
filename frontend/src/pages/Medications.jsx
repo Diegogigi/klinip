@@ -22,8 +22,20 @@ import {
   toLocaleDateTimeOrEmpty,
 } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
+import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
+import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 
 const MED_ALERT_POLL_MS = 15000;
+
+function getNewestMedicationRank(item) {
+  const createdAt = parseDate(item?.created_at);
+  if (createdAt) return createdAt.getTime();
+  const updatedAt = parseDate(item?.updated_at);
+  if (updatedAt) return updatedAt.getTime();
+  const startAt = parseDate(item?.start_at);
+  if (startAt) return startAt.getTime();
+  return Number(item?.id || 0);
+}
 
 function parseScheduleTimeValue(value) {
   if (!value || typeof value !== "string") return null;
@@ -217,10 +229,16 @@ export default function Medications() {
   });
   const [loading, setLoading] = useState(false);
 
+  const canEditActiveProfile = canWriteProfile(activeProfile);
+  const isReadOnlyProfile = isViewerProfile(activeProfile);
+
   const load = async () => {
     const data = await getMedications();
-    setMeds(data || []);
-    const missing = (data || []).find(
+    const sortedData = [...(data || [])].sort(
+      (a, b) => getNewestMedicationRank(b) - getNewestMedicationRank(a)
+    );
+    setMeds(sortedData);
+    const missing = sortedData.find(
       (m) => !m.frequency || m.frequency.trim() === ""
     );
     if (missing) {
@@ -230,7 +248,7 @@ export default function Medications() {
     } else {
       setMissingFrequency(null);
     }
-    scheduleMedicationNotifications(data || []);
+    scheduleMedicationNotifications(sortedData);
   };
 
   const loadFamilyContext = async () => {
@@ -408,6 +426,10 @@ export default function Medications() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes modificar medicamentos.");
+      return;
+    }
     setLoading(true);
     try {
       // Preparar datos: convertir strings vacíos a null y document_id a número o null
@@ -455,6 +477,10 @@ export default function Medications() {
         }, 2600);
       }
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       resetForm();
       setShowForm(false);
     } catch (err) {
@@ -467,6 +493,7 @@ export default function Medications() {
   };
 
   const handleEdit = (med) => {
+    if (!canEditActiveProfile) return;
     setShowForm(true);
     setForm({
       id: med.id,
@@ -494,9 +521,17 @@ export default function Medications() {
   };
 
   const handleRecordIntake = async (med) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes registrar tomas.");
+      return;
+    }
     try {
       await recordMedicationIntake(med.id, { status: "taken", source: "manual" });
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       setIntakeFeedback(`info:Toma registrada: ${med.name}`);
       if (feedbackTimer.current) {
         clearTimeout(feedbackTimer.current);
@@ -541,7 +576,7 @@ export default function Medications() {
   };
 
   const handleTakenFromAlert = async () => {
-    if (!notifyTarget) return;
+    if (!notifyTarget || !canEditActiveProfile) return;
     setNotifyActionLoading(true);
     try {
       await recordMedicationIntake(notifyTarget.id, {
@@ -553,6 +588,10 @@ export default function Medications() {
         localStorage.setItem(notifyPromptKey, "taken");
       }
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       setIntakeFeedback(`success:Toma registrada: ${notifyTarget.name}`);
       if (feedbackTimer.current) {
         clearTimeout(feedbackTimer.current);
@@ -574,7 +613,7 @@ export default function Medications() {
   };
 
   const handleTakenAllFromAlert = async () => {
-    if (!notifyTarget) return;
+    if (!notifyTarget || !canEditActiveProfile) return;
     const batch = [
       { med: notifyTarget, key: notifyPromptKey, triggeredAt: notifyTriggeredAt },
       ...notifyQueue.map((item) => ({ med: item.med, key: item.key, triggeredAt: item.triggeredAt })),
@@ -592,6 +631,10 @@ export default function Medications() {
         }
       }
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       setNotifyQueue([]);
       setIntakeFeedback(
         `success:Tomas registradas: ${batch.length}`
@@ -616,7 +659,7 @@ export default function Medications() {
   };
 
   const handleSkipFromAlert = async () => {
-    if (!notifyTarget) return;
+    if (!notifyTarget || !canEditActiveProfile) return;
     setNotifyActionLoading(true);
     try {
       await recordMedicationIntake(notifyTarget.id, {
@@ -629,6 +672,10 @@ export default function Medications() {
         localStorage.setItem(notifyPromptKey, "skipped");
       }
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       setIntakeFeedback(`info:Dosis omitida: ${notifyTarget.name}`);
       if (feedbackTimer.current) {
         clearTimeout(feedbackTimer.current);
@@ -650,10 +697,18 @@ export default function Medications() {
   };
 
   const handleDelete = async (med) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes eliminar medicamentos.");
+      return;
+    }
     if (!window.confirm("¿Eliminar este medicamento?")) return;
     try {
       await deleteMedication(med.id);
       await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
     } catch (err) {
       console.error(err);
       alert("No se pudo eliminar");
@@ -719,7 +774,7 @@ export default function Medications() {
   };
 
   const handleTimelineStatusUpdate = async (item, nextStatus) => {
-    if (!detailTarget?.id) return;
+    if (!canEditActiveProfile || !detailTarget?.id) return;
     try {
       await recordMedicationIntake(detailTarget.id, {
         status: nextStatus,
@@ -731,6 +786,10 @@ export default function Medications() {
             : "Actualizado desde la línea de tiempo como omitido.",
       });
       await Promise.all([load(), loadDetailIntakeItems(detailTarget.id)]);
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
       setIntakeFeedback(
         nextStatus === "late"
           ? "success:Evento actualizado como tomado tarde."
@@ -769,18 +828,30 @@ export default function Medications() {
         </p>
       </div>
 
-      <div className="card medications-surface-free medications-create">
-        <button
-          className="primary-btn"
-          type="button"
-          style={{ width: "100%" }}
-          onClick={() => setShowForm(true)}
-        >
-          Agregar medicamento
-        </button>
-      </div>
+      {isReadOnlyProfile ? (
+        <div className="card">
+          <div className="alert-info">
+            <p>
+              <strong>Perfil en modo lectura.</strong> Puedes revisar tratamientos y adherencia, pero no crear, editar, eliminar ni registrar tomas.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
-      {medsMissingFrequency.length > 0 && (
+      {canEditActiveProfile ? (
+        <div className="card medications-surface-free medications-create">
+          <button
+            className="primary-btn"
+            type="button"
+            style={{ width: "100%" }}
+            onClick={() => setShowForm(true)}
+          >
+            Agregar medicamento
+          </button>
+        </div>
+      ) : null}
+
+      {canEditActiveProfile && medsMissingFrequency.length > 0 && (
         <div className="card">
           <h3 className="card-title">Faltan indicaciones</h3>
           <p className="muted">
@@ -821,7 +892,7 @@ export default function Medications() {
               Medicamento de las{" "}
               {formatDoseClock(notifyTriggeredAt || notifyTarget.start_at || notifyTarget.schedule_time)}
             </h3>
-            {notifyQueue.length > 0 && (
+            {canEditActiveProfile && notifyQueue.length > 0 && (
               <button
                 type="button"
                 className="med-dose-batch-btn"
@@ -841,30 +912,32 @@ export default function Medications() {
               {notifyTarget.notes && (
                 <p className="med-dose-alert-notes">{notifyTarget.notes}</p>
               )}
-              <div className="med-dose-alert-actions">
-                <button
-                  className="med-dose-btn"
-                  type="button"
-                  onClick={handleSkipFromAlert}
-                  disabled={notifyActionLoading}
-                >
-                  Omitir
-                </button>
-                <button
-                  className="med-dose-btn is-primary"
-                  type="button"
-                  onClick={handleTakenFromAlert}
-                  disabled={notifyActionLoading}
-                >
-                  {notifyActionLoading ? "Registrando..." : "Tomado"}
-                </button>
-              </div>
+              {canEditActiveProfile ? (
+                <div className="med-dose-alert-actions">
+                  <button
+                    className="med-dose-btn"
+                    type="button"
+                    onClick={handleSkipFromAlert}
+                    disabled={notifyActionLoading}
+                  >
+                    Omitir
+                  </button>
+                  <button
+                    className="med-dose-btn is-primary"
+                    type="button"
+                    onClick={handleTakenFromAlert}
+                    disabled={notifyActionLoading}
+                  >
+                    {notifyActionLoading ? "Registrando..." : "Tomado"}
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       )}
 
-      {missingFrequency && !showForm && (
+      {canEditActiveProfile && missingFrequency && !showForm && (
         <div
           className="modal-backdrop"
           onClick={() => setMissingFrequency(null)}
@@ -905,7 +978,7 @@ export default function Medications() {
         </div>
       )}
 
-      {showForm && (
+      {showForm && canEditActiveProfile && (
         <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
           <div className="floating-form-card" onClick={(e) => e.stopPropagation()}>
             <div className="card-header" style={{ marginBottom: "0.5rem" }}>
@@ -1238,24 +1311,26 @@ export default function Medications() {
                               ) : null}
                             </div>
                             {item.notes ? <p>{item.notes}</p> : null}
-                            <div className="medication-intake-actions">
-                              <button
-                                type="button"
-                                className="secondary-btn"
-                                onClick={() => handleTimelineStatusUpdate(item, "late")}
-                                disabled={normalizedStatus === "late"}
-                              >
-                                Tomado tarde
-                              </button>
-                              <button
-                                type="button"
-                                className="secondary-btn"
-                                onClick={() => handleTimelineStatusUpdate(item, "skipped")}
-                                disabled={normalizedStatus === "skipped"}
-                              >
-                                Omitido
-                              </button>
-                            </div>
+                            {canEditActiveProfile ? (
+                              <div className="medication-intake-actions">
+                                <button
+                                  type="button"
+                                  className="secondary-btn"
+                                  onClick={() => handleTimelineStatusUpdate(item, "late")}
+                                  disabled={normalizedStatus === "late"}
+                                >
+                                  Tomado tarde
+                                </button>
+                                <button
+                                  type="button"
+                                  className="secondary-btn"
+                                  onClick={() => handleTimelineStatusUpdate(item, "skipped")}
+                                  disabled={normalizedStatus === "skipped"}
+                                >
+                                  Omitido
+                                </button>
+                              </div>
+                            ) : null}
                           </div>
                         </article>
                       );
@@ -1269,17 +1344,19 @@ export default function Medications() {
               </div>
             </div>
             <div className="modal-actions">
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={() => {
-                  handleEdit(detailTarget);
-                  handleCloseDetail();
-                }}
-              >
-                Editar
-              </button>
-              {!detailTarget.completed && (
+              {canEditActiveProfile ? (
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleEdit(detailTarget);
+                    handleCloseDetail();
+                  }}
+                >
+                  Editar
+                </button>
+              ) : null}
+              {canEditActiveProfile && !detailTarget.completed ? (
                 <button
                   className="primary-btn"
                   type="button"
@@ -1289,7 +1366,7 @@ export default function Medications() {
                 >
                   Marcar toma
                 </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
@@ -1329,103 +1406,203 @@ export default function Medications() {
         ) : filteredMeds.length === 0 ? (
           <p className="muted">No hay medicamentos que coincidan con los filtros.</p>
         ) : (
-          <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Dosis</th>
-                  <th>Frecuencia</th>
-                  <th>Inicio</th>
-                  <th>Próxima dosis</th>
-                  <th>Duración</th>
-                  <th>Estado</th>
-                  <th>Término</th>
-                  <th>Tomas</th>
-                  <th>Adherencia</th>
-                  <th>Reposición</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredMeds.map((m) => {
-                  const nextDose = getNextMedicationDose(m);
-                  return (
-                    <tr
-                      key={m.id}
-                      className="table-row-clickable"
-                      onClick={() => handleOpenDetail(m)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
+          <>
+            <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Dosis</th>
+                    <th>Frecuencia</th>
+                    <th>Inicio</th>
+                    <th>Próxima dosis</th>
+                    <th>Duración</th>
+                    <th>Estado</th>
+                    <th>Término</th>
+                    <th>Tomas</th>
+                    <th>Adherencia</th>
+                    <th>Reposición</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredMeds.map((m) => {
+                    const nextDose = getNextMedicationDose(m);
+                    const taken = Number(m.taken_doses || 0);
+                    const expected = Number(m.expected_doses || 0);
+                    const apiRate = Number(m.adherence_rate);
+                    const adherenceText = Number.isFinite(apiRate)
+                      ? `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`
+                      : expected > 0
+                      ? `${Math.round((taken / expected) * 100)}%`
+                      : "0%";
+                    return (
+                      <tr
+                        key={m.id}
+                        className="table-row-clickable"
+                        onClick={() => handleOpenDetail(m)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleOpenDetail(m);
+                          }
+                        }}
+                      >
+                        <td>{m.name}</td>
+                        <td>{m.dose}</td>
+                        <td>{m.frequency}</td>
+                        <td>{formatMedicationDateTime(m.start_at || m.created_at)}</td>
+                        <td>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</td>
+                        <td>{m.duration}</td>
+                        <td>{m.completed ? "Realizado" : "Activo"}</td>
+                        <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
+                        <td>
+                          {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
+                        </td>
+                        <td>{adherenceText}</td>
+                        <td>
+                          {m.refill_enabled ? (
+                            <div className="med-refill-table-cell">
+                              <strong>
+                                {m.remaining_doses ?? "—"} dosis
+                              </strong>
+                              <span>
+                                {m.refill_current_assignee_name || "Sin asignar"}
+                              </span>
+                            </div>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td onClick={(event) => event.stopPropagation()}>
+                          {canEditActiveProfile ? (
+                            <RowActionsMenu
+                              items={[
+                                {
+                                  key: "edit",
+                                  label: "Editar",
+                                  onClick: () => handleEdit(m),
+                                },
+                                {
+                                  key: "delete",
+                                  label: "Eliminar",
+                                  danger: true,
+                                  onClick: () => handleDelete(m),
+                                },
+                              ]}
+                            />
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="records-mobile-list medications-mobile-list">
+              {filteredMeds.map((m) => {
+                const nextDose = getNextMedicationDose(m);
+                const taken = Number(m.taken_doses || 0);
+                const expected = Number(m.expected_doses || 0);
+                const apiRate = Number(m.adherence_rate);
+                const adherenceText = Number.isFinite(apiRate)
+                  ? `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`
+                  : expected > 0
+                  ? `${Math.round((taken / expected) * 100)}%`
+                  : "0%";
+                return (
+                  <article
+                    key={`mobile-${m.id}`}
+                    className="records-mobile-card medications-mobile-card"
+                    onClick={() => handleOpenDetail(m)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleOpenDetail(m);
+                      }
+                    }}
+                  >
+                    <div className="records-mobile-head">
+                      <div className="records-mobile-head-main">
+                        <span className="records-mobile-icon-badge is-medication">M</span>
+                        <div className="records-mobile-title-group">
+                          <strong>{m.name}</strong>
+                          <span>{m.dose || "Sin dosis"} · {m.frequency || "Sin frecuencia"}</span>
+                        </div>
+                      </div>
+                      <div className="records-mobile-head-side">
+                        <span className={`chip ${m.completed ? "completed" : "medication"}`}>
+                          {m.completed ? "Realizado" : "Activo"}
+                        </span>
+                        {canEditActiveProfile ? (
+                          <div onClick={(event) => event.stopPropagation()}>
+                            <RowActionsMenu
+                              items={[
+                                {
+                                  key: "edit",
+                                  label: "Editar",
+                                  onClick: () => handleEdit(m),
+                                },
+                                {
+                                  key: "delete",
+                                  label: "Eliminar",
+                                  danger: true,
+                                  onClick: () => handleDelete(m),
+                                },
+                              ]}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="records-mobile-meta-grid">
+                      <div className="records-mobile-meta-item">
+                        <span className="records-mobile-meta-label">Próxima dosis</span>
+                        <span>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</span>
+                      </div>
+                      <div className="records-mobile-meta-item">
+                        <span className="records-mobile-meta-label">Adherencia</span>
+                        <span>{adherenceText}</span>
+                      </div>
+                      <div className="records-mobile-meta-item">
+                        <span className="records-mobile-meta-label">Tomas</span>
+                        <span>{taken}/{expected}</span>
+                      </div>
+                      <div className="records-mobile-meta-item">
+                        <span className="records-mobile-meta-label">Inicio</span>
+                        <span>{formatMedicationDateTime(m.start_at || m.created_at)}</span>
+                      </div>
+                    </div>
+
+                    {m.refill_enabled ? (
+                      <div className="records-mobile-note">
+                        Reposición: {m.remaining_doses ?? "—"} dosis · {m.refill_current_assignee_name || "Sin asignar"}
+                      </div>
+                    ) : null}
+
+                    <div className="records-mobile-footer">
+                      <button
+                        type="button"
+                        className="records-mobile-link"
+                        onClick={(event) => {
+                          event.stopPropagation();
                           handleOpenDetail(m);
-                        }
-                      }}
-                    >
-                      <td>{m.name}</td>
-                      <td>{m.dose}</td>
-                      <td>{m.frequency}</td>
-                      <td>{formatMedicationDateTime(m.start_at || m.created_at)}</td>
-                      <td>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</td>
-                      <td>{m.duration}</td>
-                      <td>{m.completed ? "Realizado" : "Activo"}</td>
-                      <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
-                      <td>
-                        {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
-                      </td>
-                       <td>
-                         {(() => {
-                           const taken = Number(m.taken_doses || 0);
-                          const expected = Number(m.expected_doses || 0);
-                          const apiRate = Number(m.adherence_rate);
-                          if (Number.isFinite(apiRate)) {
-                            return `${Math.max(0, Math.min(100, Math.round(apiRate)))}%`;
-                          }
-                          if (expected > 0) {
-                            return `${Math.round((taken / expected) * 100)}%`;
-                          }
-                           return "0%";
-                         })()}
-                       </td>
-                       <td>
-                         {m.refill_enabled ? (
-                           <div className="med-refill-table-cell">
-                             <strong>
-                               {m.remaining_doses ?? "—"} dosis
-                             </strong>
-                             <span>
-                               {m.refill_current_assignee_name || "Sin asignar"}
-                             </span>
-                           </div>
-                         ) : (
-                           "—"
-                         )}
-                       </td>
-                       <td onClick={(event) => event.stopPropagation()}>
-                         <RowActionsMenu
-                          items={[
-                            {
-                              key: "edit",
-                              label: "Editar",
-                              onClick: () => handleEdit(m),
-                            },
-                            {
-                              key: "delete",
-                              label: "Eliminar",
-                              danger: true,
-                              onClick: () => handleDelete(m),
-                            },
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        }}
+                      >
+                        Más detalle
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </>
