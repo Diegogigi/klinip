@@ -32,6 +32,7 @@ import re
 import unicodedata
 import threading
 import collections
+import math
 from difflib import SequenceMatcher
 import time
 
@@ -176,10 +177,27 @@ def ensure_document_schema():
                 statements.append("ALTER TABLE documents ADD COLUMN ocr_lang VARCHAR")
             added_columns.append("ocr_lang")
 
+        if "profile_id" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS profile_id INTEGER NULL"
+                )
+            else:
+                statements.append("ALTER TABLE documents ADD COLUMN profile_id INTEGER")
+            added_columns.append("profile_id")
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
                     conn.execute(text(stmt))
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_documents_profile_id ON documents (profile_id)"
+                        )
+                    )
+                except Exception:
+                    pass
             print(
                 f"DEBUG ensure_document_schema: columnas agregadas a documents: {', '.join(added_columns)}"
             )
@@ -773,6 +791,88 @@ def ensure_ai_conversation_schema():
 
 
 ensure_ai_conversation_schema()
+
+
+def ensure_ai_memory_schema():
+    try:
+        inspector = inspect(engine)
+        backend = engine.url.get_backend_name()
+        table_names = set(inspector.get_table_names())
+        with engine.begin() as conn:
+            if backend == "postgresql":
+                try:
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                except Exception as exc:
+                    print(f"WARNING ensure_ai_memory_schema: no se pudo habilitar pgvector: {exc}")
+
+            if "ai_document_chunks" in table_names:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_ai_document_chunks_profile_document "
+                            "ON ai_document_chunks (profile_id, document_id)"
+                        )
+                    )
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_ai_document_chunks_user_type "
+                            "ON ai_document_chunks (user_id, document_type)"
+                        )
+                    )
+                except Exception as exc:
+                    print(f"WARNING ensure_ai_memory_schema: no se pudieron crear indices basicos: {exc}")
+
+                if backend == "postgresql":
+                    chunk_columns = {col["name"] for col in inspector.get_columns("ai_document_chunks")}
+                    if "embedding_vector" not in chunk_columns:
+                        try:
+                            conn.execute(
+                                text(
+                                    "ALTER TABLE ai_document_chunks "
+                                    "ADD COLUMN IF NOT EXISTS embedding_vector vector(256)"
+                                )
+                            )
+                        except Exception as exc:
+                            print(f"WARNING ensure_ai_memory_schema: no se pudo crear columna vector: {exc}")
+                    try:
+                        conn.execute(
+                            text(
+                                "CREATE INDEX IF NOT EXISTS ix_ai_document_chunks_embedding_vector "
+                                "ON ai_document_chunks USING ivfflat "
+                                "(embedding_vector vector_cosine_ops) WITH (lists = 100)"
+                            )
+                        )
+                    except Exception as exc:
+                        print(f"WARNING ensure_ai_memory_schema: no se pudo crear indice pgvector: {exc}")
+
+            if "ai_conversation_summaries" in table_names:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_ai_conversation_summaries_profile_updated "
+                            "ON ai_conversation_summaries (profile_id, updated_at)"
+                        )
+                    )
+                except Exception as exc:
+                    print(f"WARNING ensure_ai_memory_schema: no se pudo indexar resúmenes de conversación: {exc}")
+
+            if "ai_query_metrics" in table_names:
+                try:
+                    conn.execute(
+                        text(
+                            "CREATE INDEX IF NOT EXISTS ix_ai_query_metrics_profile_created "
+                            "ON ai_query_metrics (profile_id, created_at)"
+                        )
+                    )
+                except Exception as exc:
+                    print(f"WARNING ensure_ai_memory_schema: no se pudo indexar métricas IA: {exc}")
+
+        print("DEBUG ensure_ai_memory_schema: tablas y extensiones de memoria verificadas")
+    except Exception as exc:
+        print(f"WARNING ensure_ai_memory_schema: no se pudo completar: {exc}")
+
+
+ensure_ai_memory_schema()
 
 PLAN_DEFINITIONS = {
     "basico": {
@@ -5351,6 +5451,12 @@ def _run_document_ocr(document_id: int):
                 db.flush()
                 doc.appointment_id = appointment.id
 
+        try:
+            _upsert_document_intelligence(db, doc)
+            _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
+        except Exception as exc:
+            print(f"WARNING _run_document_ocr memory sync: {exc}")
+
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
         profile = _resolve_profile_for_user_learning(db, doc.user_id)
         _mark_profile_ai_dirty(db, profile, include_family=True)
@@ -5933,6 +6039,16 @@ def _require_role(link: models.ProfileRelationship, min_role: str = "admin"):
         raise HTTPException(status_code=403, detail="No tienes permisos para esta accion")
 
 
+def _document_scope_filter(profile: models.HealthProfile, target_user_id: int):
+    base_filter = models.Document.user_id == int(target_user_id)
+    if bool(getattr(profile, "is_primary_profile", False)):
+        return base_filter, or_(
+            models.Document.profile_id == int(profile.id),
+            models.Document.profile_id.is_(None),
+        )
+    return base_filter, models.Document.profile_id == int(profile.id)
+
+
 def _assert_profile_creation_allowed(db: Session, current_user: models.User):
     plan_info = _build_plan_info(current_user, db)
     if plan_info["current_profiles"] >= plan_info["max_profiles"]:
@@ -6041,6 +6157,724 @@ def _ai_chat_prompt_pressure_threshold_ms(kind: str) -> int:
     except Exception:
         return fallback
     return max(100, min(10000, value))
+
+
+_AI_EMBEDDING_DIMENSIONS = 256
+_AI_RESPONSE_CACHE: dict[str, dict] = {}
+_AI_RESPONSE_CACHE_LOCK = threading.Lock()
+_AI_MEMORY_STOPWORDS = {
+    "de", "la", "el", "los", "las", "un", "una", "unos", "unas", "que", "del",
+    "para", "con", "por", "sin", "sobre", "este", "esta", "esto", "tengo",
+    "tiene", "como", "donde", "cuando", "cual", "cuales", "mi", "mis", "tu",
+    "sus", "hola", "favor", "puedes", "puedo", "quiero", "necesito", "me",
+    "hay", "hoy", "ayer", "mañana", "manana", "segun", "según", "clinico",
+    "clinica", "clinicos", "clinicas", "documento", "documentos", "perfil",
+    "klinip", "ia",
+}
+
+
+def _ai_embedding_model_name() -> str:
+    configured = (os.getenv("OPENAI_EMBEDDING_MODEL") or "").strip()
+    return configured or "text-embedding-3-small"
+
+
+def _ai_response_cache_ttl_seconds() -> int:
+    raw = (os.getenv("AI_RESPONSE_CACHE_TTL_SECONDS") or "900").strip()
+    try:
+        value = int(raw)
+    except Exception:
+        return 900
+    return max(60, min(3600, value))
+
+
+def _estimate_token_count(value: str | None) -> int:
+    text_value = (value or "").strip()
+    if not text_value:
+        return 0
+    return max(1, math.ceil(len(text_value) / 4))
+
+
+def _normalize_embedding(vector: list[float], dimensions: int = _AI_EMBEDDING_DIMENSIONS) -> list[float]:
+    sized = [float(item or 0.0) for item in (vector or [])[:dimensions]]
+    if len(sized) < dimensions:
+        sized.extend([0.0] * (dimensions - len(sized)))
+    norm = math.sqrt(sum(item * item for item in sized))
+    if norm <= 1e-9:
+        return [0.0] * dimensions
+    return [round(item / norm, 8) for item in sized]
+
+
+def _fallback_text_embedding(value: str, dimensions: int = _AI_EMBEDDING_DIMENSIONS) -> list[float]:
+    vector = [0.0] * dimensions
+    tokens = [
+        token
+        for token in re.split(r"[^a-z0-9]+", _normalize_text(value or ""))
+        if token and len(token) >= 2
+    ]
+    for idx, token in enumerate(tokens[:1200]):
+        digest = hashlib.sha256(f"{idx}:{token}".encode("utf-8")).digest()
+        slot = int.from_bytes(digest[:2], "big") % dimensions
+        sign = -1.0 if digest[2] % 2 else 1.0
+        weight = 1.0 + (min(len(token), 12) / 12.0)
+        vector[slot] += sign * weight
+    return _normalize_embedding(vector, dimensions=dimensions)
+
+
+def _cosine_similarity(left: list[float] | None, right: list[float] | None) -> float:
+    if not left or not right:
+        return 0.0
+    size = min(len(left), len(right), _AI_EMBEDDING_DIMENSIONS)
+    if size <= 0:
+        return 0.0
+    return float(sum(float(left[idx] or 0.0) * float(right[idx] or 0.0) for idx in range(size)))
+
+
+def _pgvector_literal(vector: list[float] | None) -> str:
+    values = [f"{float(item or 0.0):.8f}" for item in (vector or [])[:_AI_EMBEDDING_DIMENSIONS]]
+    if len(values) < _AI_EMBEDDING_DIMENSIONS:
+        values.extend(["0.00000000"] * (_AI_EMBEDDING_DIMENSIONS - len(values)))
+    return "[" + ",".join(values) + "]"
+
+
+def _embed_text_batch(texts: list[str]) -> tuple[list[list[float]], str, str]:
+    cleaned = [_clip_text((text_value or "").strip(), 6000) for text_value in texts]
+    if not cleaned:
+        return [], "", "none"
+
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if api_key and OpenAI is not None:
+        client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
+        model_name = _ai_embedding_model_name()
+        try:
+            response = client.embeddings.create(
+                model=model_name,
+                input=cleaned,
+                dimensions=_AI_EMBEDDING_DIMENSIONS,
+            )
+            vectors = [
+                _normalize_embedding(list(getattr(item, "embedding", []) or []))
+                for item in (getattr(response, "data", []) or [])
+            ]
+            if len(vectors) == len(cleaned):
+                return vectors, model_name, "openai"
+        except Exception as exc:
+            print(f"WARNING ai embeddings create failed: {exc}")
+            try:
+                response = client.embeddings.create(model=model_name, input=cleaned)
+                vectors = [
+                    _normalize_embedding(list(getattr(item, "embedding", []) or []))
+                    for item in (getattr(response, "data", []) or [])
+                ]
+                if len(vectors) == len(cleaned):
+                    return vectors, model_name, "openai"
+            except Exception as inner_exc:
+                print(f"WARNING ai embeddings fallback failed: {inner_exc}")
+
+    return [
+        _fallback_text_embedding(text_value, dimensions=_AI_EMBEDDING_DIMENSIONS)
+        for text_value in cleaned
+    ], "fallback-hash-256", "fallback"
+
+
+def _chunk_text_for_memory(value: str, chunk_chars: int = 900, overlap_chars: int = 140) -> list[str]:
+    source = (value or "").strip()
+    if not source:
+        return []
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", source) if part and part.strip()]
+    if not paragraphs:
+        paragraphs = [source]
+    chunks: list[str] = []
+    current = ""
+    for part in paragraphs:
+        candidate = f"{current}\n\n{part}".strip() if current else part
+        if current and len(candidate) > chunk_chars:
+            chunks.append(current.strip())
+            overlap = _clip_text(current[-overlap_chars:], overlap_chars) if overlap_chars > 0 else ""
+            current = f"{overlap}\n{part}".strip() if overlap else part
+            continue
+        if len(part) > chunk_chars and not current:
+            start = 0
+            while start < len(part):
+                end = min(len(part), start + chunk_chars)
+                chunk = part[start:end].strip()
+                if chunk:
+                    chunks.append(chunk)
+                if end >= len(part):
+                    break
+                start = max(0, end - overlap_chars)
+            current = ""
+            continue
+        current = candidate
+    if current.strip():
+        chunks.append(current.strip())
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for chunk in chunks:
+        normalized = _normalize_text(chunk)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(_clip_text(chunk, 1200))
+    return deduped[:8]
+
+
+def _memory_keywords(*values: str) -> list[str]:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for token in re.split(r"[^a-z0-9]+", _normalize_text(value or "")):
+            if len(token) < 3 or token in _AI_MEMORY_STOPWORDS or token in seen:
+                continue
+            seen.add(token)
+            tokens.append(token)
+    return tokens[:10]
+
+
+def _build_document_memory_source_text(
+    doc: models.Document,
+    summary: models.DocumentSummary | None = None,
+) -> str:
+    sections: list[str] = []
+    if getattr(doc, "filename", ""):
+        sections.append(f"Archivo: {doc.filename}")
+    sections.append(f"Tipo clínico: {_infer_document_type(doc)}")
+    if getattr(doc, "center", ""):
+        sections.append(f"Centro: {doc.center}")
+    if getattr(doc, "notes", ""):
+        sections.append(f"Notas: {doc.notes}")
+    if summary:
+        if getattr(summary, "summary_plain", ""):
+            sections.append(f"Resumen: {summary.summary_plain}")
+        key_points = list(getattr(summary, "key_points_json", []) or [])
+        if key_points:
+            sections.append("Puntos clave: " + " | ".join(str(item) for item in key_points[:6]))
+        abnormal_values = list(getattr(summary, "abnormal_values_json", []) or [])
+        if abnormal_values:
+            sections.append("Valores alterados: " + " | ".join(str(item) for item in abnormal_values[:6]))
+    if getattr(doc, "ocr_text", ""):
+        sections.append("OCR:\n" + _clip_text(doc.ocr_text or "", 12000))
+    return "\n\n".join(section for section in sections if (section or "").strip())
+
+
+def _resolve_document_profile_id(db: Session, doc: models.Document) -> int | None:
+    profile_id = getattr(doc, "profile_id", None)
+    if profile_id:
+        return int(profile_id)
+    if not getattr(doc, "user_id", None):
+        return None
+    rows = (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == int(doc.user_id),
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(models.HealthProfile.is_primary_profile.desc(), models.HealthProfile.created_at.asc())
+        .limit(2)
+        .all()
+    )
+    if len(rows) == 1:
+        return int(rows[0].id)
+    primary = next((item for item in rows if bool(getattr(item, "is_primary_profile", False))), None)
+    return int(primary.id) if primary else None
+
+
+def _sync_pgvector_chunk(db: Session, row_id: int, embedding: list[float] | None) -> None:
+    if engine.url.get_backend_name() != "postgresql" or not row_id or not embedding:
+        return
+    try:
+        db.execute(
+            text(
+                "UPDATE ai_document_chunks "
+                "SET embedding_vector = CAST(:embedding AS vector) "
+                "WHERE id = :row_id"
+            ),
+            {"embedding": _pgvector_literal(embedding), "row_id": int(row_id)},
+        )
+    except Exception as exc:
+        print(f"WARNING _sync_pgvector_chunk: {exc}")
+
+
+def _upsert_document_memory_chunks(
+    db: Session,
+    doc: models.Document,
+    *,
+    profile_id: int | None = None,
+) -> list[models.AiDocumentChunk]:
+    if not getattr(doc, "id", None):
+        return []
+    summary = (
+        db.query(models.DocumentSummary)
+        .filter(models.DocumentSummary.document_id == int(doc.id))
+        .first()
+    )
+    source_text = _build_document_memory_source_text(doc, summary=summary)
+    chunks = _chunk_text_for_memory(source_text)
+    existing = (
+        db.query(models.AiDocumentChunk)
+        .filter(models.AiDocumentChunk.document_id == int(doc.id))
+        .order_by(models.AiDocumentChunk.chunk_index.asc())
+        .all()
+    )
+    if not chunks:
+        for item in existing:
+            db.delete(item)
+        return []
+
+    resolved_profile_id = profile_id or _resolve_document_profile_id(db, doc)
+    if resolved_profile_id and not getattr(doc, "profile_id", None):
+        doc.profile_id = int(resolved_profile_id)
+        db.add(doc)
+
+    embeddings, embedding_model, embedding_source = _embed_text_batch(chunks)
+    rows_by_index = {int(item.chunk_index or 0): item for item in existing}
+    saved_rows: list[models.AiDocumentChunk] = []
+    document_type = _infer_document_type(doc)
+    for idx, chunk_text in enumerate(chunks):
+        row = rows_by_index.get(idx)
+        if not row:
+            row = models.AiDocumentChunk(document_id=int(doc.id), chunk_index=idx)
+        row.user_id = int(doc.user_id)
+        row.profile_id = int(resolved_profile_id) if resolved_profile_id else None
+        row.document_type = document_type
+        row.chunk_index = idx
+        row.chunk_hash = hashlib.sha256(chunk_text.encode("utf-8")).hexdigest()
+        row.chunk_text = chunk_text
+        row.embedding_json = embeddings[idx] if idx < len(embeddings) else _fallback_text_embedding(chunk_text)
+        row.embedding_model = embedding_model
+        row.embedding_source = embedding_source
+        row.token_estimate = _estimate_token_count(chunk_text)
+        row.metadata_json = {
+            "filename": getattr(doc, "filename", "") or "",
+            "document_type": document_type,
+            "ocr_status": getattr(doc, "ocr_status", "") or "",
+            "text_length": len(chunk_text),
+        }
+        row.updated_at = datetime.now()
+        db.add(row)
+        saved_rows.append(row)
+
+    for stale in existing:
+        if int(getattr(stale, "chunk_index", -1) or -1) >= len(chunks):
+            db.delete(stale)
+
+    db.flush()
+    for row in saved_rows:
+        _sync_pgvector_chunk(db, int(row.id), list(getattr(row, "embedding_json", []) or []))
+    return saved_rows
+
+
+def _query_document_chunks_pgvector(
+    db: Session,
+    *,
+    authorized_user_id: int,
+    profile: models.HealthProfile,
+    embedding: list[float],
+    limit: int,
+    document_type: str | None = None,
+) -> list[dict]:
+    if engine.url.get_backend_name() != "postgresql" or not embedding:
+        return []
+    filters = ["user_id = :user_id", "embedding_vector IS NOT NULL"]
+    params: dict = {
+        "user_id": int(authorized_user_id),
+        "profile_id": int(profile.id),
+        "limit": max(1, min(limit, 8)),
+        "embedding": _pgvector_literal(embedding),
+    }
+    if bool(getattr(profile, "is_primary_profile", False)):
+        filters.append("(profile_id = :profile_id OR profile_id IS NULL)")
+    else:
+        filters.append("profile_id = :profile_id")
+    if document_type:
+        filters.append("document_type = :document_type")
+        params["document_type"] = document_type
+    sql = (
+        "SELECT id, document_id, chunk_text, document_type, metadata_json, "
+        "1 - (embedding_vector <=> CAST(:embedding AS vector)) AS relevance "
+        "FROM ai_document_chunks WHERE "
+        + " AND ".join(filters)
+        + " ORDER BY embedding_vector <=> CAST(:embedding AS vector) ASC LIMIT :limit"
+    )
+    try:
+        rows = db.execute(text(sql), params).mappings().all()
+    except Exception as exc:
+        print(f"WARNING _query_document_chunks_pgvector: {exc}")
+        return []
+    return [dict(item) for item in rows]
+
+
+def _load_relevant_document_chunks(
+    db: Session,
+    current_user: models.User,
+    profile: models.HealthProfile,
+    link: models.ProfileRelationship,
+    message: str,
+    *,
+    limit: int = 4,
+    document_type: str | None = None,
+) -> list[dict]:
+    if not message.strip():
+        return []
+    if not _check_permission(db, current_user, int(profile.id), "view_documents"):
+        return []
+
+    authorized_user_id = int(profile.owner_user_id)
+    query_embedding = _embed_text_batch([message])[0]
+    embedding = query_embedding[0] if query_embedding else _fallback_text_embedding(message)
+    vector_rows = _query_document_chunks_pgvector(
+        db,
+        authorized_user_id=authorized_user_id,
+        profile=profile,
+        embedding=embedding,
+        limit=max(3, min(limit, 5)),
+        document_type=document_type,
+    )
+    if vector_rows:
+        return [
+            {
+                "chunk_id": int(item.get("id") or 0),
+                "document_id": int(item.get("document_id") or 0),
+                "document_type": item.get("document_type") or "otro",
+                "chunk_text": _clip_text(item.get("chunk_text") or "", 520),
+                "relevance": round(float(item.get("relevance") or 0.0), 4),
+                "filename": (item.get("metadata_json") or {}).get("filename") if isinstance(item.get("metadata_json"), dict) else "",
+            }
+            for item in vector_rows[: max(1, min(limit, 5))]
+            if (item.get("chunk_text") or "").strip()
+        ]
+
+    query = db.query(models.AiDocumentChunk).filter(models.AiDocumentChunk.user_id == authorized_user_id)
+    if bool(getattr(profile, "is_primary_profile", False)):
+        query = query.filter(
+            or_(
+                models.AiDocumentChunk.profile_id == int(profile.id),
+                models.AiDocumentChunk.profile_id.is_(None),
+            )
+        )
+    else:
+        query = query.filter(models.AiDocumentChunk.profile_id == int(profile.id))
+    if document_type:
+        query = query.filter(models.AiDocumentChunk.document_type == document_type)
+
+    rows = (
+        query.order_by(models.AiDocumentChunk.updated_at.desc(), models.AiDocumentChunk.id.desc())
+        .limit(36)
+        .all()
+    )
+    tokens = set(_memory_keywords(message))
+    ranked: list[tuple[float, models.AiDocumentChunk]] = []
+    for row in rows:
+        text_value = getattr(row, "chunk_text", "") or ""
+        lexical_score = 0.0
+        normalized_row = _normalize_text(text_value)
+        if tokens:
+            lexical_score = sum(1 for token in tokens if token in normalized_row) / max(len(tokens), 1)
+        semantic_score = _cosine_similarity(embedding, list(getattr(row, "embedding_json", []) or []))
+        score = semantic_score + (0.18 * lexical_score)
+        if score <= 0.05:
+            continue
+        ranked.append((score, row))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [
+        {
+            "chunk_id": int(item.id),
+            "document_id": int(item.document_id),
+            "document_type": item.document_type or "otro",
+            "chunk_text": _clip_text(item.chunk_text or "", 520),
+            "relevance": round(score, 4),
+            "filename": (getattr(item, "metadata_json", {}) or {}).get("filename", ""),
+        }
+        for score, item in ranked[: max(1, min(limit, 5))]
+    ]
+
+
+def _build_conversation_summary_payload(
+    history: list[dict],
+    *,
+    latest_user_message: str,
+    latest_reply: str,
+    event_type: str,
+    mode: str,
+) -> dict:
+    relevant_history = history[-8:] if history else []
+    user_messages = [
+        _clip_text((item.get("content") or "").strip(), 180)
+        for item in relevant_history
+        if (item.get("role") or "") == "user" and (item.get("content") or "").strip()
+    ]
+    assistant_messages = [
+        _clip_text((item.get("content") or "").strip(), 180)
+        for item in relevant_history
+        if (item.get("role") or "") == "assistant" and (item.get("content") or "").strip()
+    ]
+    focus_terms = _memory_keywords(" ".join(user_messages[-3:]), latest_user_message, latest_reply)
+    last_request = _clip_text(latest_user_message, 180)
+    last_reply = _clip_text(latest_reply, 220)
+    summary_parts = []
+    if focus_terms:
+        summary_parts.append("Temas: " + ", ".join(focus_terms[:5]) + ".")
+    if last_request:
+        summary_parts.append("Última solicitud: " + last_request + ".")
+    if last_reply:
+        summary_parts.append("Respuesta entregada: " + last_reply + ".")
+    summary_text = " ".join(summary_parts).strip() or _clip_text(last_request or last_reply, 260)
+    return {
+        "summary": _clip_text(summary_text, 420),
+        "event_type": (event_type or "general").strip() or "general",
+        "mode": (mode or "").strip(),
+        "recent_user_messages": user_messages[-3:],
+        "recent_assistant_messages": assistant_messages[-2:],
+        "keywords": focus_terms[:6],
+    }
+
+
+def _upsert_conversation_summary(
+    db: Session,
+    *,
+    profile_id: int,
+    user_id: int,
+    conversation_id: str,
+    event_type: str,
+    mode: str,
+    history: list[dict],
+    latest_user_message: str,
+    latest_reply: str,
+    last_message_id: int | None = None,
+) -> models.AiConversationSummary:
+    payload = _build_conversation_summary_payload(
+        history,
+        latest_user_message=latest_user_message,
+        latest_reply=latest_reply,
+        event_type=event_type,
+        mode=mode,
+    )
+    row = (
+        db.query(models.AiConversationSummary)
+        .filter(
+            models.AiConversationSummary.profile_id == int(profile_id),
+            models.AiConversationSummary.conversation_id == (conversation_id or "").strip(),
+            models.AiConversationSummary.summary_type == "rolling",
+        )
+        .first()
+    )
+    if not row:
+        row = models.AiConversationSummary(
+            profile_id=int(profile_id),
+            user_id=int(user_id),
+            conversation_id=(conversation_id or "").strip(),
+            summary_type="rolling",
+        )
+    row.user_id = int(user_id)
+    row.event_type = payload.get("event_type") or "general"
+    row.summary = payload.get("summary") or ""
+    row.summary_json = payload
+    row.source_message_count = len(history) + 2
+    row.last_message_id = int(last_message_id) if last_message_id else None
+    row.updated_at = datetime.now()
+    db.add(row)
+    return row
+
+
+def _load_relevant_conversation_memory(
+    db: Session,
+    *,
+    profile_id: int,
+    message: str,
+    conversation_id: str | None = None,
+    limit: int = 3,
+) -> list[dict]:
+    rows = (
+        db.query(models.AiConversationSummary)
+        .filter(models.AiConversationSummary.profile_id == int(profile_id))
+        .order_by(models.AiConversationSummary.updated_at.desc(), models.AiConversationSummary.id.desc())
+        .limit(18)
+        .all()
+    )
+    tokens = set(_memory_keywords(message))
+    ranked: list[tuple[float, models.AiConversationSummary]] = []
+    for row in rows:
+        score = 0.0
+        if conversation_id and (row.conversation_id or "") == conversation_id:
+            score += 0.6
+        normalized_summary = _normalize_text((row.summary or "") + " " + " ".join((row.summary_json or {}).get("keywords") or []))
+        if tokens:
+            score += sum(1 for token in tokens if token in normalized_summary) / max(len(tokens), 1)
+        if score <= 0.0:
+            updated_at = getattr(row, "updated_at", None) or getattr(row, "created_at", None)
+            if updated_at:
+                age_hours = max(0.0, (datetime.now() - updated_at).total_seconds() / 3600.0)
+                score += max(0.0, 0.35 - min(age_hours / 200.0, 0.35))
+        ranked.append((score, row))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return [
+        {
+            "conversation_id": item.conversation_id or "",
+            "summary": _clip_text(item.summary or "", 320),
+            "event_type": item.event_type or "general",
+            "keywords": list((item.summary_json or {}).get("keywords") or [])[:6],
+            "updated_at": _safe_iso(getattr(item, "updated_at", None)),
+            "message_count": int(getattr(item, "source_message_count", 0) or 0),
+        }
+        for score, item in ranked[: max(1, min(limit, 4))]
+        if (item.summary or "").strip()
+    ]
+
+
+def _build_context_fingerprint(context: dict) -> str:
+    profile = context.get("profile") or {}
+    documents = context.get("documents") or []
+    medications = context.get("medications") or []
+    appointments = context.get("appointments") or []
+    latest_document = documents[0] if documents else None
+    latest_appointment = appointments[0] if appointments else None
+    latest_medication = medications[0] if medications else None
+    raw = json.dumps(
+        {
+            "profile_id": profile.get("id"),
+            "docs": len(documents),
+            "meds": len(medications),
+            "appts": len(appointments),
+            "latest_doc": _safe_iso(getattr(latest_document, "created_at", None)),
+            "latest_appt": _safe_iso(getattr(latest_appointment, "date_time", None) or getattr(latest_appointment, "created_at", None)),
+            "latest_med": _safe_iso(getattr(latest_medication, "created_at", None)),
+            "summary": _clip_text(context.get("brief_profile_summary") or "", 180),
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cached_ai_reply_get(cache_key: str) -> dict | None:
+    if not cache_key:
+        return None
+    now_ts = time.time()
+    ttl = _ai_response_cache_ttl_seconds()
+    with _AI_RESPONSE_CACHE_LOCK:
+        payload = _AI_RESPONSE_CACHE.get(cache_key)
+        if not payload:
+            return None
+        if now_ts - float(payload.get("stored_at", 0.0) or 0.0) > ttl:
+            _AI_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return dict(payload)
+
+
+def _cached_ai_reply_put(cache_key: str, payload: dict) -> None:
+    if not cache_key:
+        return
+    with _AI_RESPONSE_CACHE_LOCK:
+        _AI_RESPONSE_CACHE[cache_key] = {"stored_at": time.time(), **(payload or {})}
+
+
+def _structured_medications_reply(context: dict) -> str:
+    medications = [item for item in (context.get("medications") or []) if not bool(getattr(item, "completed", False))]
+    if not medications:
+        return "No veo medicamentos activos registrados en el perfil seleccionado."
+    labels = []
+    for item in medications[:6]:
+        label = getattr(item, "name", "") or "Medicamento"
+        if getattr(item, "dose", ""):
+            label += f" ({item.dose})"
+        if getattr(item, "frequency", ""):
+            label += f", {item.frequency}"
+        labels.append(label)
+    extra = len(medications) - len(labels)
+    reply = f"En el perfil activo aparecen {len(medications)} medicamento(s) activo(s): " + "; ".join(labels) + "."
+    if extra > 0:
+        reply += f" Hay {extra} más registrados."
+    return reply
+
+
+def _structured_next_appointment_reply(context: dict) -> str:
+    insight = (context.get("appointment_insights") or {}).get("next_upcoming")
+    if not insight:
+        return "No veo una próxima cita agendada en el perfil activo."
+    specialty = insight.get("specialty") or insight.get("type") or "cita"
+    center = insight.get("center") or "sin centro registrado"
+    when_label = insight.get("date_time") or "sin fecha registrada"
+    return f"La próxima cita registrada es {specialty} para {when_label} en {center}."
+
+
+def _structured_latest_document_reply(context: dict) -> str:
+    documents = context.get("documents") or []
+    if not documents:
+        return "No veo documentos clínicos registrados en el perfil activo."
+    latest = documents[0]
+    summaries = context.get("document_summaries") or []
+    summary = next(
+        (item for item in summaries if getattr(item, "document_id", None) == getattr(latest, "id", None)),
+        None,
+    )
+    doc_type = _infer_document_type(latest)
+    center = getattr(latest, "center", "") or "sin centro registrado"
+    date_label = _safe_iso_local(getattr(latest, "date", None), context.get("timezone_name") or DEFAULT_TZ_NAME) or "sin fecha"
+    reply = f"El último documento registrado es de tipo {doc_type}, asociado a {center}, con fecha {date_label}."
+    if summary and (getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", "")):
+        reply += " " + _clip_text(
+            getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", ""),
+            260,
+        )
+    return reply
+
+
+def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str, str, str] | None:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return None
+    if any(token in normalized for token in ["que medicamentos", "cuales son mis medicamentos", "medicamentos activos", "que tomo"]):
+        return _structured_medications_reply(context), "structured-memory", "structured-medications"
+    if any(token in normalized for token in ["proxima cita", "siguiente cita", "proximo control", "siguiente hora"]):
+        return _structured_next_appointment_reply(context), "structured-memory", "structured-next-appointment"
+    if any(token in normalized for token in ["ultimo documento", "ultimo examen", "ultimo informe", "ultimo resultado"]):
+        return _structured_latest_document_reply(context), "structured-memory", "structured-latest-document"
+    return None
+
+
+def _persist_ai_query_metric(
+    db: Session,
+    *,
+    user_id: int,
+    profile_id: int,
+    conversation_id: str,
+    query_type: str,
+    model: str,
+    provider: str,
+    mode: str,
+    used_llm: bool,
+    cache_hit: bool,
+    structured_hit: bool,
+    history_messages: int,
+    chunk_count: int,
+    input_chars: int,
+    context_chars: int,
+    output_chars: int,
+    prompt_tokens_estimate: int,
+    output_tokens_estimate: int,
+    metadata_json: dict | None = None,
+) -> None:
+    metric = models.AiQueryMetric(
+        user_id=int(user_id),
+        profile_id=int(profile_id),
+        conversation_id=(conversation_id or "").strip(),
+        query_type=(query_type or "general").strip() or "general",
+        model=(model or "").strip(),
+        provider=(provider or "").strip(),
+        mode=(mode or "").strip(),
+        used_llm=bool(used_llm),
+        cache_hit=bool(cache_hit),
+        structured_hit=bool(structured_hit),
+        history_messages=max(0, int(history_messages or 0)),
+        chunk_count=max(0, int(chunk_count or 0)),
+        input_chars=max(0, int(input_chars or 0)),
+        context_chars=max(0, int(context_chars or 0)),
+        output_chars=max(0, int(output_chars or 0)),
+        prompt_tokens_estimate=max(0, int(prompt_tokens_estimate or 0)),
+        output_tokens_estimate=max(0, int(output_tokens_estimate or 0)),
+        total_tokens_estimate=max(0, int(prompt_tokens_estimate or 0)) + max(0, int(output_tokens_estimate or 0)),
+        metadata_json=metadata_json or {},
+    )
+    db.add(metric)
 
 
 def _safe_iso(dt: datetime | None) -> str:
@@ -6936,6 +7770,7 @@ def _save_document_from_chat_attachment(
         doc_type_enum = doc_type_map.get(doc_type_inferred, models.DocumentType.otro)
         doc = models.Document(
             user_id=int(user_id),
+            profile_id=int(getattr(profile, "id", 0) or 0) or None,
             doc_type=doc_type_enum,
             filename=filename,
             file_data=binary,
@@ -6945,6 +7780,14 @@ def _save_document_from_chat_attachment(
             notes="Subido desde el chat de Klinip IA",
         )
         db.add(doc)
+        db.flush()
+        if ocr_text:
+            _upsert_document_intelligence(db, doc)
+            _upsert_document_memory_chunks(
+                db,
+                doc,
+                profile_id=int(getattr(profile, "id", 0) or 0) or None,
+            )
         _mark_profile_ai_dirty(db, profile, include_family=False)
         db.commit()
     except Exception as exc:
@@ -7086,6 +7929,7 @@ def _create_document_from_workflow(
     original_filename = attachment_payload.get("filename") or "documento"
     doc = models.Document(
         user_id=target_user_id,
+        profile_id=int(getattr(profile, "id", 0) or 0) or None,
         appointment_id=None,
         doc_type=models.DocumentType(values.get("doc_type") or models.DocumentType.otro.value),
         file_data=attachment_payload.get("content"),
@@ -8885,7 +9729,7 @@ def _ai_context_bundle_for_profile(
     )
     documents = (
         db.query(models.Document)
-        .filter(models.Document.user_id == target_user_id)
+        .filter(*_document_scope_filter(profile, target_user_id))
         .order_by(models.Document.created_at.desc())
         .all()
     )
@@ -9108,7 +9952,7 @@ def _load_profile_brief_summary(
     latest_document_summary = (
         db.query(models.DocumentSummary)
         .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
-        .filter(models.Document.user_id == target_user_id)
+        .filter(*_document_scope_filter(profile, target_user_id))
         .order_by(models.Document.created_at.desc(), models.Document.id.desc())
         .first()
     )
@@ -9430,6 +10274,8 @@ def _build_chat_context_base(
     profile: models.HealthProfile,
     link: models.ProfileRelationship,
     target_user_id: int,
+    message: str = "",
+    conversation_id: str | None = None,
     intent: str = "general",
     modules: dict | None = None,
     include_family_context: bool = False,
@@ -9449,6 +10295,11 @@ def _build_chat_context_base(
     }
     plan_info = _build_plan_info(current_user, db)
     timezone_name = _resolve_user_tz_name(current_user)
+    permissions_validated = {
+        "view_profile": _check_permission(db, current_user, int(profile.id), "view_profile"),
+        "view_medications": _check_permission(db, current_user, int(profile.id), "view_medications"),
+        "view_documents": _check_permission(db, current_user, int(profile.id), "view_documents"),
+    }
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
@@ -9478,13 +10329,13 @@ def _build_chat_context_base(
             context_deadline_ts=context_deadline_ts,
             observability=query_observability,
         )
-    if modules.get("documents"):
+    if modules.get("documents") and permissions_validated.get("view_documents"):
         documents = _safe_ai_context_query(
             db,
             module_name="documents",
             loader=lambda: (
                 db.query(models.Document)
-                .filter(models.Document.user_id == target_user_id)
+                .filter(*_document_scope_filter(profile, target_user_id))
                 .order_by(models.Document.created_at.desc(), models.Document.id.desc())
                 .limit(6)
                 .all()
@@ -9495,7 +10346,7 @@ def _build_chat_context_base(
             context_deadline_ts=context_deadline_ts,
             observability=query_observability,
         )
-    if modules.get("medications"):
+    if modules.get("medications") and permissions_validated.get("view_medications"):
         medications = _safe_ai_context_query(
             db,
             module_name="medications",
@@ -9617,6 +10468,88 @@ def _build_chat_context_base(
             )
             for entity in entity_rows:
                 document_entities_by_document.setdefault(entity.document_id, []).append(entity)
+    if documents and permissions_validated.get("view_documents"):
+        try:
+            existing_chunk_doc_ids = {
+                int(item[0])
+                for item in (
+                    db.query(models.AiDocumentChunk.document_id)
+                    .filter(
+                        models.AiDocumentChunk.document_id.in_(
+                            [int(doc.id) for doc in documents[:4] if getattr(doc, "id", None) is not None]
+                        )
+                    )
+                    .distinct()
+                    .all()
+                )
+                if item and item[0] is not None
+            }
+            for doc in documents[:4]:
+                if not getattr(doc, "id", None) or int(doc.id) in existing_chunk_doc_ids:
+                    continue
+                if not (getattr(doc, "ocr_text", "") or "").strip():
+                    continue
+                _upsert_document_memory_chunks(db, doc, profile_id=int(profile.id))
+        except Exception as exc:
+            print(f"WARNING _build_chat_context_base backfill chunks: {exc}")
+    normalized_message = _normalize_text(message or "")
+    document_memory_requested = bool(
+        permissions_validated.get("view_documents")
+        and (
+            bool(modules.get("documents"))
+            or intent == "documentos"
+            or any(
+                token in normalized_message
+                for token in (
+                    "documento",
+                    "resultado",
+                    "informe",
+                    "examen",
+                    "pdf",
+                    "receta",
+                    "orden",
+                    "archivo",
+                )
+            )
+        )
+    )
+    relevant_document_chunks = (
+        _safe_ai_context_query(
+            db,
+            module_name="document-chunks",
+            loader=lambda: _load_relevant_document_chunks(
+                db,
+                current_user,
+                profile,
+                link,
+                message,
+                limit=4 if intent != "documentos" else 5,
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        if document_memory_requested
+        else []
+    )
+    conversation_summaries = _safe_ai_context_query(
+        db,
+        module_name="conversation-summaries",
+        loader=lambda: _load_relevant_conversation_memory(
+            db,
+            profile_id=int(profile.id),
+            message=message,
+            conversation_id=conversation_id,
+            limit=3,
+        ),
+        default_value=[],
+        degraded_reasons=degraded_reasons,
+        statement_timeout_ms=statement_timeout_ms,
+        context_deadline_ts=context_deadline_ts,
+        observability=query_observability,
+    )
     ai_memory_text = _extract_ai_memory_block(profile.base_medical_data or "")
     user_profile_notes_text = _strip_ai_memory_block(profile.base_medical_data or "")
     runtime_memory = _build_ai_profile_memory(
@@ -9662,9 +10595,21 @@ def _build_chat_context_base(
 
     sources = [
         {"key": "profile-summary", "label": "Resumen del perfil", "count": 1 if brief_profile_summary else 0, "enabled": True},
-        {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": bool(modules.get("documents"))},
-        {"key": "medications", "label": "Medicamentos", "count": len(medications), "enabled": bool(modules.get("medications"))},
+        {
+            "key": "documents",
+            "label": "Documentos",
+            "count": len(documents),
+            "enabled": bool(modules.get("documents")) and bool(permissions_validated.get("view_documents")),
+        },
+        {"key": "document-memory", "label": "Memoria documental", "count": len(relevant_document_chunks), "enabled": bool(relevant_document_chunks)},
+        {
+            "key": "medications",
+            "label": "Medicamentos",
+            "count": len(medications),
+            "enabled": bool(modules.get("medications")) and bool(permissions_validated.get("view_medications")),
+        },
         {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": bool(modules.get("appointments"))},
+        {"key": "conversation-memory", "label": "Memoria conversacional", "count": len(conversation_summaries), "enabled": bool(conversation_summaries)},
         {
             "key": "family",
             "label": "Perfil familiar",
@@ -9689,9 +10634,11 @@ def _build_chat_context_base(
         },
         "plan": plan_info,
         "family_access": family_access,
+        "permissions_validated": permissions_validated,
         "sources": sources,
         "timezone_name": timezone_name,
         "chat_intent": intent,
+        "current_question": _clip_text(message or "", 420),
         "enabled_modules": modules,
         "include_document_text": bool(include_document_text),
         "degraded_reasons": degraded_reasons,
@@ -9704,7 +10651,7 @@ def _build_chat_context_base(
         "document_insights": document_insights,
         "medication_insights": medication_insights,
         "recent_conversations": [],
-        "conversation_summaries": [],
+        "conversation_summaries": conversation_summaries,
         "active_medications": active_medications,
         "latest_document": latest_document,
         "latest_document_text": latest_document_text,
@@ -9715,6 +10662,7 @@ def _build_chat_context_base(
         "adherence_summary": adherence_summary,
         "document_summaries": document_summaries,
         "document_entities_by_document": document_entities_by_document,
+        "document_chunks": relevant_document_chunks,
         "health_alerts": [],
         "profile_health_features": None,
         "family_context": family_context,
@@ -9746,10 +10694,13 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         "name": "normal",
         "history_messages": 6,
         "summary_chars": 900,
+        "conversation_summaries_limit": 3,
         "appointments_limit": 6,
         "documents_limit": 4,
         "document_summaries_limit": 4,
         "document_diagnoses_limit": 4,
+        "document_chunks_limit": 4,
+        "chunk_chars": 420,
         "medications_limit": 6,
         "family_profiles_limit": 4,
         "document_ocr_first_chars": 1200,
@@ -9770,10 +10721,13 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "name": "minimal",
                 "history_messages": 2,
                 "summary_chars": 260,
+                "conversation_summaries_limit": 1,
                 "appointments_limit": 2,
                 "documents_limit": 1,
                 "document_summaries_limit": 1,
                 "document_diagnoses_limit": 1,
+                "document_chunks_limit": 2,
+                "chunk_chars": 220,
                 "medications_limit": 3,
                 "family_profiles_limit": 1,
                 "document_ocr_first_chars": 0,
@@ -9794,10 +10748,13 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "name": "lean",
                 "history_messages": 4,
                 "summary_chars": 520,
+                "conversation_summaries_limit": 2,
                 "appointments_limit": 4,
                 "documents_limit": 2,
                 "document_summaries_limit": 2,
                 "document_diagnoses_limit": 2,
+                "document_chunks_limit": 3,
+                "chunk_chars": 320,
                 "medications_limit": 4,
                 "family_profiles_limit": 2,
                 "document_ocr_first_chars": 420,
@@ -9812,6 +10769,7 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
     if intent == "documentos":
         profile["documents_limit"] = max(profile["documents_limit"], 2)
         profile["document_summaries_limit"] = max(profile["document_summaries_limit"], 2)
+        profile["document_chunks_limit"] = max(profile["document_chunks_limit"], 4)
         if profile["name"] != "minimal":
             profile["document_ocr_first_chars"] = max(profile["document_ocr_first_chars"], 420)
     elif intent == "medicamentos":
@@ -9820,6 +10778,8 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         profile["appointments_limit"] = max(profile["appointments_limit"], 3)
     elif intent == "familiar":
         profile["family_profiles_limit"] = max(profile["family_profiles_limit"], 2)
+    elif intent == "general":
+        profile["conversation_summaries_limit"] = max(profile["conversation_summaries_limit"], 2)
 
     return profile
 
@@ -9835,6 +10795,9 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     documents_limit = max(1, int(prompt_profile.get("documents_limit", 4) or 4))
     document_summaries_limit = max(1, int(prompt_profile.get("document_summaries_limit", 4) or 4))
     document_diagnoses_limit = max(1, int(prompt_profile.get("document_diagnoses_limit", 4) or 4))
+    conversation_summaries_limit = max(1, int(prompt_profile.get("conversation_summaries_limit", 3) or 3))
+    document_chunks_limit = max(1, int(prompt_profile.get("document_chunks_limit", 4) or 4))
+    chunk_chars = max(180, int(prompt_profile.get("chunk_chars", 420) or 420))
     medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
     family_profiles_limit = max(1, int(prompt_profile.get("family_profiles_limit", 4) or 4))
     notes_chars = max(60, int(prompt_profile.get("notes_chars", 180) or 180))
@@ -9845,6 +10808,7 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     document_ocr_other_chars = max(0, int(prompt_profile.get("document_ocr_other_chars", 320) or 0))
     payload = {
         "profile": context["profile"],
+        "current_question": _clip_text(context.get("current_question") or "", 320),
         "learned_profile_context": _clip_text(context.get("learned_profile_context") or "", memory_chars),
         "brief_profile_summary": context.get("brief_profile_summary")
         or (context.get("profile") or {}).get("brief_profile_summary")
@@ -9852,6 +10816,11 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
         "timezone": timezone_name,
         "chat_intent": context.get("chat_intent") or "general",
         "enabled_modules": enabled_modules,
+        "permissions_validated": {
+            "view_profile": bool((context.get("permissions_validated") or {}).get("view_profile")),
+            "view_medications": bool((context.get("permissions_validated") or {}).get("view_medications")),
+            "view_documents": bool((context.get("permissions_validated") or {}).get("view_documents")),
+        },
         "plan": {
             "plan_type": context["plan"].get("plan_type"),
             "max_profiles": context["plan"].get("max_profiles"),
@@ -9945,6 +10914,17 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             for document_id, entities in list((context.get("document_entities_by_document") or {}).items())[:document_diagnoses_limit]
             if any(getattr(entity, "entity_type", "") == "diagnosis" for entity in entities)
         ]
+    if context.get("document_chunks"):
+        payload["document_chunks"] = [
+            {
+                "document_id": item.get("document_id"),
+                "document_type": item.get("document_type") or "otro",
+                "filename": item.get("filename") or "",
+                "relevance": item.get("relevance", 0.0),
+                "chunk_text": _clip_text(item.get("chunk_text") or "", chunk_chars),
+            }
+            for item in (context.get("document_chunks") or [])[:document_chunks_limit]
+        ]
     if enabled_modules.get("medications"):
         payload["medication_insights"] = context.get("medication_insights") or {}
         payload["medications"] = [
@@ -9991,6 +10971,17 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
                 for item in (family_context.get("profiles") or [])[:family_profiles_limit]
             ],
         }
+    if context.get("conversation_summaries"):
+        payload["conversation_summaries"] = [
+            {
+                "conversation_id": item.get("conversation_id") or "",
+                "event_type": item.get("event_type") or "general",
+                "summary": _clip_text(item.get("summary") or "", max(180, brief_summary_chars)),
+                "keywords": list(item.get("keywords") or [])[:4],
+                "updated_at": item.get("updated_at") or "",
+            }
+            for item in (context.get("conversation_summaries") or [])[:conversation_summaries_limit]
+        ]
     payload["brief_profile_summary"] = _clip_text(payload.get("brief_profile_summary") or "", brief_summary_chars)
     # Texto OCR extraído del documento adjunto directamente en el chat
     chat_attachment_text = (context.get("chat_attachment_text") or "").strip()
@@ -10043,6 +11034,8 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "26. Si el contexto incluye 'chat_attachment' con ocr_text, analiza ese documento prioritariamente: identifica su tipo (receta, examen, informe, orden), extrae la informacion clave (medicamentos y dosis si es receta; valores y rangos si es examen; diagnostico y hallazgos si es informe), entrega primero un resumen en lenguaje simple y luego responde la pregunta del usuario. Advierte si la calidad del OCR puede afectar la lectura.\n"
         "27. Para documentos de tipo examen en chat_attachment: indica explicitamente si los valores parecen normales o alterados segun los rangos de referencia del documento, sin diagnosticar. Para recetas: lista medicamentos, dosis y frecuencia. Para informes: resume diagnostico principal y recomendaciones.\n"
         "28. Si el usuario pregunta sobre un documento que subio previamente (no en este chat), busca en 'documents' y 'document_summaries' del contexto clinico para responder con datos reales.\n"
+        "29. Si existe 'document_chunks', prioriza esos fragmentos porque ya fueron recuperados por relevancia semántica y permisos validados.\n"
+        "30. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -10717,6 +11710,14 @@ def _build_ai_reply(
         max_recent_messages=int(prompt_profile.get("history_messages", 6) or 6),
         summary_char_limit=int(prompt_profile.get("summary_chars", 900) or 900),
     )
+    persisted_summaries = [
+        _clip_text(item.get("summary") or "", 240)
+        for item in (context.get("conversation_summaries") or [])[:2]
+        if (item.get("summary") or "").strip()
+    ]
+    merged_conversation_summary = "\n".join(
+        item for item in [*persisted_summaries, conversation_summary] if (item or "").strip()
+    )
     serialized_context = _serialize_ai_context(context, prompt_profile=prompt_profile)
     serialized_context_json = json.dumps(
         serialized_context,
@@ -10733,13 +11734,14 @@ def _build_ai_reply(
         system_prompt,
         compact_history,
         message,
-        conversation_summary=conversation_summary,
+        conversation_summary=merged_conversation_summary,
     )
     openai_ms = round((time.perf_counter() - openai_started_at) * 1000, 1)
     if timing_info is not None:
         timing_info["openai_ms"] = openai_ms
         timing_info["prompt_history_messages"] = len(compact_history)
-        timing_info["conversation_summary_chars"] = len(conversation_summary or "")
+        timing_info["conversation_summary_chars"] = len(merged_conversation_summary or "")
+        timing_info["memory_summary_count"] = len(persisted_summaries)
     if provider_reply:
         text_reply, model = provider_reply
         return _prepend_degraded_notice(_sanitize_ai_reply(text_reply), context), model, "openai", references
@@ -13009,6 +14011,8 @@ async def ai_chat(
             profile,
             link,
             target_user_id,
+            message=message,
+            conversation_id=conversation_id,
             intent=chat_intent,
             modules=context_modules,
             include_family_context=include_family_context,
@@ -13019,7 +14023,8 @@ async def ai_chat(
         # Auditar uso de documentos por IA (qué documentos se exponen como contexto)
         if context_modules.get("documents"):
             ctx_docs = context.get("documents") or []
-            if ctx_docs:
+            ctx_chunks = context.get("document_chunks") or []
+            if ctx_docs or ctx_chunks:
                 _write_audit_log(
                     db, "ai_context_documents_used",
                     user_id=current_user.id,
@@ -13028,6 +14033,15 @@ async def ai_chat(
                         "profile_id": int(profile.id),
                         "document_ids": [d.id for d in ctx_docs if hasattr(d, "id")],
                         "count": len(ctx_docs),
+                        "chunk_document_ids": sorted(
+                            {
+                                int(item.get("document_id") or 0)
+                                for item in ctx_chunks
+                                if int(item.get("document_id") or 0) > 0
+                            }
+                        ),
+                        "chunk_ids": [int(item.get("chunk_id") or 0) for item in ctx_chunks if int(item.get("chunk_id") or 0) > 0],
+                        "chunk_count": len(ctx_chunks),
                         "conversation_id": conversation_id,
                     },
                 )
@@ -13101,6 +14115,13 @@ async def ai_chat(
                 )
 
         family_access_request = _message_asks_family_access(message)
+        cache_hit = False
+        structured_hit = False
+        cache_key = (
+            f"{profile_id}:{chat_intent}:{_build_context_fingerprint(context)}:{_normalize_text(message)}"
+            if not attachment_payload and not degraded_busy and not direct_report_request
+            else ""
+        )
         if family_access_request:
             references = _build_ai_references(message, context)
             reply = _build_family_access_reply(context)
@@ -13140,7 +14161,39 @@ async def ai_chat(
             timing_info["prompt_history_messages"] = 0
             timing_info["conversation_summary_chars"] = 0
         else:
-            reply, model_name, mode, references = _build_ai_reply(message, history, context, timing_info=timing_info)
+            cached_payload = _cached_ai_reply_get(cache_key)
+            if cached_payload:
+                references = _build_ai_references(message, context)
+                reply = _prepend_degraded_notice(
+                    _sanitize_ai_reply(cached_payload.get("reply") or ""),
+                    context,
+                )
+                model_name = cached_payload.get("model_name") or "structured-memory-cache"
+                mode = "structured-cache"
+                cache_hit = True
+                structured_hit = bool(cached_payload.get("structured_hit", True))
+                timing_info["openai_ms"] = 0.0
+                timing_info["prompt_history_messages"] = 0
+                timing_info["conversation_summary_chars"] = 0
+            else:
+                structured_result = _maybe_resolve_structured_ai_query(message, context)
+                if structured_result:
+                    reply, model_name, mode = structured_result
+                    references = _build_ai_references(message, context)
+                    structured_hit = True
+                    timing_info["openai_ms"] = 0.0
+                    timing_info["prompt_history_messages"] = 0
+                    timing_info["conversation_summary_chars"] = 0
+                    _cached_ai_reply_put(
+                        cache_key,
+                        {
+                            "reply": reply,
+                            "model_name": model_name,
+                            "structured_hit": True,
+                        },
+                    )
+                else:
+                    reply, model_name, mode, references = _build_ai_reply(message, history, context, timing_info=timing_info)
         user_item = _persist_ai_message(
             db,
             profile_id=profile_id,
@@ -13161,6 +14214,55 @@ async def ai_chat(
             content=reply,
             metadata_json={"model": model_name, "mode": mode, "references": references},
         )
+        try:
+            combined_history = history + [
+                {"role": "user", "content": message},
+                {"role": "assistant", "content": reply},
+            ]
+            _upsert_conversation_summary(
+                db,
+                profile_id=profile_id,
+                user_id=current_user.id,
+                conversation_id=conversation_id,
+                event_type=chat_intent,
+                mode=mode,
+                history=combined_history[:-2],
+                latest_user_message=message,
+                latest_reply=reply,
+                last_message_id=int(getattr(assistant_item, "id", 0) or 0) or None,
+            )
+            prompt_chars = int(timing_info.get("prompt_system_chars", 0) or 0) + len(message)
+            output_chars = len(reply or "")
+            _persist_ai_query_metric(
+                db,
+                user_id=current_user.id,
+                profile_id=profile_id,
+                conversation_id=conversation_id,
+                query_type=chat_intent,
+                model=model_name,
+                provider="openai" if mode == "openai" else ("cache" if cache_hit else "backend"),
+                mode=mode,
+                used_llm=bool(mode == "openai"),
+                cache_hit=cache_hit,
+                structured_hit=structured_hit,
+                history_messages=int(timing_info.get("prompt_history_messages", 0) or 0),
+                chunk_count=len(context.get("document_chunks") or []),
+                input_chars=len(message),
+                context_chars=int(timing_info.get("prompt_context_chars", 0) or 0),
+                output_chars=output_chars,
+                prompt_tokens_estimate=max(0, math.ceil(max(0, prompt_chars) / 4)),
+                output_tokens_estimate=_estimate_token_count(reply),
+                metadata_json={
+                    "degraded_reasons": list(context.get("degraded_reasons") or []),
+                    "prompt_profile": timing_info.get("prompt_profile") or "",
+                    "memory_summary_count": int(timing_info.get("memory_summary_count", 0) or 0),
+                    "document_chunk_ids": [int(item.get("chunk_id") or 0) for item in (context.get("document_chunks") or [])],
+                },
+            )
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING ai_chat memory persistence failed: {exc}")
         timing_info["total_ms"] = round((time.perf_counter() - total_started_at) * 1000, 1)
         db_modules = timing_info.get("db_modules") or {}
         slow_modules = ",".join(
@@ -13943,7 +15045,7 @@ def _build_cached_ai_health_context_response(
     document_summaries = (
         db.query(models.DocumentSummary)
         .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
-        .filter(models.Document.user_id == target_user_id)
+        .filter(*_document_scope_filter(profile, target_user_id))
         .order_by(models.Document.created_at.desc(), models.DocumentSummary.updated_at.desc())
         .limit(20)
         .all()
@@ -14248,7 +15350,7 @@ async def get_ai_document_intelligence(
     return (
         db.query(models.DocumentSummary)
         .join(models.Document, models.Document.id == models.DocumentSummary.document_id)
-        .filter(models.Document.user_id == target_user_id)
+        .filter(*_document_scope_filter(profile, target_user_id))
         .order_by(models.Document.created_at.desc())
         .limit(20)
         .all()
@@ -15371,10 +16473,10 @@ async def list_documents(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user)
     docs = (
         db.query(models.Document)
-        .filter(models.Document.user_id == target_user_id)
+        .filter(*_document_scope_filter(profile, target_user_id))
         .order_by(models.Document.created_at.desc())
         .all()
     )
@@ -15413,6 +16515,7 @@ async def upload_document(
     )
     doc = models.Document(
         user_id=target_user_id,
+        profile_id=int(getattr(profile, "id", 0) or 0) or None,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
         file_data=file_content,
@@ -15467,7 +16570,7 @@ async def delete_document(
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == target_user_id,
+            *_document_scope_filter(profile, target_user_id),
         )
         .first()
     )
@@ -15478,6 +16581,9 @@ async def delete_document(
     if doc.file_path and os.path.exists(doc.file_path):
         os.remove(doc.file_path)
 
+    db.query(models.AiDocumentChunk).filter(models.AiDocumentChunk.document_id == doc.id).delete()
+    db.query(models.DocumentClinicalEntity).filter(models.DocumentClinicalEntity.document_id == doc.id).delete()
+    db.query(models.DocumentSummary).filter(models.DocumentSummary.document_id == doc.id).delete()
     db.delete(doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
@@ -15496,7 +16602,7 @@ async def update_document(
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == target_user_id,
+            *_document_scope_filter(profile, target_user_id),
         )
         .first()
     )
@@ -15537,7 +16643,7 @@ async def get_document_file(
         db.query(models.Document)
         .filter(
             models.Document.id == document_id,
-            models.Document.user_id == target_user_id,
+            *_document_scope_filter(profile, target_user_id),
         )
         .first()
     )

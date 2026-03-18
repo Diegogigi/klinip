@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile } from "../api";
+import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile, getMfaStatus } from "../api";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
-import { getDocumentFile } from "../services/httpApi";
+import { getDocumentFile, getDocumentFileWithStepUp } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
+import StepUpModal from "../components/StepUpModal";
 
 const docLabels = {
   receta: "Receta",
@@ -94,6 +95,9 @@ export default function Documents() {
   const [form, setForm] = useState(initialForm);
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpPending, setStepUpPending] = useState(null); // { action: "view"|"download", doc }
+  const [hasMfa, setHasMfa] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -154,6 +158,7 @@ export default function Documents() {
 
   useEffect(() => {
     load();
+    getMfaStatus().then((s) => setHasMfa(!!s?.mfa_enabled)).catch(() => {});
   }, []);
 
   useEffect(() => () => releaseViewerUrl(), [viewerUrl]);
@@ -259,17 +264,26 @@ export default function Documents() {
     }
   };
 
-  const handleOpenViewer = async (doc) => {
+  const handleOpenViewer = async (doc, stepUpToken) => {
     setViewerLoading(true);
     setViewerOpen(true);
     setViewerTarget(doc);
     setViewerKind(inferViewerKind(doc));
     setViewerZoom(1);
     try {
-      const url = await getDocumentFile(doc.id);
+      const blob = stepUpToken
+        ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
+        : await getDocumentFile(doc.id);
+      const url = window.URL.createObjectURL(blob);
       releaseViewerUrl();
       setViewerUrl(url);
     } catch (err) {
+      if (err.stepUpRequired) {
+        closeViewer();
+        setStepUpPending({ action: "view", doc });
+        setStepUpOpen(true);
+        return;
+      }
       console.error("Error al abrir documento:", err);
       closeViewer();
       window.alert(`No se pudo abrir el documento. ${err.response?.data?.detail || err.message}`);
@@ -278,9 +292,12 @@ export default function Documents() {
     }
   };
 
-  const handleDownload = async (doc) => {
+  const handleDownload = async (doc, stepUpToken) => {
     try {
-      const url = await getDocumentFile(doc.id);
+      const blob = stepUpToken
+        ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
+        : await getDocumentFile(doc.id);
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.download = cleanUiText(doc.filename, `documento-${doc.id}`);
@@ -289,9 +306,23 @@ export default function Documents() {
       link.remove();
       window.setTimeout(() => window.URL.revokeObjectURL(url), 2000);
     } catch (err) {
+      if (err.stepUpRequired) {
+        setStepUpPending({ action: "download", doc });
+        setStepUpOpen(true);
+        return;
+      }
       console.error("Error al descargar documento:", err);
       window.alert("No se pudo descargar el documento.");
     }
+  };
+
+  const handleStepUpVerified = (token) => {
+    setStepUpOpen(false);
+    const pending = stepUpPending;
+    setStepUpPending(null);
+    if (!pending) return;
+    if (pending.action === "view") handleOpenViewer(pending.doc, token);
+    else if (pending.action === "download") handleDownload(pending.doc, token);
   };
 
   const handleOpenDetail = (doc) => {
@@ -763,6 +794,14 @@ export default function Documents() {
           </>
         )}
       </div>
+
+      <StepUpModal
+        open={stepUpOpen}
+        onClose={() => { setStepUpOpen(false); setStepUpPending(null); }}
+        onVerified={handleStepUpVerified}
+        hasMfa={hasMfa}
+        actionLabel="acceder al documento"
+      />
     </>
   );
 }

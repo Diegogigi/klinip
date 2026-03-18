@@ -1,6 +1,7 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
+import StepUpModal from "../components/StepUpModal";
 import {
   updateMe,
   getAppointments,
@@ -31,8 +32,33 @@ import {
   revokeDataConsent,
   deleteAccount as deleteAccountApi,
   submitPrivacyRequest,
+  getMfaStatus,
+  startMfaEnroll,
+  verifyMfaEnrollment,
+  disableMfa,
+  regenerateMfaBackupCodes,
+  getSessions,
+  revokeSession,
+  revokeAllSessions,
+  getAuditLogs,
 } from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
+
+const ACTION_TYPE_LABELS = {
+  invitation_accepted: "Invitación aceptada",
+  invitation_created: "Invitación enviada",
+  invitation_revoked: "Invitación revocada",
+  invitation_rejected: "Invitación rechazada",
+  member_removed: "Miembro eliminado",
+  access_granted: "Acceso otorgado",
+  access_revoked: "Acceso revocado",
+  profile_updated: "Perfil actualizado",
+  ai_conversation_deleted: "Conversación IA eliminada",
+  ai_conversation_renamed: "Conversación IA renombrada",
+  document_uploaded: "Documento subido",
+  medication_added: "Medicamento agregado",
+  appointment_created: "Cita creada",
+};
 
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate, initialSection = "perfil" }) {
   const profile = user || {};
@@ -51,6 +77,25 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection || "perfil");
+
+  // ── MFA state ──
+  const [mfaStatus, setMfaStatus] = useState(null); // { mfa_enabled, backup_codes_remaining }
+  const [mfaEnrollData, setMfaEnrollData] = useState(null); // { totp_uri, secret, backup_codes }
+  const [mfaEnrollCode, setMfaEnrollCode] = useState("");
+  const [mfaDisableCode, setMfaDisableCode] = useState("");
+  const [mfaRegenCode, setMfaRegenCode] = useState("");
+  const [mfaNewBackupCodes, setMfaNewBackupCodes] = useState(null);
+  const [mfaLoading, setMfaLoading] = useState(false);
+  const [mfaNotice, setMfaNotice] = useState("");
+  // ── Sessions state ──
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  // ── Audit log state ──
+  const [auditLogs, setAuditLogs] = useState([]);
+  // ── Step-up state ──
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpPending, setStepUpPending] = useState(null); // action name string
+  const [auditLoading, setAuditLoading] = useState(false);
   const [isMobileSettings, setIsMobileSettings] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth <= 640 : false
   );
@@ -249,6 +294,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     .filter(Boolean);
   const settingsSections = [
     { id: "perfil", label: "Perfil", icon: "profile" },
+    { id: "seguridad", label: "Seguridad", icon: "shield" },
     { id: "privacidad", label: "Privacidad", icon: "shield" },
     { id: "notificaciones", label: "Notificaciones", icon: "bell" },
     { id: "datos", label: "Exportar datos", icon: "export" },
@@ -369,6 +415,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     };
   }, [profile?.id, activeFamilyProfileId, planInfo?.plan_type]);
 
+  useEffect(() => {
+    if (activeSection === "seguridad") {
+      loadMfaStatus();
+      loadSessions();
+      loadAuditLogs();
+    }
+  }, [activeSection]);
+
   const handleSectionSelect = (section) => {
     setActiveSection(section);
     if (isMobileSettings) {
@@ -379,6 +433,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const activeSectionLabel = {
     perfil: "Perfil",
     familia: "Mi familia",
+    seguridad: "Seguridad",
     privacidad: "Privacidad",
     notificaciones: "Notificaciones",
     datos: "Exportar",
@@ -555,17 +610,29 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setPrivacyNotice("Consentimiento restaurado.");
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = async (stepUpToken) => {
     setPrivacyNotice("");
     try {
-      await deleteAccountApi();
+      await deleteAccountApi(stepUpToken);
       localStorage.removeItem("token");
       onLogout?.();
       navigate("/register");
     } catch (err) {
+      if (err.stepUpRequired) {
+        setStepUpPending("deleteAccount");
+        setStepUpOpen(true);
+        return;
+      }
       console.error(err);
       setPrivacyNotice("No se pudo eliminar la cuenta.");
     }
+  };
+
+  const handleSettingsStepUpVerified = (token) => {
+    setStepUpOpen(false);
+    const pending = stepUpPending;
+    setStepUpPending(null);
+    if (pending === "deleteAccount") handleDeleteAccount(token);
   };
 
   const handleSendPrivacyRequest = async () => {
@@ -597,6 +664,121 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setPrivacyNotice(detail || "No se pudo enviar la solicitud.");
     } finally {
       setPrivacySending(false);
+    }
+  };
+
+  // ── MFA handlers ────────────────────────────────────────────────────────────
+
+  const loadMfaStatus = async () => {
+    try {
+      const s = await getMfaStatus();
+      setMfaStatus(s);
+    } catch {}
+  };
+
+  const handleMfaEnrollStart = async () => {
+    setMfaLoading(true);
+    setMfaNotice("");
+    try {
+      const data = await startMfaEnroll();
+      setMfaEnrollData(data);
+    } catch (err) {
+      setMfaNotice(err?.response?.data?.detail || "No se pudo iniciar el enrolamiento.");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaEnrollConfirm = async () => {
+    setMfaLoading(true);
+    setMfaNotice("");
+    try {
+      await verifyMfaEnrollment({ code: mfaEnrollCode });
+      setMfaEnrollData(null);
+      setMfaEnrollCode("");
+      setMfaNotice("MFA activado correctamente.");
+      await loadMfaStatus();
+    } catch (err) {
+      setMfaNotice(err?.response?.data?.detail || "Código incorrecto.");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaDisable = async () => {
+    if (!mfaDisableCode) return;
+    setMfaLoading(true);
+    setMfaNotice("");
+    try {
+      await disableMfa({ code: mfaDisableCode });
+      setMfaDisableCode("");
+      setMfaNotice("MFA desactivado.");
+      await loadMfaStatus();
+    } catch (err) {
+      setMfaNotice(err?.response?.data?.detail || "Código incorrecto.");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  const handleMfaRegenBackupCodes = async () => {
+    if (!mfaRegenCode) return;
+    setMfaLoading(true);
+    setMfaNotice("");
+    try {
+      const res = await regenerateMfaBackupCodes({ code: mfaRegenCode });
+      setMfaNewBackupCodes(res.backup_codes);
+      setMfaRegenCode("");
+      setMfaNotice("Códigos de respaldo regenerados. Guárdalos ahora, no se mostrarán de nuevo.");
+      await loadMfaStatus();
+    } catch (err) {
+      setMfaNotice(err?.response?.data?.detail || "Código incorrecto.");
+    } finally {
+      setMfaLoading(false);
+    }
+  };
+
+  // ── Session handlers ─────────────────────────────────────────────────────────
+
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const data = await getSessions();
+      setSessions(Array.isArray(data) ? data : []);
+    } catch {} finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const handleRevokeSession = async (sessionId) => {
+    try {
+      await revokeSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    } catch (err) {
+      alert(err?.response?.data?.detail || "No se pudo revocar la sesión.");
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    if (!window.confirm("¿Cerrar todas las sesiones activas? Deberás iniciar sesión de nuevo.")) return;
+    try {
+      await revokeAllSessions();
+      setSessions([]);
+      setMfaNotice("Todas las sesiones cerradas.");
+    } catch (err) {
+      setMfaNotice(err?.response?.data?.detail || "Error al cerrar sesiones.");
+    }
+  };
+
+  // ── Audit log handlers ────────────────────────────────────────────────────────
+
+  const loadAuditLogs = async () => {
+    setAuditLoading(true);
+    try {
+      const data = await getAuditLogs({ limit: 30 });
+      setAuditLogs(Array.isArray(data) ? data : []);
+    } catch {} finally {
+      setAuditLoading(false);
     }
   };
 
@@ -1599,12 +1781,16 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                       return (
                         <article className="family-timeline-item" key={entry.id}>
                           <span className={`family-timeline-dot is-${tone}`}>
-                            {tone === "accept" ? "✓" : tone === "revoke" ? "×" : "↗"}
+                            {tone === "accept" ? "✓" : tone === "revoke" ? "✕" : "↗"}
                           </span>
                           <div className="family-timeline-body">
                             <p className="family-timeline-text">{entry.description}</p>
                             <p className="family-timeline-meta">
-                              {entry.action_type} · {entry.created_at ? toLocaleDateTimeOrEmpty(entry.created_at) : ""}
+                              <span className="family-timeline-type">
+                                {ACTION_TYPE_LABELS[entry.action_type] || entry.action_type.replace(/_/g, " ")}
+                              </span>
+                              <span className="family-timeline-sep">·</span>
+                              {entry.created_at ? toLocaleDateTimeOrEmpty(entry.created_at) : ""}
                             </p>
                           </div>
                         </article>
@@ -2141,6 +2327,235 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       </div>
       )}
 
+      {activeSection === "seguridad" && (
+      <div className="settings-section">
+        <div className="profile-page-header">
+          <div>
+            <p className="profile-page-eyebrow"><span />Cuenta</p>
+            <h2 className="profile-page-title">
+              <em>Seguridad</em> avanzada
+            </h2>
+            <p className="muted">Protección reforzada para tu cuenta y datos de salud.</p>
+          </div>
+        </div>
+        <div className="privacy-layout">
+
+          {/* ── MFA ── */}
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <h4>Autenticación en dos pasos (MFA)</h4>
+              {mfaStatus && (
+                <span className={`privacy-status-pill ${mfaStatus.mfa_enabled ? "is-on" : "is-off"}`}>
+                  {mfaStatus.mfa_enabled ? "Activo" : "Inactivo"}
+                </span>
+              )}
+            </div>
+            <p className="muted">
+              Añade una capa extra de seguridad usando una aplicación autenticadora (Google Authenticator, Authy, etc.).
+            </p>
+
+            {mfaNotice && (
+              <p className="muted" style={{ color: mfaNotice.includes("correctamente") || mfaNotice.includes("activado") || mfaNotice.includes("regenerados") ? "var(--color-success, #16a34a)" : "var(--color-danger, #dc2626)", marginBottom: "0.5rem" }}>
+                {mfaNotice}
+              </p>
+            )}
+
+            {mfaStatus && !mfaStatus.mfa_enabled && !mfaEnrollData && (
+              <div className="privacy-actions">
+                <button className="primary-btn" type="button" onClick={handleMfaEnrollStart} disabled={mfaLoading}>
+                  {mfaLoading ? "Cargando..." : "Activar MFA"}
+                </button>
+              </div>
+            )}
+
+            {/* Enrollment flow: show QR + backup codes */}
+            {mfaEnrollData && (
+              <div style={{ marginTop: "1rem" }}>
+                <p className="muted" style={{ marginBottom: "0.75rem" }}>
+                  <strong>1.</strong> Escanea el código QR con tu aplicación autenticadora:
+                </p>
+                <div style={{ background: "#fff", padding: "1rem", borderRadius: "8px", display: "inline-block", marginBottom: "1rem" }}>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mfaEnrollData.totp_uri)}`}
+                    alt="QR MFA"
+                    width={180} height={180}
+                    style={{ display: "block" }}
+                  />
+                </div>
+                <p className="muted" style={{ marginBottom: "0.5rem" }}>
+                  O ingresa el código manualmente: <code style={{ fontFamily: "monospace", background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px" }}>{mfaEnrollData.secret}</code>
+                </p>
+                <p className="muted" style={{ marginTop: "1rem", marginBottom: "0.5rem" }}>
+                  <strong>2.</strong> Guarda estos códigos de respaldo en un lugar seguro. Solo se muestran una vez:
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "1rem" }}>
+                  {mfaEnrollData.backup_codes.map((c) => (
+                    <code key={c} style={{ background: "#f1f5f9", padding: "3px 8px", borderRadius: "4px", fontFamily: "monospace", fontSize: "0.85rem" }}>{c}</code>
+                  ))}
+                </div>
+                <p className="muted" style={{ marginBottom: "0.5rem" }}>
+                  <strong>3.</strong> Ingresa el código de 6 dígitos de tu aplicación para confirmar:
+                </p>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  <input
+                    className="input-field"
+                    type="text"
+                    inputMode="numeric"
+                    value={mfaEnrollCode}
+                    onChange={(e) => setMfaEnrollCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    placeholder="000000"
+                    maxLength={6}
+                    style={{ width: "120px" }}
+                  />
+                  <button className="primary-btn" type="button" onClick={handleMfaEnrollConfirm} disabled={mfaLoading || mfaEnrollCode.length < 6}>
+                    {mfaLoading ? "Verificando..." : "Confirmar"}
+                  </button>
+                  <button className="secondary-btn" type="button" onClick={() => { setMfaEnrollData(null); setMfaEnrollCode(""); setMfaNotice(""); }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* MFA enabled: show disable + backup code regen */}
+            {mfaStatus?.mfa_enabled && !mfaEnrollData && (
+              <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+                <div>
+                  <p className="muted" style={{ marginBottom: "0.4rem" }}>
+                    Códigos de respaldo disponibles: <strong>{mfaStatus.backup_codes_remaining}</strong>
+                  </p>
+                  <p className="muted" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
+                    Regenerar códigos de respaldo (requiere código TOTP):
+                  </p>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <input
+                      className="input-field"
+                      type="text"
+                      inputMode="numeric"
+                      value={mfaRegenCode}
+                      onChange={(e) => setMfaRegenCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      placeholder="Código TOTP"
+                      maxLength={6}
+                      style={{ width: "140px" }}
+                    />
+                    <button className="secondary-btn" type="button" onClick={handleMfaRegenBackupCodes} disabled={mfaLoading || mfaRegenCode.length < 6}>
+                      Regenerar
+                    </button>
+                  </div>
+                  {mfaNewBackupCodes && (
+                    <div style={{ marginTop: "0.75rem" }}>
+                      <p className="muted" style={{ marginBottom: "0.4rem", fontSize: "0.85rem" }}>Nuevos códigos (guárdalos ahora):</p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                        {mfaNewBackupCodes.map((c) => (
+                          <code key={c} style={{ background: "#f1f5f9", padding: "3px 8px", borderRadius: "4px", fontFamily: "monospace", fontSize: "0.85rem" }}>{c}</code>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="muted" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
+                    Desactivar MFA (requiere código TOTP o código de respaldo):
+                  </p>
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                    <input
+                      className="input-field"
+                      type="text"
+                      value={mfaDisableCode}
+                      onChange={(e) => setMfaDisableCode(e.target.value.slice(0, 10))}
+                      placeholder="Código TOTP o respaldo"
+                      style={{ width: "200px" }}
+                    />
+                    <button className="secondary-btn danger" type="button" onClick={handleMfaDisable} disabled={mfaLoading || !mfaDisableCode}>
+                      Desactivar MFA
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Sesiones activas ── */}
+          <div className="privacy-card">
+            <div className="privacy-card-header">
+              <h4>Sesiones activas</h4>
+              <button className="secondary-btn danger" type="button" onClick={handleRevokeAllSessions} style={{ padding: "0.3rem 0.8rem", fontSize: "0.82rem" }}>
+                Cerrar todas
+              </button>
+            </div>
+            <p className="muted">Dispositivos con sesión abierta en tu cuenta.</p>
+            {sessionsLoading ? (
+              <p className="muted">Cargando sesiones...</p>
+            ) : sessions.length === 0 ? (
+              <p className="muted">No hay sesiones activas registradas.</p>
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                {sessions.map((s) => (
+                  <li key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", background: "#f8fafc", borderRadius: "6px", padding: "0.6rem 0.8rem", gap: "0.5rem" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {s.device_label || "Dispositivo desconocido"}
+                      </p>
+                      <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>
+                        IP: {s.ip_address || "—"} · {s.created_at ? new Date(s.created_at).toLocaleDateString("es") : ""}
+                      </p>
+                    </div>
+                    <button className="secondary-btn danger" type="button" onClick={() => handleRevokeSession(s.id)} style={{ padding: "0.25rem 0.65rem", fontSize: "0.78rem", flexShrink: 0 }}>
+                      Revocar
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* ── Historial de seguridad ── */}
+          <div className="privacy-card" style={{ gridColumn: "1 / -1" }}>
+            <h4>Historial de seguridad</h4>
+            <p className="muted">Últimos eventos de acceso y cambios de cuenta.</p>
+            {auditLoading ? (
+              <p className="muted">Cargando historial...</p>
+            ) : auditLogs.length === 0 ? (
+              <p className="muted">Sin eventos registrados.</p>
+            ) : (
+              <div style={{ maxHeight: "320px", overflowY: "auto", marginTop: "0.75rem" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
+                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>Evento</th>
+                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>IP</th>
+                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((l) => (
+                      <tr key={l.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <td style={{ padding: "0.4rem 0.5rem" }}>
+                          <span style={{
+                            display: "inline-block", padding: "1px 7px", borderRadius: "999px", fontSize: "0.75rem",
+                            background: l.action.includes("fail") || l.action.includes("failed") ? "#fee2e2" : "#eff6ff",
+                            color: l.action.includes("fail") || l.action.includes("failed") ? "#dc2626" : "#1e40af",
+                            fontWeight: 500,
+                          }}>
+                            {l.action.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td style={{ padding: "0.4rem 0.5rem", color: "#64748b" }}>{l.ip_address || "—"}</td>
+                        <td style={{ padding: "0.4rem 0.5rem", color: "#64748b" }}>
+                          {l.created_at ? new Date(l.created_at).toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+      )}
+
       {activeSection === "privacidad" && (
       <div className="settings-section">
         <div className="profile-page-header">
@@ -2298,6 +2713,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
         </div>
       )}
+
+      <StepUpModal
+        open={stepUpOpen}
+        onClose={() => { setStepUpOpen(false); setStepUpPending(null); }}
+        onVerified={handleSettingsStepUpVerified}
+        hasMfa={!!mfaStatus?.mfa_enabled}
+        actionLabel={stepUpPending === "deleteAccount" ? "eliminar tu cuenta" : "esta acción"}
+      />
     </>
   );
 }

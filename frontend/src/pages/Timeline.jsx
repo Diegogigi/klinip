@@ -3,21 +3,37 @@ import { getActiveHealthProfile, getAiLifeTimeline, getHealthProfiles } from "..
 import { toLocaleDateOrEmpty } from "../utils/dates";
 
 const MOJIBAKE_FALLBACKS = [
+  // Vocales minúsculas acentuadas
   ["Ã¡", "á"],
   ["Ã©", "é"],
   ["Ã­", "í"],
   ["Ã³", "ó"],
   ["Ãº", "ú"],
   ["Ã±", "ñ"],
-  ["Ã", "Á"],
+  ["Ã¼", "ü"],
+  // Vocales mayúsculas acentuadas
   ["Ã‰", "É"],
-  ["Ã", "Í"],
   ["Ã“", "Ó"],
   ["Ãš", "Ú"],
   ["Ã‘", "Ñ"],
+  ["Ã", "Á"],
+  ["Ã", "Í"],
+  // Signos de puntuación españoles
   ["Â¿", "¿"],
   ["Â¡", "¡"],
   ["Â·", "·"],
+  ["Â°", "°"],
+  // Comillas tipográficas (UTF-8 mal decodificado como Windows-1252)
+  ["â€", "“"],
+  ["â€", "”"],
+  ["â€™", "’"],
+  ["â€˜", "‘"],
+  // Guiones y puntos suspensivos
+  ["â€“", "–"],
+  ["â€”", "—"],
+  ["â€¦", "…"],
+  // Viñeta
+  ["â€¢", "•"],
 ];
 
 const SUMMARY_TOKEN_LABELS = [
@@ -295,47 +311,43 @@ export default function Timeline() {
         ) : (
           <ul className="timeline vertical">
             {events.map((item) => (
-              <li key={item.id} className="timeline-item">
-                <div className="timeline-main" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                    <span style={{ fontSize: "1.4rem" }}>{getTimelineIcon(item.event_type)}</span>
-                    <span className={`chip ${item.event_type === "document" ? "doc" : item.event_type}`}>
-                      {typeLabels[item.event_type] || cleanUiText(item.event_type, "Evento")}
-                    </span>
-                    {includeFamily ? (
-                      <span className="timeline-related-pill">
-                        {cleanUiText(item.profile_name, "Perfil relacionado")}
+              <li key={item.id} className={`timeline-item type-${item.event_type}`}>
+                <span className="timeline-node">{getTimelineIcon(item.event_type)}</span>
+                <div className="timeline-card">
+                  <div className="timeline-main">
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                      <span className={`chip ${item.event_type === "document" ? "doc" : item.event_type}`}>
+                        {typeLabels[item.event_type] || cleanUiText(item.event_type, "Evento")}
                       </span>
-                    ) : null}
+                      {includeFamily ? (
+                        <span className="timeline-related-pill">
+                          {cleanUiText(item.profile_name, "Perfil relacionado")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <span className="timeline-meta">{item.event_at ? toLocaleDateOrEmpty(item.event_at) : ""}</span>
                   </div>
-                  <span className="timeline-meta" style={{ fontSize: "0.875rem", whiteSpace: "nowrap" }}>
-                    {item.event_at ? toLocaleDateOrEmpty(item.event_at) : ""}
-                  </span>
+                  <p className="timeline-title">{cleanUiText(item.title, "Evento clínico")}</p>
+                  {item.summary ? (
+                    <p className="timeline-notes">{cleanUiText(item.summary)}</p>
+                  ) : null}
+                  {item.category ? (
+                    <div className="timeline-related-panel">
+                      <div className="timeline-related-title">Categoría</div>
+                      <div className="timeline-related-item is-document">{cleanUiText(item.category)}</div>
+                      {item.metadata_json?.status ? (
+                        <div className="timeline-related-item is-appointment">
+                          Estado: {cleanUiText(item.metadata_json.status)}
+                        </div>
+                      ) : null}
+                      {item.metadata_json?.filename ? (
+                        <div className="timeline-related-item is-medication">
+                          Archivo: {cleanUiText(item.metadata_json.filename)}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
-                <p className="timeline-title" style={{ fontWeight: "600", marginBottom: "0.5rem", fontSize: "1rem" }}>
-                  {cleanUiText(item.title, "Evento clínico")}
-                </p>
-                {item.summary ? (
-                  <p className="timeline-notes" style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>
-                    {cleanUiText(item.summary)}
-                  </p>
-                ) : null}
-                {item.category ? (
-                  <div className="timeline-related-panel">
-                    <div className="timeline-related-title">Categoría</div>
-                    <div className="timeline-related-item is-document">{cleanUiText(item.category)}</div>
-                    {item.metadata_json?.status ? (
-                      <div className="timeline-related-item is-appointment">
-                        Estado: {cleanUiText(item.metadata_json.status)}
-                      </div>
-                    ) : null}
-                    {item.metadata_json?.filename ? (
-                      <div className="timeline-related-item is-medication">
-                        Archivo: {cleanUiText(item.metadata_json.filename)}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
               </li>
             ))}
           </ul>

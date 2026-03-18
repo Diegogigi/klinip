@@ -374,8 +374,10 @@ export async function revokeDataConsent() {
   return res.data;
 }
 
-export async function deleteAccount() {
-  const res = await api.post("/privacy/delete-account");
+export async function deleteAccount(stepUpToken) {
+  const res = await api.post("/privacy/delete-account", undefined, {
+    headers: stepUpToken ? { "X-StepUp-Token": stepUpToken } : {},
+  });
   return res.data;
 }
 

@@ -53,6 +53,13 @@ class User(Base):
     token_version = Column(Integer, default=0)
     data_consent_revoked = Column(Boolean, default=False)
     deleted = Column(Boolean, default=False)
+    # Seguridad: bloqueo de cuenta por intentos fallidos
+    failed_login_attempts = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    # MFA / autenticación de dos factores
+    mfa_enabled = Column(Boolean, default=False)
+    mfa_secret = Column(String, nullable=True)          # TOTP base32 secret
+    mfa_backup_codes_json = Column(Text, nullable=True)  # JSON: lista de hashes de códigos de respaldo
     chronic_condition = Column(String, default="")
     primary_care_center = Column(String, default="")
     reminder_preferred_time = Column(String, default="08:00")
@@ -112,6 +119,7 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
     doc_type = Column(Enum(DocumentType), nullable=False)
     file_path = Column(
@@ -128,6 +136,7 @@ class Document(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="documents")
+    profile = relationship("HealthProfile")
     appointment = relationship("Appointment", back_populates="documents")
 
 
@@ -297,6 +306,10 @@ class ProfileRelationship(Base):
     invited_at = Column(DateTime, nullable=True)
     accepted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
+
+    # Permisos granulares: JSON array de strings de permisos otorgados explícitamente
+    # Ejemplo: ["view_documents","download_documents","view_medications"]
+    permissions_json = Column(Text, nullable=True)
 
     profile = relationship("HealthProfile", back_populates="relationships", foreign_keys=[profile_id])
     user = relationship("User", back_populates="health_profile_links", foreign_keys=[user_id])
@@ -527,6 +540,90 @@ class FamilyAiSummary(Base):
     user = relationship("User")
 
 
+class AiConversationSummary(Base):
+    __tablename__ = "ai_conversation_summaries"
+    __table_args__ = (
+        UniqueConstraint(
+            "profile_id",
+            "conversation_id",
+            "summary_type",
+            name="uq_ai_conversation_summaries_profile_conversation_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    conversation_id = Column(String, nullable=False, index=True, default="")
+    summary_type = Column(String, default="rolling", index=True)
+    event_type = Column(String, default="general", index=True)
+    summary = Column(Text, default="")
+    summary_json = Column(JSON, default=dict)
+    source_message_count = Column(Integer, default=0)
+    last_message_id = Column(Integer, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+
+
+class AiDocumentChunk(Base):
+    __tablename__ = "ai_document_chunks"
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_ai_document_chunks_document_chunk"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    document_type = Column(String, default="otro", index=True)
+    chunk_index = Column(Integer, default=0)
+    chunk_hash = Column(String, default="", index=True)
+    chunk_text = Column(Text, default="")
+    embedding_json = Column(JSON, default=list)
+    embedding_model = Column(String, default="")
+    embedding_source = Column(String, default="none")
+    token_estimate = Column(Integer, default=0)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    document = relationship("Document")
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+
+
+class AiQueryMetric(Base):
+    __tablename__ = "ai_query_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    conversation_id = Column(String, default="", index=True)
+    query_type = Column(String, default="general", index=True)
+    model = Column(String, default="")
+    provider = Column(String, default="")
+    mode = Column(String, default="")
+    used_llm = Column(Boolean, default=False)
+    cache_hit = Column(Boolean, default=False)
+    structured_hit = Column(Boolean, default=False)
+    history_messages = Column(Integer, default=0)
+    chunk_count = Column(Integer, default=0)
+    input_chars = Column(Integer, default=0)
+    context_chars = Column(Integer, default=0)
+    output_chars = Column(Integer, default=0)
+    prompt_tokens_estimate = Column(Integer, default=0)
+    output_tokens_estimate = Column(Integer, default=0)
+    total_tokens_estimate = Column(Integer, default=0)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+
+
 class ExternalClinicalSource(Base):
     __tablename__ = "external_clinical_sources"
 
@@ -560,3 +657,39 @@ class ExternalClinicalRecord(Base):
 
     profile = relationship("HealthProfile")
     source = relationship("ExternalClinicalSource")
+
+
+# ─── Seguridad: Refresh Tokens ────────────────────────────────────────────────
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True, index=True)
+    device_label = Column(String, default="")    # User-Agent simplificado
+    ip_address = Column(String, default="")
+    expires_at = Column(DateTime, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+
+
+# ─── Seguridad: Audit Log ─────────────────────────────────────────────────────
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)   # login_ok, login_fail, mfa_enabled, doc_download…
+    resource_type = Column(String, default="")            # document, medication, profile, account…
+    resource_id = Column(Integer, nullable=True)
+    ip_address = Column(String, default="")
+    user_agent = Column(String, default="")
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    user = relationship("User")
