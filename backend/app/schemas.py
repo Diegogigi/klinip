@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_serializer
 from .models import AppointmentType, AppointmentStatus, DocumentType
 
@@ -319,6 +319,11 @@ class ProfileNoteOut(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    # MFA: si está pendiente de verificación, solo se devuelve mfa_token
+    mfa_required: Optional[bool] = None
+    mfa_token: Optional[str] = None
+    # Sesiones: refresh token
+    refresh_token: Optional[str] = None
 
 
 class TokenData(BaseModel):
@@ -332,6 +337,62 @@ class ForgotPasswordIn(BaseModel):
 class ResetPasswordIn(BaseModel):
     token: str
     new_password: str
+
+
+# ─── MFA ──────────────────────────────────────────────────────────────────────
+
+class MfaEnrollOut(BaseModel):
+    totp_uri: str           # otpauth:// URI para QR
+    secret: str             # base32 secret (para mostrar al usuario como respaldo)
+    backup_codes: List[str] # 10 códigos de un solo uso (texto plano, solo en este momento)
+
+
+class MfaVerifyIn(BaseModel):
+    code: str               # código TOTP de 6 dígitos, o backup code
+
+
+class MfaLoginIn(BaseModel):
+    mfa_token: str          # token temporal devuelto por login cuando MFA está activo
+    code: str               # código TOTP o backup code
+
+
+class MfaDisableIn(BaseModel):
+    code: str               # TOTP o backup code para confirmar desactivación
+
+
+# ─── Sesiones / Refresh Tokens ────────────────────────────────────────────────
+
+class RefreshTokenIn(BaseModel):
+    refresh_token: str
+
+
+class SessionOut(BaseModel):
+    id: int
+    device_label: str
+    ip_address: str
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+    is_current: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+# ─── Permisos granulares ──────────────────────────────────────────────────────
+
+class PermissionsUpdate(BaseModel):
+    permissions: List[str]  # lista de strings como "view_documents", "download_documents"…
+
+
+# ─── Step-up authentication ────────────────────────────────────────────────────
+
+class StepUpVerifyIn(BaseModel):
+    proof: str   # código TOTP de 6 dígitos, backup code o contraseña actual
+
+
+class StepUpOut(BaseModel):
+    stepup_token: str
+    expires_in: int = 600  # segundos
 
 
 class AppointmentBase(BaseModel):
@@ -825,6 +886,12 @@ class AiChatRequest(BaseModel):
     history: list[AiChatMessageIn] = []
     conversation_id: str | None = None
     attachment: AiChatAttachmentIn | None = None
+
+
+class AiChatTranscriptionOut(BaseModel):
+    transcript: str
+    model: str = ""
+    language: str = "es"
 
 
 class AiContextSourceOut(BaseModel):

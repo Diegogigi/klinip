@@ -23,10 +23,15 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.error("401 Unauthorized - Token inválido o expirado");
-      console.error("Response data:", error.response?.data);
-      // Limpiar token inválido
       localStorage.removeItem("token");
+    }
+    // 403 con step_up_required: propagar con bandera especial para que el llamador
+    // pueda mostrar el modal de step-up
+    if (error.response?.status === 403) {
+      const detail = error.response?.data?.detail;
+      if (detail?.code === "step_up_required" || detail === "step_up_required") {
+        error.stepUpRequired = true;
+      }
     }
     return Promise.reject(error);
   }
@@ -230,6 +235,15 @@ export async function deleteProfileNote(profileId, noteId) {
 
 export async function sendAiChat(payload) {
   const res = await api.post("/ai/chat", payload, {
+    timeout: 90000,
+  });
+  return res.data;
+}
+
+export async function transcribeAiChatAudio(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post("/ai/chat/transcribe", formData, {
     timeout: 90000,
   });
   return res.data;
@@ -502,5 +516,100 @@ export async function sendTestPush() {
 // Public stats
 export async function getLandingStats() {
   const res = await api.get("/public/stats");
+  return res.data;
+}
+
+// ─── Step-up authentication ────────────────────────────────────────────────────
+
+export async function stepUpVerify(payload) {
+  const res = await api.post("/auth/stepup/verify", payload);
+  return res.data;
+}
+
+/**
+ * Realiza una petición GET con el step-up token en el header X-StepUp-Token.
+ * Usado para descargar documentos clínicos protegidos.
+ */
+export async function getDocumentFileWithStepUp(documentId, stepUpToken) {
+  const res = await api.get(`/documents/${documentId}/file`, {
+    responseType: "blob",
+    headers: stepUpToken ? { "X-StepUp-Token": stepUpToken } : {},
+  });
+  return res.data;
+}
+
+// ─── MFA ─────────────────────────────────────────────────────────────────────
+
+export async function verifyMfaLogin(payload) {
+  const res = await api.post("/auth/mfa/verify", payload);
+  return res.data;
+}
+
+export async function getMfaStatus() {
+  const res = await api.get("/auth/mfa/status");
+  return res.data;
+}
+
+export async function startMfaEnroll() {
+  const res = await api.post("/auth/mfa/enroll");
+  return res.data;
+}
+
+export async function verifyMfaEnrollment(payload) {
+  const res = await api.post("/auth/mfa/verify-enrollment", payload);
+  return res.data;
+}
+
+export async function disableMfa(payload) {
+  const res = await api.post("/auth/mfa/disable", payload);
+  return res.data;
+}
+
+export async function regenerateMfaBackupCodes(payload) {
+  const res = await api.post("/auth/mfa/backup-codes/regenerate", payload);
+  return res.data;
+}
+
+// ─── Refresh token + sesiones ─────────────────────────────────────────────────
+
+export async function refreshAccessToken(refreshToken) {
+  const res = await api.post("/auth/token/refresh", { refresh_token: refreshToken });
+  return res.data;
+}
+
+export async function getSessions() {
+  const res = await api.get("/auth/sessions");
+  return res.data;
+}
+
+export async function revokeSession(sessionId) {
+  const res = await api.delete(`/auth/sessions/${sessionId}`);
+  return res.data;
+}
+
+export async function revokeAllSessions() {
+  const res = await api.delete("/auth/sessions");
+  return res.data;
+}
+
+// ─── Permisos granulares ──────────────────────────────────────────────────────
+
+export async function getProfilePermissions(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/permissions`);
+  return res.data;
+}
+
+export async function updateRelationshipPermissions(profileId, relationshipId, permissions) {
+  const res = await api.put(
+    `/health-profiles/${profileId}/relationships/${relationshipId}/permissions`,
+    { permissions }
+  );
+  return res.data;
+}
+
+// ─── Audit log ────────────────────────────────────────────────────────────────
+
+export async function getAuditLogs({ limit = 50, offset = 0 } = {}) {
+  const res = await api.get("/audit/logs", { params: { limit, offset } });
   return res.data;
 }

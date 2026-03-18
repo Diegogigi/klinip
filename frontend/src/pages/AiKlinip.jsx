@@ -17,6 +17,7 @@ import {
   renameAiConversation,
   runAiHealthRadar,
   sendAiChat,
+  transcribeAiChatAudio,
 } from "../api";
 import { parseDate } from "../utils/dates";
 
@@ -37,6 +38,13 @@ const RADAR_PERIOD_OPTIONS = [
 ];
 
 const PINNED_CONVERSATIONS_KEY = "klinip_ai_pinned_conversations";
+const VOICE_RECORDING_MAX_MS = 90000;
+const RECORDER_MIME_OPTIONS = [
+  { mimeType: "audio/webm;codecs=opus", extension: "webm" },
+  { mimeType: "audio/webm", extension: "webm" },
+  { mimeType: "audio/ogg;codecs=opus", extension: "ogg" },
+  { mimeType: "audio/mp4", extension: "m4a" },
+];
 
 const INITIAL_MESSAGE = {
   id: "welcome",
@@ -106,6 +114,40 @@ function fileToBase64(file) {
     reader.onerror = () => reject(reader.error || new Error("No se pudo leer el archivo adjunto."));
     reader.readAsDataURL(file);
   });
+}
+
+function getPreferredRecorderOption() {
+  if (typeof MediaRecorder === "undefined") return { mimeType: "", extension: "webm" };
+  const supported = RECORDER_MIME_OPTIONS.find(({ mimeType }) => (
+    typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(mimeType)
+  ));
+  return supported || { mimeType: "", extension: "webm" };
+}
+
+function buildVoiceFile(blob, extension) {
+  const safeExtension = extension || "webm";
+  const mimeType = blob.type || (safeExtension === "ogg" ? "audio/ogg" : "audio/webm");
+  return new File([blob], `klinip-nota-voz-${Date.now()}.${safeExtension}`, {
+    type: mimeType,
+    lastModified: Date.now(),
+  });
+}
+
+function getVoiceErrorMessage(error) {
+  const detail = error?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+
+  const errorName = String(error?.name || "").trim();
+  if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+    return "Debes permitir el uso del micrófono para grabar una nota de voz.";
+  }
+  if (errorName === "NotFoundError") {
+    return "No encontré un micrófono disponible en este dispositivo.";
+  }
+  if (errorName === "NotReadableError") {
+    return "No pude acceder al micrófono. Cierra otras apps que lo estén usando e intenta otra vez.";
+  }
+  return "No pude grabar o transcribir la nota de voz. Intenta nuevamente.";
 }
 
 function cleanAssistantText(value) {
@@ -285,6 +327,9 @@ export default function AiKlinip() {
   const [resources, setResources] = useState({ profile: null, appointments: [], documents: [], medications: [] });
   const [pinnedConversationIds, setPinnedConversationIds] = useState([]);
   const [openConversationMenuId, setOpenConversationMenuId] = useState("");
+  const [voiceState, setVoiceState] = useState("idle");
+  const [voiceStatus, setVoiceStatus] = useState("");
+  const [voiceError, setVoiceError] = useState("");
   const [meta, setMeta] = useState({
     disclaimer: "Klinip IA entrega información orientativa y no reemplaza la evaluación de un profesional de salud.",
     model: "context-fallback",
@@ -300,6 +345,35 @@ export default function AiKlinip() {
   const conversationsRequestRef = useRef(null);
   const insightsRequestRef = useRef(null);
   const conversationMenuRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const voiceChunksRef = useRef([]);
+  const voiceStopTimerRef = useRef(null);
+
+  const clearVoiceTimer = () => {
+    if (voiceStopTimerRef.current) {
+      clearTimeout(voiceStopTimerRef.current);
+      voiceStopTimerRef.current = null;
+    }
+  };
+
+  const stopVoiceStream = () => {
+    const stream = mediaStreamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
+  const syncInputHeight = () => {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => {
+      const target = inputFieldRef.current;
+      if (!target) return;
+      target.style.height = "auto";
+      target.style.height = `${Math.min(target.scrollHeight, 92)}px`;
+    });
+  };
 
   const mapHistoryToMessages = (items) => {
     if (!Array.isArray(items) || !items.length) return [INITIAL_MESSAGE];
@@ -483,6 +557,15 @@ export default function AiKlinip() {
       window.removeEventListener("focus", handleWindowSync);
       document.removeEventListener("visibilitychange", handleWindowSync);
       if (fileTimerRef.current) clearTimeout(fileTimerRef.current);
+      clearVoiceTimer();
+      stopVoiceStream();
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // noop
+        }
+      }
     };
   }, [radarProfileId]);
 
@@ -532,6 +615,13 @@ export default function AiKlinip() {
       setPinnedConversationIds([]);
     }
   }, [resources.profile?.id]);
+
+  useEffect(() => {
+    if (voiceState === "ready" && !String(input || "").trim()) {
+      setVoiceState("idle");
+      setVoiceStatus("");
+    }
+  }, [input, voiceState]);
 
   useEffect(() => {
     if (!openConversationMenuId) return undefined;
@@ -636,11 +726,15 @@ export default function AiKlinip() {
     });
   }, [conversations, pinnedConversationIds]);
 
-  const submitPrompt = async (promptValue) => {
+  const submitPrompt = async (promptValue, options = {}) => {
+    const {
+      attachmentNameOverride = "",
+      clearComposer = true,
+    } = options;
     const prompt = (promptValue || "").trim();
     if (!prompt || loading) return;
 
-    const attachmentName = attachedFile?.name || "";
+    const attachmentName = attachmentNameOverride || attachedFile?.name || (voiceState === "ready" ? "Nota de voz" : "");
 
     const userMessageId = `user-${Date.now()}`;
     const nextUserMessage = {
@@ -659,9 +753,15 @@ export default function AiKlinip() {
       .map((item) => ({ role: item.role, content: item.content }));
 
     setMessages((prev) => [...prev, nextUserMessage]);
-    setInput("");
+    if (clearComposer) {
+      setInput("");
+      syncInputHeight();
+    }
     setAttachedFile(null);
     setScanVisible(false);
+    setVoiceState("idle");
+    setVoiceStatus("");
+    setVoiceError("");
     setLoading(true);
 
     try {
@@ -757,6 +857,139 @@ export default function AiKlinip() {
     if (fileTimerRef.current) clearTimeout(fileTimerRef.current);
     fileTimerRef.current = setTimeout(() => setScanVisible(false), 2800);
   };
+
+  const handleVoiceRecord = async () => {
+    if (loading || historyLoading || voiceState === "transcribing") return;
+
+    if (voiceState === "recording") {
+      clearVoiceTimer();
+      const activeRecorder = mediaRecorderRef.current;
+      if (activeRecorder && activeRecorder.state !== "inactive") {
+        activeRecorder.stop();
+      } else {
+        stopVoiceStream();
+        setVoiceState("idle");
+        setVoiceStatus("");
+      }
+      return;
+    }
+
+    if (!navigator?.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setVoiceError("Tu navegador no permite grabar audio desde Klinip IA.");
+      return;
+    }
+
+    setVoiceError("");
+    setVoiceStatus("");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorderOption = getPreferredRecorderOption();
+      const recorder = recorderOption.mimeType
+        ? new MediaRecorder(stream, { mimeType: recorderOption.mimeType })
+        : new MediaRecorder(stream);
+
+      mediaStreamRef.current = stream;
+      mediaRecorderRef.current = recorder;
+      voiceChunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          voiceChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = (event) => {
+        console.error("No se pudo grabar la nota de voz", event);
+        clearVoiceTimer();
+        stopVoiceStream();
+        setVoiceState("idle");
+        setVoiceStatus("");
+        setVoiceError("No pude capturar el audio del micrófono.");
+      };
+
+      recorder.onstop = async () => {
+        clearVoiceTimer();
+        stopVoiceStream();
+
+        const chunks = [...voiceChunksRef.current];
+        voiceChunksRef.current = [];
+        mediaRecorderRef.current = null;
+
+        if (!chunks.length) {
+          setVoiceState("idle");
+          setVoiceStatus("");
+          setVoiceError("No detecté audio en la grabación. Intenta hablar más cerca del micrófono.");
+          return;
+        }
+
+        const extension = recorderOption.extension || "webm";
+        const blob = new Blob(chunks, { type: recorder.mimeType || recorderOption.mimeType || "audio/webm" });
+        if (!blob.size) {
+          setVoiceState("idle");
+          setVoiceStatus("");
+          setVoiceError("La nota de voz quedó vacía. Vuelve a intentarlo.");
+          return;
+        }
+
+        setVoiceState("transcribing");
+        setVoiceStatus("Transcribiendo nota de voz...");
+
+        try {
+          const voiceFile = buildVoiceFile(blob, extension);
+          const result = await transcribeAiChatAudio(voiceFile);
+          const transcript = cleanUiText(result?.transcript);
+          if (!transcript) {
+            throw new Error("No pude convertir la nota de voz en texto útil.");
+          }
+
+          const currentDraft = String(inputFieldRef.current?.value || "").trim();
+          const nextDraft = currentDraft ? `${currentDraft}\n${transcript}` : transcript;
+          setInput(nextDraft);
+          setVoiceState("ready");
+          setVoiceStatus("Transcripción lista. Revísala y presiona enviar.");
+          setVoiceError("");
+          syncInputHeight();
+          window.setTimeout(() => {
+            inputFieldRef.current?.focus();
+            const target = inputFieldRef.current;
+            if (target) {
+              const position = target.value.length;
+              target.setSelectionRange(position, position);
+            }
+          }, 30);
+        } catch (error) {
+          console.error("No se pudo transcribir la nota de voz", error);
+          setVoiceState("idle");
+          setVoiceStatus("");
+          setVoiceError(getVoiceErrorMessage(error));
+        }
+      };
+
+      recorder.start();
+      setVoiceState("recording");
+      setVoiceStatus("Grabando nota de voz... toca de nuevo para detener.");
+      clearVoiceTimer();
+      voiceStopTimerRef.current = setTimeout(() => {
+        const activeRecorder = mediaRecorderRef.current;
+        if (activeRecorder && activeRecorder.state !== "inactive") {
+          activeRecorder.stop();
+        }
+      }, VOICE_RECORDING_MAX_MS);
+    } catch (error) {
+      console.error("No se pudo iniciar la nota de voz", error);
+      clearVoiceTimer();
+      stopVoiceStream();
+      setVoiceState("idle");
+      setVoiceStatus("");
+      setVoiceError(getVoiceErrorMessage(error));
+    }
+  };
+
+  const isVoiceRecording = voiceState === "recording";
+  const isVoiceTranscribing = voiceState === "transcribing";
+  const isVoiceReady = voiceState === "ready";
+  const hasVoiceFeedback = Boolean(voiceStatus || voiceError);
 
   const nextAppointmentPrompt = nextAppointment
     ? `Prepara un resumen para mi cita de ${formatDateTime(nextAppointment.date_time)}`
@@ -1108,7 +1341,7 @@ export default function AiKlinip() {
 
             <div className="ai-input-zone" ref={inputZoneRef}>
               <form className="ai-input-shell" onSubmit={(event) => { event.preventDefault(); submitPrompt(input); }}>
-                {(attachedFile || scanVisible) ? (
+                {(attachedFile || scanVisible || hasVoiceFeedback) ? (
                   <div className={`ai-upload-strip ${attachedFile ? "has-file" : ""}`}>
                     {attachedFile ? (
                       <div className="ai-upload-chip">
@@ -1123,6 +1356,18 @@ export default function AiKlinip() {
                         <span>Preparando contexto local</span>
                       </div>
                     ) : null}
+                    {voiceStatus ? (
+                      <div className={`ai-voice-badge ${isVoiceRecording ? "is-recording" : ""} ${isVoiceReady ? "is-ready" : ""}`}>
+                        <span className="ai-voice-dot" />
+                        <span>{voiceStatus}</span>
+                      </div>
+                    ) : null}
+                    {voiceError ? (
+                      <div className="ai-voice-badge is-error">
+                        <span className="ai-voice-dot" />
+                        <span>{voiceError}</span>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1132,7 +1377,7 @@ export default function AiKlinip() {
                     className="ai-input-field"
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
-                    placeholder="Escribe una pregunta o prepara un documento para consultar..."
+                    placeholder="Escribe o graba una pregunta, o adjunta un documento para consultar..."
                     rows={1}
                     onInput={(event) => {
                       const target = event.currentTarget;
@@ -1144,12 +1389,32 @@ export default function AiKlinip() {
                   <div className="ai-input-actions">
                     <label className="ai-icon-btn" title="Preparar documento">
                       <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" strokeLinecap="round" /></svg>
-                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileChange} />
+                      <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileChange} disabled={loading || isVoiceRecording || isVoiceTranscribing} />
                     </label>
-                    <button type="button" className="ai-icon-btn is-disabled" title="Nota de voz disponible pronto">
-                      <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" strokeLinecap="round" /></svg>
+                    <button
+                      type="button"
+                      className={`ai-icon-btn ${isVoiceRecording ? "is-recording" : ""} ${isVoiceTranscribing ? "is-busy" : ""}`}
+                      title={isVoiceRecording ? "Detener nota de voz" : isVoiceReady ? "Volver a grabar nota de voz" : "Grabar nota de voz"}
+                      aria-label={isVoiceRecording ? "Detener nota de voz" : isVoiceReady ? "Volver a grabar nota de voz" : "Grabar nota de voz"}
+                      aria-pressed={isVoiceRecording}
+                      onClick={handleVoiceRecord}
+                      disabled={loading || isVoiceTranscribing}
+                    >
+                      {isVoiceRecording ? (
+                        <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                          <rect x="7" y="7" width="10" height="10" rx="2" />
+                        </svg>
+                      ) : isVoiceTranscribing ? (
+                        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 3a9 9 0 109 9" strokeLinecap="round" />
+                        </svg>
+                      ) : (
+                        <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" strokeLinecap="round" />
+                        </svg>
+                      )}
                     </button>
-                    <button className="ai-send-btn" type="submit" disabled={loading || !input.trim()}>
+                    <button className="ai-send-btn" type="submit" disabled={loading || isVoiceRecording || isVoiceTranscribing || !input.trim()}>
                       <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   </div>
@@ -1535,4 +1800,3 @@ export default function AiKlinip() {
     </div>
   );
 }
-

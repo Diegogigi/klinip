@@ -31,8 +31,52 @@ import io
 import re
 import unicodedata
 import threading
+import collections
 from difflib import SequenceMatcher
 import time
+
+# ── Seguridad: Rate limiting en memoria ────────────────────────────────────
+_rl_store: dict = collections.defaultdict(list)
+_rl_lock = threading.Lock()
+
+# máx intentos / ventana en segundos por endpoint
+_RATE_LIMITS: dict = {
+    "login":            {"max": 10, "window": 60},
+    "register":         {"max":  5, "window": 60},
+    "forgot-password":  {"max":  5, "window": 60},
+    "ai-transcribe":    {"max": 12, "window": 60},
+}
+
+# Bloqueo de cuenta por intentos fallidos
+_MAX_LOGIN_ATTEMPTS = 5
+_LOCKOUT_MINUTES    = 15
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request, endpoint: str) -> None:
+    cfg = _RATE_LIMITS.get(endpoint)
+    if not cfg:
+        return
+    ip  = _get_client_ip(request)
+    key = f"{ip}:{endpoint}"
+    now = time.time()
+    window = cfg["window"]
+    with _rl_lock:
+        _rl_store[key] = [t for t in _rl_store[key] if now - t < window]
+        if len(_rl_store[key]) >= cfg["max"]:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Demasiados intentos. Espera {window} segundos e intenta de nuevo.",
+                headers={"Retry-After": str(window)},
+            )
+        _rl_store[key].append(now)
+# ───────────────────────────────────────────────────────────────────────────
 from zoneinfo import ZoneInfo
 from urllib import request as urlrequest
 from urllib import error as urlerror
@@ -322,6 +366,44 @@ def ensure_user_schema():
                 )
             added_columns.append("family_ai_last_refreshed_at")
 
+        # MFA columns
+        if "mfa_enabled" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN mfa_enabled BOOLEAN NOT NULL DEFAULT 0")
+            added_columns.append("mfa_enabled")
+
+        if "mfa_secret" not in columns:
+            if backend == "postgresql":
+                statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret VARCHAR")
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN mfa_secret VARCHAR")
+            added_columns.append("mfa_secret")
+
+        if "mfa_backup_codes_json" not in columns:
+            if backend == "postgresql":
+                statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_backup_codes_json TEXT")
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN mfa_backup_codes_json TEXT")
+            added_columns.append("mfa_backup_codes_json")
+
+        # permissions_json in profile_relationships
+        try:
+            rel_columns = {col["name"] for col in inspector.get_columns("profile_relationships")}
+            if "permissions_json" not in rel_columns:
+                if backend == "postgresql":
+                    statements.append(
+                        "ALTER TABLE profile_relationships ADD COLUMN IF NOT EXISTS permissions_json TEXT"
+                    )
+                else:
+                    statements.append("ALTER TABLE profile_relationships ADD COLUMN permissions_json TEXT")
+                added_columns.append("profile_relationships.permissions_json")
+        except Exception:
+            pass
+
         if statements:
             with engine.begin() as conn:
                 for stmt in statements:
@@ -332,11 +414,6 @@ def ensure_user_schema():
                             "UPDATE users SET family_ai_needs_refresh = COALESCE(family_ai_needs_refresh, FALSE)"
                         )
                     )
-            print(
-                f"DEBUG ensure_user_schema: columnas agregadas a users: {', '.join(added_columns)}"
-            )
-        else:
-            print("DEBUG ensure_user_schema: tabla users ya esta al dia")
     except Exception as exc:
         print(f"WARNING ensure_user_schema: no se pudo ajustar la tabla: {exc}")
 
@@ -1478,25 +1555,13 @@ def _smtp_send_message(msg: EmailMessage, smtp_user: str, smtp_pass: str):
 
 
 def _send_reset_email(to_email: str, reset_url: str):
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASS")
-    smtp_from = _smtp_from_security(smtp_user)
-
-    if not (smtp_from and to_email):
-        raise RuntimeError("Canal de correo no configurado")
-
-    msg = EmailMessage()
-    msg["Subject"] = "Klinip - Restablecer contrasena"
-    msg["From"] = smtp_from
-    msg["To"] = to_email
-    msg.set_content(
-        "Hola,\n\n"
-        "Recibimos una solicitud para restablecer tu contrasena.\n"
-        f"Ingresa al siguiente enlace para continuar:\n{reset_url}\n\n"
-        "Si no solicitaste este cambio, ignora este mensaje.\n"
+    _send_templated_email(
+        to_email=to_email,
+        subject=f"{_app_display_name()} - Restablecer contraseña",
+        template_name="password_reset.html",
+        context={"reset_url": reset_url, "year": datetime.utcnow().year},
+        from_security=True,
     )
-
-    _deliver_message(msg, smtp_user, smtp_pass)
 
 
 def _send_reset_email_safe(to_email: str, reset_url: str):
@@ -5300,15 +5365,15 @@ def _run_document_ocr(document_id: int):
         db.close()
 
 
-# Configurar CORS
-# En producciÃ³n, permitir todos los orÃ­genes (Railway puede usar diferentes dominios)
+# ── CORS ─────────────────────────────────────────────────────────────────
 is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
 if is_production:
-    # En producciÃ³n, permitir todos los orÃ­genes (sin credentials para compatibilidad)
-    allow_origins = ["*"]
+    # En producción se admiten solo los orígenes configurados explícitamente.
+    # Configura ALLOWED_ORIGINS en Railway como lista separada por comas.
+    _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+    allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
     allow_credentials = False
 else:
-    # En desarrollo, solo localhost
     allow_origins = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -5321,10 +5386,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
     allow_credentials=allow_credentials,
-    allow_methods=["*"],
-    allow_headers=["*", "Authorization", "Content-Type"],
-    expose_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
+    expose_headers=["Retry-After"],
 )
+# ───────────────────────────────────────────────────────────────────────────
+
+
+# ── Security headers ──────────────────────────────────────────────────────
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"]  = "nosniff"
+    response.headers["X-Frame-Options"]          = "DENY"
+    response.headers["X-XSS-Protection"]         = "1; mode=block"
+    response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]        = "camera=(), microphone=(self), geolocation=()"
+    if is_production:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+# ───────────────────────────────────────────────────────────────────────────
 
 
 # Health check
@@ -5413,82 +5494,24 @@ def public_stats(db: Session = Depends(auth.get_db)):
     }
 
 
-# Debug endpoint para verificar configuraciÃ³n
+# Debug endpoints — solo disponibles en entorno de desarrollo
+def _require_dev_env():
+    if is_production:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/debug/config")
 def debug_config():
-    """Endpoint de debug para verificar configuraciÃ³n (sin exponer secretos)"""
-    secret_key_configured = auth.SECRET_KEY != "supersecretkey_change_me_in_production"
-    secret_key_length = len(auth.SECRET_KEY)
-    is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv(
-        "RAILWAY_PUBLIC_DOMAIN"
-    )
-
+    _require_dev_env()
     return {
-        "secret_key_configured": secret_key_configured,
-        "secret_key_length": secret_key_length,
-        "secret_key_preview": (
-            auth.SECRET_KEY[:10] + "..." if secret_key_configured else "NO CONFIGURADO"
-        ),
+        "secret_key_configured": auth.SECRET_KEY != "supersecretkey_change_me_in_production",
         "algorithm": auth.ALGORITHM,
         "token_expire_minutes": auth.ACCESS_TOKEN_EXPIRE_MINUTES,
-        "environment": "production" if is_production else "development",
+        "environment": "development",
         "database_url_configured": bool(os.getenv("DATABASE_URL")),
-        "railway_environment": bool(is_production),
     }
 
-
-# Debug endpoint (solo para desarrollo)
-@app.get("/debug/users")
-def debug_users(db: Session = Depends(auth.get_db)):
-    """Endpoint de debug para ver usuarios (solo en desarrollo)"""
-    from . import models
-
-    users = db.query(models.User).all()
-    return {
-        "count": len(users),
-        "users": [
-            {
-                "id": u.id,
-                "email": u.email,
-                "name": u.name,
-                "has_password_hash": bool(u.password_hash),
-                "password_hash_length": len(u.password_hash) if u.password_hash else 0,
-            }
-            for u in users
-        ],
-    }
-
-
-# Debug endpoint para ver headers
-@app.get("/debug/headers")
-def debug_headers(request: Request):
-    """Endpoint de debug para ver headers recibidos"""
-    auth_header = request.headers.get("Authorization", "NO ENCONTRADO")
-    return {
-        "authorization": auth_header,
-        "authorization_parts": (
-            auth_header.split(" ") if auth_header != "NO ENCONTRADO" else None
-        ),
-        "all_headers": dict(request.headers),
-        "method": request.method,
-        "url": str(request.url),
-    }
-
-
-# Middleware para loggear todos los requests
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Middleware para loggear requests y headers"""
-    auth_header = request.headers.get("Authorization")
-    if auth_header:
-        print(f"DEBUG middleware: Authorization header recibido: {auth_header[:30]}...")
-    else:
-        print(
-            f"DEBUG middleware: NO hay Authorization header en request a {request.url.path}"
-        )
-
-    response = await call_next(request)
-    return response
 
 
 def _build_plan_info(user: models.User, db: Session) -> dict:
@@ -10114,6 +10137,93 @@ def _call_openai_ai(
         return None
 
 
+_AI_AUDIO_MAX_BYTES = 10 * 1024 * 1024
+_AI_AUDIO_ALLOWED_MIME_TYPES: dict[str, str] = {
+    "audio/webm": ".webm",
+    "audio/ogg": ".ogg",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/aac": ".aac",
+}
+_AI_AUDIO_ALLOWED_EXTENSIONS = set(_AI_AUDIO_ALLOWED_MIME_TYPES.values())
+
+
+def _ai_transcription_model_candidates() -> list[str]:
+    configured = (os.getenv("OPENAI_AUDIO_TRANSCRIPTION_MODEL") or "").strip()
+    base = [configured] if configured else []
+    base.extend(["gpt-4o-mini-transcribe", "whisper-1"])
+    return list(dict.fromkeys(item for item in base if item))
+
+
+def _validate_ai_audio_upload(
+    content: bytes,
+    filename: str,
+    content_type: str | None = None,
+    max_bytes: int = _AI_AUDIO_MAX_BYTES,
+) -> tuple[str, str]:
+    if not content:
+        raise HTTPException(status_code=400, detail="El audio está vacío.")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="La nota de voz supera el tamaño permitido.")
+
+    safe_filename = _sanitize_filename(filename or "nota-voz.webm")
+    ext = Path(safe_filename).suffix.lower()
+    declared_mime = (content_type or "").split(";")[0].strip().lower()
+    guessed_mime = (mimetypes.guess_type(safe_filename)[0] or "").strip().lower()
+    detected_mime = declared_mime or guessed_mime
+
+    if detected_mime not in _AI_AUDIO_ALLOWED_MIME_TYPES:
+        if ext in _AI_AUDIO_ALLOWED_EXTENSIONS:
+            detected_mime = next(
+                (mime for mime, expected_ext in _AI_AUDIO_ALLOWED_MIME_TYPES.items() if expected_ext == ext),
+                "",
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Formato de audio no compatible.")
+
+    expected_ext = _AI_AUDIO_ALLOWED_MIME_TYPES.get(detected_mime, "")
+    if expected_ext and ext != expected_ext:
+        base_name = os.path.splitext(safe_filename)[0] or "nota-voz"
+        safe_filename = f"{base_name}{expected_ext}"
+
+    return detected_mime, safe_filename
+
+
+def _transcribe_ai_audio(content: bytes, filename: str) -> tuple[str, str] | None:
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key or OpenAI is None:
+        return None
+
+    client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
+    prompt = (
+        "Transcribe en español de forma fiel y clara. "
+        "Mantén medicamentos, dosis, fechas y términos clínicos lo más precisos posible."
+    )
+
+    for model_name in _ai_transcription_model_candidates():
+        try:
+            audio_file = io.BytesIO(content)
+            audio_file.name = filename
+            transcript = client.audio.transcriptions.create(
+                model=model_name,
+                file=audio_file,
+                language="es",
+                prompt=prompt,
+            )
+            text_value = (getattr(transcript, "text", "") or "").strip()
+            if not text_value and isinstance(transcript, dict):
+                text_value = str(transcript.get("text") or "").strip()
+            text_value = re.sub(r"\s+", " ", text_value).strip()
+            if text_value:
+                return _clip_text(text_value, 4000), model_name
+        except Exception as exc:
+            print(f"WARNING ai audio transcription failed with {model_name}: {exc}")
+    return None
+
+
 def _family_attention_priority(item: dict) -> tuple[int, int, int, int]:
     pending_count = len(item.get("pending_documents") or [])
     return (
@@ -10753,10 +10863,12 @@ def _persist_ai_message(
 # Auth endpoints
 @app.post("/auth/register", response_model=schemas.UserOut)
 def register(
+    request: Request,
     user_in: schemas.UserCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
 ):
+    _check_rate_limit(request, "register")
     try:
         existing = auth.get_user_by_email(db, user_in.email)
         if existing:
@@ -10795,22 +10907,80 @@ def register(
 
 @app.post("/auth/login", response_model=schemas.Token)
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(auth.get_db),
 ):
-    print(f"DEBUG: Intento de login con email: {form_data.username}")
-    user = auth.authenticate_user(db, form_data.username, form_data.password)
-    if not user:
-        print(f"DEBUG: AutenticaciÃ³n fallida para: {form_data.username}")
-        raise HTTPException(status_code=400, detail="Correo o contraseÃ±a incorrectos")
-    print(f"DEBUG: AutenticaciÃ³n exitosa para usuario ID: {user.id}")
-    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # JWT requiere que 'sub' sea una cadena, no un entero
-    access_token = auth.create_access_token(
-        data={"sub": str(user.id), "tv": int(getattr(user, "token_version", 0) or 0)},
-        expires_delta=access_token_expires,
+    # 1. Rate limiting por IP
+    _check_rate_limit(request, "login")
+
+    email = (form_data.username or "").lower().strip()
+    user  = auth.get_user_by_email(db, email)
+
+    # 2. Verificar bloqueo de cuenta
+    if user and not getattr(user, "deleted", False):
+        locked_until = getattr(user, "locked_until", None)
+        if locked_until and locked_until > datetime.utcnow():
+            mins = max(1, int((locked_until - datetime.utcnow()).total_seconds() / 60) + 1)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Cuenta bloqueada por multiples intentos fallidos. "
+                       f"Intenta de nuevo en {mins} minuto(s).",
+            )
+
+    # 3. Verificar credenciales
+    password_ok = (
+        user is not None
+        and not getattr(user, "deleted", False)
+        and auth.verify_password(form_data.password, user.password_hash)
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    if not password_ok:
+        if user and not getattr(user, "deleted", False):
+            attempts = (getattr(user, "failed_login_attempts", 0) or 0) + 1
+            user.failed_login_attempts = attempts
+            if attempts >= _MAX_LOGIN_ATTEMPTS:
+                user.locked_until = datetime.utcnow() + timedelta(minutes=_LOCKOUT_MINUTES)
+            db.add(user)
+            db.commit()
+        _write_audit_log(db, "login_failed",
+                         user_id=user.id if user else None,
+                         ip_address=_get_client_ip(request),
+                         user_agent=request.headers.get("user-agent", ""))
+        raise HTTPException(status_code=400, detail="Correo o contrasena incorrectos")
+
+    # 4. Exito: resetear contador
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.add(user)
+    db.commit()
+
+    tv = int(getattr(user, "token_version", 0) or 0)
+
+    # 5. Si MFA está activo, devolver token temporal (paso 2 pendiente)
+    if getattr(user, "mfa_enabled", False):
+        mfa_token = auth.create_mfa_temp_token(user.id, tv)
+        _write_audit_log(db, "login_mfa_required", user_id=user.id,
+                         ip_address=_get_client_ip(request),
+                         user_agent=request.headers.get("user-agent", ""))
+        return {"access_token": "", "token_type": "bearer",
+                "mfa_required": True, "mfa_token": mfa_token}
+
+    # 6. Login completo: emitir access token + refresh token
+    access_token = auth.create_access_token(
+        data={"sub": str(user.id), "tv": tv},
+    )
+    device_label = request.headers.get("user-agent", "")[:200]
+    refresh_token = auth.create_refresh_token(
+        db, user.id,
+        ip_address=_get_client_ip(request),
+        device_label=device_label,
+    )
+    _write_audit_log(db, "login_ok", user_id=user.id,
+                     ip_address=_get_client_ip(request),
+                     user_agent=device_label)
+    return {"access_token": access_token, "token_type": "bearer",
+            "refresh_token": refresh_token}
 
 
 @app.post("/auth/forgot-password")
@@ -10820,6 +10990,7 @@ def forgot_password(
     background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
 ):
+    _check_rate_limit(request, "forgot-password")
     config_errors = _password_reset_config_errors()
     if config_errors:
         raise HTTPException(
@@ -10886,6 +11057,582 @@ def reset_password(payload: schemas.ResetPasswordIn, db: Session = Depends(auth.
     db.commit()
 
     return {"ok": True}
+
+
+# ─── Audit log helper ─────────────────────────────────────────────────────────
+
+def _write_audit_log(
+    db: Session,
+    action: str,
+    user_id: int | None = None,
+    resource_type: str = "",
+    resource_id: int | None = None,
+    ip_address: str = "",
+    user_agent: str = "",
+    metadata: dict | None = None,
+):
+    """Registra un evento de seguridad en la tabla audit_logs."""
+    try:
+        entry = models.AuditLog(
+            user_id=user_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata_json=metadata or {},
+        )
+        db.add(entry)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+# ─── MFA endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/auth/mfa/enroll", response_model=schemas.MfaEnrollOut)
+def mfa_enroll(
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Inicia el enrolamiento TOTP. Devuelve URI para QR + secret + backup codes."""
+    secret = auth.generate_totp_secret()
+    totp_uri = auth.get_totp_uri(secret, current_user.email)  # usa el secret plano para el URI
+    raw_codes = auth.generate_backup_codes(10)
+    codes_json = auth.hash_backup_codes(raw_codes)
+
+    # Guardamos secret cifrado y backup codes en el usuario pero NO activamos MFA aún
+    current_user.mfa_secret = auth.encrypt_field(secret)
+    current_user.mfa_backup_codes_json = codes_json
+    db.add(current_user)
+    db.commit()
+
+    _write_audit_log(
+        db, "mfa_enroll_started",
+        user_id=current_user.id,
+        ip_address=_get_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"totp_uri": totp_uri, "secret": secret, "backup_codes": raw_codes}
+
+
+@app.post("/auth/mfa/verify-enrollment")
+def mfa_verify_enrollment(
+    payload: schemas.MfaVerifyIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Confirma el enrolamiento verificando el primer código TOTP."""
+    if not current_user.mfa_secret:
+        raise HTTPException(status_code=400, detail="No hay enrolamiento MFA pendiente")
+    if current_user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA ya está activado")
+
+    if not auth.verify_totp(current_user.mfa_secret, payload.code):
+        _write_audit_log(db, "mfa_enroll_failed", user_id=current_user.id,
+                         ip_address=_get_client_ip(request))
+        raise HTTPException(status_code=400, detail="Código incorrecto")
+
+    current_user.mfa_enabled = True
+    # Invalidar todas las sesiones al activar MFA (seguridad)
+    current_user.token_version = int(getattr(current_user, "token_version", 0) or 0) + 1
+    auth.revoke_all_refresh_tokens(db, current_user.id)
+    db.add(current_user)
+    db.commit()
+
+    _write_audit_log(db, "mfa_enabled", user_id=current_user.id,
+                     ip_address=_get_client_ip(request),
+                     user_agent=request.headers.get("user-agent", ""))
+    return {"ok": True, "message": "MFA activado correctamente"}
+
+
+@app.post("/auth/mfa/disable")
+def mfa_disable(
+    payload: schemas.MfaDisableIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Desactiva MFA. Requiere código TOTP o backup code para confirmar."""
+    if not current_user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA no está activado")
+
+    # Verificar con TOTP o con backup code
+    totp_ok = auth.verify_totp(current_user.mfa_secret or "", payload.code)
+    backup_ok = False
+    new_codes_json = None
+    if not totp_ok and current_user.mfa_backup_codes_json:
+        new_codes_json = auth.verify_backup_code(current_user.mfa_backup_codes_json, payload.code)
+        backup_ok = new_codes_json is not None
+
+    if not totp_ok and not backup_ok:
+        _write_audit_log(db, "mfa_disable_failed", user_id=current_user.id,
+                         ip_address=_get_client_ip(request))
+        raise HTTPException(status_code=400, detail="Código incorrecto")
+
+    current_user.mfa_enabled = False
+    current_user.mfa_secret = None
+    current_user.mfa_backup_codes_json = None
+    # Invalidar sesiones al desactivar MFA
+    current_user.token_version = int(getattr(current_user, "token_version", 0) or 0) + 1
+    auth.revoke_all_refresh_tokens(db, current_user.id)
+    db.add(current_user)
+    db.commit()
+
+    _write_audit_log(db, "mfa_disabled", user_id=current_user.id,
+                     ip_address=_get_client_ip(request),
+                     user_agent=request.headers.get("user-agent", ""))
+    return {"ok": True, "message": "MFA desactivado"}
+
+
+@app.post("/auth/mfa/verify", response_model=schemas.Token)
+def mfa_verify_login(
+    payload: schemas.MfaLoginIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+):
+    """
+    Segundo paso del login: valida el código TOTP (o backup code)
+    y devuelve access_token + refresh_token.
+    """
+    decoded = auth.decode_mfa_temp_token(payload.mfa_token)
+    if not decoded:
+        raise HTTPException(status_code=401, detail="Token MFA inválido o expirado")
+
+    user_id = int(decoded["sub"])
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or getattr(user, "deleted", False):
+        raise HTTPException(status_code=401, detail="Usuario no válido")
+
+    # Verificar que token_version coincide (evita replay con token viejo)
+    if int(decoded.get("tv", -1)) != int(getattr(user, "token_version", 0) or 0):
+        raise HTTPException(status_code=401, detail="Token MFA inválido o expirado")
+
+    # Verificar código TOTP o backup code
+    code_ok = auth.verify_totp(user.mfa_secret or "", payload.code)
+    if not code_ok and user.mfa_backup_codes_json:
+        new_codes = auth.verify_backup_code(user.mfa_backup_codes_json, payload.code)
+        if new_codes is not None:
+            code_ok = True
+            user.mfa_backup_codes_json = new_codes
+            db.add(user)
+            db.commit()
+
+    if not code_ok:
+        _write_audit_log(db, "mfa_verify_failed", user_id=user.id,
+                         ip_address=_get_client_ip(request))
+        raise HTTPException(status_code=400, detail="Código MFA incorrecto")
+
+    tv = int(getattr(user, "token_version", 0) or 0)
+    access_token = auth.create_access_token({"sub": str(user.id), "tv": tv})
+    device_label = request.headers.get("user-agent", "")[:200]
+    refresh_token = auth.create_refresh_token(
+        db, user.id,
+        ip_address=_get_client_ip(request),
+        device_label=device_label,
+    )
+
+    _write_audit_log(db, "login_ok", user_id=user.id,
+                     ip_address=_get_client_ip(request),
+                     user_agent=device_label,
+                     metadata={"method": "mfa_totp"})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token,
+    }
+
+
+@app.post("/auth/mfa/backup-codes/regenerate")
+def mfa_regenerate_backup_codes(
+    payload: schemas.MfaVerifyIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Regenera los backup codes. Requiere código TOTP para confirmar."""
+    if not current_user.mfa_enabled:
+        raise HTTPException(status_code=400, detail="MFA no está activado")
+    if not auth.verify_totp(current_user.mfa_secret or "", payload.code):
+        raise HTTPException(status_code=400, detail="Código incorrecto")
+
+    raw_codes = auth.generate_backup_codes(10)
+    current_user.mfa_backup_codes_json = auth.hash_backup_codes(raw_codes)
+    db.add(current_user)
+    db.commit()
+
+    _write_audit_log(db, "mfa_backup_codes_regenerated", user_id=current_user.id,
+                     ip_address=_get_client_ip(request))
+    return {"backup_codes": raw_codes}
+
+
+@app.post("/auth/stepup/verify", response_model=schemas.StepUpOut)
+def stepup_verify(
+    payload: schemas.StepUpVerifyIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Eleva el nivel de confianza del usuario para una acción sensible.
+    Acepta como prueba:
+      - Código TOTP de 6 dígitos (si MFA activo)
+      - Backup code de MFA
+      - Contraseña actual (si MFA no activo o como alternativa)
+    Devuelve un step-up token válido por 10 minutos.
+    """
+    proof = (payload.proof or "").strip()
+    if not proof:
+        raise HTTPException(status_code=400, detail="Debes proporcionar una prueba de identidad.")
+
+    verified = False
+
+    # Opción 1: TOTP (si MFA activo)
+    if current_user.mfa_enabled and current_user.mfa_secret:
+        if auth.verify_totp(current_user.mfa_secret, proof):
+            verified = True
+
+    # Opción 2: backup code de MFA
+    if not verified and current_user.mfa_enabled and current_user.mfa_backup_codes_json:
+        new_codes = auth.verify_backup_code(current_user.mfa_backup_codes_json, proof)
+        if new_codes is not None:
+            verified = True
+            current_user.mfa_backup_codes_json = new_codes
+            db.add(current_user)
+            db.commit()
+
+    # Opción 3: contraseña actual
+    if not verified:
+        if auth.verify_password(proof, current_user.password_hash):
+            verified = True
+
+    if not verified:
+        _write_audit_log(db, "stepup_failed", user_id=current_user.id,
+                         ip_address=_get_client_ip(request))
+        raise HTTPException(status_code=403, detail="Verificación incorrecta.")
+
+    stepup_token = auth.create_stepup_token(current_user.id)
+    _write_audit_log(db, "stepup_granted", user_id=current_user.id,
+                     ip_address=_get_client_ip(request),
+                     user_agent=request.headers.get("user-agent", ""))
+    return {"stepup_token": stepup_token, "expires_in": auth.STEPUP_TOKEN_EXPIRE_MINUTES * 60}
+
+
+def _check_stepup(request: Request, user: models.User) -> None:
+    """
+    Verifica que la solicitud incluya un step-up token válido.
+    El token debe venir en el header X-StepUp-Token.
+    Si falta o es inválido, lanza 403 con detail estructurado para que el frontend
+    muestre el modal de step-up.
+    """
+    token = request.headers.get("X-StepUp-Token", "").strip()
+    if not token or not auth.verify_stepup_token(token, user.id):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "step_up_required",
+                    "message": "Esta acción requiere verificación adicional de identidad."},
+        )
+
+
+@app.get("/auth/mfa/status")
+def mfa_status(current_user: models.User = Depends(auth.get_current_user)):
+    """Devuelve el estado MFA del usuario actual."""
+    codes_count = 0
+    if current_user.mfa_backup_codes_json:
+        try:
+            import json as _json
+            codes_count = len(_json.loads(current_user.mfa_backup_codes_json))
+        except Exception:
+            pass
+    return {
+        "mfa_enabled": bool(current_user.mfa_enabled),
+        "backup_codes_remaining": codes_count,
+    }
+
+
+# ─── Refresh token + sesiones ─────────────────────────────────────────────────
+
+@app.post("/auth/token/refresh", response_model=schemas.Token)
+def token_refresh(
+    payload: schemas.RefreshTokenIn,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+):
+    """Rota el refresh token y emite un nuevo access token."""
+    result = auth.rotate_refresh_token(
+        db,
+        payload.refresh_token,
+        ip_address=_get_client_ip(request),
+        device_label=request.headers.get("user-agent", "")[:200],
+    )
+    if not result:
+        raise HTTPException(status_code=401, detail="Refresh token inválido o expirado")
+
+    new_refresh, user_id = result
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user or getattr(user, "deleted", False):
+        raise HTTPException(status_code=401, detail="Usuario no válido")
+
+    tv = int(getattr(user, "token_version", 0) or 0)
+    access_token = auth.create_access_token({"sub": str(user.id), "tv": tv})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": new_refresh,
+    }
+
+
+@app.get("/auth/sessions")
+def list_sessions(
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Lista las sesiones activas del usuario."""
+    sessions = (
+        db.query(models.RefreshToken)
+        .filter(
+            models.RefreshToken.user_id == current_user.id,
+            models.RefreshToken.revoked.is_(False),
+            models.RefreshToken.expires_at > datetime.utcnow(),
+        )
+        .order_by(models.RefreshToken.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": s.id,
+            "device_label": s.device_label,
+            "ip_address": s.ip_address,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "last_used_at": s.last_used_at.isoformat() if s.last_used_at else None,
+        }
+        for s in sessions
+    ]
+
+
+@app.delete("/auth/sessions/{session_id}")
+def revoke_session(
+    session_id: int,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Revoca una sesión específica del usuario."""
+    rt = db.query(models.RefreshToken).filter(
+        models.RefreshToken.id == session_id,
+        models.RefreshToken.user_id == current_user.id,
+    ).first()
+    if not rt:
+        raise HTTPException(status_code=404, detail="Sesión no encontrada")
+    rt.revoked = True
+    db.add(rt)
+    db.commit()
+    _write_audit_log(db, "session_revoked", user_id=current_user.id,
+                     ip_address=_get_client_ip(request),
+                     metadata={"session_id": session_id})
+    return {"ok": True}
+
+
+@app.delete("/auth/sessions")
+def revoke_all_sessions(
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Cierra todas las sesiones activas (logout global)."""
+    n = auth.revoke_all_refresh_tokens(db, current_user.id)
+    # También incrementar token_version para invalidar access tokens activos
+    current_user.token_version = int(getattr(current_user, "token_version", 0) or 0) + 1
+    db.add(current_user)
+    db.commit()
+    _write_audit_log(db, "sessions_revoked_all", user_id=current_user.id,
+                     ip_address=_get_client_ip(request),
+                     metadata={"count": n})
+    return {"ok": True, "revoked": n}
+
+
+# ─── Permisos granulares por relación familiar ────────────────────────────────
+
+# Permisos válidos para relaciones familiares/cuidadores
+VALID_PERMISSIONS = {
+    "view_profile",
+    "view_medications",
+    "edit_medications",
+    "view_documents",
+    "download_documents",
+    "receive_alerts",
+    "manage_refills",
+}
+
+# Permisos por defecto según rol
+_DEFAULT_PERMISSIONS = {
+    "viewer": ["view_profile", "view_medications", "view_documents"],
+    "caregiver": ["view_profile", "view_medications", "edit_medications",
+                  "view_documents", "receive_alerts", "manage_refills"],
+    "admin": list(VALID_PERMISSIONS),
+}
+
+
+def _get_profile_permissions(link: models.ProfileRelationship) -> list:
+    """Devuelve los permisos efectivos de un enlace, usando defaults si no hay explícitos."""
+    if link.permissions_json:
+        try:
+            import json as _json
+            return _json.loads(link.permissions_json)
+        except Exception:
+            pass
+    role = (link.role or "viewer").strip().lower()
+    return _DEFAULT_PERMISSIONS.get(role, _DEFAULT_PERMISSIONS["viewer"])
+
+
+def _check_permission(
+    db: Session,
+    user: models.User,
+    profile_id: int,
+    permission: str,
+) -> bool:
+    """
+    Verifica si el usuario tiene un permiso específico sobre un perfil.
+    El owner siempre tiene todos los permisos.
+    """
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == profile_id
+    ).first()
+    if profile and profile.owner_user_id == user.id:
+        return True
+
+    link = db.query(models.ProfileRelationship).filter(
+        models.ProfileRelationship.profile_id == profile_id,
+        models.ProfileRelationship.user_id == user.id,
+        models.ProfileRelationship.status == "accepted",
+    ).first()
+    if not link:
+        return False
+    return permission in _get_profile_permissions(link)
+
+
+@app.get("/health-profiles/{profile_id}/permissions")
+def get_profile_permissions(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Devuelve los permisos del usuario actual sobre un perfil."""
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == profile_id
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+
+    # Owner: todos los permisos
+    if profile.owner_user_id == current_user.id:
+        return {"permissions": list(VALID_PERMISSIONS), "role": "owner"}
+
+    link = db.query(models.ProfileRelationship).filter(
+        models.ProfileRelationship.profile_id == profile_id,
+        models.ProfileRelationship.user_id == current_user.id,
+        models.ProfileRelationship.status == "accepted",
+    ).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Sin acceso a este perfil")
+
+    return {
+        "permissions": _get_profile_permissions(link),
+        "role": link.role or "viewer",
+    }
+
+
+@app.put("/health-profiles/{profile_id}/relationships/{relationship_id}/permissions")
+def update_relationship_permissions(
+    profile_id: int,
+    relationship_id: int,
+    payload: schemas.PermissionsUpdate,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """
+    Actualiza los permisos granulares de una relación familiar.
+    Solo el admin del perfil puede hacerlo.
+    """
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == profile_id
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+
+    # Verificar que el usuario es admin o owner del perfil
+    is_owner = profile.owner_user_id == current_user.id
+    if not is_owner:
+        admin_link = db.query(models.ProfileRelationship).filter(
+            models.ProfileRelationship.profile_id == profile_id,
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+        ).first()
+        if not admin_link or (admin_link.role or "").lower() not in ("admin", "administrador"):
+            raise HTTPException(status_code=403, detail="Solo el administrador puede cambiar permisos")
+
+    link = db.query(models.ProfileRelationship).filter(
+        models.ProfileRelationship.id == relationship_id,
+        models.ProfileRelationship.profile_id == profile_id,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Relación no encontrada")
+
+    # Modificar permisos de acceso a datos de salud es una acción sensible: step-up
+    _check_stepup(request, current_user)
+
+    # Validar y filtrar permisos
+    valid = [p for p in payload.permissions if p in VALID_PERMISSIONS]
+    import json as _json
+    link.permissions_json = _json.dumps(valid)
+    db.add(link)
+    db.commit()
+
+    _write_audit_log(
+        db, "permissions_updated",
+        user_id=current_user.id,
+        resource_type="profile_relationship",
+        resource_id=relationship_id,
+        ip_address=_get_client_ip(request),
+        metadata={"profile_id": profile_id, "permissions": valid},
+    )
+    return {"ok": True, "permissions": valid}
+
+
+# ─── Audit log endpoint ───────────────────────────────────────────────────────
+
+@app.get("/audit/logs")
+def get_audit_logs(
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Devuelve el historial de eventos de seguridad del usuario."""
+    logs = (
+        db.query(models.AuditLog)
+        .filter(models.AuditLog.user_id == current_user.id)
+        .order_by(models.AuditLog.created_at.desc())
+        .offset(offset)
+        .limit(min(limit, 200))
+        .all()
+    )
+    return [
+        {
+            "id": l.id,
+            "action": l.action,
+            "resource_type": l.resource_type,
+            "resource_id": l.resource_id,
+            "ip_address": l.ip_address,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+            "metadata": l.metadata_json,
+        }
+        for l in logs
+    ]
 
 
 @app.get("/me", response_model=schemas.UserOut)
@@ -12268,6 +13015,23 @@ async def ai_chat(
             include_document_text=include_document_text,
         )
         timing_info.setdefault("openai_ms", 0.0)
+
+        # Auditar uso de documentos por IA (qué documentos se exponen como contexto)
+        if context_modules.get("documents"):
+            ctx_docs = context.get("documents") or []
+            if ctx_docs:
+                _write_audit_log(
+                    db, "ai_context_documents_used",
+                    user_id=current_user.id,
+                    resource_type="document",
+                    metadata={
+                        "profile_id": int(profile.id),
+                        "document_ids": [d.id for d in ctx_docs if hasattr(d, "id")],
+                        "count": len(ctx_docs),
+                        "conversation_id": conversation_id,
+                    },
+                )
+
         if degraded_busy:
             current_reasons = list(context.get("degraded_reasons") or [])
             current_reasons.append("busy-profile")
@@ -12465,6 +13229,42 @@ async def ai_chat(
     finally:
         if limiter_acquired:
             limiter.release()
+
+
+@app.post("/ai/chat/transcribe", response_model=schemas.AiChatTranscriptionOut)
+async def ai_chat_transcribe(
+    request: Request,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _check_rate_limit(request, "ai-transcribe")
+    _ = current_user
+
+    file_content = await file.read()
+    _detected_mime, safe_filename = _validate_ai_audio_upload(
+        file_content,
+        file.filename or "nota-voz.webm",
+        file.content_type,
+    )
+    transcription = _transcribe_ai_audio(file_content, safe_filename)
+    if not transcription:
+        raise HTTPException(
+            status_code=503,
+            detail="La transcripción de voz no está disponible en este momento.",
+        )
+
+    transcript_text, model_name = transcription
+    if not transcript_text:
+        raise HTTPException(
+            status_code=422,
+            detail="No pude identificar una voz clara en el audio. Intenta grabar de nuevo.",
+        )
+
+    return {
+        "transcript": transcript_text,
+        "model": model_name,
+        "language": "es",
+    }
 
 
 @app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
@@ -14305,9 +15105,12 @@ async def revoke_data_consent(
 
 @app.post("/privacy/delete-account")
 async def delete_account(
+    request: Request,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    # Eliminar cuenta es una acción irreversible: requiere step-up
+    _check_stepup(request, current_user)
     user_id = current_user.id
 
     db.query(models.MedicationIntake).filter(models.MedicationIntake.user_id == user_id).delete()
@@ -14406,6 +15209,155 @@ async def privacy_contact(
     return {"ok": True, "request_id": req.id}
 
 
+# ─── Upload safety ────────────────────────────────────────────────────────────
+
+# Tipos MIME permitidos para documentos clínicos
+_ALLOWED_MIME_TYPES: dict[str, str] = {
+    "application/pdf":  ".pdf",
+    "image/jpeg":       ".jpg",
+    "image/png":        ".png",
+    "image/tiff":       ".tif",
+    "image/webp":       ".webp",
+    "image/heic":       ".heic",
+    "image/heif":       ".heif",
+}
+
+# Magic bytes → MIME type (primeros bytes del archivo)
+_MAGIC_BYTES: list[tuple[bytes, str]] = [
+    (b"%PDF-",        "application/pdf"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n",  "image/png"),
+    (b"II*\x00",      "image/tiff"),  # TIFF little-endian
+    (b"MM\x00*",      "image/tiff"),  # TIFF big-endian
+    (b"RIFF",         "image/webp"),  # verificación parcial: también revisar bytes 8-12
+]
+
+# Firmas de archivos peligrosos a rechazar (ejecutables, scripts)
+_DANGEROUS_SIGNATURES: list[bytes] = [
+    b"MZ",              # PE executable (Windows)
+    b"\x7fELF",         # ELF (Linux)
+    b"\xca\xfe\xba\xbe",# Mach-O fat binary
+    b"\xfe\xed\xfa\xce",# Mach-O 32-bit
+    b"\xfe\xed\xfa\xcf",# Mach-O 64-bit
+    b"#!/",             # shell script shebang
+    b"<?php",           # PHP
+    b"<script",         # JS/HTML injection
+]
+
+# Extensiones prohibidas (independent of MIME)
+_BLOCKED_EXTENSIONS = {
+    ".exe", ".dll", ".so", ".bat", ".cmd", ".ps1", ".vbs",
+    ".sh", ".bash", ".zsh", ".py", ".rb", ".pl", ".php",
+    ".js", ".ts", ".html", ".htm", ".xml", ".svg", ".zip",
+    ".tar", ".gz", ".rar", ".7z", ".iso", ".img",
+}
+
+
+def _detect_mime_from_magic(data: bytes) -> str:
+    """Detecta tipo MIME por magic bytes (primeros bytes del archivo)."""
+    if not data:
+        return "application/octet-stream"
+    for magic, mime in _MAGIC_BYTES:
+        if data[:len(magic)] == magic:
+            # Verificar WEBP completo: RIFF????WEBP
+            if mime == "image/webp" and not (len(data) >= 12 and data[8:12] == b"WEBP"):
+                continue
+            return mime
+    # HEIC/HEIF: magic a offset 4
+    if len(data) >= 12 and data[4:8] == b"ftyp":
+        brand = data[8:12]
+        if brand in (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"):
+            return "image/heic"
+    return "application/octet-stream"
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Limpia el nombre de archivo: elimina rutas, reemplaza caracteres peligrosos."""
+    # Quitar componentes de ruta
+    name = os.path.basename(filename)
+    # Eliminar caracteres peligrosos
+    name = re.sub(r'[^\w\s.\-()]', '_', name).strip()
+    # Limitar longitud
+    if len(name) > 200:
+        base, ext = os.path.splitext(name)
+        name = base[:196] + ext
+    return name or "document"
+
+
+def _validate_upload(content: bytes, filename: str, max_bytes: int = MAX_UPLOAD_BYTES) -> tuple[str, str]:
+    """
+    Valida el archivo subido: tamaño, magic bytes, extensión, firmas peligrosas.
+    Devuelve (mime_type, safe_filename) o lanza HTTPException.
+    """
+    if not content:
+        raise HTTPException(status_code=400, detail="El archivo está vacío.")
+
+    if len(content) > max_bytes:
+        mb = max_bytes // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"Archivo demasiado grande. Máximo permitido: {mb} MB.")
+
+    safe_filename = _sanitize_filename(filename)
+    _, ext = os.path.splitext(safe_filename.lower())
+
+    # Rechazar extensiones prohibidas
+    if ext in _BLOCKED_EXTENSIONS:
+        raise HTTPException(status_code=415, detail=f"Tipo de archivo no permitido: {ext}")
+
+    # Rechazar firmas peligrosas
+    for sig in _DANGEROUS_SIGNATURES:
+        if content[: len(sig)].lower() == sig.lower():
+            raise HTTPException(status_code=415, detail="Archivo rechazado: tipo no seguro.")
+
+    # Detectar MIME real por magic bytes
+    detected_mime = _detect_mime_from_magic(content)
+
+    if detected_mime not in _ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail="Solo se permiten PDF, JPEG, PNG, TIFF, WEBP y HEIC/HEIF.",
+        )
+
+    # Coherencia entre extensión declarada y contenido real
+    expected_ext = _ALLOWED_MIME_TYPES[detected_mime]
+    common_aliases = {
+        "image/jpeg": {".jpg", ".jpeg", ".jpe", ""},
+        "image/tiff": {".tif", ".tiff", ""},
+        "image/heic": {".heic", ".heif", ""},
+    }
+    aliases = common_aliases.get(detected_mime, {expected_ext, ""})
+    if ext and ext not in aliases and ext != expected_ext:
+        # Extensión no coincide con contenido — posible spoofing
+        # No rechazamos, pero registramos la extensión "real"
+        safe_filename = os.path.splitext(safe_filename)[0] + expected_ext
+
+    return detected_mime, safe_filename
+
+
+# ─── Suspicious activity tracker (download burst) ─────────────────────────────
+
+_download_tracker: dict = collections.defaultdict(list)
+_download_lock = threading.Lock()
+_MAX_DOWNLOADS_WINDOW = int(os.getenv("MAX_DOWNLOADS_WINDOW", "20"))   # intentos máximos
+_DOWNLOADS_WINDOW_SECS = int(os.getenv("DOWNLOADS_WINDOW_SECS", "300")) # ventana en segundos (5 min)
+
+
+def _track_download(user_id: int) -> bool:
+    """
+    Registra un acceso de descarga. Devuelve True si el patrón es sospechoso
+    (burst de descargas en poco tiempo).
+    """
+    key = f"dl:{user_id}"
+    now = time.time()
+    with _download_lock:
+        _download_tracker[key] = [
+            t for t in _download_tracker[key]
+            if now - t < _DOWNLOADS_WINDOW_SECS
+        ]
+        count = len(_download_tracker[key])
+        _download_tracker[key].append(now)
+    return count >= _MAX_DOWNLOADS_WINDOW
+
+
 # Documents
 UPLOAD_DIR = "uploaded_docs"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -14441,18 +15393,10 @@ async def upload_document(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
-    # Leer el contenido del archivo
+    # Leer y validar el archivo
     file_content = await file.read()
-    if len(file_content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="Archivo demasiado grande. Maximo permitido: 10 MB.",
-        )
     original_filename = file.filename or "document"
-
-    print(
-        f"DEBUG upload_document: Subiendo archivo: {original_filename}, tamaÃ±o: {len(file_content)} bytes"
-    )
+    _detected_mime, safe_filename = _validate_upload(file_content, original_filename)
 
     parsed_date = None
     if date:
@@ -14469,9 +15413,9 @@ async def upload_document(
         user_id=target_user_id,
         appointment_id=appointment_id,
         doc_type=models.DocumentType(doc_type),
-        file_data=file_content,  # Guardar datos del archivo en la BD
-        filename=original_filename,  # Guardar nombre original
-        file_path=file_path_placeholder,  # Ya no usamos file_path para archivos nuevos
+        file_data=file_content,
+        filename=safe_filename,   # nombre saneado
+        file_path=file_path_placeholder,
         date=parsed_date,
         center=center or "",
         notes=notes or "",
@@ -14482,9 +15426,6 @@ async def upload_document(
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
-    print(
-        f"DEBUG upload_document: Documento guardado en BD con ID: {doc.id}, filename: {doc.filename}"
-    )
     if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
         background_tasks.add_task(
             _send_medical_order_uploaded_email_safe,
@@ -14571,15 +15512,24 @@ async def update_document(
 # Endpoint protegido para servir documentos
 @app.get("/documents/{document_id}/file")
 async def get_document_file(
+    request: Request,
     document_id: int,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _get_active_profile_context(db, current_user)
-    """Sirve un archivo de documento solo si el usuario tiene acceso"""
-    print(
-        f"DEBUG get_document_file: Solicitando documento ID {document_id} para usuario {current_user.id}"
-    )
+    """Sirve un archivo de documento solo si el usuario tiene acceso."""
+    profile, link, target_user_id = _get_active_profile_context(db, current_user)
+
+    # Verificar permiso granular de descarga (owners siempre pueden)
+    if profile.owner_user_id != current_user.id:
+        if not _check_permission(db, current_user, profile.id, "download_documents"):
+            raise HTTPException(
+                status_code=403,
+                detail="No tienes permiso para descargar documentos de este perfil.",
+            )
+
+    # Step-up requerido para descargar documentos clínicos
+    _check_stepup(request, current_user)
 
     doc = (
         db.query(models.Document)
@@ -14591,85 +15541,66 @@ async def get_document_file(
     )
 
     if not doc:
-        print(
-            f"DEBUG get_document_file: Documento {document_id} no encontrado para usuario {current_user.id}"
-        )
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    # Prioridad 1: Si el archivo estÃ¡ en la BD (file_data)
-    if doc.file_data:
-        print(
-            f"DEBUG get_document_file: Sirviendo archivo desde BD, tamaÃ±o: {len(doc.file_data)} bytes"
+    # Detectar ráfaga de descargas (actividad sospechosa)
+    if _track_download(current_user.id):
+        _write_audit_log(
+            db, "suspicious_download_burst",
+            user_id=current_user.id,
+            resource_type="document",
+            ip_address=_get_client_ip(request),
+            user_agent=request.headers.get("user-agent", ""),
+            metadata={"document_id": document_id, "window_secs": _DOWNLOADS_WINDOW_SECS},
         )
-        filename = doc.filename or f"document_{doc.id}"
 
-        # Detectar el tipo MIME del archivo
+    # Registrar descarga en audit log
+    _write_audit_log(
+        db, "document_downloaded",
+        user_id=current_user.id,
+        resource_type="document",
+        resource_id=document_id,
+        ip_address=_get_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+        metadata={"filename": doc.filename or ""},
+    )
+
+    # Prioridad 1: Archivo almacenado en BD (file_data)
+    if doc.file_data:
+        filename = doc.filename or f"document_{doc.id}"
         mime_type, _ = mimetypes.guess_type(filename)
         if not mime_type:
             mime_type = "application/octet-stream"
-
-        print(f"DEBUG get_document_file: Tipo MIME: {mime_type}, filename: {filename}")
         return Response(
             content=doc.file_data,
             media_type=mime_type,
             headers={"Content-Disposition": f'inline; filename="{filename}"'},
         )
 
-    # Prioridad 2: Si el archivo estÃ¡ en el sistema de archivos (compatibilidad con documentos antiguos)
+    # Prioridad 2: Archivo en sistema de archivos (compatibilidad con documentos antiguos)
     if doc.file_path:
-        print(
-            f"DEBUG get_document_file: Intentando servir desde file_path: {doc.file_path}"
-        )
-
-        # Intentar con ruta absoluta si es relativa
         file_path_to_check = doc.file_path
         if not os.path.isabs(file_path_to_check):
             file_path_to_check = os.path.abspath(file_path_to_check)
-            print(
-                f"DEBUG get_document_file: Convirtiendo a ruta absoluta: {file_path_to_check}"
-            )
 
-        # TambiÃ©n intentar con la ruta relativa original
         if not os.path.exists(file_path_to_check):
-            # Intentar con la ruta relativa desde el directorio de trabajo
             relative_path = doc.file_path
             if not relative_path.startswith(UPLOAD_DIR):
-                relative_path = os.path.join(
-                    UPLOAD_DIR, os.path.basename(doc.file_path)
-                )
+                relative_path = os.path.join(UPLOAD_DIR, os.path.basename(doc.file_path))
             relative_path = os.path.abspath(relative_path)
-            print(
-                f"DEBUG get_document_file: Intentando ruta alternativa: {relative_path}"
-            )
             if os.path.exists(relative_path):
                 file_path_to_check = relative_path
-                print(
-                    f"DEBUG get_document_file: Archivo encontrado en ruta alternativa"
-                )
 
         if os.path.exists(file_path_to_check):
-            # Detectar el tipo MIME del archivo
             mime_type, _ = mimetypes.guess_type(file_path_to_check)
             if not mime_type:
                 mime_type = "application/octet-stream"
-
-            print(
-                f"DEBUG get_document_file: Sirviendo archivo desde sistema de archivos"
-            )
             return FileResponse(
                 file_path_to_check,
                 media_type=mime_type,
                 filename=os.path.basename(file_path_to_check),
             )
-        else:
-            print(
-                f"DEBUG get_document_file: Archivo no existe en file_path: {file_path_to_check}"
-            )
 
-    # Si no hay archivo ni en BD ni en sistema de archivos
-    print(
-        f"DEBUG get_document_file: No se encontrÃ³ archivo para el documento {document_id}"
-    )
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 

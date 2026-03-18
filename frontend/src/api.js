@@ -37,6 +37,7 @@ export const createProfileNote = api.createProfileNote;
 export const updateProfileNote = api.updateProfileNote;
 export const deleteProfileNote = api.deleteProfileNote;
 export const sendAiChat = api.sendAiChat;
+export const transcribeAiChatAudio = api.transcribeAiChatAudio;
 export const getAiConversations = api.getAiConversations;
 export const getAiHistory = api.getAiHistory;
 export const deleteAiConversation = api.deleteAiConversation;
@@ -82,3 +83,30 @@ export const subscribePush = api.subscribePush;
 export const unsubscribePush = api.unsubscribePush;
 export const sendTestPush = api.sendTestPush;
 export const getLandingStats = api.getLandingStats;
+
+// Step-up auth
+export const stepUpVerify = api.stepUpVerify;
+export const getDocumentFileWithStepUp = api.getDocumentFileWithStepUp;
+
+// MFA
+export const verifyMfaLogin = api.verifyMfaLogin;
+export const getMfaStatus = api.getMfaStatus;
+export const startMfaEnroll = api.startMfaEnroll;
+export const verifyMfaEnrollment = api.verifyMfaEnrollment;
+export const disableMfa = api.disableMfa;
+export const regenerateMfaBackupCodes = api.regenerateMfaBackupCodes;
+
+// Sessions
+export const refreshAccessToken = api.refreshAccessToken;
+export const getSessions = api.getSessions;
+export const revokeSession = api.revokeSession;
+export const revokeAllSessions = api.revokeAllSessions;
+
+// Permissions
+export const getProfilePermissions = api.getProfilePermissions;
+export const updateRelationshipPermissions = api.updateRelationshipPermissions;
+
+// Audit log
+export const getAuditLogs = api.getAuditLogs;
+
+export const getDocumentFile = api.getDocumentFile;
