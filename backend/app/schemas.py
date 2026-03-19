@@ -87,22 +87,6 @@ class PublicPlanOut(BaseModel):
     metrics: list[PlanMetricOut]
 
 
-class WaitlistLeadIn(BaseModel):
-    full_name: str
-    email: EmailStr
-    phone: Optional[str] = ""
-    role: Optional[str] = "persona"
-    notes: Optional[str] = ""
-    source: Optional[str] = "www"
-    consent_updates: bool = True
-
-
-class WaitlistLeadOut(BaseModel):
-    ok: bool = True
-    already_registered: bool = False
-    message: str = ""
-
-
 class HealthProfileCreate(BaseModel):
     full_name: str
     birth_date: Optional[datetime] = None
