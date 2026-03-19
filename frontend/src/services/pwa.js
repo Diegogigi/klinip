@@ -2,6 +2,7 @@ import { subscribePush, unsubscribePush } from "./httpApi";
 
 const PUBLIC_VAPID_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
 const SERVICE_WORKER_URL = "/service-worker.js";
+let pendingPushSubscriptionPromise = null;
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -235,38 +236,50 @@ async function syncSubscriptionWithServer(subscription) {
 }
 
 export async function ensurePushSubscription() {
-  const support = getPushSupportStatus();
-  if (!support.supported) {
-    throw new Error(support.reason);
+  if (pendingPushSubscriptionPromise) {
+    return pendingPushSubscriptionPromise;
   }
 
-  const permission =
-    Notification.permission === "granted"
-      ? "granted"
-      : await Notification.requestPermission();
+  pendingPushSubscriptionPromise = (async () => {
+    const support = getPushSupportStatus();
+    if (!support.supported) {
+      throw new Error(support.reason);
+    }
 
-  if (permission !== "granted") {
-    throw new Error("Debes permitir las notificaciones en tu navegador.");
-  }
+    const permission =
+      Notification.permission === "granted"
+        ? "granted"
+        : await Notification.requestPermission();
 
-  const { registration } = await getCurrentPushSubscription({ registerIfMissing: true });
-  if (!registration) {
-    throw new Error("No se pudo preparar el service worker para notificaciones.");
-  }
+    if (permission !== "granted") {
+      throw new Error("Debes permitir las notificaciones en tu navegador.");
+    }
 
-  let subscription = await registration.pushManager.getSubscription();
-  if (subscription?.endpoint) {
+    const { registration } = await getCurrentPushSubscription({ registerIfMissing: true });
+    if (!registration) {
+      throw new Error("No se pudo preparar el service worker para notificaciones.");
+    }
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (subscription?.endpoint) {
+      await syncSubscriptionWithServer(subscription);
+      return true;
+    }
+
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
+    });
+
     await syncSubscriptionWithServer(subscription);
     return true;
+  })();
+
+  try {
+    return await pendingPushSubscriptionPromise;
+  } finally {
+    pendingPushSubscriptionPromise = null;
   }
-
-  subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
-  });
-
-  await syncSubscriptionWithServer(subscription);
-  return true;
 }
 
 export async function removePushSubscription() {

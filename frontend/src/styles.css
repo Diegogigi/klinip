@@ -268,6 +268,21 @@ body.theme-dark .sidebar-menu-link.active {
   gap: 0.75rem;
 }
 
+.lp-theme-toggle {
+  width: auto;
+  min-width: 134px;
+  padding: 0.58rem 0.78rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: #d8dee8;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+}
+
+.lp-theme-toggle:hover {
+  background: #ffffff;
+  border-color: #c9d3e4;
+}
+
 .lp-btn-ghost,
 .lp-btn-primary,
 .lp-btn-secondary,
@@ -1234,6 +1249,17 @@ body.theme-dark .lp-navbar {
   background: rgba(11, 17, 32, 0.88);
 }
 
+body.theme-dark .lp-theme-toggle {
+  background: rgba(15, 23, 42, 0.84);
+  border-color: #334155;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.34);
+}
+
+body.theme-dark .lp-theme-toggle:hover {
+  background: #0f172a;
+  border-color: #475569;
+}
+
 body.theme-dark .lp-nav-logo-name,
 body.theme-dark .lp-hero-title,
 body.theme-dark .lp-feature-card h3,
@@ -1381,6 +1407,15 @@ body.theme-dark .lp-footer {
 
   .lp-nav-right {
     gap: 0.45rem;
+  }
+
+  .lp-theme-toggle {
+    min-width: 0;
+    padding: 0.55rem 0.62rem;
+  }
+
+  .lp-theme-toggle .theme-toggle-label {
+    display: none;
   }
 
   .lp-btn-ghost,

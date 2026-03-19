@@ -675,9 +675,7 @@ export default function App() {
     if (savedTheme === "dark" || savedTheme === "light") {
       return savedTheme;
     }
-    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
+    return "light";
   });
   const [booting, setBooting] = useState(true);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -2028,7 +2026,7 @@ export default function App() {
                       <Dashboard key={`dashboard-${activeHealthProfileId || "none"}`} user={user} />
                     </ProtectedRoute>
                   ) : (
-                    <Landing />
+                    <Landing theme={theme} onToggleTheme={handleToggleTheme} />
                   )
                 }
               />
@@ -2136,7 +2134,5 @@ export default function App() {
     </div>
   );
 }
-
-
 
 

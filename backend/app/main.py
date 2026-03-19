@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, func, or_
-from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.exc import IntegrityError, ProgrammingError
 from typing import List
 import os
 import mimetypes
@@ -15983,9 +15983,14 @@ async def subscribe_push(
         existing.user_id = current_user.id
         existing.p256dh = p256dh
         existing.auth = auth_key
-        db.commit()
-        db.refresh(existing)
-        return existing
+        try:
+            db.commit()
+            db.refresh(existing)
+            return existing
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING push subscribe: no se pudo actualizar endpoint existente: {exc}")
+            raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
 
     sub = models.PushSubscription(
         user_id=current_user.id,
@@ -15994,9 +15999,33 @@ async def subscribe_push(
         auth=auth_key,
     )
     db.add(sub)
-    db.commit()
-    db.refresh(sub)
-    return sub
+    try:
+        db.commit()
+        db.refresh(sub)
+        return sub
+    except IntegrityError:
+        db.rollback()
+        recovered = (
+            db.query(models.PushSubscription)
+            .filter(models.PushSubscription.endpoint == sub_in.endpoint)
+            .first()
+        )
+        if recovered:
+            recovered.user_id = current_user.id
+            recovered.p256dh = p256dh
+            recovered.auth = auth_key
+            try:
+                db.commit()
+                db.refresh(recovered)
+                return recovered
+            except Exception as exc:
+                db.rollback()
+                print(f"WARNING push subscribe: no se pudo recuperar suscripcion duplicada: {exc}")
+        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING push subscribe: error inesperado registrando suscripcion: {exc}")
+        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
 
 
 @app.post("/push/cleanup-duplicates")

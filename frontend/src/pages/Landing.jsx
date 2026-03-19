@@ -4,22 +4,22 @@ import { getLandingStats, getPublicPlans } from "../api";
 import { PLAN_CATALOG } from "../data/plans";
 
 const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
-  ["Â©", "©"],
+  ["Ã¡", "\u00e1"],
+  ["Ã©", "\u00e9"],
+  ["Ã­", "\u00ed"],
+  ["Ã³", "\u00f3"],
+  ["Ãº", "\u00fa"],
+  ["Ã±", "\u00f1"],
+  ["Ã", "\u00c1"],
+  ["Ã‰", "\u00c9"],
+  ["Ã", "\u00cd"],
+  ["Ã“", "\u00d3"],
+  ["Ãš", "\u00da"],
+  ["Ã‘", "\u00d1"],
+  ["Â¿", "\u00bf"],
+  ["Â¡", "\u00a1"],
+  ["Â·", "\u00b7"],
+  ["Â©", "\u00a9"],
 ];
 
 const cleanUiText = (value) => {
@@ -40,7 +40,7 @@ const formatPercent = (value) => `${value}%`;
 const features = [
   {
     title: "Asistente IA en salud",
-    desc: "Sugiere alertas para citas, documentos y medicación con recordatorios claros.",
+    desc: "Sugiere alertas para citas, documentos y medicaci\u00f3n con recordatorios claros.",
     tone: "blue",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -52,7 +52,7 @@ const features = [
   },
   {
     title: "Calendario unificado",
-    desc: "Citas, exámenes y medicamentos en una sola línea de tiempo sincronizada.",
+    desc: "Citas, ex\u00e1menes y medicamentos en una sola l\u00ednea de tiempo sincronizada.",
     tone: "teal",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -65,7 +65,7 @@ const features = [
   },
   {
     title: "Documentos siempre a mano",
-    desc: "Resultados, recetas y órdenes seguras, con OCR y búsqueda rápida integrada.",
+    desc: "Resultados, recetas y \u00f3rdenes seguras, con OCR y b\u00fasqueda r\u00e1pida integrada.",
     tone: "amber",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -76,7 +76,7 @@ const features = [
   },
   {
     title: "Seguimiento integral",
-    desc: "Historial clínico y línea de tiempo para compartir fácilmente con tu médico.",
+    desc: "Historial cl\u00ednico y l\u00ednea de tiempo para compartir f\u00e1cilmente con tu m\u00e9dico.",
     tone: "violet",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -89,15 +89,15 @@ const features = [
 const moreFeatures = [
   {
     title: "Medicamentos y adherencia",
-    desc: "Registra tomas, frecuencia y duración para mejorar tu adherencia.",
+    desc: "Registra tomas, frecuencia y duraci\u00f3n para mejorar tu adherencia.",
   },
   {
     title: "Recordatorios inteligentes",
-    desc: "Alertas en tiempo real para no olvidar citas y exámenes.",
+    desc: "Alertas en tiempo real para no olvidar citas y ex\u00e1menes.",
   },
   {
     title: "Documentos con OCR",
-    desc: "Extrae fecha, centro y notas desde fotos o PDFs automáticamente.",
+    desc: "Extrae fecha, centro y notas desde fotos o PDFs autom\u00e1ticamente.",
   },
   {
     title: "Calendario familiar",
@@ -105,18 +105,18 @@ const moreFeatures = [
   },
   {
     title: "Notificaciones push",
-    desc: "Avisos en móvil y escritorio, incluso con la app cerrada.",
+    desc: "Avisos en m\u00f3vil y escritorio, incluso con la app cerrada.",
   },
   {
     title: "Control de privacidad",
-    desc: "Tu información, tus reglas: consentimiento y exportación total.",
+    desc: "Tu informaci\u00f3n, tus reglas: consentimiento y exportaci\u00f3n total.",
   },
 ];
 
 const aiFeatures = [
   {
     title: "Alertas proactivas",
-    desc: "Detecta cuando un medicamento está por terminarse o una cita por vencer.",
+    desc: "Detecta cuando un medicamento est\u00e1 por terminarse o una cita por vencer.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -125,7 +125,7 @@ const aiFeatures = [
     ),
   },
   {
-    title: "Análisis de adherencia",
+    title: "An\u00e1lisis de adherencia",
     desc: "Visualiza tu cumplimiento de tratamientos y recibe sugerencias para mejorar.",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -153,7 +153,7 @@ const aiFeatures = [
   },
 ];
 
-export default function Landing() {
+export default function Landing({ theme = "light", onToggleTheme }) {
   const [stats, setStats] = useState(fallbackStats);
   const [billing, setBilling] = useState("monthly");
   const [plans, setPlans] = useState(PLAN_CATALOG);
@@ -193,7 +193,7 @@ export default function Landing() {
     { value: formatCount(stats.users), label: "Usuarios registrados" },
     { value: formatCount(stats.appointments), label: "Citas gestionadas" },
     { value: formatCount(stats.reminders), label: "Recordatorios enviados" },
-    { value: formatPercent(stats.satisfaction), label: "Satisfacción" },
+    { value: formatPercent(stats.satisfaction), label: "Satisfacci\u00f3n" },
   ];
 
   return (
@@ -214,7 +214,21 @@ export default function Landing() {
           </nav>
 
           <div className="lp-nav-right">
-            <Link className="lp-btn-ghost" to="/login">Iniciar sesión</Link>
+            <button
+              type="button"
+              className="theme-toggle lp-theme-toggle"
+              onClick={() => onToggleTheme?.()}
+              aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              aria-pressed={theme === "dark"}
+            >
+              <span className="theme-toggle-label">
+                {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+              </span>
+              <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
+                <span className="theme-switch-thumb" />
+              </span>
+            </button>
+            <Link className="lp-btn-ghost" to="/login">Iniciar sesi&oacute;n</Link>
             <Link className="lp-btn-primary" to="/register">Crear cuenta</Link>
           </div>
         </div>
@@ -230,7 +244,7 @@ export default function Landing() {
                   <path d="M3 15a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
                 </svg>
               </span>
-              Asistente clínico con IA
+              Asistente cl&iacute;nico con IA
             </div>
 
             <h1 className="lp-hero-title lp-anim lp-anim-d2">
@@ -239,9 +253,9 @@ export default function Landing() {
             </h1>
 
             <p className="lp-hero-desc lp-anim lp-anim-d3">
-              Klinip es tu compañero digital de salud. Organiza tus <strong>citas médicas</strong>,
-              gestiona tu <strong>medicación</strong>, almacena <strong>documentos</strong> importantes
-              y mantén un <strong>historial completo</strong> con IA que te ayuda a no olvidar nada.
+              Klinip es tu compa&ntilde;ero digital de salud. Organiza tus <strong>citas m&eacute;dicas</strong>,
+              gestiona tu <strong>medicaci&oacute;n</strong>, almacena <strong>documentos</strong> importantes
+              y mant&eacute;n un <strong>historial completo</strong> con IA que te ayuda a no olvidar nada.
             </p>
 
             <div className="lp-hero-actions lp-anim lp-anim-d4">
@@ -274,20 +288,20 @@ export default function Landing() {
                   <span className="is-green" />
                 </div>
                 <span className="lp-mockup-title">Klinip Salud</span>
-                <span className="lp-mockup-tag">Calendario · Hoy</span>
+                <span className="lp-mockup-tag">Calendario &middot; Hoy</span>
               </div>
               <div className="lp-mockup-body">
                 <div className="lp-mockup-row">
                   <div>
-                    <strong>Consulta cardiología</strong>
-                    <small>12:00 · Centro Salud Norte</small>
+                    <strong>Consulta cardiolog&iacute;a</strong>
+                    <small>12:00 &middot; Centro Salud Norte</small>
                   </div>
                   <span className="lp-tag is-blue">Agendada</span>
                 </div>
                 <div className="lp-mockup-row">
                   <div>
-                    <strong>Tomar medicación</strong>
-                    <small>08:00 · Amlodipino 5 mg</small>
+                    <strong>Tomar medicaci&oacute;n</strong>
+                    <small>08:00 &middot; Amlodipino 5 mg</small>
                   </div>
                   <span className="lp-tag is-red">Recordar</span>
                 </div>
@@ -303,7 +317,7 @@ export default function Landing() {
                     <strong>Control de diabetes</strong>
                     <small>Seguimiento de adherencia: 85%</small>
                   </div>
-                  <span className="lp-tag is-green">Al día</span>
+                  <span className="lp-tag is-green">Al d&iacute;a</span>
                 </div>
               </div>
             </div>
@@ -315,26 +329,26 @@ export default function Landing() {
         <div className="lp-section-inner">
           <div className="lp-section-eyebrow"><span />Funciones<span /></div>
           <h2 className="lp-section-title">Todo lo que necesitas para <em>cuidar tu salud</em></h2>
-          <p className="lp-section-sub">Funciones diseñadas para simplificar la gestión de tu salud y la de tu familia.</p>
+          <p className="lp-section-sub">Funciones dise&ntilde;adas para simplificar la gesti&oacute;n de tu salud y la de tu familia.</p>
 
           <div className="lp-feature-grid">
             {features.map((feature) => (
               <article key={feature.title} className="lp-feature-card">
                 <div className={`lp-feature-line tone-${feature.tone}`} />
                 <div className={`lp-feature-icon tone-${feature.tone}`}>{feature.icon}</div>
-                <h3>{feature.title}</h3>
-                <p>{feature.desc}</p>
+                <h3>{cleanUiText(feature.title)}</h3>
+                <p>{cleanUiText(feature.desc)}</p>
               </article>
             ))}
           </div>
 
           <div className="lp-more-block">
-            <p className="lp-more-kicker">Más cosas que hace Klinip</p>
+            <p className="lp-more-kicker">M&aacute;s cosas que hace Klinip</p>
             <div className="lp-more-grid">
               {moreFeatures.map((item) => (
                 <article key={item.title} className="lp-more-card">
-                  <h3>{item.title}</h3>
-                  <p>{item.desc}</p>
+                  <h3>{cleanUiText(item.title)}</h3>
+                  <p>{cleanUiText(item.desc)}</p>
                 </article>
               ))}
             </div>
@@ -357,8 +371,8 @@ export default function Landing() {
                 <div key={item.title} className="lp-ai-feature">
                   <div className="lp-ai-feature-icon">{item.icon}</div>
                   <div>
-                    <strong>{item.title}</strong>
-                    <p>{item.desc}</p>
+                    <strong>{cleanUiText(item.title)}</strong>
+                    <p>{cleanUiText(item.desc)}</p>
                   </div>
                 </div>
               ))}
@@ -373,20 +387,20 @@ export default function Landing() {
                   <span className="is-yellow" />
                   <span className="is-green" />
                 </div>
-                <span className="lp-ai-chat-title">Klinip IA · Copiloto de salud</span>
+                <span className="lp-ai-chat-title">Klinip IA &middot; Copiloto de salud</span>
                 <span className="lp-ai-chat-tag">IA activa</span>
               </div>
 
               <div className="lp-ai-messages">
-                <div className="lp-ai-msg is-ai">Hola. Revisé tu agenda de hoy. Tienes una cita de cardiología a las 12:00. ¿Quieres que te prepare un resumen de documentos relevantes?</div>
-                <div className="lp-ai-msg is-user">Sí, muéstrame qué debo llevar</div>
-                <div className="lp-ai-msg is-ai">Perfecto. Según tu historial, te recomiendo llevar tu último ECG, la lista de medicamentos actuales y resultados de examen de sangre. ¿Quieres que genere un PDF con este resumen?</div>
+                <div className="lp-ai-msg is-ai">Hola. Revis&eacute; tu agenda de hoy. Tienes una cita de cardiolog&iacute;a a las 12:00. &iquest;Quieres que te prepare un resumen de documentos relevantes?</div>
+                <div className="lp-ai-msg is-user">S&iacute;, mu&eacute;strame qu&eacute; debo llevar</div>
+                <div className="lp-ai-msg is-ai">Perfecto. Seg&uacute;n tu historial, te recomiendo llevar tu &uacute;ltimo ECG, la lista de medicamentos actuales y resultados de examen de sangre. &iquest;Quieres que genere un PDF con este resumen?</div>
                 <div className="lp-ai-msg is-user">Genera el PDF</div>
-                <div className="lp-ai-msg is-ai">Listo. El PDF ya está preparado y activé un recordatorio 1 hora antes de tu cita.</div>
+                <div className="lp-ai-msg is-ai">Listo. El PDF ya est&aacute; preparado y activ&eacute; un recordatorio 1 hora antes de tu cita.</div>
               </div>
 
               <div className="lp-ai-chip-row">
-                <button type="button" className="lp-ai-chip">¿Cuándo tomé mi última dosis?</button>
+                <button type="button" className="lp-ai-chip">&iquest;Cu&aacute;ndo tom&eacute; mi &uacute;ltima dosis?</button>
                 <button type="button" className="lp-ai-chip">Ver mis citas de marzo</button>
                 <button type="button" className="lp-ai-chip">Adherencia esta semana</button>
               </div>
@@ -407,7 +421,7 @@ export default function Landing() {
               type="button"
               className={`lp-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
               onClick={() => setBilling((prev) => (prev === "monthly" ? "yearly" : "monthly"))}
-              aria-label="Cambiar facturación"
+              aria-label={"Cambiar facturaci\u00f3n"}
             >
               <span className="lp-billing-thumb" />
             </button>
@@ -423,7 +437,9 @@ export default function Landing() {
                 <div className={`lp-price-amount ${plan.slug === "basico" ? "is-free" : ""}`}>
                   {billing === "monthly" ? plan.priceMonthly : plan.priceYearly}
                 </div>
-                <div className="lp-price-period">{billing === "monthly" ? "Facturación mensual" : "Facturación anual"}</div>
+                <div className="lp-price-period">
+                  {billing === "monthly" ? "Facturaci&oacute;n mensual" : "Facturaci&oacute;n anual"}
+                </div>
                 <div className="lp-price-subtitle">{cleanUiText(plan.note)}</div>
                 <div className="lp-price-divider" />
                 <ul className="lp-price-features">
@@ -450,7 +466,7 @@ export default function Landing() {
         <div className="lp-cta-inner">
           <div className="lp-cta-eyebrow">Empieza hoy</div>
           <h2>Comienza a organizar tu <em>salud hoy</em></h2>
-          <p>Únete a miles de personas que ya confían en Klinip para gestionar su salud y la de su familia.</p>
+          <p>&Uacute;nete a miles de personas que ya conf&iacute;an en Klinip para gestionar su salud y la de su familia.</p>
           <Link className="lp-cta-btn" to="/register">
             <span>Crear cuenta gratis</span>
             <svg viewBox="0 0 24 24">
@@ -472,7 +488,7 @@ export default function Landing() {
               <span>Tu ruta de salud, simplificada</span>
             </div>
           </div>
-          <div className="lp-footer-copy">© 2026 Klinip. Todos los derechos reservados.</div>
+          <div className="lp-footer-copy">&copy; 2026 Klinip. Todos los derechos reservados.</div>
         </div>
       </footer>
     </div>

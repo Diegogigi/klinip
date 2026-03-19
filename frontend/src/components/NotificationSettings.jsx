@@ -25,6 +25,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [pushSupport, setPushSupport] = useState(() => getPushSupportStatus());
   const pushSupported = pushSupport.supported;
+  const [pushActionLoading, setPushActionLoading] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(() => {
     const saved = localStorage.getItem("klinip_push_enabled");
     return saved === "true";
@@ -141,6 +142,8 @@ export default function NotificationSettings({ onClose, embedded = false }) {
   };
 
   const handleEnablePush = async () => {
+    if (pushActionLoading) return;
+    setPushActionLoading(true);
     try {
       const support = getPushSupportStatus();
       setPushSupport(support);
@@ -166,17 +169,29 @@ export default function NotificationSettings({ onClose, embedded = false }) {
     } catch (error) {
       console.error("Error habilitando push:", error);
 
-      const details =
+      const statusCode = error?.response?.status;
+      const backendDetail = error?.response?.data?.detail;
+      let details =
+        backendDetail ||
         error?.message ||
         "Verifica HTTPS, permisos del navegador y que la clave VAPID est\u00e9 configurada.";
+
+      if (statusCode === 503 || statusCode === 520) {
+        details =
+          "El servidor no pudo registrar la suscripci\u00f3n push. Intenta nuevamente en unos segundos.";
+      }
 
       window.alert(`Error al habilitar notificaciones push.\n\n${details}`);
       localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
+    } finally {
+      setPushActionLoading(false);
     }
   };
 
   const handleDisablePush = async () => {
+    if (pushActionLoading) return;
+    setPushActionLoading(true);
     try {
       await removePushSubscription();
       localStorage.setItem("klinip_push_enabled", "false");
@@ -185,6 +200,8 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       window.alert("Notificaciones push deshabilitadas.");
     } catch (error) {
       console.error("Error deshabilitando push:", error);
+    } finally {
+      setPushActionLoading(false);
     }
   };
 
@@ -397,15 +414,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
           )}
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             {!pushEnabled ? (
-              <button className="primary-btn" onClick={handleEnablePush} disabled={!pushSupported}>
-                Habilitar notificaciones push
+              <button className="primary-btn" onClick={handleEnablePush} disabled={!pushSupported || pushActionLoading}>
+                {pushActionLoading ? "Activando..." : "Habilitar notificaciones push"}
               </button>
             ) : (
-              <button className="danger-btn" onClick={handleDisablePush}>
-                Deshabilitar notificaciones push
+              <button className="danger-btn" onClick={handleDisablePush} disabled={pushActionLoading}>
+                {pushActionLoading ? "Desactivando..." : "Deshabilitar notificaciones push"}
               </button>
             )}
-            <button className="secondary-btn" onClick={handleTestPush} disabled={!pushEnabled}>
+            <button className="secondary-btn" onClick={handleTestPush} disabled={!pushEnabled || pushActionLoading}>
               Enviar notificaci&oacute;n de prueba
             </button>
           </div>

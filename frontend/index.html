@@ -10,7 +10,7 @@
     <meta name="theme-color" content="#2563eb" />
     <meta
       name="description"
-      content="Gestiona tu salud de forma sencilla: citas, medicamentos, documentos mÃ©dicos y mÃ¡s"
+      content="Gestiona tu salud de forma sencilla: citas, medicamentos, documentos m&eacute;dicos y m&aacute;s"
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -22,6 +22,20 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
   </head>
   <body class="bg-slate-50">
+    <script>
+      (function () {
+        try {
+          var savedTheme = localStorage.getItem("theme");
+          if (savedTheme === "dark") {
+            document.body.classList.add("theme-dark");
+          } else {
+            document.body.classList.remove("theme-dark");
+          }
+        } catch (_error) {
+          document.body.classList.remove("theme-dark");
+        }
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
