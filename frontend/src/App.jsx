@@ -1646,191 +1646,289 @@ export default function App() {
         </div>
       )}
       {onboardingOpen && (
-        <div className="consent-backdrop">
-          <div className="consent-card" role="dialog" aria-modal="true">
-            <p className="consent-kicker">Bienvenido a Klinip</p>
-            {onboardingStep === 0 && (
-              <>
-                <h2 className="consent-title">Organiza tu salud en un solo lugar</h2>
-                <p className="consent-text">
-                  Organiza medicamentos, citas y documentos en un lugar.
-                  Te guiaremos en 5 pasos cortos para personalizar Klinip.
-                </p>
-              </>
-            )}
-            {onboardingStep === 1 && (
-              <>
-                <h2 className="consent-title">Activa recordatorios importantes</h2>
-                <p className="consent-text">
-                  Si activas notificaciones, podrás recibir avisos de medicamentos, citas y alertas de salud.
-                </p>
-                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
-                  <button
-                    className="primary-btn"
-                    type="button"
-                    onClick={handleOnboardingEnableNotifications}
-                    disabled={onboardingNotifLoading}
-                  >
-                    {onboardingNotifLoading ? "Activando..." : "Activar notificaciones"}
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    type="button"
-                    onClick={() =>
-                      setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }))
-                    }
-                    disabled={onboardingNotifLoading}
-                  >
-                    Configurar después
-                  </button>
-                </div>
-                {onboardingNotifMessage ? (
-                  <p className="consent-switch-sub" style={{ marginTop: "0.6rem" }}>
-                    {onboardingNotifMessage}
-                  </p>
-                ) : null}
-              </>
-            )}
-            {onboardingStep === 2 && (
-              <>
-                <h2 className="consent-title">Configuración mínima útil</h2>
-                <p className="consent-text">Ajusta zona horaria y hora preferida de recordatorios.</p>
-                <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.6rem" }}>
-                  <input
-                    className="input-field"
-                    list="onboarding-timezone-options"
-                    value={onboardingData.timezone}
-                    onChange={(event) =>
-                      setOnboardingData((prev) => ({ ...prev, timezone: event.target.value }))
-                    }
-                    placeholder="America/Santiago"
-                  />
-                  <datalist id="onboarding-timezone-options">
-                    {ONBOARDING_TIMEZONE_OPTIONS.map((tz) => (
-                      <option value={tz} key={tz} />
-                    ))}
-                  </datalist>
-                  <input
-                    className="input-field"
-                    type="time"
-                    value={onboardingData.reminderPreferredTime}
-                    onChange={(event) =>
-                      setOnboardingData((prev) => ({
-                        ...prev,
-                        reminderPreferredTime: event.target.value || "08:00",
-                      }))
-                    }
-                  />
-                </div>
-              </>
-            )}
-            {onboardingStep === 3 && (
-              <>
-                <h2 className="consent-title">¿Tienes una patología crónica?</h2>
-                <p className="consent-text">Opcional. Nos ayuda a personalizar recomendaciones.</p>
-                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
-                  <button
-                    className={`secondary-btn ${onboardingData.hasChronicCondition === "yes" ? "is-active" : ""}`}
-                    type="button"
-                    onClick={() => setOnboardingData((prev) => ({ ...prev, hasChronicCondition: "yes" }))}
-                  >
-                    Sí
-                  </button>
-                  <button
-                    className={`secondary-btn ${onboardingData.hasChronicCondition === "no" ? "is-active" : ""}`}
-                    type="button"
-                    onClick={() =>
-                      setOnboardingData((prev) => ({
-                        ...prev,
-                        hasChronicCondition: "no",
-                        chronicCondition: "",
-                      }))
-                    }
-                  >
-                    No
-                  </button>
-                </div>
-                {onboardingData.hasChronicCondition === "yes" && (
-                  <div style={{ marginTop: "0.75rem" }}>
-                    <input
-                      className="input-field"
-                      type="text"
-                      value={onboardingData.chronicCondition}
-                      onChange={(event) =>
-                        setOnboardingData((prev) => ({ ...prev, chronicCondition: event.target.value }))
-                      }
-                      placeholder="Ej: hipertensión, diabetes, asma..."
-                    />
-                  </div>
-                )}
-                <div style={{ marginTop: "0.75rem" }}>
-                  <input
-                    className="input-field"
-                    type="text"
-                    value={onboardingData.primaryCareCenter}
-                    onChange={(event) =>
-                      setOnboardingData((prev) => ({ ...prev, primaryCareCenter: event.target.value }))
-                    }
-                    placeholder="Centro habitual (opcional): CESFAM Norte, Clinica ..."
-                  />
-                </div>
-              </>
-            )}
-            {onboardingStep === 4 && (
-              <>
-                <h2 className="consent-title">Primer acción guiada</h2>
-                <p className="consent-text">Puedes comenzar con una de estas acciones:</p>
-                <div className="consent-actions" style={{ marginTop: "0.75rem" }}>
-                  <button className="secondary-btn" type="button" onClick={() => navigate("/documents")}>
-                    Subir orden médica
-                  </button>
-                  <button className="secondary-btn" type="button" onClick={() => navigate("/medications")}>
-                    Agregar medicamento
-                  </button>
-                  <button className="secondary-btn" type="button" onClick={() => navigate("/appointments")}>
-                    Agendar cita
-                  </button>
-                </div>
-              </>
-            )}
-            <div className="consent-actions" style={{ marginTop: "1rem" }}>
-              <button className="ghost-btn" type="button" onClick={handleSkipOnboarding} disabled={onboardingSaving}>
-                Omitir
+        <div className="ob-backdrop">
+          <div className="ob-overlay" role="dialog" aria-modal="true" aria-label="Bienvenida a Klinip">
+            {onboardingStep < 4 && (
+              <button
+                className="ob-skip"
+                type="button"
+                onClick={handleSkipOnboarding}
+                disabled={onboardingSaving}
+              >
+                {onboardingStep + 1}/5 &nbsp; Saltar
               </button>
-              {onboardingStep > 0 && (
-                <button
-                  className="secondary-btn"
-                  type="button"
-                  onClick={() => setOnboardingStep((prev) => Math.max(prev - 1, 0))}
-                  disabled={onboardingSaving}
-                >
-                  Atras
-                </button>
+            )}
+
+            <div className="ob-illus-wrap">
+              {onboardingStep === 0 && (
+                <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="108" r="80" fill="rgba(255,255,255,0.12)" />
+                  <ellipse cx="130" cy="88" rx="26" ry="29" fill="rgba(255,255,255,0.95)" />
+                  <ellipse cx="130" cy="68" rx="26" ry="14" fill="#7c3aed" opacity="0.85" />
+                  <rect x="103" y="117" width="54" height="55" rx="10" fill="rgba(255,255,255,0.95)" />
+                  <rect x="116" y="117" width="9" height="32" rx="4" fill="#dbeafe" />
+                  <rect x="135" y="117" width="9" height="32" rx="4" fill="#dbeafe" />
+                  <path d="M112 140 Q103 152 108 163" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" fill="none" />
+                  <circle cx="109" cy="165" r="6" fill="#2563eb" />
+                  <rect x="121" y="128" width="9" height="22" rx="2.5" fill="#2563eb" />
+                  <rect x="115" y="134" width="21" height="9" rx="2.5" fill="#2563eb" />
+                  <circle cx="62" cy="86" r="20" fill="rgba(255,255,255,0.18)" />
+                  <path d="M55 86h14M62 79v14" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" />
+                  <circle cx="198" cy="92" r="20" fill="rgba(255,255,255,0.18)" />
+                  <path d="M198 84c-7 0-12 5-12 10s9 11 12 13c3-2 12-8 12-13s-5-10-12-10z" fill="#fff" />
+                  <circle cx="185" cy="138" r="15" fill="rgba(255,255,255,0.18)" />
+                  <path d="M179 138l4 5 7-9" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="78" cy="144" r="15" fill="rgba(255,255,255,0.18)" />
+                  <rect x="72" y="137" width="13" height="14" rx="2.5" fill="none" stroke="#fff" strokeWidth="2" />
+                  <path d="M75 143h7M75 147h5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
               )}
-              {onboardingStep < 4 ? (
-                <button
-                  className="primary-btn"
-                  type="button"
-                  onClick={() => setOnboardingStep((prev) => Math.min(prev + 1, 4))}
-                  disabled={
-                    onboardingSaving ||
-                    (onboardingStep === 3 &&
-                      onboardingData.hasChronicCondition === "yes" &&
-                      !(onboardingData.chronicCondition || "").trim())
-                  }
-                >
-                  Siguiente
-                </button>
-              ) : (
-                <button
-                  className="primary-btn"
-                  type="button"
-                  onClick={handleCompleteOnboarding}
-                  disabled={onboardingSaving}
-                >
-                  {onboardingSaving ? "Guardando..." : "Finalizar"}
-                </button>
+              {onboardingStep === 1 && (
+                <svg className="ob-illus" viewBox="0 0 260 210" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="105" r="78" fill="rgba(255,255,255,0.12)" />
+                  <path d="M130 38c-33 0-50 28-50 56v28l-12 13h124l-12-13V94c0-28-17-56-50-56z" fill="rgba(255,255,255,0.93)" />
+                  <circle cx="130" cy="148" r="12" fill="rgba(255,255,255,0.93)" />
+                  <circle cx="130" cy="28" r="9" fill="rgba(255,255,255,0.93)" />
+                  <circle cx="178" cy="58" r="16" fill="#ef4444" />
+                  <rect x="177" y="50" width="2" height="9" rx="1" fill="#fff" />
+                  <circle cx="178" cy="62" r="1.5" fill="#fff" />
+                  <rect x="58" y="78" width="44" height="27" rx="7" fill="rgba(255,255,255,0.22)" />
+                  <rect x="64" y="84" width="22" height="3.5" rx="2" fill="#fff" />
+                  <rect x="64" y="91" width="15" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                  <rect x="160" y="83" width="44" height="27" rx="7" fill="rgba(255,255,255,0.22)" />
+                  <rect x="166" y="89" width="22" height="3.5" rx="2" fill="#fff" />
+                  <rect x="166" y="96" width="15" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                  <rect x="78" y="160" width="104" height="27" rx="7" fill="rgba(255,255,255,0.18)" />
+                  <rect x="85" y="167" width="42" height="3.5" rx="2" fill="#fff" />
+                  <rect x="85" y="174" width="28" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                </svg>
               )}
+              {onboardingStep === 2 && (
+                <svg className="ob-illus" viewBox="0 0 260 210" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="105" r="78" fill="rgba(255,255,255,0.12)" />
+                  <circle cx="130" cy="100" r="60" fill="rgba(255,255,255,0.93)" stroke="rgba(255,255,255,0.4)" strokeWidth="3" />
+                  <circle cx="130" cy="100" r="6" fill="#2563eb" />
+                  <line x1="130" y1="100" x2="130" y2="57" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" />
+                  <line x1="130" y1="100" x2="157" y2="112" stroke="#1d4ed8" strokeWidth="3" strokeLinecap="round" />
+                  <line x1="130" y1="43" x2="130" y2="50" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="130" y1="150" x2="130" y2="157" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="73" y1="100" x2="80" y2="100" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="180" y1="100" x2="187" y2="100" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+                  <line x1="93" y1="60" x2="98" y2="66" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="162" y1="134" x2="167" y2="140" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="167" y1="60" x2="162" y2="66" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                  <line x1="98" y1="134" x2="93" y2="140" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="64" cy="160" r="24" fill="rgba(255,255,255,0.2)" />
+                  <ellipse cx="64" cy="160" rx="8" ry="18" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+                  <line x1="46" y1="160" x2="82" y2="160" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                  <line x1="64" y1="142" x2="64" y2="178" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                  <circle cx="196" cy="155" r="24" fill="rgba(255,255,255,0.2)" />
+                  <ellipse cx="196" cy="155" rx="8" ry="18" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
+                  <line x1="178" y1="155" x2="214" y2="155" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                  <line x1="196" y1="137" x2="196" y2="173" stroke="rgba(255,255,255,0.6)" strokeWidth="1.5" />
+                </svg>
+              )}
+              {onboardingStep === 3 && (
+                <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="115" r="80" fill="rgba(255,255,255,0.12)" />
+                  <rect x="74" y="58" width="112" height="138" rx="12" fill="rgba(255,255,255,0.93)" />
+                  <rect x="100" y="46" width="60" height="24" rx="7" fill="rgba(255,255,255,0.93)" stroke="rgba(255,255,255,0.5)" strokeWidth="2" />
+                  <rect x="84" y="84" width="92" height="3.5" rx="2" fill="#e2e8f0" />
+                  <rect x="84" y="96" width="66" height="3.5" rx="2" fill="#e2e8f0" />
+                  <polyline points="84,122 96,122 103,105 110,138 117,112 124,122 150,122 157,111 164,132 170,122" stroke="#2563eb" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <path d="M130 155c0 0-16-9-16-20 0-6 5-10 9-10 3 0 5 2 7 5 2-3 4-5 7-5 4 0 9 4 9 10 0 11-16 20-16 20z" fill="#ef4444" />
+                  <ellipse cx="92" cy="170" rx="11" ry="7" fill="#dbeafe" transform="rotate(-30 92 170)" />
+                  <line x1="86" y1="165" x2="98" y2="175" stroke="#93c5fd" strokeWidth="2.2" />
+                  <circle cx="168" cy="96" r="11" fill="rgba(37,99,235,0.18)" />
+                  <path d="M162 96l4 5 8-9" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+              {onboardingStep === 4 && (
+                <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="115" r="80" fill="rgba(255,255,255,0.12)" />
+                  <path d="M130 42c0 0-36 35-36 76 0 18 12 30 36 36 24-6 36-18 36-36 0-41-36-76-36-76z" fill="rgba(255,255,255,0.93)" />
+                  <circle cx="130" cy="105" r="14" fill="#bfdbfe" />
+                  <circle cx="130" cy="105" r="8" fill="#2563eb" />
+                  <path d="M94 118 L77 142 L100 136z" fill="rgba(255,255,255,0.75)" />
+                  <path d="M166 118 L183 142 L160 136z" fill="rgba(255,255,255,0.75)" />
+                  <ellipse cx="130" cy="162" rx="14" ry="17" fill="rgba(251,191,36,0.85)" />
+                  <ellipse cx="130" cy="170" rx="8" ry="11" fill="rgba(249,115,22,0.9)" />
+                  <circle cx="72" cy="76" r="5" fill="rgba(255,255,255,0.7)" />
+                  <circle cx="188" cy="88" r="4" fill="rgba(255,255,255,0.6)" />
+                  <circle cx="82" cy="148" r="6" fill="rgba(255,255,255,0.55)" />
+                  <circle cx="178" cy="142" r="5" fill="rgba(255,255,255,0.65)" />
+                  <circle cx="95" cy="58" r="4" fill="rgba(255,255,255,0.55)" />
+                  <circle cx="162" cy="62" r="6" fill="rgba(255,255,255,0.7)" />
+                  <rect x="52" y="182" width="56" height="30" rx="8" fill="rgba(255,255,255,0.22)" />
+                  <rect x="59" y="190" width="26" height="3.5" rx="2" fill="#fff" />
+                  <rect x="59" y="197" width="18" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                  <rect x="152" y="182" width="56" height="30" rx="8" fill="rgba(255,255,255,0.22)" />
+                  <rect x="159" y="190" width="26" height="3.5" rx="2" fill="#fff" />
+                  <rect x="159" y="197" width="18" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                </svg>
+              )}
+            </div>
+
+            <div className="ob-card">
+              <div className="ob-card-content">
+                {onboardingStep === 0 && (
+                  <>
+                    <h2 className="ob-title">Organiza tu salud en un solo lugar</h2>
+                    <p className="ob-text">Gestiona medicamentos, citas y documentos médicos de forma simple. Te guiaremos en pocos pasos.</p>
+                  </>
+                )}
+                {onboardingStep === 1 && (
+                  <>
+                    <h2 className="ob-title">Nunca olvides un medicamento</h2>
+                    <p className="ob-text">Activa recordatorios y recibe alertas de medicamentos, citas y documentos pendientes.</p>
+                    <div className="ob-actions-col">
+                      <button
+                        className="ob-action-btn ob-action-primary"
+                        type="button"
+                        onClick={handleOnboardingEnableNotifications}
+                        disabled={onboardingNotifLoading}
+                      >
+                        {onboardingNotifLoading ? "Activando..." : "Activar notificaciones"}
+                      </button>
+                      <button
+                        className="ob-action-btn ob-action-ghost"
+                        type="button"
+                        onClick={() => setOnboardingData((prev) => ({ ...prev, notificationsConsent: "later" }))}
+                        disabled={onboardingNotifLoading}
+                      >
+                        Ahora no
+                      </button>
+                    </div>
+                    {onboardingNotifMessage && <p className="ob-msg">{onboardingNotifMessage}</p>}
+                  </>
+                )}
+                {onboardingStep === 2 && (
+                  <>
+                    <h2 className="ob-title">Ajusta tus preferencias</h2>
+                    <p className="ob-text">Indica tu zona horaria y la hora preferida para recibir recordatorios.</p>
+                    <div className="ob-form">
+                      <input
+                        className="ob-input"
+                        list="onboarding-timezone-options"
+                        value={onboardingData.timezone}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, timezone: e.target.value }))}
+                        placeholder="Zona horaria (ej: America/Santiago)"
+                      />
+                      <datalist id="onboarding-timezone-options">
+                        {ONBOARDING_TIMEZONE_OPTIONS.map((tz) => (<option value={tz} key={tz} />))}
+                      </datalist>
+                      <label className="ob-input-label">Hora preferida de recordatorio</label>
+                      <input
+                        className="ob-input"
+                        type="time"
+                        value={onboardingData.reminderPreferredTime}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, reminderPreferredTime: e.target.value || "08:00" }))}
+                      />
+                    </div>
+                  </>
+                )}
+                {onboardingStep === 3 && (
+                  <>
+                    <h2 className="ob-title">Personaliza tu perfil de salud</h2>
+                    <p className="ob-text">¿Tienes una condición crónica? Nos ayuda a darte mejores recomendaciones.</p>
+                    <div className="ob-toggle-row">
+                      <button
+                        className={`ob-toggle-btn${onboardingData.hasChronicCondition === "yes" ? " ob-toggle-active" : ""}`}
+                        type="button"
+                        onClick={() => setOnboardingData((prev) => ({ ...prev, hasChronicCondition: "yes" }))}
+                      >Sí</button>
+                      <button
+                        className={`ob-toggle-btn${onboardingData.hasChronicCondition === "no" ? " ob-toggle-active" : ""}`}
+                        type="button"
+                        onClick={() => setOnboardingData((prev) => ({ ...prev, hasChronicCondition: "no", chronicCondition: "" }))}
+                      >No</button>
+                    </div>
+                    <div className="ob-form">
+                      {onboardingData.hasChronicCondition === "yes" && (
+                        <input
+                          className="ob-input"
+                          type="text"
+                          value={onboardingData.chronicCondition}
+                          onChange={(e) => setOnboardingData((prev) => ({ ...prev, chronicCondition: e.target.value }))}
+                          placeholder="Ej: hipertensión, diabetes, asma..."
+                        />
+                      )}
+                      <input
+                        className="ob-input"
+                        type="text"
+                        value={onboardingData.primaryCareCenter}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, primaryCareCenter: e.target.value }))}
+                        placeholder="Centro habitual (opcional): CESFAM, Clínica..."
+                      />
+                    </div>
+                  </>
+                )}
+                {onboardingStep === 4 && (
+                  <>
+                    <h2 className="ob-title">¡Listo para comenzar!</h2>
+                    <p className="ob-text">Elige por dónde empezar o explora Klinip por tu cuenta.</p>
+                    <div className="ob-quick-actions">
+                      <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/documents"); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 3.5h7l3 3.5V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z" /><path d="M14 3.5v4h3" /><path d="M9 12h6M9 15h4" /></svg>
+                        Subir documento
+                      </button>
+                      <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/medications"); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="5" y="6" width="14" height="15" rx="2" /><path d="M10.5 3h3a1.5 1.5 0 0 1 1.5 1.5v1.5H9V4.5A1.5 1.5 0 0 1 10.5 3Z" /><path d="M9 13h6M12 10v6" /></svg>
+                        Medicamentos
+                      </button>
+                      <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/appointments"); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.5 2.5" /></svg>
+                        Agendar cita
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="ob-footer">
+                <div className="ob-dots">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span key={i} className={`ob-dot${onboardingStep === i ? " ob-dot-active" : ""}`} />
+                  ))}
+                </div>
+                <div className="ob-nav">
+                  {onboardingStep > 0 && (
+                    <button
+                      className="ob-back-btn"
+                      type="button"
+                      onClick={() => setOnboardingStep((prev) => Math.max(prev - 1, 0))}
+                      disabled={onboardingSaving}
+                      aria-label="Paso anterior"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="15 18 9 12 15 6" /></svg>
+                    </button>
+                  )}
+                  {onboardingStep < 4 ? (
+                    <button
+                      className="ob-cta"
+                      type="button"
+                      onClick={() => setOnboardingStep((prev) => Math.min(prev + 1, 4))}
+                      disabled={
+                        onboardingSaving ||
+                        (onboardingStep === 3 &&
+                          onboardingData.hasChronicCondition === "yes" &&
+                          !(onboardingData.chronicCondition || "").trim())
+                      }
+                    >
+                      Continuar
+                    </button>
+                  ) : (
+                    <button
+                      className="ob-cta"
+                      type="button"
+                      onClick={handleCompleteOnboarding}
+                      disabled={onboardingSaving}
+                    >
+                      {onboardingSaving ? "Guardando..." : "Comenzar"}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
