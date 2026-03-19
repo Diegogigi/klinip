@@ -275,21 +275,20 @@ export default function Documents() {
 
   const handleOpenViewer = async (doc, stepUpToken) => {
     setViewerLoading(true);
-    setViewerOpen(true);
-    setViewerTarget(doc);
-    setViewerKind(inferViewerKind(doc));
-    setViewerZoom(1);
-    setViewerStepUpToken(stepUpToken || "");
     try {
       const blob = stepUpToken
         ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
         : await getDocumentFile(doc.id);
       const url = window.URL.createObjectURL(blob);
       releaseViewerUrl();
+      setViewerTarget(doc);
+      setViewerKind(inferViewerKind(doc));
+      setViewerZoom(1);
+      setViewerStepUpToken(stepUpToken || "");
       setViewerUrl(url);
+      setViewerOpen(true);
     } catch (err) {
       if (err.stepUpRequired) {
-        closeViewer();
         setStepUpPending({ action: "view", doc });
         setStepUpOpen(true);
         return;
