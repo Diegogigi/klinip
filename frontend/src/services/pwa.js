@@ -1,20 +1,104 @@
 import { subscribePush, unsubscribePush } from "./httpApi";
 
 const PUBLIC_VAPID_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
+const SERVICE_WORKER_URL = "/service-worker.js";
 
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
+  for (let i = 0; i < rawData.length; i += 1) {
     outputArray[i] = rawData.charCodeAt(i);
   }
   return outputArray;
 }
 
+function isStandaloneDisplayMode() {
+  const mediaStandalone =
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(display-mode: standalone)").matches;
+  const navigatorStandalone =
+    typeof navigator !== "undefined" &&
+    Object.prototype.hasOwnProperty.call(navigator, "standalone") &&
+    navigator.standalone === true;
+  return Boolean(mediaStandalone || navigatorStandalone);
+}
+
+async function getExistingServiceWorkerRegistration() {
+  if (!("serviceWorker" in navigator)) return null;
+
+  let registration = await navigator.serviceWorker
+    .getRegistration(SERVICE_WORKER_URL)
+    .catch(() => null);
+
+  if (!registration) {
+    registration = await navigator.serviceWorker.getRegistration().catch(() => null);
+  }
+
+  return registration;
+}
+
+export function getPushSupportStatus() {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return {
+      supported: false,
+      reason: "No se pudo verificar el soporte de notificaciones push.",
+    };
+  }
+
+  if (!("Notification" in window)) {
+    return {
+      supported: false,
+      reason: "Este navegador no soporta notificaciones del sistema.",
+    };
+  }
+
+  if (!("serviceWorker" in navigator)) {
+    return {
+      supported: false,
+      reason: "Este navegador no soporta Service Worker.",
+    };
+  }
+
+  if (!("PushManager" in window)) {
+    return {
+      supported: false,
+      reason: "Este navegador no soporta notificaciones push.",
+    };
+  }
+
+  if (!window.isSecureContext && window.location.hostname !== "localhost") {
+    return {
+      supported: false,
+      reason: "Las notificaciones push requieren HTTPS.",
+    };
+  }
+
+  const userAgent = navigator.userAgent || "";
+  const isIOS = /iphone|ipad|ipod/i.test(userAgent);
+  if (isIOS && !isStandaloneDisplayMode()) {
+    return {
+      supported: false,
+      reason:
+        "En iPhone y iPad las notificaciones push funcionan solo si Klinip est\u00e1 instalada en la pantalla de inicio.",
+    };
+  }
+
+  if (!PUBLIC_VAPID_KEY.trim()) {
+    return {
+      supported: false,
+      reason: "Falta la clave VAPID p\u00fablica. Revisa la configuraci\u00f3n del despliegue.",
+    };
+  }
+
+  return { supported: true, reason: "" };
+}
+
 export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
+
   try {
     if (import.meta.env.DEV) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -26,23 +110,25 @@ export async function registerServiceWorker() {
       return null;
     }
 
-    const reg = await navigator.serviceWorker.register("/service-worker.js");
-    reg.update().catch(() => null);
+    const registration = await navigator.serviceWorker.register(SERVICE_WORKER_URL);
+    registration.update().catch(() => null);
 
     let lastNotifiedUpdateKey = "";
     const notifyUpdate = (worker = null) => {
       const updateKey =
         worker?.scriptURL ||
-        reg.waiting?.scriptURL ||
-        reg.installing?.scriptURL ||
-        reg.active?.scriptURL ||
-        reg.scope ||
+        registration.waiting?.scriptURL ||
+        registration.installing?.scriptURL ||
+        registration.active?.scriptURL ||
+        registration.scope ||
         "klinip-sw-update";
+
       if (lastNotifiedUpdateKey === updateKey) return;
       lastNotifiedUpdateKey = updateKey;
+
       window.dispatchEvent(
         new CustomEvent("klinip-sw-update", {
-          detail: { registration: reg, updateKey },
+          detail: { registration, updateKey },
         })
       );
     };
@@ -56,13 +142,14 @@ export async function registerServiceWorker() {
 
     navigator.serviceWorker.addEventListener("controllerchange", refreshOnUpdate);
 
-    if (reg.waiting && navigator.serviceWorker.controller) {
-      notifyUpdate(reg.waiting);
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      notifyUpdate(registration.waiting);
     }
 
-    reg.addEventListener("updatefound", () => {
-      const newWorker = reg.installing;
+    registration.addEventListener("updatefound", () => {
+      const newWorker = registration.installing;
       if (!newWorker) return;
+
       newWorker.addEventListener("statechange", () => {
         if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
           notifyUpdate(newWorker);
@@ -70,97 +157,133 @@ export async function registerServiceWorker() {
       });
     });
 
-    return reg;
-  } catch (err) {
-    console.error("No se pudo registrar service worker", err);
+    return registration;
+  } catch (error) {
+    console.error("No se pudo registrar el service worker.", error);
     return null;
   }
 }
 
-export async function ensurePushSubscription() {
-  try {
-    // 1. Verificar compatibilidad del navegador
-    if (!("serviceWorker" in navigator)) {
-      throw new Error("Tu navegador no soporta Service Workers");
-    }
-    
-    if (!("PushManager" in window)) {
-      throw new Error("Tu navegador no soporta notificaciones push");
-    }
-    
-    // 2. Verificar HTTPS (requerido en móviles)
-    if (location.protocol !== "https:" && location.hostname !== "localhost") {
-      throw new Error("Las notificaciones push requieren HTTPS. Por favor accede usando https://");
-    }
-    
-    // 3. Verificar clave VAPID
-    if (!PUBLIC_VAPID_KEY || PUBLIC_VAPID_KEY.trim() === "") {
-      throw new Error("Error de configuración: Falta la clave VAPID. Contacta al administrador.");
-    }
-    
-    // 4. Solicitar permiso de notificaciones
-    console.log("Solicitando permiso de notificaciones...");
-  const permission = await Notification.requestPermission();
-    console.log("Permiso obtenido:", permission);
-    
-    if (permission !== "granted") {
-      throw new Error("Debes permitir las notificaciones en tu navegador");
-    }
-    
-    // 5. Esperar a que el service worker esté listo
-    console.log("Esperando service worker...");
-  const reg = await navigator.serviceWorker.ready;
-    console.log("Service worker listo");
-    
-    // 6. Cancelar cualquier suscripción anterior para evitar duplicados
-    let existingSub = await reg.pushManager.getSubscription();
-    if (existingSub) {
-      try {
-        console.log("Cancelando suscripción anterior...");
-        await unsubscribePush({ endpoint: existingSub.endpoint });
-        await existingSub.unsubscribe();
-        console.log("Suscripción anterior cancelada");
-      } catch (err) {
-        console.warn("No se pudo cancelar suscripción anterior:", err);
-      }
-    }
-    
-    // 7. Crear nueva suscripción
-    console.log("Creando nueva suscripción push...");
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
-    });
-    console.log("Suscripción creada:", sub.endpoint);
-    
-    // 8. Enviar suscripción al servidor
-    console.log("Enviando suscripción al servidor...");
-  await subscribePush({
-    endpoint: sub.endpoint,
-    keys: sub.toJSON().keys,
-  });
-    console.log("✅ Suscripción registrada en el servidor");
-    
-  return true;
-  } catch (error) {
-    console.error("❌ Error en ensurePushSubscription:", error);
-    throw error; // Re-lanzar el error para que el componente lo maneje
+async function ensureServiceWorkerRegistration() {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Este navegador no soporta Service Worker.");
   }
+
+  let registration = await getExistingServiceWorkerRegistration();
+  if (!registration) {
+    registration = await registerServiceWorker();
+  }
+
+  if (!registration) {
+    throw new Error("No se pudo registrar el service worker de Klinip.");
+  }
+
+  await registration.update().catch(() => null);
+
+  const readyRegistration = await navigator.serviceWorker.ready.catch(() => null);
+  return readyRegistration || registration;
+}
+
+export async function getCurrentPushSubscription(options = {}) {
+  const { registerIfMissing = false } = options;
+  const support = getPushSupportStatus();
+
+  if (!support.supported) {
+    return {
+      ...support,
+      registration: null,
+      subscription: null,
+      browserHasSubscription: false,
+    };
+  }
+
+  const registration = registerIfMissing
+    ? await ensureServiceWorkerRegistration()
+    : await getExistingServiceWorkerRegistration();
+
+  if (!registration) {
+    return {
+      ...support,
+      registration: null,
+      subscription: null,
+      browserHasSubscription: false,
+    };
+  }
+
+  const subscription = await registration.pushManager.getSubscription().catch(() => null);
+
+  return {
+    ...support,
+    registration,
+    subscription,
+    browserHasSubscription: Boolean(subscription?.endpoint),
+  };
+}
+
+async function syncSubscriptionWithServer(subscription) {
+  const rawSubscription = subscription?.toJSON?.() || {};
+  const keys = rawSubscription.keys || {};
+
+  if (!subscription?.endpoint || !keys.p256dh || !keys.auth) {
+    throw new Error("La suscripci\u00f3n push del navegador es inv\u00e1lida.");
+  }
+
+  await subscribePush({
+    endpoint: subscription.endpoint,
+    keys,
+  });
+}
+
+export async function ensurePushSubscription() {
+  const support = getPushSupportStatus();
+  if (!support.supported) {
+    throw new Error(support.reason);
+  }
+
+  const permission =
+    Notification.permission === "granted"
+      ? "granted"
+      : await Notification.requestPermission();
+
+  if (permission !== "granted") {
+    throw new Error("Debes permitir las notificaciones en tu navegador.");
+  }
+
+  const { registration } = await getCurrentPushSubscription({ registerIfMissing: true });
+  if (!registration) {
+    throw new Error("No se pudo preparar el service worker para notificaciones.");
+  }
+
+  let subscription = await registration.pushManager.getSubscription();
+  if (subscription?.endpoint) {
+    await syncSubscriptionWithServer(subscription);
+    return true;
+  }
+
+  subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY),
+  });
+
+  await syncSubscriptionWithServer(subscription);
+  return true;
 }
 
 export async function removePushSubscription() {
-  if (!("serviceWorker" in navigator)) return false;
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  if (sub) {
-    try {
-      await unsubscribePush({ endpoint: sub.endpoint });
-    } catch (error) {
-      if (error?.response?.status !== 401) {
-        console.warn("No se pudo desregistrar la suscripcion push en backend", error);
-      }
+  const { registration } = await getCurrentPushSubscription();
+  if (!registration) return false;
+
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) return false;
+
+  try {
+    await unsubscribePush({ endpoint: subscription.endpoint });
+  } catch (error) {
+    if (error?.response?.status !== 401) {
+      console.warn("No se pudo desregistrar la suscripci\u00f3n push en backend.", error);
     }
-    await sub.unsubscribe().catch(() => false);
   }
+
+  await subscription.unsubscribe().catch(() => false);
   return true;
 }
