@@ -262,6 +262,24 @@ def ensure_user_schema():
                 statements.append("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0")
             added_columns.append("token_version")
 
+        if "failed_login_attempts" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0")
+            added_columns.append("failed_login_attempts")
+
+        if "locked_until" not in columns:
+            if backend == "postgresql":
+                statements.append(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP NULL"
+                )
+            else:
+                statements.append("ALTER TABLE users ADD COLUMN locked_until DATETIME")
+            added_columns.append("locked_until")
+
         if "data_consent_revoked" not in columns:
             if backend == "postgresql":
                 statements.append(
@@ -432,6 +450,12 @@ def ensure_user_schema():
                     conn.execute(
                         text(
                             "UPDATE users SET family_ai_needs_refresh = COALESCE(family_ai_needs_refresh, FALSE)"
+                        )
+                    )
+                if "failed_login_attempts" in added_columns:
+                    conn.execute(
+                        text(
+                            "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)"
                         )
                     )
     except Exception as exc:
