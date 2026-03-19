@@ -15856,11 +15856,23 @@ async def record_medication_intake(
     intake.source = _safe_text(getattr(payload, "source", "") or "manual")[:40] or "manual"
     intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
     db.add(intake)
-    db.flush()
-    _mark_profile_ai_dirty(db, profile, include_family=True)
-    db.commit()
-    db.refresh(intake)
-    return intake
+    try:
+        db.flush()
+        try:
+            _mark_profile_ai_dirty(db, profile, include_family=True)
+        except Exception as ai_exc:
+            print(f"WARNING medication intake: no se pudo marcar refresh de IA: {ai_exc}")
+        db.commit()
+        db.refresh(intake)
+        return intake
+    except Exception as exc:
+        db.rollback()
+        print(
+            "WARNING medication intake: no se pudo registrar la toma "
+            f"(medication_id={medication_id}, status={normalized_status}, scheduled_at={scheduled_at}, "
+            f"taken_at={taken_at}, user_id={target_user_id}): {exc}"
+        )
+        raise HTTPException(status_code=500, detail="No se pudo registrar la toma")
 
 
 @app.get("/medications/{medication_id}/intakes", response_model=schemas.MedicationIntakeListOut)

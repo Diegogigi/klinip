@@ -589,6 +589,27 @@ export default function Medications() {
     }
   };
 
+  const recordTakenFromReminder = async (medication, source, triggeredAt) => {
+    const scheduledAt = triggeredAt || new Date().toISOString();
+    try {
+      return await recordMedicationIntake(medication.id, {
+        status: "taken",
+        source,
+        scheduled_at: scheduledAt,
+      });
+    } catch (error) {
+      if (!triggeredAt) {
+        throw error;
+      }
+      return recordMedicationIntake(medication.id, {
+        status: "taken",
+        source: `${source}_fallback`.slice(0, 40),
+        taken_at: new Date().toISOString(),
+        notes: "Fallback sin horario programado desde recordatorio.",
+      });
+    }
+  };
+
   const handleOpenDetail = (med) => {
     setDetailTarget(med);
     setDetailOpen(true);
@@ -623,11 +644,7 @@ export default function Medications() {
     if (!notifyTarget || !canEditActiveProfile) return;
     setNotifyActionLoading(true);
     try {
-      await recordMedicationIntake(notifyTarget.id, {
-        status: "taken",
-        source: "reminder_prompt",
-        scheduled_at: notifyTriggeredAt || new Date().toISOString(),
-      });
+      await recordTakenFromReminder(notifyTarget, "reminder_prompt", notifyTriggeredAt);
       if (notifyPromptKey) {
         localStorage.setItem(notifyPromptKey, "taken");
       }
@@ -650,7 +667,10 @@ export default function Medications() {
       navigate("/medications", { replace: true });
     } catch (err) {
       console.error(err);
-      alert("No se pudo registrar la toma.");
+      alert(
+        "No se pudo registrar la toma: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
     } finally {
       setNotifyActionLoading(false);
     }
@@ -665,11 +685,7 @@ export default function Medications() {
     setNotifyActionLoading(true);
     try {
       for (const item of batch) {
-        await recordMedicationIntake(item.med.id, {
-          status: "taken",
-          source: "reminder_batch",
-          scheduled_at: item.triggeredAt || new Date().toISOString(),
-        });
+        await recordTakenFromReminder(item.med, "reminder_batch", item.triggeredAt);
         if (item.key) {
           localStorage.setItem(item.key, "taken");
         }
@@ -696,7 +712,10 @@ export default function Medications() {
       navigate("/medications", { replace: true });
     } catch (err) {
       console.error(err);
-      alert("No se pudieron registrar todas las tomas.");
+      alert(
+        "No se pudieron registrar todas las tomas: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
     } finally {
       setNotifyActionLoading(false);
     }
@@ -1840,4 +1859,3 @@ export default function Medications() {
     </>
   );
 }
-
