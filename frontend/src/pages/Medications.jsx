@@ -571,21 +571,16 @@ export default function Medications() {
     }
     try {
       await recordMedicationIntake(med.id, { status: "taken", source: "manual" });
-      await load();
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
-      setIntakeFeedback(`info:Toma registrada: ${med.name}`);
-      if (feedbackTimer.current) {
-        clearTimeout(feedbackTimer.current);
-      }
-      feedbackTimer.current = setTimeout(() => {
-        setIntakeFeedback("");
-      }, 2600);
+      await refreshMedicationStateAfterIntake(
+        `info:Toma registrada: ${med.name}`,
+        `info:Toma registrada: ${med.name}. Actualiza la lista si no ves el cambio.`
+      );
     } catch (err) {
       console.error(err);
-      alert("No se pudo marcar como realizado");
+      alert(
+        "No se pudo marcar como realizado: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
     }
   };
 
@@ -608,6 +603,44 @@ export default function Medications() {
         notes: "Fallback sin horario programado desde recordatorio.",
       });
     }
+  };
+
+  const showTimedIntakeFeedback = (message) => {
+    setIntakeFeedback(message);
+    if (feedbackTimer.current) {
+      clearTimeout(feedbackTimer.current);
+    }
+    feedbackTimer.current = setTimeout(() => {
+      setIntakeFeedback("");
+    }, 2600);
+  };
+
+  const notifyMedicationDataChanged = () => {
+    notifyClinicalDataChanged({
+      profileId: activeProfile?.id,
+      sources: ["medications", "health-radar", "adherence"],
+    });
+  };
+
+  const refreshMedicationStateAfterIntake = async (
+    successMessage,
+    refreshFailureMessage
+  ) => {
+    notifyMedicationDataChanged();
+    try {
+      await load();
+      showTimedIntakeFeedback(successMessage);
+    } catch (error) {
+      console.error("No se pudo refrescar la lista de medicamentos", error);
+      showTimedIntakeFeedback(refreshFailureMessage || successMessage);
+    }
+  };
+
+  const resetReminderPromptState = () => {
+    setNotifyOpen(false);
+    setNotifyTarget(null);
+    setNotifyPromptKey("");
+    setNotifyTriggeredAt(null);
   };
 
   const handleOpenDetail = (med) => {
@@ -648,23 +681,12 @@ export default function Medications() {
       if (notifyPromptKey) {
         localStorage.setItem(notifyPromptKey, "taken");
       }
-      await load();
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
-      setIntakeFeedback(`success:Toma registrada: ${notifyTarget.name}`);
-      if (feedbackTimer.current) {
-        clearTimeout(feedbackTimer.current);
-      }
-      feedbackTimer.current = setTimeout(() => {
-        setIntakeFeedback("");
-      }, 2600);
-      setNotifyOpen(false);
-      setNotifyTarget(null);
-      setNotifyPromptKey("");
-      setNotifyTriggeredAt(null);
+      resetReminderPromptState();
       navigate("/medications", { replace: true });
+      await refreshMedicationStateAfterIntake(
+        `success:Toma registrada: ${notifyTarget.name}`,
+        `info:Toma registrada: ${notifyTarget.name}. Actualiza la lista si no ves el cambio.`
+      );
     } catch (err) {
       console.error(err);
       alert(
@@ -690,26 +712,13 @@ export default function Medications() {
           localStorage.setItem(item.key, "taken");
         }
       }
-      await load();
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
       setNotifyQueue([]);
-      setIntakeFeedback(
-        `success:Tomas registradas: ${batch.length}`
-      );
-      if (feedbackTimer.current) {
-        clearTimeout(feedbackTimer.current);
-      }
-      feedbackTimer.current = setTimeout(() => {
-        setIntakeFeedback("");
-      }, 2600);
-      setNotifyOpen(false);
-      setNotifyTarget(null);
-      setNotifyPromptKey("");
-      setNotifyTriggeredAt(null);
+      resetReminderPromptState();
       navigate("/medications", { replace: true });
+      await refreshMedicationStateAfterIntake(
+        `success:Tomas registradas: ${batch.length}`,
+        "info:Las tomas quedaron registradas. Actualiza la lista si no ves el cambio."
+      );
     } catch (err) {
       console.error(err);
       alert(
@@ -734,26 +743,18 @@ export default function Medications() {
       if (notifyPromptKey) {
         localStorage.setItem(notifyPromptKey, "skipped");
       }
-      await load();
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
-      setIntakeFeedback(`info:Dosis omitida: ${notifyTarget.name}`);
-      if (feedbackTimer.current) {
-        clearTimeout(feedbackTimer.current);
-      }
-      feedbackTimer.current = setTimeout(() => {
-        setIntakeFeedback("");
-      }, 2600);
-      setNotifyOpen(false);
-      setNotifyTarget(null);
-      setNotifyPromptKey("");
-      setNotifyTriggeredAt(null);
+      resetReminderPromptState();
       navigate("/medications", { replace: true });
+      await refreshMedicationStateAfterIntake(
+        `info:Dosis omitida: ${notifyTarget.name}`,
+        "info:La omisión quedó registrada. Actualiza la lista si no ves el cambio."
+      );
     } catch (err) {
       console.error(err);
-      alert("No se pudo registrar la omisión.");
+      alert(
+        "No se pudo registrar la omisión: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
     } finally {
       setNotifyActionLoading(false);
     }

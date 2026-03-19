@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, func, or_
-from sqlalchemy.exc import IntegrityError, ProgrammingError
+from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 from typing import List
 import os
 import mimetypes
@@ -6876,26 +6876,54 @@ def _structured_next_appointment_reply(context: dict) -> str:
     return f"La próxima cita registrada es {specialty} para {when_label} en {center}."
 
 
-def _structured_latest_document_reply(context: dict) -> str:
-    documents = context.get("documents") or []
-    if not documents:
-        return "No veo documentos clínicos registrados en el perfil activo."
-    latest = documents[0]
-    summaries = context.get("document_summaries") or []
-    summary = next(
-        (item for item in summaries if getattr(item, "document_id", None) == getattr(latest, "id", None)),
+def _document_summary_for_context(context: dict, document_id: int | None):
+    if not document_id:
+        return None
+    return next(
+        (
+            item
+            for item in (context.get("document_summaries") or [])
+            if getattr(item, "document_id", None) == document_id
+        ),
         None,
     )
-    doc_type = _infer_document_type(latest)
-    center = getattr(latest, "center", "") or "sin centro registrado"
-    date_label = _safe_iso_local(getattr(latest, "date", None), context.get("timezone_name") or DEFAULT_TZ_NAME) or "sin fecha"
-    reply = f"El último documento registrado es de tipo {doc_type}, asociado a {center}, con fecha {date_label}."
+
+
+def _structured_document_reply(doc: models.Document | None, context: dict) -> str:
+    if not doc:
+        return "No veo documentos clínicos registrados en el perfil activo."
+    summary = _document_summary_for_context(context, getattr(doc, "id", None))
+    doc_type = _infer_document_type(doc)
+    file_format = _document_file_format(doc)
+    filename = getattr(doc, "filename", "") or f"#{getattr(doc, 'id', '')}"
+    center = getattr(doc, "center", "") or "sin centro registrado"
+    date_label = _safe_iso_local(getattr(doc, "date", None), context.get("timezone_name") or DEFAULT_TZ_NAME) or "sin fecha"
+    parts = [
+        f"Documento {filename}: tipo {doc_type}, formato {file_format}, centro {center}, fecha {date_label}."
+    ]
+    if getattr(doc, "notes", ""):
+        parts.append("Notas guardadas: " + _clip_text(getattr(doc, "notes", "") or "", 220) + ".")
     if summary and (getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", "")):
-        reply += " " + _clip_text(
-            getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", ""),
-            260,
+        parts.append(
+            _clip_text(
+                getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", ""),
+                280,
+            )
         )
-    return reply
+    elif getattr(doc, "ocr_text", ""):
+        parts.append("Resumen OCR orientativo: " + _clip_text(getattr(doc, "ocr_text", "") or "", 900))
+        parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
+    else:
+        parts.append("Todavía no hay texto OCR disponible para ese documento.")
+    return " ".join(parts)
+
+
+def _structured_latest_document_reply(context: dict) -> str:
+    documents = context.get("documents") or []
+    latest = documents[0] if documents else None
+    if not latest:
+        return "No veo documentos clínicos registrados en el perfil activo."
+    return _structured_document_reply(latest, context)
 
 
 def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str, str, str] | None:
@@ -7124,6 +7152,7 @@ def _document_to_ai_dict(item: models.Document | None, tz_name: str) -> dict | N
     if not item:
         return None
     return {
+        "document_id": int(getattr(item, "id", 0) or 0),
         "doc_type": _document_type_key(item.doc_type),
         "detected_doc_type": _infer_document_type(item),
         "file_format": _document_file_format(item),
@@ -7135,6 +7164,18 @@ def _document_to_ai_dict(item: models.Document | None, tz_name: str) -> dict | N
         "notes": _clip_text(item.notes or "", 180),
         "ocr_excerpt": _clip_text(item.ocr_text or "", 240),
     }
+
+
+def _ordered_unique_document_ids_from_chunks(chunks: list[dict] | None) -> list[int]:
+    ordered: list[int] = []
+    seen: set[int] = set()
+    for item in chunks or []:
+        document_id = int(item.get("document_id") or 0)
+        if document_id <= 0 or document_id in seen:
+            continue
+        seen.add(document_id)
+        ordered.append(document_id)
+    return ordered
 
 
 def _document_insights(documents: list[models.Document], tz_name: str) -> dict:
@@ -10503,8 +10544,10 @@ def _build_chat_context_base(
         if modules.get("adherence")
         else {}
     )
+    document_ids: list[int] = []
     document_summaries = []
     document_entities_by_document: dict[int, list[models.DocumentClinicalEntity]] = {}
+    relevant_documents: list[models.Document] = []
     if modules.get("document_summaries") and documents:
         document_ids = [doc.id for doc in documents if getattr(doc, "id", None) is not None]
         if document_ids:
@@ -10614,6 +10657,107 @@ def _build_chat_context_base(
         if document_memory_requested
         else []
     )
+    relevant_document_ids = _ordered_unique_document_ids_from_chunks(relevant_document_chunks)
+    if relevant_document_ids and permissions_validated.get("view_documents"):
+        loaded_document_ids = {
+            int(getattr(doc, "id", 0) or 0)
+            for doc in documents
+            if getattr(doc, "id", None) is not None
+        }
+        missing_document_ids = [doc_id for doc_id in relevant_document_ids if doc_id not in loaded_document_ids]
+        extra_relevant_documents = (
+            _safe_ai_context_query(
+                db,
+                module_name="relevant-documents",
+                loader=lambda: (
+                    db.query(models.Document)
+                    .filter(
+                        models.Document.id.in_(missing_document_ids),
+                        *_document_scope_filter(profile, target_user_id),
+                    )
+                    .all()
+                ),
+                default_value=[],
+                degraded_reasons=degraded_reasons,
+                statement_timeout_ms=statement_timeout_ms,
+                context_deadline_ts=context_deadline_ts,
+                observability=query_observability,
+            )
+            if missing_document_ids
+            else []
+        )
+        documents_by_id = {
+            int(getattr(doc, "id", 0) or 0): doc
+            for doc in [*documents, *extra_relevant_documents]
+            if getattr(doc, "id", None) is not None
+        }
+        relevant_documents = [
+            documents_by_id[doc_id]
+            for doc_id in relevant_document_ids
+            if doc_id in documents_by_id
+        ][:5]
+
+        if modules.get("document_summaries") and relevant_documents:
+            relevant_ids = [
+                int(getattr(doc, "id", 0) or 0)
+                for doc in relevant_documents
+                if getattr(doc, "id", None) is not None
+            ]
+            existing_summary_ids = {
+                int(getattr(item, "document_id", 0) or 0)
+                for item in document_summaries
+                if getattr(item, "document_id", None) is not None
+            }
+            missing_summary_ids = [doc_id for doc_id in relevant_ids if doc_id not in existing_summary_ids]
+            if missing_summary_ids:
+                extra_summary_rows = _safe_ai_context_query(
+                    db,
+                    module_name="relevant-document-summaries",
+                    loader=lambda: (
+                        db.query(models.DocumentSummary)
+                        .filter(models.DocumentSummary.document_id.in_(missing_summary_ids))
+                        .all()
+                    ),
+                    default_value=[],
+                    degraded_reasons=degraded_reasons,
+                    statement_timeout_ms=statement_timeout_ms,
+                    context_deadline_ts=context_deadline_ts,
+                    observability=query_observability,
+                )
+                summary_map = {
+                    int(getattr(item, "document_id", 0) or 0): item
+                    for item in [*document_summaries, *extra_summary_rows]
+                    if getattr(item, "document_id", None) is not None
+                }
+                document_summaries = [
+                    summary_map[doc_id]
+                    for doc_id in [*document_ids, *missing_summary_ids]
+                    if doc_id in summary_map
+                ]
+
+            entity_loaded_ids = {int(key) for key in document_entities_by_document.keys()}
+            missing_entity_ids = [doc_id for doc_id in relevant_ids if doc_id not in entity_loaded_ids]
+            if missing_entity_ids:
+                extra_entity_rows = _safe_ai_context_query(
+                    db,
+                    module_name="relevant-document-entities",
+                    loader=lambda: (
+                        db.query(models.DocumentClinicalEntity)
+                        .filter(models.DocumentClinicalEntity.document_id.in_(missing_entity_ids))
+                        .order_by(
+                            models.DocumentClinicalEntity.document_id.asc(),
+                            models.DocumentClinicalEntity.created_at.asc(),
+                        )
+                        .all()
+                    ),
+                    default_value=[],
+                    degraded_reasons=degraded_reasons,
+                    statement_timeout_ms=statement_timeout_ms,
+                    context_deadline_ts=context_deadline_ts,
+                    observability=query_observability,
+                )
+                for entity in extra_entity_rows:
+                    document_entities_by_document.setdefault(entity.document_id, []).append(entity)
     conversation_summaries = _safe_ai_context_query(
         db,
         module_name="conversation-summaries",
@@ -10743,6 +10887,7 @@ def _build_chat_context_base(
         "document_summaries": document_summaries,
         "document_entities_by_document": document_entities_by_document,
         "document_chunks": relevant_document_chunks,
+        "relevant_documents": relevant_documents,
         "health_alerts": [],
         "profile_health_features": None,
         "family_context": family_context,
@@ -10966,6 +11111,43 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             }
             for index, item in enumerate(context["documents"][:documents_limit])
         ]
+        if context.get("relevant_documents"):
+            summary_map = {
+                int(getattr(item, "document_id", 0) or 0): item
+                for item in (context.get("document_summaries") or [])
+                if getattr(item, "document_id", None) is not None
+            }
+            chunk_relevance_map = {}
+            for item in (context.get("document_chunks") or []):
+                document_id = int(item.get("document_id") or 0)
+                if document_id <= 0 or document_id in chunk_relevance_map:
+                    continue
+                chunk_relevance_map[document_id] = round(float(item.get("relevance") or 0.0), 4)
+            payload["relevant_documents"] = [
+                {
+                    **(_document_to_ai_dict(item, timezone_name) or {}),
+                    "relevance": chunk_relevance_map.get(int(getattr(item, "id", 0) or 0), 0.0),
+                    **(
+                        {
+                            "summary_plain": _clip_text(
+                                getattr(summary_map.get(int(getattr(item, "id", 0) or 0)), "summary_plain", "") or "",
+                                max(180, brief_summary_chars),
+                            ),
+                            "patient_friendly_explanation": _clip_text(
+                                getattr(
+                                    summary_map.get(int(getattr(item, "id", 0) or 0)),
+                                    "patient_friendly_explanation",
+                                    "",
+                                ) or "",
+                                max(220, family_summary_chars),
+                            ),
+                        }
+                        if summary_map.get(int(getattr(item, "id", 0) or 0))
+                        else {}
+                    ),
+                }
+                for item in (context.get("relevant_documents") or [])[: min(3, documents_limit)]
+            ]
     if enabled_modules.get("document_summaries"):
         payload["document_summaries"] = [
             {
@@ -11113,9 +11295,10 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
         "26. Si el contexto incluye 'chat_attachment' con ocr_text, analiza ese documento prioritariamente: identifica su tipo (receta, examen, informe, orden), extrae la informacion clave (medicamentos y dosis si es receta; valores y rangos si es examen; diagnostico y hallazgos si es informe), entrega primero un resumen en lenguaje simple y luego responde la pregunta del usuario. Advierte si la calidad del OCR puede afectar la lectura.\n"
         "27. Para documentos de tipo examen en chat_attachment: indica explicitamente si los valores parecen normales o alterados segun los rangos de referencia del documento, sin diagnosticar. Para recetas: lista medicamentos, dosis y frecuencia. Para informes: resume diagnostico principal y recomendaciones.\n"
-        "28. Si el usuario pregunta sobre un documento que subio previamente (no en este chat), busca en 'documents' y 'document_summaries' del contexto clinico para responder con datos reales.\n"
-        "29. Si existe 'document_chunks', prioriza esos fragmentos porque ya fueron recuperados por relevancia semántica y permisos validados.\n"
-        "30. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
+        "28. Si el usuario pregunta sobre un documento que subio previamente (no en este chat), busca en 'relevant_documents', 'document_chunks', 'documents' y 'document_summaries' para responder con datos reales.\n"
+        "29. Si existe 'relevant_documents', prioriza esos documentos porque ya fueron seleccionados por relevancia para la pregunta actual.\n"
+        "30. Si existe 'document_chunks', prioriza esos fragmentos porque ya fueron recuperados por relevancia semántica y permisos validados.\n"
+        "31. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -11499,31 +11682,32 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             parts.append("La lectura OCR puede contener errores y conviene validarla con el archivo original.")
         return " ".join(parts)
 
-    if any(token in normalized for token in ["ultimo documento", "explicame mi ultimo documento", "documento", "ocr"]):
+    latest_document_tokens = [
+        "ultimo documento",
+        "último documento",
+        "explicame mi ultimo documento",
+        "explícame mi último documento",
+        "ultimo informe",
+        "último informe",
+        "ultimo resultado",
+        "último resultado",
+        "ultimo examen",
+        "último examen",
+    ]
+    if any(token in normalized for token in latest_document_tokens):
         if not latest_document:
             return (
                 "No encuentro documentos registrados para el perfil activo. "
                 "Si subes un documento, podré ayudarte a resumirlo."
             )
-        doc_type = str(getattr(latest_document.doc_type, "value", latest_document.doc_type))
-        detected_type = _infer_document_type(latest_document)
-        file_format = _document_file_format(latest_document)
-        parts = [f"El último documento registrado es de tipo {doc_type} (detectado: {detected_type}) en formato {file_format}."]
-        if latest_document.date:
-            parts.append(f"Fecha registrada: {_safe_iso(latest_document.date)}.")
-        if latest_document.center:
-            parts.append(f"Centro asociado: {latest_document.center}.")
-        if latest_document.notes:
-            parts.append(f"Notas guardadas: {_clip_text(latest_document.notes, 220)}.")
-        if latest_document.ocr_text:
-            parts.append(f"Resumen OCR orientativo: {_clip_text(latest_document.ocr_text, 900)}")
-            parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
-        else:
-            parts.append("Todavía no hay texto OCR disponible para ese documento.")
-        summary_row = document_summaries[0] if document_summaries else None
-        if summary_row and summary_row.patient_friendly_explanation:
-            parts.append("Explicación simple: " + _clip_text(summary_row.patient_friendly_explanation, 280))
-        return " ".join(parts)
+        return _structured_document_reply(latest_document, context)
+
+    relevant_documents = context.get("relevant_documents") or []
+    if relevant_documents and any(
+        token in normalized
+        for token in ["documento", "ocr", "informe", "resultado", "receta", "orden", "pdf", "imagen", "archivo"]
+    ):
+        return _structured_document_reply(relevant_documents[0], context)
 
     if any(token in normalized for token in ["resumen de medicamentos", "mis medicamentos", "estado de medicamentos"]):
         status_counts = medication_insights.get("counts_by_status") or {}
@@ -11615,6 +11799,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     normalized = _normalize_text(message or "")
     refs: list[dict] = []
     latest_document = context.get("latest_document")
+    relevant_documents = context.get("relevant_documents") or []
     active_medications = context.get("active_medications") or []
     upcoming = context.get("upcoming") or []
     document_insights = context.get("document_insights") or {}
@@ -11625,15 +11810,25 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     family_context = context.get("family_context") or {}
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
 
-    if latest_document and any(
-        token in normalized for token in ["documento", "ocr", "ultimo documento", "explicame mi ultimo documento"]
-    ):
-        doc_type = _infer_document_type(latest_document)
+    referenced_document = (
+        relevant_documents[0]
+        if relevant_documents and any(
+            token in normalized for token in ["documento", "documentos", "ocr", "informe", "resultado", "receta", "orden", "pdf", "imagen", "archivo"]
+        )
+        else latest_document
+        if latest_document and any(
+            token in normalized for token in ["ultimo documento", "explicame mi ultimo documento", "ultimo informe", "ultimo resultado", "ultimo examen"]
+        )
+        else None
+    )
+
+    if referenced_document:
+        doc_type = _infer_document_type(referenced_document)
         refs.append(
             {
                 "kind": "document",
-                "label": f"Documento {latest_document.filename or f'#{latest_document.id}'}",
-                "detail": f"{doc_type} | {_document_file_format(latest_document)} | {latest_document.center or 'Sin centro'}",
+                "label": f"Documento {referenced_document.filename or f'#{referenced_document.id}'}",
+                "detail": f"{doc_type} | {_document_file_format(referenced_document)} | {referenced_document.center or 'Sin centro'}",
             }
         )
 
@@ -15881,6 +16076,11 @@ async def record_medication_intake(
             or "source" in detail
             or "notes" in detail
             or "created_at" in detail
+            or "no such column" in detail
+            or "has no column named" in detail
+            or "undefined column" in detail
+            or "unknown column" in detail
+            or "invalid column name" in detail
         )
 
     def _legacy_write_taken_intake():
@@ -15941,7 +16141,7 @@ async def record_medication_intake(
 
     try:
         return _write_intake_record()
-    except ProgrammingError as exc:
+    except DBAPIError as exc:
         db.rollback()
         if _is_medication_intake_schema_error(exc):
             print(
