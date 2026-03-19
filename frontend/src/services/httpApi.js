@@ -111,11 +111,6 @@ export async function getPublicPlans() {
     : [];
 }
 
-export async function joinWaitlist(payload) {
-  const res = await api.post("/public/waitlist", payload);
-  return res.data;
-}
-
 export async function getHealthProfiles() {
   const res = await api.get("/health-profiles");
   return res.data;

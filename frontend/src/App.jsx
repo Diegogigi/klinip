@@ -15,8 +15,6 @@ import Stats from "./pages/Stats";
 import AiKlinip from "./pages/AiKlinip";
 import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
-import WaitlistLanding from "./pages/WaitlistLanding";
-import WaitlistDashboard from "./pages/WaitlistDashboard";
 import Plans from "./pages/Plans";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
@@ -33,34 +31,6 @@ import {
   setActiveHealthProfile,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
-
-const WAITLIST_ONLY_MODE = String(import.meta.env.VITE_WAITLIST_ONLY ?? "true").toLowerCase() !== "false";
-
-function normalizeInternalPath(rawValue, fallback = "/") {
-  let raw = String(rawValue ?? fallback).trim();
-  if (!raw) raw = fallback;
-  raw = raw.split("?")[0].split("#")[0];
-  if (!raw.startsWith("/")) raw = `/${raw}`;
-  raw = raw.replace(/\/{2,}/g, "/");
-  if (raw.length > 1) raw = raw.replace(/\/+$/, "");
-  return raw || fallback;
-}
-
-function matchesPath(currentPath, expectedPath) {
-  if (!currentPath || !expectedPath) return false;
-  return currentPath === expectedPath || currentPath === `${expectedPath}/`;
-}
-
-const INTERNAL_LOGIN_PATH = normalizeInternalPath(
-  import.meta.env.VITE_INTERNAL_LOGIN_PATH ?? "/acceso-interno",
-  "/acceso-interno"
-);
-const INTERNAL_WAITLIST_PATH = normalizeInternalPath(
-  `${INTERNAL_LOGIN_PATH}/fila`,
-  "/acceso-interno/fila"
-);
-const INTERNAL_LOGIN_PATH_TRAILING = `${INTERNAL_LOGIN_PATH}/`;
-const INTERNAL_WAITLIST_PATH_TRAILING = `${INTERNAL_WAITLIST_PATH}/`;
 
 const icons = {
   home: (
@@ -157,7 +127,6 @@ function Sidebar({
   const location = useLocation();
   const isPublicAuthRoute =
     location.pathname === "/login" ||
-    matchesPath(location.pathname, INTERNAL_LOGIN_PATH) ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -337,7 +306,6 @@ function Topbar({
 
   const isAuthRoute =
     location.pathname === "/login" ||
-    matchesPath(location.pathname, INTERNAL_LOGIN_PATH) ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
     location.pathname === "/reset-password";
@@ -355,13 +323,10 @@ function Topbar({
     "/family": "Mi familia",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
-    [INTERNAL_WAITLIST_PATH]: "Fila",
   };
-  const title = titles[matchesPath(location.pathname, INTERNAL_WAITLIST_PATH) ? INTERNAL_WAITLIST_PATH : location.pathname] || "Klinip";
+  const title = titles[location.pathname] || "Klinip";
   const subtitle =
-    matchesPath(location.pathname, INTERNAL_WAITLIST_PATH)
-      ? "Acceso interno"
-      : location.pathname === "/"
+    location.pathname === "/"
       ? "Panel general"
       : "Tu ruta de salud";
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
@@ -692,7 +657,7 @@ const getPathFromNotification = (item) => {
 
 function ProtectedRoute({ user, children }) {
   if (!user) {
-    return <Navigate to={INTERNAL_LOGIN_PATH} replace />;
+    return <Navigate to="/login" replace />;
   }
   return children;
 }
@@ -1365,7 +1330,7 @@ export default function App() {
     }
     setUser(null);
     setBooting(false);
-    navigate(INTERNAL_LOGIN_PATH, { replace: true });
+    navigate("/login", { replace: true });
     try {
       await pushCleanup;
     } catch (_) {
@@ -1585,8 +1550,7 @@ export default function App() {
 
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
-  const isPublicLanding = !user && location.pathname === "/";
-  const isPublicMarketingRoute = isPublicLanding || isPlansRoute;
+  const isPublicMarketingRoute = (!user && location.pathname === "/") || isPlansRoute;
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname === "/settings";
@@ -1927,13 +1891,6 @@ export default function App() {
           >
             <Routes>
               <Route
-                path={INTERNAL_LOGIN_PATH}
-                element={
-                  user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
-                }
-              />
-              <Route path={INTERNAL_LOGIN_PATH_TRAILING} element={<Navigate to={INTERNAL_LOGIN_PATH} replace />} />
-              <Route
                 path="/login"
                 element={
                   user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
@@ -1950,13 +1907,7 @@ export default function App() {
               <Route
                 path="/register"
                 element={
-                  user ? (
-                    <Navigate to="/" replace />
-                  ) : WAITLIST_ONLY_MODE ? (
-                    <Navigate to="/" replace />
-                  ) : (
-                    <Register onRegistered={setUser} />
-                  )
+                  user ? <Navigate to="/" replace /> : <Register onRegistered={setUser} />
                 }
               />
               <Route path="/legal/privacy" element={<LegalPrivacy />} />
@@ -1965,11 +1916,11 @@ export default function App() {
               <Route path="/legal/notificaciones" element={<LegalNotifications />} />
               <Route
                 path="/planes"
-                element={WAITLIST_ONLY_MODE && !user ? <Navigate to="/" replace /> : <Plans user={user} />}
+                element={<Plans user={user} />}
               />
               <Route
                 path="/planes/:planSlug"
-                element={WAITLIST_ONLY_MODE && !user ? <Navigate to="/" replace /> : <Plans user={user} />}
+                element={<Plans user={user} />}
               />
               <Route
                 path="/"
@@ -1979,19 +1930,10 @@ export default function App() {
                       <Dashboard key={`dashboard-${activeHealthProfileId || "none"}`} user={user} />
                     </ProtectedRoute>
                   ) : (
-                    WAITLIST_ONLY_MODE ? <WaitlistLanding /> : <Landing />
+                    <Landing />
                   )
                 }
               />
-              <Route
-                path={INTERNAL_WAITLIST_PATH}
-                element={
-                  <ProtectedRoute user={user}>
-                    <WaitlistDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path={INTERNAL_WAITLIST_PATH_TRAILING} element={<Navigate to={INTERNAL_WAITLIST_PATH} replace />} />
               <Route
                 path="/appointments"
                 element={
