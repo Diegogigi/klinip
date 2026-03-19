@@ -458,6 +458,11 @@ def ensure_user_schema():
                             "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)"
                         )
                     )
+            print(
+                f"DEBUG ensure_user_schema: columnas agregadas a users: {', '.join(added_columns)}"
+            )
+        else:
+            print("DEBUG ensure_user_schema: tabla users ya esta al dia")
     except Exception as exc:
         print(f"WARNING ensure_user_schema: no se pudo ajustar la tabla: {exc}")
 
@@ -824,15 +829,19 @@ def ensure_ai_memory_schema():
         inspector = inspect(engine)
         backend = engine.url.get_backend_name()
         table_names = set(inspector.get_table_names())
-        with engine.begin() as conn:
-            if backend == "postgresql":
-                try:
-                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-                except Exception as exc:
-                    print(f"WARNING ensure_ai_memory_schema: no se pudo habilitar pgvector: {exc}")
+        vector_available = False
 
-            if "ai_document_chunks" in table_names:
-                try:
+        if backend == "postgresql":
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                vector_available = True
+            except Exception as exc:
+                print(f"WARNING ensure_ai_memory_schema: no se pudo habilitar pgvector: {exc}")
+
+        if "ai_document_chunks" in table_names:
+            try:
+                with engine.begin() as conn:
                     conn.execute(
                         text(
                             "CREATE INDEX IF NOT EXISTS ix_ai_document_chunks_profile_document "
@@ -845,22 +854,24 @@ def ensure_ai_memory_schema():
                             "ON ai_document_chunks (user_id, document_type)"
                         )
                     )
-                except Exception as exc:
-                    print(f"WARNING ensure_ai_memory_schema: no se pudieron crear indices basicos: {exc}")
+            except Exception as exc:
+                print(f"WARNING ensure_ai_memory_schema: no se pudieron crear indices basicos: {exc}")
 
-                if backend == "postgresql":
-                    chunk_columns = {col["name"] for col in inspector.get_columns("ai_document_chunks")}
-                    if "embedding_vector" not in chunk_columns:
-                        try:
+            if backend == "postgresql" and vector_available:
+                chunk_columns = {col["name"] for col in inspector.get_columns("ai_document_chunks")}
+                if "embedding_vector" not in chunk_columns:
+                    try:
+                        with engine.begin() as conn:
                             conn.execute(
                                 text(
                                     "ALTER TABLE ai_document_chunks "
                                     "ADD COLUMN IF NOT EXISTS embedding_vector vector(256)"
                                 )
                             )
-                        except Exception as exc:
-                            print(f"WARNING ensure_ai_memory_schema: no se pudo crear columna vector: {exc}")
-                    try:
+                    except Exception as exc:
+                        print(f"WARNING ensure_ai_memory_schema: no se pudo crear columna vector: {exc}")
+                try:
+                    with engine.begin() as conn:
                         conn.execute(
                             text(
                                 "CREATE INDEX IF NOT EXISTS ix_ai_document_chunks_embedding_vector "
@@ -868,30 +879,32 @@ def ensure_ai_memory_schema():
                                 "(embedding_vector vector_cosine_ops) WITH (lists = 100)"
                             )
                         )
-                    except Exception as exc:
-                        print(f"WARNING ensure_ai_memory_schema: no se pudo crear indice pgvector: {exc}")
+                except Exception as exc:
+                    print(f"WARNING ensure_ai_memory_schema: no se pudo crear indice pgvector: {exc}")
 
-            if "ai_conversation_summaries" in table_names:
-                try:
+        if "ai_conversation_summaries" in table_names:
+            try:
+                with engine.begin() as conn:
                     conn.execute(
                         text(
                             "CREATE INDEX IF NOT EXISTS ix_ai_conversation_summaries_profile_updated "
                             "ON ai_conversation_summaries (profile_id, updated_at)"
                         )
                     )
-                except Exception as exc:
-                    print(f"WARNING ensure_ai_memory_schema: no se pudo indexar resúmenes de conversación: {exc}")
+            except Exception as exc:
+                print(f"WARNING ensure_ai_memory_schema: no se pudo indexar resúmenes de conversación: {exc}")
 
-            if "ai_query_metrics" in table_names:
-                try:
+        if "ai_query_metrics" in table_names:
+            try:
+                with engine.begin() as conn:
                     conn.execute(
                         text(
                             "CREATE INDEX IF NOT EXISTS ix_ai_query_metrics_profile_created "
                             "ON ai_query_metrics (profile_id, created_at)"
                         )
                     )
-                except Exception as exc:
-                    print(f"WARNING ensure_ai_memory_schema: no se pudo indexar métricas IA: {exc}")
+            except Exception as exc:
+                print(f"WARNING ensure_ai_memory_schema: no se pudo indexar métricas IA: {exc}")
 
         print("DEBUG ensure_ai_memory_schema: tablas y extensiones de memoria verificadas")
     except Exception as exc:
@@ -1207,6 +1220,47 @@ ensure_family_schema_data()
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@klinip.app")
+
+
+def ensure_login_security_schema():
+    """
+    Refuerzo puntual para entornos donde el esquema de users quedó desfasado
+    respecto del flujo de login.
+    """
+    backend = engine.url.get_backend_name()
+    try:
+        with engine.begin() as conn:
+            if backend == "postgresql":
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP NULL"
+                    )
+                )
+            else:
+                inspector = inspect(engine)
+                columns = {col["name"] for col in inspector.get_columns("users")}
+                if "failed_login_attempts" not in columns:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0"
+                        )
+                    )
+                if "locked_until" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN locked_until DATETIME"))
+            conn.execute(
+                text(
+                    "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)"
+                )
+            )
+    except Exception as exc:
+        print(f"WARNING ensure_login_security_schema: no se pudo reforzar users: {exc}")
 
 
 def send_web_push(subscription: models.PushSubscription, payload: dict):
@@ -12192,6 +12246,7 @@ def login(
 ):
     # 1. Rate limiting por IP
     _check_rate_limit(request, "login")
+    ensure_login_security_schema()
 
     email = (form_data.username or "").lower().strip()
     user  = auth.get_user_by_email(db, email)
