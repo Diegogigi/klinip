@@ -2772,6 +2772,39 @@ body.theme-dark .modal-card h3 {
   color: #e2e8f0;
 }
 
+body.theme-dark .stepup-modal-lock {
+  color: #93c5fd;
+}
+
+body.theme-dark .stepup-modal-title-wrap p {
+  color: #94a3b8;
+}
+
+body.theme-dark .stepup-modal-close {
+  background: #111827;
+  border-color: #243244;
+  color: #e2e8f0;
+}
+
+body.theme-dark .stepup-modal-close:hover {
+  background: #162134;
+  border-color: #2f435c;
+  color: #f8fafc;
+}
+
+body.theme-dark .stepup-method-btn {
+  background: #111b2e;
+  border-color: #243244;
+  color: #cbd5e1;
+}
+
+body.theme-dark .stepup-method-btn.is-active {
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.3) 0%, rgba(37, 99, 235, 0.24) 100%);
+  border-color: rgba(96, 165, 250, 0.42);
+  color: #bfdbfe;
+  box-shadow: 0 14px 28px rgba(2, 6, 23, 0.32);
+}
+
 body.theme-dark .detail-modal-header {
   border-bottom-color: transparent;
 }
@@ -5450,6 +5483,188 @@ body.theme-dark .primary-btn {
 .modal-card h3 {
   margin: 0 0 0.75rem;
   color: #0f172a;
+}
+
+.stepup-modal-backdrop {
+  z-index: 2300;
+}
+
+.stepup-modal-card {
+  width: min(440px, 100%);
+  max-width: min(440px, calc(100vw - 1.2rem));
+  padding: 1.1rem;
+  border-radius: 28px;
+}
+
+.stepup-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.stepup-modal-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.stepup-modal-lock {
+  width: 22px;
+  height: 22px;
+  color: #1d4ed8;
+  flex: 0 0 auto;
+  margin-top: 0.15rem;
+}
+
+.stepup-modal-title-wrap h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.15;
+}
+
+.stepup-modal-title-wrap p {
+  margin: 0.22rem 0 0;
+  color: #475569;
+  font-size: 0.96rem;
+  line-height: 1.5;
+}
+
+.stepup-modal-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #ffffff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.stepup-modal-close:hover {
+  background: #f8fafc;
+  border-color: rgba(59, 130, 246, 0.28);
+  color: #0f172a;
+}
+
+.stepup-modal-body {
+  margin-top: 0.9rem;
+}
+
+.stepup-method-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.stepup-method-btn {
+  min-height: 40px;
+  border-radius: 14px;
+  border: 1px solid #dbe5f2;
+  background: #f8fbff;
+  color: #475569;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.55rem 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stepup-method-btn.is-active {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: rgba(37, 99, 235, 0.34);
+  color: #1d4ed8;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.12);
+}
+
+.stepup-alert {
+  margin-bottom: 0.8rem;
+}
+
+.stepup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.stepup-help-text {
+  display: block;
+  margin-top: 0.45rem;
+  line-height: 1.45;
+}
+
+.stepup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.stepup-actions .primary-btn,
+.stepup-actions .secondary-btn {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.stepup-spinner {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 640px) {
+  .stepup-modal-backdrop {
+    padding: 0.7rem;
+  }
+
+  .stepup-modal-card {
+    max-width: calc(100vw - 1.4rem);
+    padding: 0.9rem;
+    border-radius: 22px;
+  }
+
+  .stepup-modal-header {
+    gap: 0.55rem;
+  }
+
+  .stepup-modal-title-wrap {
+    gap: 0.55rem;
+  }
+
+  .stepup-modal-title-wrap h3 {
+    font-size: 1rem;
+  }
+
+  .stepup-modal-title-wrap p {
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .stepup-method-switch,
+  .stepup-actions {
+    gap: 0.45rem;
+  }
+
+  .stepup-method-btn,
+  .stepup-actions .primary-btn,
+  .stepup-actions .secondary-btn {
+    min-height: 40px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    padding: 0.58rem 0.72rem;
+  }
+
+  .stepup-help-text {
+    margin-top: 0.38rem;
+    font-size: 0.76rem;
+  }
 }
 
 .modal-actions {

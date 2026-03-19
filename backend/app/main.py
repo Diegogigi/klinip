@@ -12375,20 +12375,21 @@ def stepup_verify(
       - Contraseña actual (si MFA no activo o como alternativa)
     Devuelve un step-up token válido por 10 minutos.
     """
-    proof = (payload.proof or "").strip()
-    if not proof:
+    raw_proof = payload.proof or ""
+    normalized_proof = raw_proof.strip()
+    if not normalized_proof:
         raise HTTPException(status_code=400, detail="Debes proporcionar una prueba de identidad.")
 
     verified = False
 
     # Opción 1: TOTP (si MFA activo)
     if current_user.mfa_enabled and current_user.mfa_secret:
-        if auth.verify_totp(current_user.mfa_secret, proof):
+        if auth.verify_totp(current_user.mfa_secret, normalized_proof):
             verified = True
 
     # Opción 2: backup code de MFA
     if not verified and current_user.mfa_enabled and current_user.mfa_backup_codes_json:
-        new_codes = auth.verify_backup_code(current_user.mfa_backup_codes_json, proof)
+        new_codes = auth.verify_backup_code(current_user.mfa_backup_codes_json, normalized_proof)
         if new_codes is not None:
             verified = True
             current_user.mfa_backup_codes_json = new_codes
@@ -12397,7 +12398,9 @@ def stepup_verify(
 
     # Opción 3: contraseña actual
     if not verified:
-        if auth.verify_password(proof, current_user.password_hash):
+        if auth.verify_password(raw_proof, current_user.password_hash):
+            verified = True
+        elif raw_proof != normalized_proof and auth.verify_password(normalized_proof, current_user.password_hash):
             verified = True
 
     if not verified:

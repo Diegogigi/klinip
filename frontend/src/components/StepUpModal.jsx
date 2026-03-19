@@ -3,39 +3,43 @@ import { stepUpVerify } from "../api";
 
 /**
  * Modal de step-up authentication.
- * Se muestra cuando una acción sensible (descarga de documento, eliminar cuenta,
- * modificar permisos familiares, etc.) requiere verificación adicional.
- *
- * Props:
- *   open         {boolean}           — controla la visibilidad
- *   onClose      {() => void}        — cerrar sin completar
- *   onVerified   {(token) => void}   — verificación exitosa, recibe el step-up token
- *   hasMfa       {boolean}           — si el usuario tiene MFA activo
- *   actionLabel  {string}            — descripción de la acción (para el mensaje)
+ * Se muestra cuando una acción sensible requiere verificación adicional.
  */
-export default function StepUpModal({ open, onClose, onVerified, hasMfa = false, actionLabel = "esta acción" }) {
+export default function StepUpModal({
+  open,
+  onClose,
+  onVerified,
+  hasMfa = false,
+  actionLabel = "esta acción",
+}) {
   const [proof, setProof] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [method, setMethod] = useState(hasMfa ? "code" : "password");
   const inputRef = useRef(null);
+
+  const isPasswordMethod = method === "password";
+  const normalizedProof = isPasswordMethod ? proof : proof.trim();
+  const canSubmit = isPasswordMethod ? proof.length > 0 : normalizedProof.length > 0;
 
   useEffect(() => {
     if (open) {
       setProof("");
       setError("");
+      setMethod(hasMfa ? "code" : "password");
       setTimeout(() => inputRef.current?.focus(), 80);
     }
-  }, [open]);
+  }, [hasMfa, open]);
 
   if (!open) return null;
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!proof.trim()) return;
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!canSubmit) return;
     setLoading(true);
     setError("");
     try {
-      const res = await stepUpVerify({ proof: proof.trim() });
+      const res = await stepUpVerify({ proof: normalizedProof });
       if (res?.stepup_token) {
         setProof("");
         onVerified(res.stepup_token);
@@ -56,60 +60,108 @@ export default function StepUpModal({ open, onClose, onVerified, hasMfa = false,
 
   return (
     <div
-      className="modal-overlay"
-      style={{ zIndex: 2100 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      className="modal-backdrop stepup-modal-backdrop"
+      onClick={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="modal-card" style={{ maxWidth: 400 }}>
-        <div className="modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1e40af" strokeWidth="2">
+      <div
+        className="modal-card stepup-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="stepup-modal-title"
+      >
+        <div className="stepup-modal-header">
+          <div className="stepup-modal-title-wrap">
+            <svg
+              className="stepup-modal-lock"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
-            <span style={{ fontWeight: 600, fontSize: "1rem" }}>Verificación requerida</span>
+            <div>
+              <h3 id="stepup-modal-title">Verificación requerida</h3>
+              <p>
+                Para <strong>{actionLabel}</strong>, confirma tu identidad.
+              </p>
+            </div>
           </div>
-          <button className="modal-close" onClick={onClose} aria-label="Cerrar">×</button>
+          <button className="stepup-modal-close" type="button" onClick={onClose} aria-label="Cerrar">
+            ×
+          </button>
         </div>
 
-        <div className="modal-body">
-          <p className="muted" style={{ marginBottom: "1rem" }}>
-            Para <strong>{actionLabel}</strong>, confirma tu identidad:
-          </p>
+        <div className="stepup-modal-body">
+          {hasMfa ? (
+            <div className="stepup-method-switch" role="tablist" aria-label="Método de verificación">
+              <button
+                type="button"
+                className={`stepup-method-btn${!isPasswordMethod ? " is-active" : ""}`}
+                onClick={() => {
+                  setMethod("code");
+                  setProof("");
+                  setError("");
+                }}
+              >
+                Código o respaldo
+              </button>
+              <button
+                type="button"
+                className={`stepup-method-btn${isPasswordMethod ? " is-active" : ""}`}
+                onClick={() => {
+                  setMethod("password");
+                  setProof("");
+                  setError("");
+                }}
+              >
+                Contraseña
+              </button>
+            </div>
+          ) : null}
 
-          {error && (
-            <div className="auth-alert error" style={{ marginBottom: "0.75rem" }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+          {error ? (
+            <div className="auth-alert error stepup-alert">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" />
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               <span>{error}</span>
             </div>
-          )}
+          ) : null}
 
-          <form onSubmit={handleSubmit}>
-            <div className="input-group" style={{ marginBottom: "1rem" }}>
+          <form onSubmit={handleSubmit} className="stepup-form">
+            <div className="input-group">
               <label className="input-label">
-                {hasMfa
-                  ? "Código de autenticador, código de respaldo o contraseña"
-                  : "Contraseña actual"}
+                {isPasswordMethod
+                  ? "Contraseña actual"
+                  : "Código del autenticador o código de respaldo"}
               </label>
               <input
                 ref={inputRef}
                 className="input-field"
-                type={hasMfa ? "text" : "password"}
-                inputMode={hasMfa ? "numeric" : undefined}
+                type={isPasswordMethod ? "password" : "text"}
+                inputMode={isPasswordMethod ? undefined : "text"}
                 value={proof}
-                onChange={(e) => setProof(hasMfa ? e.target.value.slice(0, 16) : e.target.value)}
-                placeholder={hasMfa ? "000000 o código de respaldo" : "••••••••"}
-                autoComplete={hasMfa ? "one-time-code" : "current-password"}
-                maxLength={hasMfa ? 16 : 128}
+                onChange={(event) =>
+                  setProof(isPasswordMethod ? event.target.value : event.target.value.slice(0, 32))
+                }
+                placeholder={isPasswordMethod ? "Ingresa tu contraseña actual" : "000000 o código de respaldo"}
+                autoComplete={isPasswordMethod ? "current-password" : "one-time-code"}
+                maxLength={isPasswordMethod ? 128 : 32}
                 disabled={loading}
               />
+              <span className="tiny-note stepup-help-text">
+                {isPasswordMethod
+                  ? "Usa tu contraseña exacta. Si contiene espacios, se respetarán tal como los escribas."
+                  : "Puedes usar el código de 6 dígitos del autenticador o un código de respaldo."}
+              </span>
             </div>
 
-            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+            <div className="stepup-actions">
               <button
                 type="button"
                 className="secondary-btn"
@@ -121,11 +173,11 @@ export default function StepUpModal({ open, onClose, onVerified, hasMfa = false,
               <button
                 type="submit"
                 className="primary-btn"
-                disabled={loading || !proof.trim()}
+                disabled={loading || !canSubmit}
               >
                 {loading ? (
                   <>
-                    <span className="auth-spinner" style={{ width: "14px", height: "14px" }}></span>
+                    <span className="auth-spinner stepup-spinner"></span>
                     Verificando...
                   </>
                 ) : (
