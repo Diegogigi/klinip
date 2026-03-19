@@ -15826,6 +15826,8 @@ async def record_medication_intake(
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
+    ensure_medication_intake_schema()
+
     requested_status = _normalize_adherence_status(getattr(payload, "status", "taken"))
     scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
         med,
@@ -15833,30 +15835,31 @@ async def record_medication_intake(
         getattr(payload, "scheduled_at", None),
         getattr(payload, "taken_at", None),
     )
-    intake = None
-    if scheduled_at:
-        intake = (
-            db.query(models.MedicationIntake)
-            .filter(
-                models.MedicationIntake.medication_id == medication_id,
-                models.MedicationIntake.user_id == target_user_id,
-                models.MedicationIntake.scheduled_at == scheduled_at,
+
+    def _write_intake_record():
+        intake = None
+        if scheduled_at:
+            intake = (
+                db.query(models.MedicationIntake)
+                .filter(
+                    models.MedicationIntake.medication_id == medication_id,
+                    models.MedicationIntake.user_id == target_user_id,
+                    models.MedicationIntake.scheduled_at == scheduled_at,
+                )
+                .order_by(models.MedicationIntake.id.desc())
+                .first()
             )
-            .order_by(models.MedicationIntake.id.desc())
-            .first()
-        )
-    if not intake:
-        intake = models.MedicationIntake(
-            user_id=target_user_id,
-            medication_id=medication_id,
-        )
-    intake.scheduled_at = scheduled_at
-    intake.taken_at = taken_at
-    intake.status = normalized_status
-    intake.source = _safe_text(getattr(payload, "source", "") or "manual")[:40] or "manual"
-    intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
-    db.add(intake)
-    try:
+        if not intake:
+            intake = models.MedicationIntake(
+                user_id=target_user_id,
+                medication_id=medication_id,
+            )
+        intake.scheduled_at = scheduled_at
+        intake.taken_at = taken_at
+        intake.status = normalized_status
+        intake.source = _safe_text(getattr(payload, "source", "") or "manual")[:40] or "manual"
+        intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
+        db.add(intake)
         db.flush()
         try:
             _mark_profile_ai_dirty(db, profile, include_family=True)
@@ -15865,6 +15868,116 @@ async def record_medication_intake(
         db.commit()
         db.refresh(intake)
         return intake
+
+    def _is_medication_intake_schema_error(exc: Exception) -> bool:
+        detail = str(getattr(exc, "orig", exc) or "").lower()
+        return (
+            "medication_intakes" in detail
+            or "scheduled_at" in detail
+            or "status" in detail
+            or "source" in detail
+            or "notes" in detail
+            or "created_at" in detail
+        )
+
+    def _legacy_write_taken_intake():
+        if normalized_status not in {"taken", "late"}:
+            return None
+        fallback_taken_at = taken_at or datetime.now()
+        fallback_source = _safe_text(getattr(payload, "source", "") or "legacy_fallback")[:40] or "legacy_fallback"
+        fallback_notes = _clip_text(getattr(payload, "notes", "") or "", 240)
+        created_at = datetime.now()
+        inserted_id = None
+        backend = engine.url.get_backend_name()
+        if backend == "postgresql":
+            inserted_id = db.execute(
+                text(
+                    """
+                    INSERT INTO medication_intakes (user_id, medication_id, taken_at)
+                    VALUES (:user_id, :medication_id, :taken_at)
+                    RETURNING id
+                    """
+                ),
+                {
+                    "user_id": target_user_id,
+                    "medication_id": medication_id,
+                    "taken_at": fallback_taken_at,
+                },
+            ).scalar()
+        else:
+            result = db.execute(
+                text(
+                    """
+                    INSERT INTO medication_intakes (user_id, medication_id, taken_at)
+                    VALUES (:user_id, :medication_id, :taken_at)
+                    """
+                ),
+                {
+                    "user_id": target_user_id,
+                    "medication_id": medication_id,
+                    "taken_at": fallback_taken_at,
+                },
+            )
+            inserted_id = getattr(result, "lastrowid", None)
+        try:
+            _mark_profile_ai_dirty(db, profile, include_family=True)
+        except Exception as ai_exc:
+            print(f"WARNING medication intake legacy fallback: no se pudo marcar refresh de IA: {ai_exc}")
+        db.commit()
+        return {
+            "id": int(inserted_id or 0),
+            "medication_id": medication_id,
+            "user_id": target_user_id,
+            "scheduled_at": scheduled_at,
+            "taken_at": fallback_taken_at,
+            "status": normalized_status,
+            "source": fallback_source,
+            "notes": fallback_notes,
+            "created_at": created_at,
+        }
+
+    try:
+        return _write_intake_record()
+    except ProgrammingError as exc:
+        db.rollback()
+        if _is_medication_intake_schema_error(exc):
+            print(
+                "WARNING medication intake: se detecto esquema desfasado, reintentando "
+                f"(medication_id={medication_id}, user_id={target_user_id}): {exc}"
+            )
+            ensure_medication_intake_schema()
+            db.expire_all()
+            try:
+                return _write_intake_record()
+            except Exception as retry_exc:
+                db.rollback()
+                if _is_medication_intake_schema_error(retry_exc):
+                    try:
+                        legacy_intake = _legacy_write_taken_intake()
+                        if legacy_intake:
+                            print(
+                                "WARNING medication intake: se uso fallback legado para registrar la toma "
+                                f"(medication_id={medication_id}, user_id={target_user_id})"
+                            )
+                            return legacy_intake
+                    except Exception as legacy_exc:
+                        db.rollback()
+                        print(
+                            "WARNING medication intake: fallo fallback legado "
+                            f"(medication_id={medication_id}, user_id={target_user_id}): {legacy_exc}"
+                        )
+                print(
+                    "WARNING medication intake: fallo tras reintento "
+                    f"(medication_id={medication_id}, status={normalized_status}, scheduled_at={scheduled_at}, "
+                    f"taken_at={taken_at}, user_id={target_user_id}): {retry_exc}"
+                )
+                raise HTTPException(status_code=500, detail="No se pudo registrar la toma")
+        print(
+            "WARNING medication intake: error SQL no recuperable "
+            f"(medication_id={medication_id}, status={normalized_status}, scheduled_at={scheduled_at}, "
+            f"taken_at={taken_at}, user_id={target_user_id}): {exc}"
+        )
+        raise HTTPException(status_code=500, detail="No se pudo registrar la toma")
     except Exception as exc:
         db.rollback()
         print(
