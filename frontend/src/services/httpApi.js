@@ -19,20 +19,81 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Instancia separada para el refresh (no pasa por el interceptor de 401)
+const refreshApi = axios.create({ baseURL: API_URL });
+
+let _isRefreshing = false;
+let _refreshQueue = [];
+
+function _processRefreshQueue(error, token = null) {
+  _refreshQueue.forEach((cb) => (error ? cb.reject(error) : cb.resolve(token)));
+  _refreshQueue = [];
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-    }
-    // 403 con step_up_required: propagar con bandera especial para que el llamador
-    // pueda mostrar el modal de step-up
+  async (error) => {
+    const originalRequest = error.config;
+
+    // 403 con step_up_required: propagar con bandera especial
     if (error.response?.status === 403) {
       const detail = error.response?.data?.detail;
       if (detail?.code === "step_up_required" || detail === "step_up_required") {
         error.stepUpRequired = true;
       }
+      return Promise.reject(error);
     }
+
+    // 401: intentar renovar el access token con el refresh token
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = localStorage.getItem("refresh_token");
+
+      // Sin refresh token → cerrar sesión
+      if (!refreshToken) {
+        localStorage.removeItem("token");
+        return Promise.reject(error);
+      }
+
+      // Si ya hay un refresh en curso, encolar esta petición
+      if (_isRefreshing) {
+        return new Promise((resolve, reject) => {
+          _refreshQueue.push({ resolve, reject });
+        })
+          .then((newToken) => {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            return api(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      _isRefreshing = true;
+
+      try {
+        const res = await refreshApi.post("/auth/token/refresh", {
+          refresh_token: refreshToken,
+        });
+        const newAccessToken = res.data?.access_token;
+        if (!newAccessToken) throw new Error("No access_token en respuesta");
+
+        localStorage.setItem("token", newAccessToken);
+        if (res.data?.refresh_token) {
+          localStorage.setItem("refresh_token", res.data.refresh_token);
+        }
+
+        _processRefreshQueue(null, newAccessToken);
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        _processRefreshQueue(refreshError, null);
+        localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        return Promise.reject(refreshError);
+      } finally {
+        _isRefreshing = false;
+      }
+    }
+
     return Promise.reject(error);
   }
 );
