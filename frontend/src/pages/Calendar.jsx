@@ -398,12 +398,9 @@ export default function Calendar() {
           <div>
             <h2 className="card-title">Calendario de salud</h2>
             <p className="muted calendar-intro-copy">
-              Vista mensual para citas, exÃ¡menes, trÃ¡mites y medicaciÃ³n. Pulsa un dÃ­a para ver el
+              Vista mensual para citas, exámenes, trámites y medicación. Pulsa un día para ver el
               detalle.
             </p>
-              <p className="muted calendar-intro-copy-clean">
-                {"Vista mensual para citas, ex\u00E1menes, tr\u00E1mites y medicaci\u00F3n. Pulsa un d\u00EDa para ver el detalle."}
-              </p>
           </div>
           <div className="calendar-controls">
             <button
@@ -484,15 +481,9 @@ export default function Calendar() {
 
         <div className="legend">
           <span className="legend-dot event-green" /> Citas
-          <span className="legend-dot event-blue" /> ExÃ¡menes
-          <span className="legend-dot event-yellow" /> TrÃ¡mites
-          <span className="legend-dot event-purple" /> MedicaciÃ³n
-        </div>
-        <div className="calendar-legend-clean">
-          <span><span className="legend-dot event-green" /> Citas</span>
-          <span><span className="legend-dot event-blue" /> {"Ex\u00E1menes"}</span>
-          <span><span className="legend-dot event-yellow" /> {"Tr\u00E1mites"}</span>
-          <span><span className="legend-dot event-purple" /> {"Medicaci\u00F3n"}</span>
+          <span className="legend-dot event-blue" /> Exámenes
+          <span className="legend-dot event-yellow" /> Trámites
+          <span className="legend-dot event-purple" /> Medicación
         </div>
 
         {loading ? (
@@ -620,11 +611,8 @@ export default function Calendar() {
             <div className="floating-actions calendar-floating-actions">
               {calendarScope === "both" ? (
                 <>
-                <p className="muted calendar-helper-note calendar-helper-note-legacy">
-                  Elige â€œMioâ€ o â€œCompartidoâ€ para crear una actividad en un perfil especifico.
-                </p>
                 <p className="muted calendar-helper-note calendar-helper-note-clean">
-                  Elige "Mio" o "Compartido" para crear una actividad en un perfil especifico.
+                  Elige "Mío" o "Compartido" para crear una actividad en un perfil específico.
                 </p>
                 </>
               ) : currentActionProfile && canCreateOnCurrentProfile ? (

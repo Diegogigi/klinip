@@ -2583,6 +2583,11 @@ def _build_medication_event_defaults(
     taken_at: datetime | None,
 ) -> tuple[datetime | None, datetime | None, str]:
     now = datetime.now()
+    # Strip timezone info upfront to avoid TypeError when comparing with timezone-naive datetimes
+    if scheduled_at and getattr(scheduled_at, "tzinfo", None) is not None:
+        scheduled_at = scheduled_at.replace(tzinfo=None)
+    if taken_at and getattr(taken_at, "tzinfo", None) is not None:
+        taken_at = taken_at.replace(tzinfo=None)
     schedule_dt = scheduled_at
     actual_taken_at = taken_at
     normalized_status = _normalize_adherence_status(status)
@@ -2607,10 +2612,6 @@ def _build_medication_event_defaults(
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
             normalized_status = "late"
-    if schedule_dt and getattr(schedule_dt, "tzinfo", None) is not None:
-        schedule_dt = schedule_dt.replace(tzinfo=None)
-    if actual_taken_at and getattr(actual_taken_at, "tzinfo", None) is not None:
-        actual_taken_at = actual_taken_at.replace(tzinfo=None)
     return schedule_dt, actual_taken_at, normalized_status
 
 

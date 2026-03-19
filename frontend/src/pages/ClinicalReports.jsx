@@ -23,7 +23,7 @@ function formatStamp(value) {
 }
 
 function formatTypeLabel(value) {
-  if (!value) return "Reporte clinico";
+  if (!value) return "Reporte clínico";
   return String(value)
     .split("_")
     .filter(Boolean)
@@ -44,7 +44,7 @@ function getPeriodCutoff(periodKey) {
 const REPORT_TYPES = [
   {
     type: "consulta_medica",
-    title: "Consulta medica",
+    title: "Consulta médica",
     description: "Resumen para llevar a una consulta con medicamentos, adherencia, citas y eventos relevantes.",
     periodDays: 30,
   },
@@ -57,16 +57,16 @@ const REPORT_TYPES = [
   {
     type: "resumen_mensual",
     title: "Resumen mensual",
-    description: "Vista general del ultimo mes con citas, documentos, resultados y alertas detectadas.",
+    description: "Vista general del último mes con citas, documentos, resultados y alertas detectadas.",
     periodDays: 30,
   },
 ];
 
 const PERIOD_OPTIONS = [
-  { value: "7", label: "Ultimos 7 dias" },
-  { value: "30", label: "Ultimos 30 dias" },
-  { value: "90", label: "Ultimos 90 dias" },
-  { value: "180", label: "Ultimos 180 dias" },
+  { value: "7", label: "Últimos 7 días" },
+  { value: "30", label: "Últimos 30 días" },
+  { value: "90", label: "Últimos 90 días" },
+  { value: "180", label: "Últimos 180 días" },
   { value: "all", label: "Todo el historial" },
 ];
 
