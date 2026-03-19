@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, func, or_
+from sqlalchemy.exc import ProgrammingError
 from typing import List
 import os
 import mimetypes
@@ -1259,6 +1260,7 @@ def ensure_login_security_schema():
                     "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)"
                 )
             )
+        print("DEBUG ensure_login_security_schema: columnas criticas de login verificadas")
     except Exception as exc:
         print(f"WARNING ensure_login_security_schema: no se pudo reforzar users: {exc}")
 
@@ -12249,7 +12251,16 @@ def login(
     ensure_login_security_schema()
 
     email = (form_data.username or "").lower().strip()
-    user  = auth.get_user_by_email(db, email)
+    try:
+        user = auth.get_user_by_email(db, email)
+    except ProgrammingError as exc:
+        db.rollback()
+        detail = str(getattr(exc, "orig", exc) or "").lower()
+        if "failed_login_attempts" in detail or "locked_until" in detail:
+            ensure_login_security_schema()
+            user = auth.get_user_by_email(db, email)
+        else:
+            raise
 
     # 2. Verificar bloqueo de cuenta
     if user and not getattr(user, "deleted", False):
