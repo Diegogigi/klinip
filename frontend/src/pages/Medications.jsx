@@ -1148,7 +1148,7 @@ export default function Medications() {
                     <span>Activar</span>
                   </label>
                 </div>
-                {familyRefillAvailable ? (
+                {familyRefillAvailable && form.refill_enabled ? (
                   <>
                     <div className="form-row">
                       <div className="input-group">
@@ -1254,12 +1254,12 @@ export default function Medications() {
                         : `Rotación automática para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""} entre: ${familyRefillNames.join(", ")}.`}
                     </p>
                   </>
-                ) : (
+                ) : !familyRefillAvailable ? (
                   <p className="med-refill-helper">
                     Esta automatización se habilita cuando el perfil activo tiene
                     colaboración familiar y al menos un colaborador aceptado.
                   </p>
-                )}
+                ) : null}
               </div>
 
               <div className="input-group">
