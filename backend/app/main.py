@@ -10425,6 +10425,7 @@ def _build_chat_context_base(
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
+    profile_notes: list[models.ProfileNote] = []
     family_access = (
         _build_family_access_context(
             db,
@@ -10481,6 +10482,23 @@ def _build_chat_context_base(
                     models.Medication.id.desc(),
                 )
                 .limit(12)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+    if modules.get("profile_notes") and permissions_validated.get("view_profile"):
+        profile_notes = _safe_ai_context_query(
+            db,
+            module_name="profile-notes",
+            loader=lambda: (
+                db.query(models.ProfileNote)
+                .filter(models.ProfileNote.profile_id == profile.id)
+                .order_by(models.ProfileNote.updated_at.desc(), models.ProfileNote.created_at.desc())
+                .limit(6)
                 .all()
             ),
             default_value=[],
@@ -10821,6 +10839,12 @@ def _build_chat_context_base(
     sources = [
         {"key": "profile-summary", "label": "Resumen del perfil", "count": 1 if brief_profile_summary else 0, "enabled": True},
         {
+            "key": "profile-notes",
+            "label": "Notas rápidas",
+            "count": len(profile_notes),
+            "enabled": bool(modules.get("profile_notes")) and bool(permissions_validated.get("view_profile")),
+        },
+        {
             "key": "documents",
             "label": "Documentos",
             "count": len(documents),
@@ -10882,7 +10906,7 @@ def _build_chat_context_base(
         "latest_document_text": latest_document_text,
         "learned_profile_context": _clip_text(ai_memory_text or runtime_memory, 1200),
         "brief_profile_summary": brief_profile_summary,
-        "profile_notes": [],
+        "profile_notes": profile_notes,
         "activity_log": [],
         "adherence_summary": adherence_summary,
         "document_summaries": document_summaries,
@@ -11026,6 +11050,7 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     chunk_chars = max(180, int(prompt_profile.get("chunk_chars", 420) or 420))
     medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
     family_profiles_limit = max(1, int(prompt_profile.get("family_profiles_limit", 4) or 4))
+    profile_notes_limit = max(1, int(prompt_profile.get("profile_notes_limit", 6) or 6))
     notes_chars = max(60, int(prompt_profile.get("notes_chars", 180) or 180))
     memory_chars = max(120, int(prompt_profile.get("memory_chars", 1500) or 1500))
     brief_summary_chars = max(100, int(prompt_profile.get("brief_summary_chars", 320) or 320))
@@ -11209,6 +11234,17 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
         ]
     if enabled_modules.get("adherence"):
         payload["adherence_summary"] = context.get("adherence_summary") or {}
+    if enabled_modules.get("profile_notes") and context.get("profile_notes"):
+        payload["profile_notes"] = [
+            {
+                "note": _clip_text(item.note or "", max(140, notes_chars + 80)),
+                "visibility": item.visibility or "shared",
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
+                "updated_at": _safe_iso_local(item.updated_at, timezone_name),
+                "created_by_name": getattr(getattr(item, "created_by_user", None), "name", "") or "",
+            }
+            for item in (context.get("profile_notes") or [])[:profile_notes_limit]
+        ]
     if enabled_modules.get("family") and family_context:
         payload["family_context"] = {
             "summary": _clip_text(family_context.get("summary") or "", family_summary_chars),
@@ -11300,6 +11336,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "29. Si existe 'relevant_documents', prioriza esos documentos porque ya fueron seleccionados por relevancia para la pregunta actual.\n"
         "30. Si existe 'document_chunks', prioriza esos fragmentos porque ya fueron recuperados por relevancia semántica y permisos validados.\n"
         "31. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
+        "32. Si existe 'profile_notes', úsalas como contexto declarado por el usuario para pendientes, recordatorios, objetivos o temas a resolver. No las presentes como hechos clínicos confirmados si la nota solo expresa una intención o tarea.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -11532,6 +11569,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     adherence_summary = context.get("adherence_summary") or {}
     health_alerts = context.get("health_alerts") or []
     document_summaries = context.get("document_summaries") or []
+    profile_notes = context.get("profile_notes") or []
     family_access = context.get("family_access") or {}
     family_context = context.get("family_context") or {}
     family_profiles = family_context.get("profiles") or []
@@ -11630,6 +11668,19 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             f"Hoy veo {len(active_medications)} medicamento(s) activo(s), {len(appointments)} cita(s), "
             f"{len(documents)} documento(s) y adherencia estimada de {overall if overall is not None else 'sin datos'}%."
         )
+
+    if any(
+        token in normalized
+        for token in ["nota rapida", "nota rápida", "notas rapidas", "notas rápidas", "mis notas", "que anote", "qué anoté"]
+    ):
+        if not profile_notes:
+            return "No veo notas rápidas guardadas en el perfil activo."
+        rendered_notes = []
+        for item in profile_notes[:5]:
+            timestamp = _safe_iso_local(getattr(item, "updated_at", None) or getattr(item, "created_at", None), context.get("timezone_name") or DEFAULT_TZ_NAME)
+            note_text = _clip_text(getattr(item, "note", "") or "", 180)
+            rendered_notes.append(note_text + (f" ({timestamp})" if timestamp else ""))
+        return "Notas rápidas recientes del perfil activo: " + " | ".join(rendered_notes) + "."
 
     if "ultima" in normalized and "cita" in normalized:
         pick = appointment_insights.get("last_scheduled_created") if "agendada" in normalized else appointment_insights.get("last_created")
@@ -11803,6 +11854,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     relevant_documents = context.get("relevant_documents") or []
     active_medications = context.get("active_medications") or []
     upcoming = context.get("upcoming") or []
+    profile_notes = context.get("profile_notes") or []
     document_insights = context.get("document_insights") or {}
     medication_insights = context.get("medication_insights") or {}
     adherence_summary = context.get("adherence_summary") or {}
@@ -11885,6 +11937,31 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                 "label": first.title,
                 "detail": first.severity,
             }
+            )
+
+    if profile_notes and any(
+        token in normalized
+        for token in [
+            "nota rapida",
+            "nota rápida",
+            "notas rapidas",
+            "notas rápidas",
+            "mis notas",
+            "pendiente personal",
+            "recordatorio personal",
+        ]
+    ):
+        for item in profile_notes[:3]:
+            refs.append(
+                {
+                    "kind": "profile-note",
+                    "label": _clip_text(getattr(item, "note", "") or "Nota rápida", 72),
+                    "detail": _safe_iso_local(
+                        getattr(item, "updated_at", None) or getattr(item, "created_at", None),
+                        context.get("timezone_name") or DEFAULT_TZ_NAME,
+                    )
+                    or "sin fecha",
+                }
             )
 
     if family_context and any(
@@ -14974,6 +15051,7 @@ def detect_chat_intent(message: str | None) -> str:
 
 def select_context_modules(intent: str) -> dict:
     base_modules = {
+        "profile_notes": True,
         "appointments": False,
         "documents": False,
         "document_summaries": False,
