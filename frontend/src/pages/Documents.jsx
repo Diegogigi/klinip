@@ -69,6 +69,13 @@ function inferViewerKind(doc) {
   return "other";
 }
 
+function getErrorDetail(err, fallback) {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (detail?.message) return detail.message;
+  return fallback;
+}
+
 const initialForm = {
   doc_type: "receta",
   date: "",
@@ -90,6 +97,7 @@ export default function Documents() {
   const [viewerKind, setViewerKind] = useState("other");
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerZoom, setViewerZoom] = useState(1);
+  const [viewerStepUpToken, setViewerStepUpToken] = useState("");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [form, setForm] = useState(initialForm);
@@ -120,6 +128,7 @@ export default function Documents() {
     setViewerUrl("");
     setViewerKind("other");
     setViewerZoom(1);
+    setViewerStepUpToken("");
     setViewerLoading(false);
   };
 
@@ -270,6 +279,7 @@ export default function Documents() {
     setViewerTarget(doc);
     setViewerKind(inferViewerKind(doc));
     setViewerZoom(1);
+    setViewerStepUpToken(stepUpToken || "");
     try {
       const blob = stepUpToken
         ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
@@ -286,7 +296,7 @@ export default function Documents() {
       }
       console.error("Error al abrir documento:", err);
       closeViewer();
-      window.alert(`No se pudo abrir el documento. ${err.response?.data?.detail || err.message}`);
+      window.alert(`No se pudo abrir el documento. ${getErrorDetail(err, err.message)}`);
     } finally {
       setViewerLoading(false);
     }
@@ -312,7 +322,7 @@ export default function Documents() {
         return;
       }
       console.error("Error al descargar documento:", err);
-      window.alert("No se pudo descargar el documento.");
+      window.alert(getErrorDetail(err, "No se pudo descargar el documento."));
     }
   };
 
@@ -579,7 +589,7 @@ export default function Documents() {
             </div>
 
             <div className="document-viewer-actions">
-              <button className="primary-btn" type="button" onClick={() => handleDownload(viewerTarget)}>
+              <button className="primary-btn" type="button" onClick={() => handleDownload(viewerTarget, viewerStepUpToken)}>
                 {viewerKind === "pdf" ? "Descargar PDF" : "Descargar archivo"}
               </button>
               <button className="secondary-btn" type="button" onClick={closeViewer}>

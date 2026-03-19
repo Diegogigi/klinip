@@ -30,28 +30,61 @@ function _processRefreshQueue(error, token = null) {
   _refreshQueue = [];
 }
 
+async function _normalizeErrorResponse(error) {
+  const response = error?.response;
+  if (!response) return error;
+
+  let detail = response.data?.detail;
+
+  if (
+    detail === undefined &&
+    typeof Blob !== "undefined" &&
+    response.data instanceof Blob
+  ) {
+    const contentType = String(
+      response.headers?.["content-type"] || response.data.type || ""
+    ).toLowerCase();
+
+    if (contentType.includes("json") || contentType.includes("text")) {
+      try {
+        const text = await response.data.text();
+        const parsed = JSON.parse(text);
+        response.data = parsed;
+        detail = parsed?.detail;
+      } catch {
+        // Mantener el error original si el blob no trae JSON valido.
+      }
+    }
+  }
+
+  if (response.status === 403) {
+    if (detail?.code === "step_up_required" || detail === "step_up_required") {
+      error.stepUpRequired = true;
+    }
+  }
+
+  return error;
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const normalizedError = await _normalizeErrorResponse(error);
+    const originalRequest = normalizedError.config;
 
     // 403 con step_up_required: propagar con bandera especial
-    if (error.response?.status === 403) {
-      const detail = error.response?.data?.detail;
-      if (detail?.code === "step_up_required" || detail === "step_up_required") {
-        error.stepUpRequired = true;
-      }
-      return Promise.reject(error);
+    if (normalizedError.response?.status === 403) {
+      return Promise.reject(normalizedError);
     }
 
     // 401: intentar renovar el access token con el refresh token
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (normalizedError.response?.status === 401 && !originalRequest._retry) {
       const refreshToken = localStorage.getItem("refresh_token");
 
       // Sin refresh token → cerrar sesión
       if (!refreshToken) {
         localStorage.removeItem("token");
-        return Promise.reject(error);
+        return Promise.reject(normalizedError);
       }
 
       // Si ya hay un refresh en curso, encolar esta petición
@@ -94,7 +127,7 @@ api.interceptors.response.use(
       }
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalizedError);
   }
 );
 
@@ -499,21 +532,11 @@ export async function updateDocument(id, payload) {
 }
 
 export async function getDocumentFile(documentId) {
-  const token = localStorage.getItem("token");
-  const API_URL = import.meta.env.VITE_API_URL || 
-    (import.meta.env.PROD ? "" : "http://localhost:8000");
-  
   const response = await api.get(`/documents/${documentId}/file`, {
     responseType: "blob",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   });
-  
-  // Crear una URL temporal para el blob
-  const blob = new Blob([response.data], { type: response.headers["content-type"] });
-  const url = window.URL.createObjectURL(blob);
-  return url;
+
+  return response.data;
 }
 
 // Medications
