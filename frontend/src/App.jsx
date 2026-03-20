@@ -1533,9 +1533,24 @@ export default function App() {
     return (
       <div className="app-shell">
         <div className="main-content">
-          <div className="splash">
-            <div className="splash-dot" />
-            <p>Cargando Klinip...</p>
+          <div className="splash splash-brand" role="status" aria-live="polite" aria-label="Cargando Klinip">
+            <div className="splash-brand-shell">
+              <div className="splash-brand-orbit" aria-hidden="true">
+                <span className="splash-brand-orbit-ring splash-brand-orbit-ring-outer" />
+                <span className="splash-brand-orbit-ring splash-brand-orbit-ring-inner" />
+                <span className="splash-brand-core">
+                  <span className="splash-brand-core-glow" />
+                </span>
+              </div>
+              <p className="splash-brand-kicker">Plataforma clínica inteligente</p>
+              <div className="brand-wordmark splash-brand-wordmark" aria-label="Klinip">
+                <span className="brand-wordmark-full">Klinip</span>
+              </div>
+              <p className="splash-brand-text">Preparando tu entorno de salud y sincronizando datos clave.</p>
+              <div className="splash-brand-progress" aria-hidden="true">
+                <span />
+              </div>
+            </div>
           </div>
         </div>
       </div>
