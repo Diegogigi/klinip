@@ -11,28 +11,28 @@ const PLAN_THEME = {
 
 const PLAN_PAGE_COPY = {
   basico: {
-    badge: "Para siempre gratis",
+    badge: "Gratis para siempre",
     badgeIcon: (
       <svg viewBox="0 0 24 24">
         <polyline points="20 6 9 17 4 12" />
       </svg>
     ),
-    subtitle: "Salud personal · Sin tarjeta de crédito",
+    subtitle: "Salud personal · IA esencial",
     description:
-      "Todo lo que necesitas para empezar a organizar tu salud de forma digital. Ideal para personas que quieren tener sus citas, medicamentos y documentos en un solo lugar.",
+      "El punto de partida para ordenar tu salud en digital. Incluye tu perfil, documentos, medicamentos y Klinip IA en modalidad básica con capacidad diaria limitada.",
     primaryCta: "Empezar gratis",
-    secondaryCta: "Ver planes de pago",
-    note: "Sin límite de tiempo. Sin tarjeta requerida.",
+    secondaryCta: "Ver planes superiores",
+    note: "Gratis para siempre · 1 perfil incluido",
     ctaEyebrow: "Empieza hoy",
-    ctaTitle: "Comienza gratis, sin compromisos",
+    ctaTitle: "Comienza con Klinip",
     ctaTitleEm: "gratis",
-    ctaSub: "Sin tarjeta de crédito. Sin límite de tiempo. Solo tu salud, organizada.",
+    ctaSub: "Organiza tu salud personal con lo esencial y activa Klinip IA básica desde el primer día.",
     ctaPrimary: "Crear cuenta gratis",
     ctaSecondary: "Ver plan Plus",
     features: [
       {
         title: "1 perfil de salud",
-        desc: "Gestiona tu propio perfil con toda tu información médica centralizada y siempre accesible.",
+        desc: "Gestiona tu propia ficha de salud con tus datos, documentos, citas y medicamentos en un solo lugar.",
         tone: "green",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -43,7 +43,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Medicamentos, citas y calendario",
-        desc: "Registra tus medicamentos con dosis y horarios. Agrega citas y visualiza todo en un calendario unificado.",
+        desc: "Registra tus tratamientos, agenda médica y actividades de salud con una vista simple y clara.",
         tone: "blue",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -55,8 +55,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Documentos con OCR básico",
-        desc: "Sube recetas, resultados y órdenes. El OCR básico extrae texto automáticamente para búsquedas rápidas.",
+        title: "Documentos con lectura automática básica",
+        desc: "Sube recetas, resultados y órdenes para mantenerlos organizados y con texto detectado automáticamente para búsquedas simples.",
         tone: "amber",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -66,8 +66,18 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
+        title: "Klinip IA básica",
+        desc: "Haz preguntas rápidas sobre tu información de salud con una capacidad de hasta 15 consultas al día.",
+        tone: "indigo",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        ),
+      },
+      {
         title: "Recordatorios esenciales",
-        desc: "Alertas para tomar medicamentos y recordatorios de citas próximas por correo electrónico.",
+        desc: "Recibe alertas para citas y tomas de medicamentos sin complejidad extra.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -78,7 +88,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Acceso móvil y escritorio",
-        desc: "Disponible en cualquier dispositivo. Tu información sincronizada siempre en tiempo real.",
+        desc: "Disponible desde celular o computador para que tu información esté siempre contigo.",
         tone: "violet",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -88,59 +98,45 @@ const PLAN_PAGE_COPY = {
           </svg>
         ),
       },
-      {
-        title: "Privacidad y seguridad",
-        desc: "Tus datos cifrados y protegidos. Control total sobre tu información médica sin compartir con terceros.",
-        tone: "teal",
-        icon: (
-          <svg viewBox="0 0 24 24">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-          </svg>
-        ),
-      },
     ],
     faqs: [
       {
-        q: "¿El plan Básico es realmente gratis para siempre?",
-        a: "Sí. El plan Básico no tiene fecha de vencimiento ni requiere tarjeta de crédito. Puedes usarlo de forma permanente con todas sus funciones incluidas.",
+        q: "¿El plan Básico es gratis para siempre?",
+        a: "Sí. El plan Básico no tiene vencimiento y te permite usar Klinip de forma permanente con 1 perfil de salud.",
       },
       {
-        q: "¿Puedo actualizar mi plan en cualquier momento?",
-        a: "Sí. Puedes subir de plan cuando quieras desde la configuración de tu cuenta. El cambio es inmediato y solo pagas la diferencia proporcional del mes.",
+        q: "¿La IA está incluida en el plan Básico?",
+        a: "Sí, pero en modalidad básica. Puedes usar Klinip IA con una capacidad de hasta 15 consultas al día.",
       },
       {
-        q: "¿Mis datos están seguros en Klinip?",
-        a: "Tu información está cifrada en tránsito y en reposo. Nunca compartimos ni vendemos datos a terceros. Puedes exportar o eliminar tu información cuando quieras.",
-      },
-      {
-        q: "¿Qué pasa si cancelo un plan de pago?",
-        a: "Si cancelas, tu cuenta se mantiene activa hasta el fin del periodo pagado. Luego, pasa automáticamente al plan Básico sin perder tus datos históricos.",
+        q: "¿Puedo cambiar a un plan superior después?",
+        a: "Sí. Puedes cambiar a Plus o Familiar cuando necesites más perfiles o IA completa.",
       },
     ],
   },
   plus: {
-    badge: "Más popular",
+    badge: "Más elegido",
     badgeIcon: (
       <svg viewBox="0 0 24 24">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
       </svg>
     ),
-    subtitle: "Individual ampliado · Facturación mensual",
+    subtitle: "Más perfiles · IA completa",
     description:
-      "Para quienes quieren llevar el control total de su salud con inteligencia artificial. Incluye historial completo, OCR mejorado y el copiloto de IA para anticiparte a cualquier situación.",
-    primaryCta: "Probar Plus gratis",
+      "Pensado para quienes gestionan su salud y la de personas a su cargo desde una sola cuenta, con hasta 3 perfiles y acceso completo a Klinip IA.",
+    primaryCta: "Elegir Plus",
     secondaryCta: "Ver detalle completo",
-    note: "14 días de prueba gratis · Sin tarjeta requerida",
-    ctaEyebrow: "14 días gratis",
-    ctaTitle: "Prueba Plus sin riesgos",
-    ctaTitleEm: "Plus",
-    ctaSub: "14 días completos sin tarjeta. Acceso a todas las funciones de IA desde el primer día.",
-    ctaPrimary: "Probar Plus gratis",
+    note: "$3.990 al mes o $39.990 al año",
+    ctaEyebrow: "Más capacidad",
+    ctaTitle: "Escala tu seguimiento con",
+    ctaTitleEm: "IA completa",
+    ctaSub: "Más perfiles, más contexto clínico y más profundidad para entender tu información de salud.",
+    ctaPrimary: "Elegir Plus",
     ctaSecondary: "Ver plan Familiar",
     features: [
       {
         title: "Hasta 3 perfiles de salud",
-        desc: "Gestiona tu salud y la de hasta 2 personas más desde una sola cuenta.",
+        desc: "Administra tu salud y la de hasta 2 personas más desde una sola cuenta, sin colaboración multiusuario.",
         tone: "blue",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -151,8 +147,18 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "OCR mejorado",
-        desc: "Extrae automáticamente fecha, médico, diagnóstico y medicamentos desde fotos o PDFs.",
+        title: "Klinip IA completa",
+        desc: "Consulta documentos, medicamentos, citas, historial y contexto del perfil sin límite diario de consultas.",
+        tone: "indigo",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        ),
+      },
+      {
+        title: "Lectura automática mejorada",
+        desc: "Detecta mejor la información útil desde fotos y PDFs para acelerar tus búsquedas y resúmenes.",
         tone: "teal",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -164,7 +170,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Historial completo y reportes",
-        desc: "Línea de tiempo completa de tu salud con reportes exportables para compartir con tu médico.",
+        desc: "Accede a una línea de tiempo más profunda y genera reportes clínicos para compartir.",
         tone: "violet",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -173,8 +179,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Recordatorios avanzados con IA",
-        desc: "El sistema aprende tus patrones y envía alertas inteligentes antes de que algo se escape.",
+        title: "Recordatorios avanzados",
+        desc: "Mantén mejor seguimiento de tratamientos y actividades con más contexto clínico.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -185,18 +191,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Copiloto IA en salud",
-        desc: "Pregunta por medicamentos, historial o próximas citas y recibe respuestas en lenguaje natural.",
-        tone: "indigo",
-        icon: (
-          <svg viewBox="0 0 24 24">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        ),
-      },
-      {
-        title: "Gestión de dependientes",
-        desc: "Administra la salud de menores o personas a tu cargo con perfiles independientes.",
+        title: "Gestión individual de varios perfiles",
+        desc: "Ideal para quien coordina más de una persona, pero sin panel familiar compartido ni roles multiusuario.",
         tone: "amber",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -207,21 +203,21 @@ const PLAN_PAGE_COPY = {
     ],
     faqs: [
       {
-        q: "¿Cómo funciona la prueba gratis de 14 días?",
-        a: "Puedes probar el plan Plus completo durante 14 días sin ingresar tarjeta de crédito. Al terminar, puedes continuar con Plus o volver al plan Básico.",
+        q: "¿Qué cambia realmente entre Básico y Plus?",
+        a: "Plus sube de 1 a 3 perfiles y activa Klinip IA completa, además de lectura automática mejorada de documentos, más historial y reportes.",
       },
       {
-        q: "¿Qué es el copiloto de IA?",
-        a: "Es un asistente conversacional que conoce tu historial de salud. Puedes preguntarle por medicamentos, resúmenes para consultas o adherencia.",
+        q: "¿Plus incluye colaboración familiar?",
+        a: "No. Plus permite más perfiles bajo una sola cuenta, pero no habilita panel familiar ni colaboración multiusuario.",
       },
       {
-        q: "¿Puedo cancelar en cualquier momento?",
-        a: "Sí. Puedes cancelar desde tu perfil sin penalidades. La cuenta sigue activa hasta el fin del periodo pagado y luego baja a Básico.",
+        q: "¿Puedo pasar luego a Familiar?",
+        a: "Sí. Si más adelante necesitas colaboración entre cuidadores y panel familiar, puedes subir a Familiar.",
       },
     ],
   },
   familiar: {
-    badge: "Ecosistema familiar",
+    badge: "Colaboración total",
     badgeIcon: (
       <svg viewBox="0 0 24 24">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -229,22 +225,22 @@ const PLAN_PAGE_COPY = {
         <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
       </svg>
     ),
-    subtitle: "Hasta 5 perfiles · Facturación mensual",
+    subtitle: "Multiusuario · IA completa",
     description:
-      "El plan completo para familias que quieren gestionar la salud de todos en un solo lugar. Panel familiar compartido, roles por cuidador, alertas inteligentes por perfil y colaboración total.",
+      "El plan más completo para familias y cuidadores. Incluye colaboración multiusuario, panel familiar, calendarios compartidos y Klinip IA completa para todo el grupo.",
     primaryCta: "Elegir Familiar",
     secondaryCta: "Comparar con Plus",
-    note: "14 días de prueba gratis · Cancela cuando quieras",
-    ctaEyebrow: "Para toda la familia",
-    ctaTitle: "La salud de todos, en un solo lugar",
-    ctaTitleEm: "en un solo lugar",
-    ctaSub: "14 días gratis para toda tu familia. Sin tarjeta. Sin complicaciones.",
+    note: "$6.990 al mes o $69.990 al año",
+    ctaEyebrow: "Para coordinar en equipo",
+    ctaTitle: "La salud de todos",
+    ctaTitleEm: "bien coordinada",
+    ctaSub: "Centraliza perfiles, roles, recordatorios y contexto clínico compartido en un solo espacio.",
     ctaPrimary: "Elegir Familiar",
     ctaSecondary: "Comparar planes",
     features: [
       {
         title: "Hasta 5 perfiles de salud",
-        desc: "Toda la familia en una sola cuenta. Cada miembro tiene su propio perfil, historial y recordatorios independientes.",
+        desc: "Concentra la salud del grupo familiar en una sola suscripción con historial y seguimiento por persona.",
         tone: "violet",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -256,7 +252,7 @@ const PLAN_PAGE_COPY = {
       },
       {
         title: "Panel familiar y calendarios",
-        desc: "Vista centralizada de toda la familia para coordinar citas, exámenes y medicamentos.",
+        desc: "Visualiza citas, exámenes, tratamientos y documentos del grupo desde una vista compartida.",
         tone: "blue",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -268,8 +264,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Roles y colaboración",
-        desc: "Asigna roles de administrador, editor o lector a cada cuidador con control total de permisos.",
+        title: "Roles y colaboración multiusuario",
+        desc: "Asigna administradores, cuidadores o lectores con control explícito de acceso por perfil.",
         tone: "green",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -278,8 +274,18 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Alertas inteligentes por perfil",
-        desc: "Alertas individualizadas para cada miembro de la familia cuando alguien necesita atención.",
+        title: "Klinip IA completa para todo el grupo",
+        desc: "Usa el asistente con contexto clínico completo para cada integrante, sin capacidad reducida.",
+        tone: "indigo",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        ),
+      },
+      {
+        title: "Recordatorios por perfil",
+        desc: "Cada persona tiene sus propios recordatorios, pendientes y alertas según su situación clínica.",
         tone: "red",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -289,18 +295,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "Copiloto IA para toda la familia",
-        desc: "El asistente de IA conoce el historial de cada miembro y sugiere acciones preventivas.",
-        tone: "indigo",
-        icon: (
-          <svg viewBox="0 0 24 24">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        ),
-      },
-      {
         title: "Historial y actividad por persona",
-        desc: "Reportes detallados de adherencia, citas y documentos para cada miembro.",
+        desc: "Sigue la evolución de cada integrante con documentos, adherencia, citas y actividad reciente.",
         tone: "amber",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -311,20 +307,16 @@ const PLAN_PAGE_COPY = {
     ],
     faqs: [
       {
-        q: "¿Quién puede ser parte del plan Familiar?",
-        a: "Cualquier persona que invites: pareja, hijos, padres, abuelos o personas a tu cuidado. Cada miembro puede tener su propio acceso con los permisos que tú definas.",
+        q: "¿Qué habilita Familiar que Plus no tiene?",
+        a: "Familiar habilita colaboración multiusuario, panel familiar y roles por cuidador, además de subir el límite a 5 perfiles.",
       },
       {
-        q: "¿Puedo controlar qué ve cada miembro?",
-        a: "Sí. Puedes asignar roles: administrador, editor o lector. Cada perfil puede tener restricciones de privacidad según tu configuración.",
+        q: "¿Puedo controlar qué puede ver o editar cada cuidador?",
+        a: "Sí. Puedes asignar roles y permisos según el nivel de acceso que necesite cada persona.",
       },
       {
-        q: "¿Qué pasa si un miembro quiere su propia cuenta?",
-        a: "Puede crearla cuando quiera. Sus datos del perfil familiar pueden exportarse para continuar de forma independiente.",
-      },
-      {
-        q: "¿Se puede agregar más de 5 perfiles?",
-        a: "El plan Familiar incluye hasta 5 perfiles. Si necesitas más, puedes contactarnos para opciones ampliadas.",
+        q: "¿Familiar mantiene IA completa?",
+        a: "Sí. Familiar conserva la IA completa y la extiende al contexto compartido del grupo familiar.",
       },
     ],
   },
@@ -335,33 +327,24 @@ const COMPARISON_ROWS = [
     group: "Perfiles y usuarios",
     rows: [
       { label: "Perfiles de salud", basico: "1", plus: "Hasta 3", familiar: "Hasta 5" },
+      { label: "Colaboración multiusuario", basico: false, plus: false, familiar: true },
       { label: "Panel familiar", basico: false, plus: false, familiar: true },
-      { label: "Roles y colaboración", basico: false, plus: false, familiar: true },
     ],
   },
   {
-    group: "Medicamentos y citas",
+    group: "Seguimiento clínico",
     rows: [
-      { label: "Registro de medicamentos", basico: true, plus: true, familiar: true },
-      { label: "Calendario unificado", basico: true, plus: true, familiar: true },
-      { label: "Seguimiento de adherencia", basico: true, plus: true, familiar: true },
+      { label: "Medicamentos, citas y calendario", basico: true, plus: true, familiar: true },
+      { label: "Lectura automática de documentos", basico: "Básica", plus: "Mejorada", familiar: "Mejorada" },
+      { label: "Historial y reportes", basico: "Esencial", plus: "Completo", familiar: "Completo" },
     ],
   },
   {
-    group: "Documentos",
+    group: "Klinip IA",
     rows: [
-      { label: "Subir documentos", basico: true, plus: true, familiar: true },
-      { label: "OCR automático", basico: "Básico", plus: "Mejorado", familiar: "Mejorado" },
-      { label: "Historial completo", basico: false, plus: true, familiar: true },
-    ],
-  },
-  {
-    group: "IA y recordatorios",
-    rows: [
-      { label: "Recordatorios esenciales", basico: true, plus: true, familiar: true },
-      { label: "Recordatorios avanzados con IA", basico: false, plus: true, familiar: true },
-      { label: "Copiloto IA en salud", basico: false, plus: true, familiar: true },
-      { label: "Reportes de salud", basico: false, plus: true, familiar: true },
+      { label: "Asistente Klinip IA", basico: "Básica", plus: "Completa", familiar: "Completa" },
+      { label: "Capacidad diaria de IA", basico: "15 consultas/día", plus: "Completa", familiar: "Completa" },
+      { label: "Contexto completo de documentos, medicamentos y citas", basico: true, plus: true, familiar: true },
     ],
   },
 ];
@@ -465,7 +448,7 @@ export default function Plans({ user }) {
         <div className="pp-hero-inner">
           <div className="pp-hero-eyebrow"><span />Planes y precios<span /></div>
           <h1>Elige el plan para tu <em>salud y tu familia</em></h1>
-          <p>Empieza gratis y escala cuando lo necesites. Sin compromisos, cancela cuando quieras.</p>
+          <p>Empieza gratis y escala cuando necesites más perfiles, más colaboración o IA completa.</p>
 
           <div className="pp-billing-wrap">
             <span className={`pp-billing-label ${billing === "monthly" ? "is-on" : ""}`}>Mensual</span>

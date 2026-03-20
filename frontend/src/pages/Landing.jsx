@@ -3,6 +3,12 @@ import { Link } from "react-router-dom";
 import { getLandingStats, getPublicPlans } from "../api";
 import { PLAN_CATALOG } from "../data/plans";
 
+const LANDING_NAV_ITEMS = [
+  { id: "features", label: "Funciones" },
+  { id: "ia", label: "IA en salud" },
+  { id: "planes", label: "Planes" },
+];
+
 const MOJIBAKE_FALLBACKS = [
   ["Ã¡", "\u00e1"],
   ["Ã©", "\u00e9"],
@@ -65,7 +71,7 @@ const features = [
   },
   {
     title: "Documentos siempre a mano",
-    desc: "Resultados, recetas y \u00f3rdenes seguras, con OCR y b\u00fasqueda r\u00e1pida integrada.",
+    desc: "Resultados, recetas y \u00f3rdenes seguras, con lectura autom\u00e1tica y b\u00fasqueda r\u00e1pida integrada.",
     tone: "amber",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -96,8 +102,8 @@ const moreFeatures = [
     desc: "Alertas en tiempo real para no olvidar citas y ex\u00e1menes.",
   },
   {
-    title: "Documentos con OCR",
-    desc: "Extrae fecha, centro y notas desde fotos o PDFs autom\u00e1ticamente.",
+    title: "Documentos con lectura inteligente",
+    desc: "Detecta fecha, centro y texto clave desde fotos o PDFs autom\u00e1ticamente.",
   },
   {
     title: "Calendario familiar",
@@ -157,6 +163,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
   const [stats, setStats] = useState(fallbackStats);
   const [billing, setBilling] = useState("monthly");
   const [plans, setPlans] = useState(PLAN_CATALOG);
+  const [activeNavSection, setActiveNavSection] = useState("features");
 
   useEffect(() => {
     let mounted = true;
@@ -189,6 +196,36 @@ export default function Landing({ theme = "light", onToggleTheme }) {
     };
   }, []);
 
+  useEffect(() => {
+    const sections = LANDING_NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(Boolean);
+    if (!sections.length || typeof IntersectionObserver === "undefined") return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visibleEntry = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (visibleEntry?.target?.id) {
+          setActiveNavSection(visibleEntry.target.id);
+        }
+      },
+      {
+        rootMargin: "-28% 0px -52% 0px",
+        threshold: [0.2, 0.35, 0.55],
+      }
+    );
+
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, []);
+
+  const handleLandingNav = (sectionId) => {
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+    setActiveNavSection(sectionId);
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const statItems = [
     { value: formatCount(stats.users), label: "Usuarios registrados" },
     { value: formatCount(stats.appointments), label: "Citas gestionadas" },
@@ -208,9 +245,17 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           </Link>
 
           <nav className="lp-nav-links">
-            <a className="lp-nav-link" href="#features">Funciones</a>
-            <a className="lp-nav-link" href="#ia">IA en salud</a>
-            <a className="lp-nav-link" href="#planes">Planes</a>
+            {LANDING_NAV_ITEMS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`lp-nav-link ${activeNavSection === item.id ? "active" : ""}`}
+                onClick={() => handleLandingNav(item.id)}
+                aria-current={activeNavSection === item.id ? "page" : undefined}
+              >
+                {item.label}
+              </button>
+            ))}
           </nav>
 
           <div className="lp-nav-right">

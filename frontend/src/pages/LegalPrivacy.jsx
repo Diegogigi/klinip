@@ -8,74 +8,90 @@ export default function LegalPrivacy() {
         <div className="legal-header">
           <p className="legal-kicker">Documento legal</p>
           <h1 className="legal-title">Política de Privacidad de Klinip</h1>
-          <p className="legal-meta">Versión 1.0 - Enero 2026</p>
+          <p className="legal-meta">Versión 1.1 · Marzo 2026</p>
         </div>
 
         <section className="legal-section">
-          <h2>1. Finalidad del tratamiento</h2>
-          <p>
-            Klinip recopila y procesa datos personales con el propósito de
-            gestionar información de salud personal, organizar citas, medicamentos
-            y documentos clínicos, generar recordatorios y notificaciones, y
-            mejorar la experiencia del usuario mediante analítica interna.
-          </p>
+          <h2>1. Qué datos puede tratar Klinip</h2>
+          <ul className="legal-list">
+            <li>Datos de cuenta, como nombre, correo electrónico y configuración de acceso.</li>
+            <li>Datos de salud registrados por el usuario en perfiles, notas, medicamentos, citas y documentos.</li>
+            <li>Archivos subidos por el usuario, incluyendo imágenes, PDFs y texto extraído mediante OCR.</li>
+            <li>Conversaciones con Klinip IA, referencias, resúmenes y acciones solicitadas dentro del chat.</li>
+            <li>Datos técnicos y de seguridad necesarios para operar la plataforma y proteger la cuenta.</li>
+          </ul>
         </section>
 
         <section className="legal-section">
-          <h2>2. Datos que se recopilan</h2>
+          <h2>2. Finalidades del tratamiento</h2>
+          <p>Klinip utiliza esta información para:</p>
           <ul className="legal-list">
-            <li>Datos de identificación: nombre, correo electrónico.</li>
-            <li>Datos de uso: actividad en la plataforma.</li>
-            <li>Datos de salud proporcionados voluntariamente por el usuario.</li>
+            <li>Permitir la gestión de salud personal y familiar dentro de la plataforma.</li>
+            <li>Organizar documentos, generar OCR, recordatorios, reportes y resúmenes clínicos orientativos.</li>
+            <li>Responder consultas mediante Klinip IA usando el contexto autorizado del perfil activo.</li>
+            <li>Mejorar seguridad, continuidad operativa, auditoría y prevención de accesos no autorizados.</li>
+            <li>Enviar comunicaciones operativas o notificaciones, según la configuración del usuario.</li>
           </ul>
-          <p className="legal-note">
-            Klinip solo accede a los datos ingresados por el usuario.
-          </p>
         </section>
 
         <section className="legal-section">
           <h2>3. Base legal</h2>
           <p>
-            El tratamiento se realiza conforme a la Ley 19.628 y normativa
-            vigente en Chile, con consentimiento explícito del usuario.
+            El tratamiento de datos se funda en la ejecución del servicio solicitado por el usuario y, en
+            el caso de datos sensibles de salud, en el consentimiento informado otorgado al crear o usar la
+            cuenta conforme a la normativa chilena aplicable.
           </p>
         </section>
 
         <section className="legal-section">
-          <h2>4. Conservación y eliminación</h2>
+          <h2>4. IA, OCR y procesamiento automatizado</h2>
           <p>
-            Los datos se almacenan mientras el usuario mantenga su cuenta activa.
-            El usuario puede exportar sus datos y eliminar su información o su
-            cuenta desde el perfil.
+            Para ciertas funciones, Klinip puede procesar texto, imágenes y documentos mediante OCR o
+            herramientas de IA con el fin de organizar, resumir o responder consultas sobre la información
+            registrada por el usuario.
+          </p>
+          <ul className="legal-list">
+            <li>Estas funciones operan como apoyo y pueden producir resultados incompletos o inexactos.</li>
+            <li>La información crítica debe verificarse con el documento original y con profesionales de salud.</li>
+            <li>Klinip no utiliza estas funciones como sustituto de decisión clínica profesional.</li>
+          </ul>
+        </section>
+
+        <section className="legal-section">
+          <h2>5. Acceso, colaboración y confidencialidad</h2>
+          <p>
+            Cuando el usuario comparte perfiles o habilita colaboración familiar, Klinip aplicará los roles,
+            permisos y restricciones configurados dentro de la cuenta. Proveedores tecnológicos podrán tratar
+            datos únicamente para prestar infraestructura, almacenamiento, procesamiento o soporte, bajo
+            obligaciones de confidencialidad y seguridad.
           </p>
         </section>
 
         <section className="legal-section">
-          <h2>5. Transferencia y confidencialidad</h2>
+          <h2>6. Conservación y eliminación</h2>
           <p>
-            No se comparten datos con terceros sin autorización del usuario.
-            Proveedores tecnológicos pueden acceder a infraestructura bajo
-            acuerdos de confidencialidad.
+            Los datos se conservan mientras la cuenta permanezca activa o durante el tiempo necesario para
+            prestar el servicio, cumplir obligaciones legales, resolver incidentes o atender solicitudes del
+            usuario. Este puede solicitar eliminación, exportación o revisión de su información conforme a
+            las herramientas disponibles y a la normativa aplicable.
           </p>
         </section>
 
         <section className="legal-section">
-          <h2>6. Seguridad</h2>
+          <h2>7. Seguridad</h2>
           <p>
-            Klinip aplica medidas técnicas y organizativas contra accesos no
-            autorizados, pérdida o alteración de la información.
-          </p>
-          <p className="legal-note">
-            Klinip es una app de gestión personal de salud y no reemplaza la
-            atención profesional.
+            Klinip aplica medidas razonables de seguridad técnicas y organizativas para proteger la
+            confidencialidad, integridad y disponibilidad de la información. Sin perjuicio de ello, ningún
+            sistema conectado a internet puede garantizar riesgo cero.
           </p>
         </section>
 
         <section className="legal-section">
-          <h2>7. Derechos del titular de datos</h2>
+          <h2>8. Derechos del titular y contacto</h2>
           <p>
-            El usuario puede ejercer acceso, rectificación, cancelación y
-            oposición escribiendo a soporte@klinip.cl.
+            El usuario puede ejercer derechos de acceso, rectificación, cancelación, oposición y otras
+            solicitudes relacionadas escribiendo a soporte@klinip.cl o utilizando los mecanismos habilitados
+            dentro de la plataforma.
           </p>
         </section>
 

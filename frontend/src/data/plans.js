@@ -6,14 +6,15 @@ export const PLAN_CATALOG = [
     priceYearly: "Gratis",
     yearlyEquivalent: "Sin costo",
     note: "Salud personal",
-    summary: "Para organizar tu propia salud con lo esencial desde el primer día.",
+    summary: "Para organizar tu salud personal con lo esencial y acceso a Klinip IA en modalidad básica.",
     recommended: false,
     cta: "Empezar gratis",
     features: [
       "1 perfil de salud",
       "Medicamentos, citas y calendario",
-      "Documentos médicos con OCR básico",
+      "Documentos médicos con lectura automática básica",
       "Recordatorios esenciales",
+      "Klinip IA básica con hasta 15 consultas al día",
       "Acceso móvil y escritorio",
     ],
     detailSections: [
@@ -21,7 +22,7 @@ export const PLAN_CATALOG = [
         title: "Ideal para",
         items: [
           "Personas que quieren centralizar su información médica",
-          "Usuarios que necesitan recordatorios y documentos en un solo lugar",
+          "Usuarios que necesitan recordatorios, documentos y apoyo inicial de IA en un solo lugar",
         ],
       },
       {
@@ -29,6 +30,7 @@ export const PLAN_CATALOG = [
         items: [
           "Gestión de citas, medicamentos y documentos",
           "Historial básico de salud",
+          "Klinip IA con capacidad diaria limitada para consultas rápidas",
           "Panel individual simple y rápido",
         ],
       },
@@ -45,37 +47,38 @@ export const PLAN_CATALOG = [
     priceMonthly: "$3.990 / mes",
     priceYearly: "$39.990 / año",
     yearlyEquivalent: "$3.332 / mes",
-    note: "Individual ampliado",
-    summary: "Más capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
+    note: "Más perfiles + IA completa",
+    summary: "Más capacidad de perfiles y Klinip IA completa para quienes gestionan su salud y la de personas a su cargo desde una sola cuenta.",
     recommended: true,
-    cta: "Probar Plus",
+    cta: "Elegir Plus",
     features: [
       "Hasta 3 perfiles de salud",
-      "OCR mejorado",
+      "Lectura automática mejorada de documentos",
       "Historial completo y reportes",
       "Recordatorios avanzados",
-      "Gestión personal y de dependientes",
+      "Klinip IA completa",
+      "Gestión individual de varios perfiles",
     ],
     detailSections: [
       {
         title: "Ideal para",
         items: [
-          "Usuarios que manejan su salud y la de hijos o adultos mayores",
+          "Usuarios que manejan su salud y la de hijos, padres o dependientes desde su propia cuenta",
           "Personas que necesitan más trazabilidad y reportes",
         ],
       },
       {
         title: "Incluye",
         items: [
-          "Más perfiles para centralizar seguimiento",
+          "Hasta 3 perfiles sin colaboración multiusuario",
           "Mayor profundidad en historial y documentos",
-          "Automatización de recordatorios con más contexto",
+          "Klinip IA completa para consultas, resúmenes y seguimiento",
         ],
       },
     ],
     metrics: [
       { label: "Perfiles", value: "3" },
-      { label: "Colaboración", value: "Parcial" },
+      { label: "Colaboración", value: "No" },
       { label: "Panel familiar", value: "No" },
     ],
   },
@@ -86,7 +89,7 @@ export const PLAN_CATALOG = [
     priceYearly: "$69.990 / año",
     yearlyEquivalent: "$5.832 / mes",
     note: "Ecosistema colaborativo",
-    summary: "Pensado para familias y cuidadores que coordinan la salud de varias personas.",
+    summary: "Pensado para familias y cuidadores que coordinan la salud de varias personas con Klinip IA completa y colaboración multiusuario.",
     recommended: false,
     cta: "Elegir Familiar",
     features: [
@@ -94,6 +97,7 @@ export const PLAN_CATALOG = [
       "Panel familiar y calendarios compartidos",
       "Recordatorios por perfil",
       "Roles por cuidador y colaboración multiusuario",
+      "Klinip IA completa para todo el grupo",
       "Historial y actividad por persona",
     ],
     detailSections: [

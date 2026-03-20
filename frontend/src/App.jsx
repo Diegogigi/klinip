@@ -135,6 +135,7 @@ function Sidebar({
     (!user && location.pathname === "/");
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
+  const isLegalRoute = location.pathname.startsWith("/legal/");
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -198,7 +199,7 @@ function Sidebar({
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
 
-  if (isAuthRoute || isPlansRoute) return null;
+  if (isAuthRoute || isPlansRoute || isLegalRoute) return null;
 
   return (
     <aside className="sidebar">
@@ -311,6 +312,7 @@ function Topbar({
     location.pathname === "/reset-password";
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
+  const isLegalRoute = location.pathname.startsWith("/legal/");
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",
@@ -386,7 +388,7 @@ function Topbar({
     return "invitado";
   };
 
-  if (isAuthRoute || isPlansRoute || (!user && location.pathname === "/")) return null;
+  if (isAuthRoute || isPlansRoute || isLegalRoute || (!user && location.pathname === "/")) return null;
 
   return (
     <header className="topbar">
@@ -1548,7 +1550,9 @@ export default function App() {
 
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
+  const isLegalRoute = location.pathname.startsWith("/legal/");
   const isPublicMarketingRoute = (!user && location.pathname === "/") || isPlansRoute;
+  const isPublicStandaloneRoute = isPublicMarketingRoute || isLegalRoute;
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname === "/settings";
@@ -1564,13 +1568,13 @@ export default function App() {
               Antes de continuar, revisa y acepta los documentos legales de Klinip.
             </p>
             <div className="consent-links">
-              <Link to="/legal/terms" className="secondary-btn">
+              <Link to="/legal/terms" className="secondary-btn" target="_blank" rel="noreferrer">
                 Términos de uso
               </Link>
-              <Link to="/legal/privacy" className="secondary-btn">
+              <Link to="/legal/privacy" className="secondary-btn" target="_blank" rel="noreferrer">
                 Política de privacidad
               </Link>
-              <Link to="/legal/consent" className="secondary-btn">
+              <Link to="/legal/consent" className="secondary-btn" target="_blank" rel="noreferrer">
                 Consentimiento informado
               </Link>
             </div>
@@ -1941,7 +1945,7 @@ export default function App() {
           onSwitchProfile={handleSwitchActiveProfile}
           switchingProfile={switchingProfile}
         />
-        <div className={`main-area ${isPublicMarketingRoute ? "main-area-public" : ""}`}>
+        <div className={`main-area ${isPublicStandaloneRoute ? "main-area-public" : ""}`}>
           <Topbar
             user={user}
             notifications={notifications}
@@ -1956,7 +1960,7 @@ export default function App() {
             onSwitchProfile={handleSwitchActiveProfile}
             switchingProfile={switchingProfile}
           />
-          {updateAvailable && (
+          {updateAvailable && !isPublicStandaloneRoute && (
             <div className="update-banner" role="status" aria-live="polite">
               <div>
                 <p className="update-title">Actualizacion disponible</p>
@@ -1979,7 +1983,7 @@ export default function App() {
             </div>
           )}
           <main
-            className={`main-content ${isPublicMarketingRoute ? "main-content-landing" : ""} ${
+            className={`main-content ${isPublicStandaloneRoute ? "main-content-landing" : ""} ${
               isAiRoute ? "main-content-ai" : ""
             } ${isFamilyRoute ? "main-content-family" : ""} ${
               isSettingsRoute ? "main-content-settings" : ""
@@ -2134,5 +2138,3 @@ export default function App() {
     </div>
   );
 }
-
-

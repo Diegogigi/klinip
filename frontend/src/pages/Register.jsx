@@ -35,7 +35,7 @@ export default function Register({ onRegistered }) {
     }
     if (!acceptedLegal) {
       setError(
-        "Debes aceptar los Terminos, Politica de Privacidad y Consentimiento informado."
+        "Debes aceptar los Términos, la Política de Privacidad y el Consentimiento informado."
       );
       return;
     }
@@ -237,10 +237,17 @@ export default function Register({ onRegistered }) {
                   required
                 />
                 <span>
-                  He leido y acepto los{" "}
-                  <Link to="/legal/terms">Terminos y Condiciones</Link>,{" "}
-                  <Link to="/legal/privacy">Politica de Privacidad</Link> y{" "}
-                  <Link to="/legal/consent">Consentimiento informado</Link>.
+                  He leído y acepto los{" "}
+                  <Link to="/legal/terms" target="_blank" rel="noreferrer">
+                    Términos y Condiciones
+                  </Link>,{" "}
+                  <Link to="/legal/privacy" target="_blank" rel="noreferrer">
+                    Política de Privacidad
+                  </Link>{" "}
+                  y{" "}
+                  <Link to="/legal/consent" target="_blank" rel="noreferrer">
+                    Consentimiento informado
+                  </Link>.
                 </span>
               </label>
             </div>
