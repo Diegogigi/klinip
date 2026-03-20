@@ -918,6 +918,8 @@ PLAN_DEFINITIONS = {
             "max_profiles": 1,
             "collaboration_enabled": False,
             "family_panel_enabled": False,
+            "ai_access_level": "basica",
+            "ai_chat_daily_limit": 15,
         },
         "public": {
             "slug": "basico",
@@ -926,7 +928,7 @@ PLAN_DEFINITIONS = {
             "price_yearly": "Gratis",
             "yearly_equivalent": "Sin costo",
             "note": "Salud personal",
-            "summary": "Para organizar tu propia salud con lo esencial desde el primer día.",
+            "summary": "Para organizar tu salud personal con lo esencial y acceso a Klinip IA en modalidad básica.",
             "recommended": False,
             "cta": "Empezar gratis",
             "features": [
@@ -934,6 +936,7 @@ PLAN_DEFINITIONS = {
                 "Medicamentos, citas y calendario",
                 "Documentos médicos con OCR básico",
                 "Recordatorios esenciales",
+                "Klinip IA básica con hasta 15 consultas al día",
                 "Acceso móvil y escritorio",
             ],
             "detail_sections": [
@@ -941,7 +944,7 @@ PLAN_DEFINITIONS = {
                     "title": "Ideal para",
                     "items": [
                         "Personas que quieren centralizar su información médica",
-                        "Usuarios que necesitan recordatorios y documentos en un solo lugar",
+                        "Usuarios que necesitan recordatorios, documentos y apoyo inicial de IA en un solo lugar",
                     ],
                 },
                 {
@@ -949,6 +952,7 @@ PLAN_DEFINITIONS = {
                     "items": [
                         "Gestión de citas, medicamentos y documentos",
                         "Historial básico de salud",
+                        "Klinip IA con capacidad diaria limitada para consultas rápidas",
                         "Panel individual simple y rápido",
                     ],
                 },
@@ -965,6 +969,8 @@ PLAN_DEFINITIONS = {
             "max_profiles": 3,
             "collaboration_enabled": False,
             "family_panel_enabled": False,
+            "ai_access_level": "completa",
+            "ai_chat_daily_limit": None,
         },
         "public": {
             "slug": "plus",
@@ -972,8 +978,8 @@ PLAN_DEFINITIONS = {
             "price_monthly": "$3.990 / mes",
             "price_yearly": "$39.990 / año",
             "yearly_equivalent": "$3.332 / mes",
-            "note": "Individual ampliado",
-            "summary": "Más capacidad y seguimiento para quienes gestionan su salud y la de sus dependientes.",
+            "note": "Más perfiles + IA completa",
+            "summary": "Más capacidad de perfiles y Klinip IA completa para quienes gestionan su salud y la de personas a su cargo desde una sola cuenta.",
             "recommended": True,
             "cta": "Probar Plus",
             "features": [
@@ -981,28 +987,29 @@ PLAN_DEFINITIONS = {
                 "OCR mejorado",
                 "Historial completo y reportes",
                 "Recordatorios avanzados",
-                "Gestión personal y de dependientes",
+                "Klinip IA completa",
+                "Gestión individual de varios perfiles",
             ],
             "detail_sections": [
                 {
                     "title": "Ideal para",
                     "items": [
-                        "Usuarios que manejan su salud y la de hijos o adultos mayores",
+                        "Usuarios que manejan su salud y la de hijos, padres o dependientes desde su propia cuenta",
                         "Personas que necesitan más trazabilidad y reportes",
                     ],
                 },
                 {
                     "title": "Incluye",
                     "items": [
-                        "Más perfiles para centralizar seguimiento",
+                        "Hasta 3 perfiles sin colaboración multiusuario",
                         "Mayor profundidad en historial y documentos",
-                        "Automatización de recordatorios con más contexto",
+                        "Klinip IA completa para consultas, resúmenes y seguimiento",
                     ],
                 },
             ],
             "metrics": [
                 {"label": "Perfiles", "value": "3"},
-                {"label": "Colaboración", "value": "Parcial"},
+                {"label": "Colaboración", "value": "No"},
                 {"label": "Panel familiar", "value": "No"},
             ],
         },
@@ -1012,6 +1019,8 @@ PLAN_DEFINITIONS = {
             "max_profiles": 5,
             "collaboration_enabled": True,
             "family_panel_enabled": True,
+            "ai_access_level": "completa",
+            "ai_chat_daily_limit": None,
         },
         "public": {
             "slug": "familiar",
@@ -1028,6 +1037,7 @@ PLAN_DEFINITIONS = {
                 "Panel familiar y calendarios compartidos",
                 "Recordatorios por perfil",
                 "Roles por cuidador y colaboración multiusuario",
+                "Klinip IA completa para todo el grupo",
                 "Historial y actividad por persona",
             ],
             "detail_sections": [
@@ -5710,7 +5720,46 @@ def _build_plan_info(user: models.User, db: Session) -> dict:
         "collaboration_enabled": bool(features.get("collaboration_enabled", False)),
         "family_panel_enabled": bool(features.get("family_panel_enabled", False)),
         "current_profiles": _count_owned_profiles(db, user.id),
+        "ai_access_level": _safe_text(features.get("ai_access_level", "basica"))[:20] or "basica",
+        "ai_chat_daily_limit": (
+            int(features["ai_chat_daily_limit"])
+            if features.get("ai_chat_daily_limit") is not None
+            else None
+        ),
     }
+
+
+def _count_ai_chat_messages_today(db: Session, user_id: int) -> int:
+    now = datetime.now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    return (
+        db.query(models.AiConversationMessage)
+        .filter(
+            models.AiConversationMessage.user_id == user_id,
+            models.AiConversationMessage.role == "user",
+            models.AiConversationMessage.created_at >= day_start,
+            models.AiConversationMessage.created_at < day_end,
+        )
+        .count()
+    )
+
+
+def _assert_ai_chat_capacity_available(db: Session, current_user: models.User) -> None:
+    plan_info = _build_plan_info(current_user, db)
+    daily_limit = plan_info.get("ai_chat_daily_limit")
+    if daily_limit is None:
+        return
+    used_today = _count_ai_chat_messages_today(db, current_user.id)
+    if used_today >= int(daily_limit):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Tu plan {str(plan_info.get('plan_type') or 'basico').capitalize()} incluye Klinip IA "
+                f"con hasta {int(daily_limit)} consultas al día. Vuelve mañana o cambia a Plus o Familiar "
+                "para usar IA completa."
+            ),
+        )
 
 
 def _plan_allows_collaboration_for_user(user: models.User | None) -> bool:
@@ -7412,6 +7461,11 @@ AI_CHAT_WORKFLOW_CONFIG = {
         "required_fields": ["doc_type", "file"],
         "optional_fields": ["date", "center", "notes"],
     },
+    "profile_note": {
+        "resource_label": "nota del perfil",
+        "required_fields": ["note"],
+        "optional_fields": [],
+    },
 }
 
 AI_CHAT_WORKFLOW_FIELD_LABELS = {
@@ -7431,6 +7485,7 @@ AI_CHAT_WORKFLOW_FIELD_LABELS = {
     "end_date": "fecha de término",
     "doc_type": "tipo de documento",
     "file": "archivo",
+    "note": "nota del perfil",
 }
 
 AI_CHAT_WORKFLOW_CANCEL_TOKENS = {
@@ -7457,6 +7512,31 @@ AI_CHAT_WORKFLOW_SKIP_TOKENS = {
     "pasar",
     "saltalo",
     "sáltalo",
+}
+
+AI_CHAT_WORKFLOW_CONFIRM_TOKENS = {
+    "si",
+    "sí",
+    "si guardala",
+    "sí guárdala",
+    "guardala",
+    "guárdala",
+    "guardarla",
+    "guardar",
+    "guardar asi",
+    "guardar así",
+    "tal como esta",
+    "tal como está",
+    "asi esta bien",
+    "así está bien",
+    "confirmar",
+    "confirmo",
+    "ok",
+    "okay",
+    "dale",
+    "correcto",
+    "perfecto",
+    "listo",
 }
 
 
@@ -7578,13 +7658,92 @@ def _detect_chat_creation_target(message: str | None) -> str | None:
         "subir informe",
         "subir orden",
     ]
+    profile_note_tokens = [
+        "crear nota del perfil",
+        "crea una nota del perfil",
+        "crear nota",
+        "crea una nota",
+        "crear nota rapida",
+        "crear nota rápida",
+        "agregar nota del perfil",
+        "agregar nota",
+        "agrega una nota",
+        "agregar nota rapida",
+        "agregar nota rápida",
+        "guardar nota del perfil",
+        "guardar nota",
+        "guardar nota rapida",
+        "guardar nota rápida",
+        "registrar nota",
+        "necesito una nota",
+        "quiero una nota",
+        "haz una nota",
+        "hacer una nota",
+        "anota que",
+        "anotar que",
+        "deja una nota",
+    ]
     if any(token in normalized for token in appointment_tokens):
         return "appointment"
     if any(token in normalized for token in medication_tokens):
         return "medication"
     if any(token in normalized for token in document_tokens):
         return "document"
+    if any(token in normalized for token in profile_note_tokens):
+        return "profile_note"
     return None
+
+
+def _workflow_confirmation_accepted(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return False
+    if normalized in {_normalize_text(token) for token in AI_CHAT_WORKFLOW_CONFIRM_TOKENS}:
+        return True
+    return any(
+        token in normalized
+        for token in [
+            "quiero guardarla",
+            "quiero guardar",
+            "puedes guardarla",
+            "puedes guardar",
+            "guardala tal como esta",
+            "guárdala tal como está",
+            "guardarla tal como esta",
+            "guardarla tal como está",
+        ]
+    )
+
+
+def _extract_profile_note_candidate(message: str | None) -> str:
+    text_value = (message or "").strip()
+    if not text_value:
+        return ""
+    cleaned = text_value
+    patterns = [
+        r"^(?:necesito|quiero|me gustaria|me gustaría|haz|hacer)\s+(?:una\s+)?nota\s+del\s+perfil\s*(?:para\s+)?(?:indicar|recordar|anotar)?\s*(?:que\s+)?",
+        r"^(?:necesito|quiero|me gustaria|me gustaría|haz|hacer)\s+(?:una\s+)?nota(?:\s+rapida|\s+rápida)?\s*(?:para\s+)?(?:indicar|recordar|anotar)?\s*(?:que\s+)?",
+        r"^(?:crea|crear|agrega|agregar|guarda|guardar|registra|registrar)\s+(?:una\s+)?nota\s+del\s+perfil\s*(?:para\s+)?(?:indicar|recordar|anotar)?\s*(?:que\s+)?",
+        r"^(?:crea|crear|agrega|agregar|guarda|guardar|registra|registrar)\s+(?:una\s+)?nota(?:\s+rapida|\s+rápida)?\s*(?:para\s+)?(?:indicar|recordar|anotar)?\s*(?:que\s+)?",
+        r"^(?:anota|anotar)\s+(?:que\s+)?",
+        r"^(?:deja|dejar)\s+(?:una\s+)?nota\s+del\s+perfil\s*(?:que\s+)?",
+        r"^(?:deja|dejar)\s+(?:una\s+)?nota(?:\s+rapida|\s+rápida)?\s*(?:que\s+)?",
+    ]
+    for pattern in patterns:
+        next_value = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+        if next_value != cleaned:
+            cleaned = next_value
+            break
+    cleaned = cleaned.strip(" .:-")
+    return cleaned or text_value
+
+
+def _workflow_profile_note_confirmation_reply(note_text: str) -> str:
+    clipped = _clip_text(note_text, 260)
+    return (
+        f'Voy a agregar la siguiente nota del perfil: "{clipped}". '
+        "¿Te gustaría que la guarde así o deseas hacer algún cambio?"
+    )
 
 
 def _parse_chat_time_value(message: str | None) -> str | None:
@@ -7750,6 +7909,10 @@ def _extract_workflow_values(
             extracted["center"] = text_value
         if current_field == "notes" and text_value:
             extracted["notes"] = text_value
+    elif workflow_type == "profile_note":
+        candidate = _extract_profile_note_candidate(text_value)
+        if current_field == "note" and candidate:
+            extracted["note"] = candidate
     return extracted
 
 
@@ -7776,6 +7939,11 @@ def _workflow_prompt_for_field(workflow_type: str, field_name: str) -> str:
             "notes": "¿Quieres agregar notas del medicamento? Si no, escribe 'omitir'.",
         }
         return prompts.get(field_name, "Falta un dato para crear el medicamento.")
+    if workflow_type == "profile_note":
+        prompts = {
+            "note": "¿Qué texto quieres guardar como nota del perfil?",
+        }
+        return prompts.get(field_name, "Falta el texto de la nota del perfil.")
     prompts = {
         "doc_type": "¿Qué tipo de documento quieres guardar: receta, orden, resultado, informe u otro?",
         "file": "Adjunta el archivo del documento y envíame cualquier mensaje breve para continuar.",
@@ -7935,6 +8103,11 @@ def _workflow_confirmation_reply(workflow_type: str, created_item, timezone_name
             + (f" con dosis {created_item.dose}." if getattr(created_item, "dose", "") else ".")
             + " Si quieres, también puedo resumirte el tratamiento."
         )
+    if workflow_type == "profile_note":
+        return (
+            f'Listo. Guardé la nota del perfil "{_clip_text(getattr(created_item, "note", "") or "sin contenido", 220)}". '
+            "Si quieres, también puedo recordarte tus notas recientes."
+        )
     return (
         f"Listo. Guardé el documento {getattr(created_item, 'filename', '') or 'adjunto'}"
         + (f" como {getattr(getattr(created_item, 'doc_type', None), 'value', getattr(created_item, 'doc_type', 'documento'))}." if created_item else ".")
@@ -8032,6 +8205,41 @@ def _create_medication_from_workflow(
     return med
 
 
+def _create_profile_note_from_workflow(
+    db: Session,
+    *,
+    profile,
+    current_user: models.User,
+    values: dict,
+):
+    note_text = (values.get("note") or "").strip()
+    if not note_text:
+        raise HTTPException(status_code=400, detail="La nota no puede estar vacía")
+    item = models.ProfileNote(
+        profile_id=int(getattr(profile, "id", 0) or 0),
+        created_by_user_id=current_user.id,
+        note=note_text,
+        visibility="shared",
+    )
+    db.add(item)
+    _log_profile_activity(
+        db,
+        profile_id=int(getattr(profile, "id", 0) or 0),
+        actor_user_id=current_user.id,
+        action_type="note_added",
+        description=f"{current_user.name or current_user.email} agregó una nota del perfil desde Klinip IA",
+        metadata_json={
+            "visibility": item.visibility,
+            "source": "ai_chat",
+            "note_preview": _clip_text(note_text, 160),
+        },
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=False)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
 def _create_document_from_workflow(
     db: Session,
     *,
@@ -8101,6 +8309,7 @@ def _handle_chat_creation_workflow(
         conversation_id=conversation_id,
     )
     workflow_type = (workflow_item.workflow_type or "").strip() if workflow_item else ""
+    workflow_status = (workflow_item.status or "collecting").strip() if workflow_item else "collecting"
     if _workflow_cancel_requested(message):
         if workflow_item:
             _clear_ai_conversation_workflow(db, profile_id=profile_id, conversation_id=conversation_id)
@@ -8126,6 +8335,95 @@ def _handle_chat_creation_workflow(
             workflow_type=workflow_type,
             payload_json=payload_json,
         )
+        workflow_status = (workflow_item.status or "collecting").strip()
+
+    if workflow_type == "profile_note":
+        values = dict((workflow_item.payload_json or {}).get("values") or {})
+        if workflow_status == "awaiting_confirmation":
+            if _workflow_confirmation_accepted(message):
+                created_item = _create_profile_note_from_workflow(
+                    db,
+                    profile=profile,
+                    current_user=current_user,
+                    values=values,
+                )
+                references = [
+                    {
+                        "kind": "profile-note-created",
+                        "label": "Nota del perfil guardada",
+                        "detail": _clip_text(getattr(created_item, "note", "") or "nota del perfil", 72),
+                    }
+                ]
+                _clear_ai_conversation_workflow(db, profile_id=profile_id, conversation_id=conversation_id)
+                return {
+                    "handled": True,
+                    "reply": _workflow_confirmation_reply(workflow_type, created_item, timezone_name),
+                    "mode": "workflow-profile-note-created",
+                    "model_name": "workflow-engine",
+                    "references": references,
+                }
+            if _normalize_text(message or "") in {"no", "cambiar", "cambiala", "cámbiala", "editar", "modificar"}:
+                _save_ai_conversation_workflow(
+                    db,
+                    profile_id=profile_id,
+                    user_id=current_user.id,
+                    conversation_id=conversation_id,
+                    workflow_type=workflow_type,
+                    payload_json={"values": values, "skipped_fields": []},
+                    status="collecting",
+                )
+                return {
+                    "handled": True,
+                    "reply": "Perfecto. Escríbeme el texto exacto que quieres guardar como nota del perfil.",
+                    "mode": "workflow-profile-note-editing",
+                    "model_name": "workflow-engine",
+                    "references": [],
+                }
+
+        candidate_note = _extract_profile_note_candidate(message)
+        if candidate_note and not _workflow_confirmation_accepted(message):
+            values["note"] = candidate_note
+        note_value = (values.get("note") or "").strip()
+        if not note_value:
+            _save_ai_conversation_workflow(
+                db,
+                profile_id=profile_id,
+                user_id=current_user.id,
+                conversation_id=conversation_id,
+                workflow_type=workflow_type,
+                payload_json={"values": values, "skipped_fields": []},
+                status="collecting",
+            )
+            return {
+                "handled": True,
+                "reply": _workflow_prompt_for_field(workflow_type, "note"),
+                "mode": "workflow-profile-note-collecting",
+                "model_name": "workflow-engine",
+                "references": [],
+            }
+
+        _save_ai_conversation_workflow(
+            db,
+            profile_id=profile_id,
+            user_id=current_user.id,
+            conversation_id=conversation_id,
+            workflow_type=workflow_type,
+            payload_json={"values": values, "skipped_fields": []},
+            status="awaiting_confirmation",
+        )
+        return {
+            "handled": True,
+            "reply": _workflow_profile_note_confirmation_reply(note_value),
+            "mode": "workflow-profile-note-awaiting-confirmation",
+            "model_name": "workflow-engine",
+            "references": [
+                {
+                    "kind": "profile-note-draft",
+                    "label": "Borrador de nota del perfil",
+                    "detail": _clip_text(note_value, 72),
+                }
+            ],
+        }
 
     values = dict((workflow_item.payload_json or {}).get("values") or {})
     skipped_fields = list((workflow_item.payload_json or {}).get("skipped_fields") or [])
@@ -11337,6 +11635,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "30. Si existe 'document_chunks', prioriza esos fragmentos porque ya fueron recuperados por relevancia semántica y permisos validados.\n"
         "31. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
         "32. Si existe 'profile_notes', úsalas como contexto declarado por el usuario para pendientes, recordatorios, objetivos o temas a resolver. No las presentes como hechos clínicos confirmados si la nota solo expresa una intención o tarea.\n"
+        "33. No afirmes que guardaste, creaste, registraste o modificaste datos dentro de Klinip a menos que esa acción haya sido confirmada por el sistema. Si el usuario pide guardar algo y no hay confirmación del sistema, limita tu respuesta a redactar o preparar el contenido.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -11671,10 +11970,20 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
 
     if any(
         token in normalized
-        for token in ["nota rapida", "nota rápida", "notas rapidas", "notas rápidas", "mis notas", "que anote", "qué anoté"]
+        for token in [
+            "nota del perfil",
+            "notas del perfil",
+            "nota rapida",
+            "nota rápida",
+            "notas rapidas",
+            "notas rápidas",
+            "mis notas",
+            "que anote",
+            "qué anoté",
+        ]
     ):
         if not profile_notes:
-            return "No veo notas rápidas guardadas en el perfil activo."
+            return "No veo notas del perfil guardadas en el perfil activo."
         rendered_notes = []
         for item in profile_notes[:5]:
             timestamp = _safe_iso_local(getattr(item, "updated_at", None) or getattr(item, "created_at", None), context.get("timezone_name") or DEFAULT_TZ_NAME)
@@ -11942,6 +12251,8 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     if profile_notes and any(
         token in normalized
         for token in [
+            "nota del perfil",
+            "notas del perfil",
             "nota rapida",
             "nota rápida",
             "notas rapidas",
@@ -14090,7 +14401,7 @@ async def create_profile_note(
     _require_role(link, "caregiver")
     note_text = (payload.note or "").strip()
     if not note_text:
-        raise HTTPException(status_code=400, detail="La nota no puede estar vacia")
+        raise HTTPException(status_code=400, detail="La nota no puede estar vacía")
 
     item = models.ProfileNote(
         profile_id=profile_id,
@@ -14104,8 +14415,11 @@ async def create_profile_note(
         profile_id=profile_id,
         actor_user_id=current_user.id,
         action_type="note_added",
-        description=f"{current_user.name or current_user.email} agrego una nota colaborativa",
-        metadata_json={"visibility": item.visibility},
+        description=f"{current_user.name or current_user.email} agregó una nota del perfil",
+        metadata_json={
+            "visibility": item.visibility,
+            "note_preview": _clip_text(note_text, 160),
+        },
     )
     db.commit()
     db.refresh(item)
@@ -14135,7 +14449,7 @@ async def update_profile_note(
 
     updated_note = (payload.note if payload.note is not None else item.note).strip()
     if not updated_note:
-        raise HTTPException(status_code=400, detail="La nota no puede estar vacia")
+        raise HTTPException(status_code=400, detail="La nota no puede estar vacía")
 
     item.note = updated_note
     if payload.visibility is not None:
@@ -14146,8 +14460,12 @@ async def update_profile_note(
         profile_id=profile_id,
         actor_user_id=current_user.id,
         action_type="note_updated",
-        description=f"{current_user.name or current_user.email} actualizo una nota colaborativa",
-        metadata_json={"note_id": item.id, "visibility": item.visibility},
+        description=f"{current_user.name or current_user.email} actualizó una nota del perfil",
+        metadata_json={
+            "note_id": item.id,
+            "visibility": item.visibility,
+            "note_preview": _clip_text(updated_note, 160),
+        },
     )
     db.add(item)
     db.commit()
@@ -14180,8 +14498,12 @@ async def delete_profile_note(
         profile_id=profile_id,
         actor_user_id=current_user.id,
         action_type="note_deleted",
-        description=f"{current_user.name or current_user.email} elimino una nota colaborativa",
-        metadata_json={"note_id": item.id, "visibility": item.visibility or "shared"},
+        description=f"{current_user.name or current_user.email} eliminó una nota del perfil",
+        metadata_json={
+            "note_id": item.id,
+            "visibility": item.visibility or "shared",
+            "note_preview": _clip_text(item.note, 160),
+        },
     )
     db.delete(item)
     db.commit()
@@ -14199,6 +14521,7 @@ async def ai_chat(
     message = (payload.message or "").strip()
     if not message:
         raise HTTPException(status_code=400, detail="Debes escribir un mensaje.")
+    _assert_ai_chat_capacity_available(db, current_user)
 
     direct_report_request = _extract_direct_report_request(message)
     chat_intent = detect_chat_intent(message)
@@ -14229,18 +14552,20 @@ async def ai_chat(
         profile_id=int(profile.id),
         conversation_id=conversation_id,
     )
-    if has_workflow or _detect_chat_creation_target(message):
+    detected_workflow_type = (has_workflow.workflow_type or "").strip() if has_workflow else (_detect_chat_creation_target(message) or "")
+    if has_workflow or detected_workflow_type:
         try:
             writable_profile, _, writable_target_user_id = _get_active_profile_context(
                 db,
                 current_user,
                 require_write=True,
             )
-            _assert_collaboration_enabled(
-                current_user,
-                db=db,
-                owner_user_id=writable_profile.owner_user_id,
-            )
+            if detected_workflow_type != "profile_note":
+                _assert_collaboration_enabled(
+                    current_user,
+                    db=db,
+                    owner_user_id=writable_profile.owner_user_id,
+                )
         except HTTPException as exc:
             if exc.status_code == 403:
                 _clear_ai_conversation_workflow(

@@ -15,7 +15,7 @@ export default function LegalTerms() {
           <h2>1. Naturaleza del servicio</h2>
           <p>
             Klinip es una plataforma digital de gestión personal de salud. Permite organizar perfiles,
-            medicamentos, citas, calendario, documentos clínicos, notas rápidas, recordatorios y reportes
+            medicamentos, citas, calendario, documentos clínicos, notas del perfil, recordatorios y reportes
             de apoyo. Algunas funciones pueden variar según el plan contratado.
           </p>
         </section>

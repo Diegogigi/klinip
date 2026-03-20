@@ -15,7 +15,7 @@ export default function LegalConsent() {
           <p>Al usar Klinip, el usuario declara que comprende y acepta lo siguiente:</p>
           <ul className="legal-list">
             <li>Que la plataforma tratará datos personales sensibles relacionados con su salud y bienestar.</li>
-            <li>Que autoriza el almacenamiento y organización de datos como perfiles, medicamentos, citas, documentos y notas rápidas.</li>
+            <li>Que autoriza el almacenamiento y organización de datos como perfiles, medicamentos, citas, documentos y notas del perfil.</li>
             <li>Que autoriza el procesamiento de archivos subidos por él, incluyendo lectura OCR cuando corresponda.</li>
             <li>Que comprende que Klinip IA puede usar el contexto disponible del perfil activo para responder preguntas, generar resúmenes o asistir en acciones dentro de la app.</li>
             <li>Que entiende que la IA y el OCR son funciones de apoyo, pueden cometer errores y no reemplazan criterio médico profesional.</li>

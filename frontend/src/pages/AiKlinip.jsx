@@ -10,6 +10,7 @@ import {
   getAiHealthRadar,
   getAiHistory,
   getAppointments,
+  getMyPlan,
   deleteAiConversation,
   getDocuments,
   getHealthProfiles,
@@ -325,6 +326,7 @@ export default function AiKlinip() {
   const [radarProfileId, setRadarProfileId] = useState("active");
   const [radarPeriod, setRadarPeriod] = useState("30");
   const [resources, setResources] = useState({ profile: null, appointments: [], documents: [], medications: [] });
+  const [planInfo, setPlanInfo] = useState(null);
   const [pinnedConversationIds, setPinnedConversationIds] = useState([]);
   const [openConversationMenuId, setOpenConversationMenuId] = useState("");
   const [voiceState, setVoiceState] = useState("idle");
@@ -451,9 +453,10 @@ export default function AiKlinip() {
         return resourcesRequestRef.current;
       }
       resourcesRequestRef.current = (async () => {
-        const [profile, profiles] = await Promise.all([
+        const [profile, profiles, plan] = await Promise.all([
           getActiveHealthProfile().catch(() => null),
           getHealthProfiles().catch(() => []),
+          getMyPlan().catch(() => null),
         ]);
         const [appointments, documents, medications] = await Promise.all([
           getAppointments().catch(() => []),
@@ -468,6 +471,7 @@ export default function AiKlinip() {
           documents: Array.isArray(documents) ? documents : [],
           medications: Array.isArray(medications) ? medications : [],
         });
+        setPlanInfo(plan || null);
         setRadarProfiles(Array.isArray(profiles) ? profiles : []);
 
         if (profile?.full_name) {
@@ -839,7 +843,7 @@ export default function AiKlinip() {
           content:
               error?.code === "ECONNABORTED"
                 ? "Klinip IA está tardando más de lo normal en responder. Intenta de nuevo en unos segundos."
-                : "No pude consultar Klinip IA en este momento. Revisa tu conexión o intenta nuevamente.",
+                : cleanUiText(error?.response?.data?.detail || "No pude consultar Klinip IA en este momento. Revisa tu conexión o intenta nuevamente."),
           references: [],
           createdAt: new Date().toISOString(),
         },
@@ -848,6 +852,11 @@ export default function AiKlinip() {
       setLoading(false);
     }
   };
+
+  const aiFooterCopy =
+    planInfo?.plan_type === "basico" && planInfo?.ai_chat_daily_limit
+      ? `Plan Básico: Klinip IA en modalidad básica con hasta ${planInfo.ai_chat_daily_limit} consultas al día.`
+      : "Plan con Klinip IA completa para consultas sobre documentos, medicamentos, citas e historial.";
 
   const handleFileChange = (event) => {
     const selected = event.target.files?.[0];
@@ -1423,7 +1432,7 @@ export default function AiKlinip() {
 
               <div className="ai-input-footer">
                 <span className="ai-safe-dot" />
-                <span>La respuesta usa documentos, medicamentos, citas e historial según permisos del plan.</span>
+                <span>{aiFooterCopy}</span>
               </div>
             </div>
           </div>

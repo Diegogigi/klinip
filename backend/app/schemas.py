@@ -60,6 +60,8 @@ class PlanInfoOut(BaseModel):
     collaboration_enabled: bool
     family_panel_enabled: bool
     current_profiles: int
+    ai_access_level: str
+    ai_chat_daily_limit: Optional[int] = None
 
 
 class PlanMetricOut(BaseModel):

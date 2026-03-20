@@ -115,6 +115,16 @@ const icons = {
   aiMobile: <span className="icon-k" aria-hidden="true">K</span>,
 };
 
+function getHealthProfileAccessLabel(item, userId) {
+  if (!item) return "";
+  const isOwnProfile = Number(item.owner_user_id) === Number(userId);
+  if (isOwnProfile) return "propio";
+  if (item.is_primary_profile) return "titular";
+  const role = (item.access_role || "").toLowerCase();
+  if (role === "admin") return "admin";
+  return "invitado";
+}
+
 function Sidebar({
   user,
   notifications,
@@ -186,14 +196,6 @@ function Sidebar({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
-  const getProfileAccessLabelMobile = (item) => {
-    if (!item) return "";
-    const isOwner = Number(item.owner_user_id) === Number(user?.id);
-    if (isOwner) return "propio";
-    const role = (item.access_role || "").toLowerCase();
-    if (role === "admin") return "admin";
-    return "invitado";
-  };
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -379,14 +381,6 @@ function Topbar({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
-  const getProfileAccessLabel = (item) => {
-    if (!item) return "";
-    const isOwner = Number(item.owner_user_id) === Number(user?.id);
-    if (isOwner) return "propio";
-    const role = (item.access_role || "").toLowerCase();
-    if (role === "admin") return "admin";
-    return "invitado";
-  };
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || (!user && location.pathname === "/")) return null;
 
@@ -489,7 +483,7 @@ function Topbar({
                 </div>
                 <p className="topbar-user-menu-profile-name">
                   {activeProfile
-                    ? `${activeProfile.full_name} (${getProfileAccessLabel(activeProfile)})`
+                    ? `${activeProfile.full_name} (${getHealthProfileAccessLabel(activeProfile, user?.id)})`
                     : user?.name || "Perfil personal"}
                 </p>
                 {canSwitchProfiles ? (
@@ -502,7 +496,7 @@ function Topbar({
                     {(healthProfiles || []).map((item) => (
                       <option value={item.id} key={item.id}>
                         {item.full_name}
-                        {` (${getProfileAccessLabel(item)})`}
+                        {` (${getHealthProfileAccessLabel(item, user?.id)})`}
                       </option>
                     ))}
                   </select>

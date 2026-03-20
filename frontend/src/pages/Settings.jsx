@@ -58,6 +58,9 @@ const ACTION_TYPE_LABELS = {
   document_uploaded: "Documento subido",
   medication_added: "Medicamento agregado",
   appointment_created: "Cita creada",
+  note_added: "Nota agregada",
+  note_updated: "Nota actualizada",
+  note_deleted: "Nota eliminada",
 };
 
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate, initialSection = "perfil" }) {
@@ -129,6 +132,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   });
   const [profileNotes, setProfileNotes] = useState([]);
   const [newProfileNote, setNewProfileNote] = useState("");
+  const [showAllProfileNotes, setShowAllProfileNotes] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     email: "",
     role: "viewer",
@@ -140,6 +144,20 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     if (normalizedRole === "admin") return "Administrador";
     if (normalizedRole === "caregiver") return "Editor";
     return "Lector";
+  };
+  const familyRoleAccessSummary = (role) => {
+    const normalizedRole = String(role || "viewer").trim().toLowerCase();
+    if (normalizedRole === "admin") {
+      return "Puedes ver, editar y gestionar colaboradores.";
+    }
+    if (normalizedRole === "caregiver") {
+      return "Puedes ver y editar datos clínicos.";
+    }
+    return "Solo puedes revisar la información compartida.";
+  };
+  const getActivityNotePreview = (entry) => {
+    const preview = entry?.metadata?.note_preview;
+    return typeof preview === "string" ? preview.trim() : "";
   };
 
   const detectedTimezone = useMemo(() => {
@@ -227,6 +245,29 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const familyMemberCards = familyProfiles.map((item, index) => {
     const panel = panelByProfileId.get(Number(item.id)) || {};
     const tone = familyAccentTones[index % familyAccentTones.length];
+    const isOwnProfile = Number(item.owner_user_id) === Number(profile?.id);
+    const isPrimaryProfile = Boolean(item.is_primary_profile);
+    const roleLabel = familyRoleLabel(item.access_role);
+    const relationLabel = panel.relationship || item.relation_with_owner || "Perfil de salud";
+    const ageLabel = typeof panel.age_years === "number" ? `${panel.age_years} años` : null;
+    const relationshipLabel = isOwnProfile
+      ? "Perfil administrado desde tu cuenta"
+      : isPrimaryProfile
+      ? "Perfil principal del plan familiar"
+      : `${relationLabel}${ageLabel ? ` - ${ageLabel}` : ""}`;
+    const badgeLabel = isOwnProfile
+      ? "Tu perfil"
+      : isPrimaryProfile
+      ? "Titular del plan"
+      : "Perfil compartido";
+    const accessSummary = isOwnProfile
+      ? "Administrador desde tu cuenta."
+      : roleLabel;
+    const accessHint = isOwnProfile
+      ? "Este perfil no depende de una invitación externa."
+      : isPrimaryProfile
+      ? familyRoleAccessSummary(item.access_role)
+      : `Acceso otorgado desde otra cuenta. ${familyRoleAccessSummary(item.access_role)}`;
     return {
       ...item,
       tone,
@@ -236,16 +277,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         .slice(0, 2)
         .map((part) => part[0]?.toUpperCase() || "")
         .join(""),
-      relationshipLabel: panel.relationship || item.relation_with_owner || "Perfil de salud",
-      ageLabel: typeof panel.age_years === "number" ? `${panel.age_years} anos` : null,
-      medicationsCount: panel.medications_active ?? 0,
-      documentsCount: panel.documents_uploaded ?? panel.reminders_pending ?? 0,
-      appointmentsCount: panel.next_appointment_at ? 1 : 0,
-      isOwner: Number(item.owner_user_id) === Number(profile?.id),
-      accessLabel:
-        Number(item.owner_user_id) === Number(profile?.id)
-          ? "Tu - Administrador"
-          : familyRoleLabel(item.access_role),
+      relationshipLabel,
+      badgeLabel,
+      accessSummary,
+      accessHint,
+      isOwner: isOwnProfile,
     };
   });
   const familyReportHighlight =
@@ -288,6 +324,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     !!activeHealthProfile && (isActiveHealthProfileOwner || ["admin", "caregiver"].includes(activeHealthProfileRole));
   const canManageActiveFamilyProfile =
     !!activeHealthProfile && (isActiveHealthProfileOwner || activeHealthProfileRole === "admin");
+  const visibleProfileNotes = showAllProfileNotes ? profileNotes : profileNotes.slice(0, 3);
+  const canToggleProfileNotes = profileNotes.length > 3;
   const chronicConditionTags = (chronicCondition || "")
     .split(",")
     .map((item) => item.trim())
@@ -321,6 +359,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setMobileSectionOpen(true);
     }
   }, [initialSection, isMobileSettings]);
+
+  useEffect(() => {
+    setShowAllProfileNotes(false);
+  }, [activeFamilyProfileId]);
 
   useEffect(() => {
     let mounted = true;
@@ -1036,7 +1078,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     if (!activeFamilyProfileId) return;
     const note = (newProfileNote || "").trim();
     if (!note) {
-      setFamilyStatus("La nota no puede estar vacia");
+      setFamilyStatus("La nota no puede estar vacía");
       return;
     }
     try {
@@ -1475,10 +1517,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 </span>
                 <div>
                   <p className="family-member-name">{item.full_name}</p>
-                  <p className="family-member-meta">
-                    {item.relationshipLabel}
-                    {item.ageLabel ? ` - ${item.ageLabel}` : ""}
-                  </p>
+                  <p className="family-member-meta">{item.relationshipLabel}</p>
                   <span
                     className={`family-member-badge ${item.isOwner ? "is-owner" : "is-managed"}`}
                     style={
@@ -1487,23 +1526,15 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                         : { background: item.tone.soft, borderColor: item.tone.border, color: item.tone.start }
                     }
                   >
-                    {item.accessLabel}
+                    {item.badgeLabel}
                   </span>
                 </div>
               </div>
-              <div className="family-member-stats">
-                <div className="family-member-stat">
-                  <strong>{item.medicationsCount}</strong>
-                  <span>Medicamentos</span>
-                </div>
-                <div className="family-member-stat">
-                  <strong>{item.documentsCount}</strong>
-                  <span>Seguimientos</span>
-                </div>
-                <div className="family-member-stat">
-                  <strong>{item.appointmentsCount}</strong>
-                  <span>Citas</span>
-                </div>
+              <div className="family-member-details">
+                <p className="family-member-detail-line">
+                  <strong>Acceso actual:</strong> {item.accessSummary}
+                </p>
+                <p className="family-member-detail-line">{item.accessHint}</p>
               </div>
               <div className="family-member-actions">
                 <button
@@ -1736,13 +1767,24 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               <div className="family-card-line tone-violet" />
               <div className="family-card-head">
                 <div>
-                  <p className="family-card-kicker family-title-violet">Notas colaborativas</p>
-                  <p className="family-inline-muted">Comparte anotaciones con los cuidadores</p>
+                  <p className="family-card-kicker family-title-violet">Notas del perfil</p>
+                  <p className="family-inline-muted">
+                    Deja contexto breve sobre síntomas, cambios o pendientes para quienes cuidan este perfil.
+                  </p>
                 </div>
-                <button className="family-link-btn" type="button">
-                  Ver historial
+                <button
+                  className="family-link-btn"
+                  type="button"
+                  onClick={() => setShowAllProfileNotes((prev) => !prev)}
+                  disabled={!canToggleProfileNotes}
+                >
+                  {canToggleProfileNotes ? (showAllProfileNotes ? "Ver menos" : `Ver historial (${profileNotes.length})`) : "Últimas notas"}
                 </button>
               </div>
+
+              <p className="family-note-purpose">
+                Úsala para dejar observaciones rápidas que ayuden a otro cuidador a entender qué pasó y qué sigue.
+              </p>
 
               {canEditActiveFamilyProfile ? (
                 <>
@@ -1758,9 +1800,45 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 </>
               ) : (
                 <p className="muted">
-                  Disponible en plan Familiar para coordinacion entre cuidadores.
+                  Disponible en plan Familiar para coordinación entre cuidadores.
                 </p>
               )}
+
+              <div className="family-notes-history">
+                <div className="family-notes-history-head">
+                  <p className="family-notes-history-title">Historial de notas</p>
+                  {profileNotes.length ? (
+                    <p className="family-inline-muted">
+                      {showAllProfileNotes || profileNotes.length <= 3
+                        ? `${profileNotes.length} nota${profileNotes.length === 1 ? "" : "s"} visible${profileNotes.length === 1 ? "" : "s"}`
+                        : `Mostrando 3 de ${profileNotes.length} notas`}
+                    </p>
+                  ) : null}
+                </div>
+                {visibleProfileNotes.length ? (
+                  <div className="family-notes-list">
+                    {visibleProfileNotes.map((item) => (
+                      <article className="family-note-item" key={item.id}>
+                        <div className="family-note-item-head">
+                          <p className="family-note-item-author">{item.created_by_name || "Cuidador"}</p>
+                          <p className="family-note-item-meta">
+                            {item.updated_at && item.updated_at !== item.created_at ? "Actualizada" : "Creada"}
+                            {" · "}
+                            {item.updated_at
+                              ? toLocaleDateTimeOrEmpty(item.updated_at)
+                              : toLocaleDateTimeOrEmpty(item.created_at)}
+                          </p>
+                        </div>
+                        <p className="family-note-item-body">{item.note}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="muted">
+                    Aún no hay notas del perfil guardadas para este perfil.
+                  </p>
+                )}
+              </div>
 
               <div className="family-activity-divider">
                 <span />
@@ -1772,19 +1850,25 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 <div className="family-timeline">
                   {activityLog.length ? (
                     activityLog.map((entry) => {
+                      const notePreview = getActivityNotePreview(entry);
                       const tone =
                         entry.action_type === "invitation_accepted"
                           ? "accept"
-                          : entry.action_type === "invitation_revoked"
+                        : entry.action_type === "invitation_revoked"
                           ? "revoke"
+                        : entry.action_type?.startsWith("note_")
+                          ? "note"
                           : "invite";
                       return (
                         <article className="family-timeline-item" key={entry.id}>
                           <span className={`family-timeline-dot is-${tone}`}>
-                            {tone === "accept" ? "✓" : tone === "revoke" ? "✕" : "↗"}
+                            {tone === "accept" ? "✓" : tone === "revoke" ? "✕" : tone === "note" ? "✎" : "↗"}
                           </span>
                           <div className="family-timeline-body">
                             <p className="family-timeline-text">{entry.description}</p>
+                            {notePreview ? (
+                              <p className="family-timeline-note-preview">"{notePreview}"</p>
+                            ) : null}
                             <p className="family-timeline-meta">
                               <span className="family-timeline-type">
                                 {ACTION_TYPE_LABELS[entry.action_type] || entry.action_type.replace(/_/g, " ")}
@@ -1797,7 +1881,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                       );
                     })
                   ) : (
-                    <p className="muted">Aun no hay actividad en este perfil.</p>
+                    <p className="muted">Aún no hay actividad en este perfil.</p>
                   )}
                 </div>
               ) : (
@@ -2724,13 +2808,5 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     </>
   );
 }
-
-
-
-
-
-
-
-
 
 
