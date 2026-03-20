@@ -326,6 +326,20 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     !!activeHealthProfile && (isActiveHealthProfileOwner || activeHealthProfileRole === "admin");
   const visibleProfileNotes = showAllProfileNotes ? profileNotes : profileNotes.slice(0, 3);
   const canToggleProfileNotes = profileNotes.length > 3;
+  const hasRelevantFamilyAiSignals = Boolean(
+    familyAiContext &&
+      (
+        Number(familyAiContext.active_alerts_total || 0) > 0 ||
+        Number(familyAiContext.low_adherence_profiles || 0) > 0 ||
+        Number(familyAiContext.pending_documents_total || 0) > 0 ||
+        (familyAiContext.profiles || []).some(
+          (item) =>
+            Number(item.active_alerts || 0) > 0 ||
+            Boolean(item.low_adherence) ||
+            Number(item.pending_documents_count || 0) > 0
+        )
+      )
+  );
   const chronicConditionTags = (chronicCondition || "")
     .split(",")
     .map((item) => item.trim())
@@ -1936,10 +1950,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   <p className="family-card-kicker family-title-blue">IA familiar</p>
                   <p className="family-inline-muted">Lectura transversal de perfiles, alertas y brechas del grupo</p>
                 </div>
-                <span className="family-inline-muted">30 dias</span>
+                <span className="family-inline-muted">30 días</span>
               </div>
 
-              {familyAiContext ? (
+              {hasRelevantFamilyAiSignals ? (
                 <>
                   <p className="family-ai-summary">{familyAiContext.summary}</p>
                   <div className="family-report-kpis family-ai-kpis">
@@ -1966,7 +1980,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                         <div>
                           <p className="family-report-highlight-name">{item.profile_name}</p>
                           <p className="family-inline-muted">
-                            {item.relation_with_owner || "Perfil familiar"} · {item.upcoming_appointments || 0} citas proximas
+                            {item.relation_with_owner || "Perfil familiar"} · {item.upcoming_appointments || 0} citas próximas
                           </p>
                         </div>
                         <div className="family-ai-profile-tags">
@@ -1978,7 +1992,12 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   </div>
                 </>
               ) : (
-                <p className="muted">Sin analisis IA familiar aun.</p>
+                <div className="family-report-empty">
+                  <p className="family-report-empty-title">Aún no hay señales familiares relevantes.</p>
+                  <p className="family-inline-muted">
+                    Cuando se detecten alertas, adherencia baja o documentos pendientes, aparecerán aquí.
+                  </p>
+                </div>
               )}
             </section>
 
@@ -2808,5 +2827,3 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     </>
   );
 }
-
-

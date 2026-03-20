@@ -3274,6 +3274,7 @@ body.theme-dark .family-link-btn:hover {
 body.theme-dark .family-role-row,
 body.theme-dark .family-inv-row,
 body.theme-dark .family-report-kpi,
+body.theme-dark .family-report-empty,
 body.theme-dark .family-report-highlight {
   background: #0b1224;
   border-color: #1e293b;
@@ -3285,6 +3286,7 @@ body.theme-dark .family-notes-history-title,
 body.theme-dark .family-note-item-author,
 body.theme-dark .family-smart-alert-title,
 body.theme-dark .family-report-kpi strong,
+body.theme-dark .family-report-empty-title,
 body.theme-dark .family-report-highlight-name,
 body.theme-dark .family-automation-row {
   color: #e2e8f0;
@@ -9002,6 +9004,21 @@ body.theme-dark .med-refill-toggle {
   padding: 0.95rem 1rem;
 }
 
+.family-report-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  padding: 1rem;
+}
+
+.family-report-empty-title {
+  margin: 0 0 0.3rem;
+  color: #0f172a;
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .family-report-highlight-name {
   margin: 0;
   color: #0f172a;
@@ -9371,6 +9388,14 @@ body.theme-dark .med-refill-toggle {
     overflow-wrap: anywhere;
     word-break: break-word;
     hyphens: auto;
+  }
+
+  .family-report-empty {
+    padding: 0.85rem;
+  }
+
+  .family-report-empty-title {
+    font-size: 0.86rem;
   }
 
   .family-report-highlight {
