@@ -1,10 +1,80 @@
 import React, { useEffect, useRef, useState } from "react";
-import { stepUpVerify } from "../api";
+import { requestStepUpEmailCode, stepUpVerify } from "../api";
 
-/**
- * Modal de step-up authentication.
- * Se muestra cuando una acción sensible requiere verificación adicional.
- */
+const METHOD_EMAIL = "email_code";
+const METHOD_PASSWORD = "password";
+const METHOD_AUTHENTICATOR = "authenticator";
+
+function getMethodOptions(hasMfa) {
+  const options = [
+    {
+      id: METHOD_EMAIL,
+      title: "Código por correo",
+      badge: "Recomendado",
+      description: "Te enviamos un código temporal de 6 dígitos al correo de tu cuenta.",
+    },
+    {
+      id: METHOD_PASSWORD,
+      title: "Contraseña actual",
+      badge: "Siempre disponible",
+      description: "Usa la misma contraseña con la que inicias sesión en Klinip.",
+    },
+  ];
+
+  if (hasMfa) {
+    options.push({
+      id: METHOD_AUTHENTICATOR,
+      title: "App autenticadora",
+      badge: "Opcional",
+      description: "Usa Google Authenticator, Microsoft Authenticator, Authy u otra app compatible.",
+    });
+  }
+
+  return options;
+}
+
+function getMethodFieldMeta(method) {
+  if (method === METHOD_EMAIL) {
+    return {
+      label: "Código temporal",
+      placeholder: "000000",
+      type: "text",
+      inputMode: "numeric",
+      autoComplete: "one-time-code",
+      maxLength: 6,
+      helper:
+        "Escribe el código de 6 dígitos que llegó a tu correo. Expira en pocos minutos.",
+      normalize: (value) => value.replace(/\D/g, "").slice(0, 6),
+    };
+  }
+
+  if (method === METHOD_AUTHENTICATOR) {
+    return {
+      label: "Código del autenticador o código de respaldo",
+      placeholder: "000000 o código de respaldo",
+      type: "text",
+      inputMode: "text",
+      autoComplete: "one-time-code",
+      maxLength: 32,
+      helper:
+        "La app autenticadora es opcional. Si la activaste, aquí puedes usar el código de 6 dígitos o un código de respaldo.",
+      normalize: (value) => value.slice(0, 32),
+    };
+  }
+
+  return {
+    label: "Contraseña actual",
+    placeholder: "Ingresa tu contraseña",
+    type: "password",
+    inputMode: undefined,
+    autoComplete: "current-password",
+    maxLength: 128,
+    helper:
+      "Corresponde a la misma contraseña que usas para iniciar sesión. No es la contraseña del perfil de salud.",
+    normalize: (value) => value,
+  };
+}
+
 export default function StepUpModal({
   open,
   onClose,
@@ -12,26 +82,66 @@ export default function StepUpModal({
   hasMfa = false,
   actionLabel = "esta acción",
 }) {
+  const [method, setMethod] = useState(METHOD_EMAIL);
   const [proof, setProof] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sendingEmailCode, setSendingEmailCode] = useState(false);
   const [error, setError] = useState("");
-  const [method, setMethod] = useState(hasMfa ? "code" : "password");
+  const [emailNotice, setEmailNotice] = useState("");
+  const [emailMeta, setEmailMeta] = useState(null);
   const inputRef = useRef(null);
 
-  const isPasswordMethod = method === "password";
-  const normalizedProof = isPasswordMethod ? proof : proof.trim();
-  const canSubmit = isPasswordMethod ? proof.length > 0 : normalizedProof.length > 0;
+  const methodOptions = getMethodOptions(hasMfa);
+  const fieldMeta = getMethodFieldMeta(method);
+  const normalizedProof =
+    method === METHOD_PASSWORD ? proof : proof.trim();
+  const canSubmit = normalizedProof.length > 0;
 
   useEffect(() => {
-    if (open) {
-      setProof("");
-      setError("");
-      setMethod(hasMfa ? "code" : "password");
-      setTimeout(() => inputRef.current?.focus(), 80);
-    }
-  }, [hasMfa, open]);
+    if (!open) return;
+    setMethod(METHOD_EMAIL);
+    setProof("");
+    setLoading(false);
+    setSendingEmailCode(false);
+    setError("");
+    setEmailNotice("");
+    setEmailMeta(null);
+    setTimeout(() => inputRef.current?.focus(), 80);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    setProof("");
+    setError("");
+    setTimeout(() => inputRef.current?.focus(), 80);
+  }, [method, open]);
 
   if (!open) return null;
+
+  const handleMethodChange = (nextMethod) => {
+    setMethod(nextMethod);
+  };
+
+  const handleSendEmailCode = async () => {
+    setSendingEmailCode(true);
+    setError("");
+    setEmailNotice("");
+    try {
+      const response = await requestStepUpEmailCode();
+      setEmailMeta(response || null);
+      setEmailNotice(
+        response?.masked_email
+          ? `Enviamos un código temporal a ${response.masked_email}.`
+          : "Enviamos un código temporal a tu correo."
+      );
+      setTimeout(() => inputRef.current?.focus(), 80);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setError(typeof detail === "string" ? detail : "No se pudo enviar el código temporal.");
+    } finally {
+      setSendingEmailCode(false);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -39,19 +149,22 @@ export default function StepUpModal({
     setLoading(true);
     setError("");
     try {
-      const res = await stepUpVerify({ proof: normalizedProof });
-      if (res?.stepup_token) {
+      const response = await stepUpVerify({
+        method,
+        proof: normalizedProof,
+      });
+      if (response?.stepup_token) {
         setProof("");
-        onVerified(res.stepup_token);
-      } else {
-        setError("Respuesta inesperada. Intenta de nuevo.");
+        onVerified(response.stepup_token);
+        return;
       }
+      setError("Respuesta inesperada. Intenta nuevamente.");
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setError(
         typeof detail === "string"
           ? detail
-          : detail?.message || "Verificación incorrecta. Intenta de nuevo."
+          : detail?.message || "No pudimos confirmar tu identidad."
       );
     } finally {
       setLoading(false);
@@ -83,9 +196,9 @@ export default function StepUpModal({
               <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
             <div>
-              <h3 id="stepup-modal-title">Verificación requerida</h3>
+              <h3 id="stepup-modal-title">Confirma que eres tú</h3>
               <p>
-                Para <strong>{actionLabel}</strong>, confirma tu identidad.
+                Para <strong>{actionLabel}</strong>, elige un método de seguridad y valida tu identidad.
               </p>
             </div>
           </div>
@@ -95,70 +208,83 @@ export default function StepUpModal({
         </div>
 
         <div className="stepup-modal-body">
-          {hasMfa ? (
-            <div className="stepup-method-switch" role="tablist" aria-label="Método de verificación">
+          <div className="stepup-intro-card">
+            <p className="stepup-intro-title">¿Qué está pasando?</p>
+            <p className="stepup-intro-copy">
+              Esta verificación protege documentos e información sensible. Puedes usar tu correo, tu contraseña
+              o, si la activaste, una app autenticadora.
+            </p>
+          </div>
+
+          <div className={`stepup-method-switch${hasMfa ? " has-three" : ""}`} role="tablist" aria-label="Método de verificación">
+            {methodOptions.map((option) => (
               <button
+                key={option.id}
                 type="button"
-                className={`stepup-method-btn${!isPasswordMethod ? " is-active" : ""}`}
-                onClick={() => {
-                  setMethod("code");
-                  setProof("");
-                  setError("");
-                }}
+                className={`stepup-method-btn${method === option.id ? " is-active" : ""}`}
+                onClick={() => handleMethodChange(option.id)}
               >
-                Código o respaldo
+                <span className="stepup-method-btn-title">{option.title}</span>
+                <span className="stepup-method-btn-badge">{option.badge}</span>
+                <span className="stepup-method-btn-desc">{option.description}</span>
               </button>
+            ))}
+          </div>
+
+          {method === METHOD_EMAIL ? (
+            <div className="stepup-channel-card">
+              <div>
+                <p className="stepup-channel-title">Código temporal por correo</p>
+                <p className="stepup-channel-copy">
+                  No necesitas instalar otra app. Te enviaremos un código temporal a tu correo registrado.
+                </p>
+              </div>
               <button
                 type="button"
-                className={`stepup-method-btn${isPasswordMethod ? " is-active" : ""}`}
-                onClick={() => {
-                  setMethod("password");
-                  setProof("");
-                  setError("");
-                }}
+                className="secondary-btn stepup-email-send"
+                onClick={handleSendEmailCode}
+                disabled={sendingEmailCode || loading}
               >
-                Contraseña
+                {sendingEmailCode ? "Enviando..." : emailMeta ? "Reenviar código" : "Enviar código"}
               </button>
             </div>
           ) : null}
 
-          {error ? (
-            <div className="auth-alert error stepup-alert">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-              <span>{error}</span>
+          {method === METHOD_AUTHENTICATOR ? (
+            <div className="stepup-channel-card is-subtle">
+              <div>
+                <p className="stepup-channel-title">App autenticadora opcional</p>
+                <p className="stepup-channel-copy">
+                  Puedes usar apps gratuitas como Google Authenticator, Microsoft Authenticator o Authy.
+                </p>
+              </div>
             </div>
           ) : null}
+
+          {emailNotice ? <div className="auth-alert success stepup-alert"><span>{emailNotice}</span></div> : null}
+          {error ? <div className="auth-alert error stepup-alert"><span>{error}</span></div> : null}
 
           <form onSubmit={handleSubmit} className="stepup-form">
             <div className="input-group">
-              <label className="input-label">
-                {isPasswordMethod
-                  ? "Contraseña actual"
-                  : "Código del autenticador o código de respaldo"}
-              </label>
+              <label className="input-label">{fieldMeta.label}</label>
               <input
                 ref={inputRef}
                 className="input-field"
-                type={isPasswordMethod ? "password" : "text"}
-                inputMode={isPasswordMethod ? undefined : "text"}
+                type={fieldMeta.type}
+                inputMode={fieldMeta.inputMode}
                 value={proof}
-                onChange={(event) =>
-                  setProof(isPasswordMethod ? event.target.value : event.target.value.slice(0, 32))
-                }
-                placeholder={isPasswordMethod ? "Ingresa tu contraseña actual" : "000000 o código de respaldo"}
-                autoComplete={isPasswordMethod ? "current-password" : "one-time-code"}
-                maxLength={isPasswordMethod ? 128 : 32}
+                onChange={(event) => setProof(fieldMeta.normalize(event.target.value))}
+                placeholder={fieldMeta.placeholder}
+                autoComplete={fieldMeta.autoComplete}
+                maxLength={fieldMeta.maxLength}
                 disabled={loading}
               />
-              <span className="tiny-note stepup-help-text">
-                {isPasswordMethod
-                  ? "Usa tu contraseña exacta. Si contiene espacios, se respetarán tal como los escribas."
-                  : "Puedes usar el código de 6 dígitos del autenticador o un código de respaldo."}
-              </span>
+              <span className="tiny-note stepup-help-text">{fieldMeta.helper}</span>
+              {method === METHOD_EMAIL && emailMeta?.expires_in ? (
+                <span className="tiny-note stepup-help-text">
+                  El código dura aproximadamente {Math.max(1, Math.round(emailMeta.expires_in / 60))} minutos.
+                </span>
+              ) : null}
             </div>
 
             <div className="stepup-actions">
@@ -166,7 +292,7 @@ export default function StepUpModal({
                 type="button"
                 className="secondary-btn"
                 onClick={onClose}
-                disabled={loading}
+                disabled={loading || sendingEmailCode}
               >
                 Cancelar
               </button>

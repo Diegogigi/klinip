@@ -63,6 +63,69 @@ const ACTION_TYPE_LABELS = {
   note_deleted: "Nota eliminada",
 };
 
+const SECURITY_EVENT_LABELS = {
+  login_ok: "Inicio de sesión correcto",
+  login_fail: "Inicio de sesión rechazado",
+  mfa_enroll_started: "Configuración de app autenticadora iniciada",
+  mfa_enabled: "App autenticadora activada",
+  mfa_disabled: "App autenticadora desactivada",
+  mfa_backup_codes_regenerated: "Códigos de respaldo regenerados",
+  stepup_granted: "Acceso sensible autorizado",
+  stepup_failed: "Verificación sensible rechazada",
+  stepup_email_requested: "Código temporal enviado al correo",
+  stepup_email_failed: "Código temporal por correo rechazado",
+  document_downloaded: "Documento descargado",
+};
+
+const getSecurityEventLabel = (action) =>
+  SECURITY_EVENT_LABELS[action] || String(action || "evento").replace(/_/g, " ");
+
+const getSecurityEventTone = (action) => {
+  const normalized = String(action || "").toLowerCase();
+  if (normalized.includes("fail") || normalized.includes("failed")) return "is-danger";
+  if (normalized.includes("email") || normalized.includes("mfa")) return "is-info";
+  return "is-success";
+};
+
+const getSessionDeviceSummary = (deviceLabel) => {
+  const raw = String(deviceLabel || "").trim();
+  if (!raw) {
+    return {
+      title: "Dispositivo sin nombre",
+      detail: "",
+    };
+  }
+
+  const browserMatch =
+    raw.match(/Edg\/([\d.]+)/i) ||
+    raw.match(/Chrome\/([\d.]+)/i) ||
+    raw.match(/Firefox\/([\d.]+)/i) ||
+    raw.match(/Version\/([\d.]+).*Safari/i) ||
+    raw.match(/Safari\/([\d.]+)/i);
+  const browserName = browserMatch
+    ? browserMatch[0].startsWith("Edg")
+      ? `Edge ${browserMatch[1].split(".")[0]}`
+      : browserMatch[0].startsWith("Chrome")
+      ? `Chrome ${browserMatch[1].split(".")[0]}`
+      : browserMatch[0].startsWith("Firefox")
+      ? `Firefox ${browserMatch[1].split(".")[0]}`
+      : `Safari ${browserMatch[1].split(".")[0]}`
+    : "";
+
+  let platform = "";
+  if (/Windows/i.test(raw)) platform = "Windows";
+  else if (/Android/i.test(raw)) platform = "Android";
+  else if (/(iPhone|iPad|iOS)/i.test(raw)) platform = "iPhone";
+  else if (/Mac OS X|Macintosh/i.test(raw)) platform = "macOS";
+  else if (/Linux/i.test(raw)) platform = "Linux";
+
+  const title = [browserName, platform].filter(Boolean).join(" · ") || raw.slice(0, 48);
+  return {
+    title,
+    detail: raw !== title ? raw : "",
+  };
+};
+
 export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate, initialSection = "perfil" }) {
   const profile = user || {};
   const navigate = useNavigate();
@@ -353,6 +416,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     { id: "reportes", label: "Reportes IA", icon: "legal" },
     { id: "legal", label: "Legal", icon: "legal" },
   ];
+  const mfaNoticeTone =
+    mfaNotice && /(correctamente|activado|regenerados|desactivado)/i.test(mfaNotice)
+      ? "is-success"
+      : "is-danger";
 
   useEffect(() => {
     const onResize = () => {
@@ -2438,223 +2505,338 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             <h2 className="profile-page-title">
               <em>Seguridad</em> avanzada
             </h2>
-            <p className="muted">Protección reforzada para tu cuenta y datos de salud.</p>
+            <p className="muted">Protección reforzada para tu cuenta, documentos e información clínica.</p>
           </div>
         </div>
-        <div className="privacy-layout">
-
-          {/* ── MFA ── */}
-          <div className="privacy-card">
-            <div className="privacy-card-header">
-              <h4>Autenticación en dos pasos (MFA)</h4>
-              {mfaStatus && (
-                <span className={`privacy-status-pill ${mfaStatus.mfa_enabled ? "is-on" : "is-off"}`}>
-                  {mfaStatus.mfa_enabled ? "Activo" : "Inactivo"}
-                </span>
-              )}
+        <div className="security-stack">
+          <div className="privacy-card security-overview-card">
+            <div className="privacy-card-header security-card-heading">
+              <div>
+                <h4>Cómo protegemos las acciones sensibles</h4>
+                <p className="muted">
+                  Cuando abres o descargas documentos clínicos, Klinip te vuelve a pedir confirmar tu identidad.
+                </p>
+              </div>
             </div>
-            <p className="muted">
-              Añade una capa extra de seguridad usando una aplicación autenticadora (Google Authenticator, Authy, etc.).
-            </p>
-
-            {mfaNotice && (
-              <p className="muted" style={{ color: mfaNotice.includes("correctamente") || mfaNotice.includes("activado") || mfaNotice.includes("regenerados") ? "var(--color-success, #16a34a)" : "var(--color-danger, #dc2626)", marginBottom: "0.5rem" }}>
-                {mfaNotice}
-              </p>
-            )}
-
-            {mfaStatus && !mfaStatus.mfa_enabled && !mfaEnrollData && (
-              <div className="privacy-actions">
-                <button className="primary-btn" type="button" onClick={handleMfaEnrollStart} disabled={mfaLoading}>
-                  {mfaLoading ? "Cargando..." : "Activar MFA"}
-                </button>
+            <div className="security-overview-grid">
+              <div className="security-overview-tile">
+                <span className="security-overview-kicker">Método recomendado</span>
+                <strong>Código temporal por correo</strong>
+                <p className="muted">
+                  Recibes un código numérico de 6 dígitos en tu correo y lo ingresas para continuar. No requiere otra app.
+                </p>
               </div>
-            )}
-
-            {/* Enrollment flow: show QR + backup codes */}
-            {mfaEnrollData && (
-              <div style={{ marginTop: "1rem" }}>
-                <p className="muted" style={{ marginBottom: "0.75rem" }}>
-                  <strong>1.</strong> Escanea el código QR con tu aplicación autenticadora:
+              <div className="security-overview-tile">
+                <span className="security-overview-kicker">Método alternativo</span>
+                <strong>Tu contraseña actual</strong>
+                <p className="muted">
+                  Es la misma contraseña con la que inicias sesión. No corresponde a la contraseña del perfil de salud.
                 </p>
-                <div style={{ background: "#fff", padding: "1rem", borderRadius: "8px", display: "inline-block", marginBottom: "1rem" }}>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(mfaEnrollData.totp_uri)}`}
-                    alt="QR MFA"
-                    width={180} height={180}
-                    style={{ display: "block" }}
-                  />
-                </div>
-                <p className="muted" style={{ marginBottom: "0.5rem" }}>
-                  O ingresa el código manualmente: <code style={{ fontFamily: "monospace", background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px" }}>{mfaEnrollData.secret}</code>
-                </p>
-                <p className="muted" style={{ marginTop: "1rem", marginBottom: "0.5rem" }}>
-                  <strong>2.</strong> Guarda estos códigos de respaldo en un lugar seguro. Solo se muestran una vez:
-                </p>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginBottom: "1rem" }}>
-                  {mfaEnrollData.backup_codes.map((c) => (
-                    <code key={c} style={{ background: "#f1f5f9", padding: "3px 8px", borderRadius: "4px", fontFamily: "monospace", fontSize: "0.85rem" }}>{c}</code>
-                  ))}
-                </div>
-                <p className="muted" style={{ marginBottom: "0.5rem" }}>
-                  <strong>3.</strong> Ingresa el código de 6 dígitos de tu aplicación para confirmar:
-                </p>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  <input
-                    className="input-field"
-                    type="text"
-                    inputMode="numeric"
-                    value={mfaEnrollCode}
-                    onChange={(e) => setMfaEnrollCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    placeholder="000000"
-                    maxLength={6}
-                    style={{ width: "120px" }}
-                  />
-                  <button className="primary-btn" type="button" onClick={handleMfaEnrollConfirm} disabled={mfaLoading || mfaEnrollCode.length < 6}>
-                    {mfaLoading ? "Verificando..." : "Confirmar"}
-                  </button>
-                  <button className="secondary-btn" type="button" onClick={() => { setMfaEnrollData(null); setMfaEnrollCode(""); setMfaNotice(""); }}>
-                    Cancelar
-                  </button>
-                </div>
               </div>
-            )}
+              <div className="security-overview-tile">
+                <span className="security-overview-kicker">Opción avanzada</span>
+                <strong>App autenticadora</strong>
+                <p className="muted">
+                  Es opcional. Puedes usar apps gratuitas como Google Authenticator, Microsoft Authenticator o Authy.
+                </p>
+              </div>
+            </div>
+          </div>
 
-            {/* MFA enabled: show disable + backup code regen */}
-            {mfaStatus?.mfa_enabled && !mfaEnrollData && (
-              <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+          <div className="security-grid">
+            <div className="privacy-card security-mfa-card">
+              <div className="privacy-card-header security-card-heading">
                 <div>
-                  <p className="muted" style={{ marginBottom: "0.4rem" }}>
-                    Códigos de respaldo disponibles: <strong>{mfaStatus.backup_codes_remaining}</strong>
+                  <h4>App autenticadora opcional</h4>
+                  <p className="muted">
+                    Si quieres una capa extra, puedes activar una app autenticadora aparte de tu contraseña.
                   </p>
-                  <p className="muted" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
-                    Regenerar códigos de respaldo (requiere código TOTP):
-                  </p>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <input
-                      className="input-field"
-                      type="text"
-                      inputMode="numeric"
-                      value={mfaRegenCode}
-                      onChange={(e) => setMfaRegenCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                      placeholder="Código TOTP"
-                      maxLength={6}
-                      style={{ width: "140px" }}
-                    />
-                    <button className="secondary-btn" type="button" onClick={handleMfaRegenBackupCodes} disabled={mfaLoading || mfaRegenCode.length < 6}>
-                      Regenerar
-                    </button>
+                </div>
+                {mfaStatus && (
+                  <span className={`privacy-status-pill ${mfaStatus.mfa_enabled ? "is-on" : "is-off"}`}>
+                    {mfaStatus.mfa_enabled ? "Activa" : "Inactiva"}
+                  </span>
+                )}
+              </div>
+
+              {mfaNotice ? (
+                <div className={`security-inline-notice ${mfaNoticeTone}`}>
+                  <span>{mfaNotice}</span>
+                </div>
+              ) : null}
+
+              {!mfaEnrollData ? (
+                <div className="security-faq-list">
+                  <div className="security-faq-item">
+                    <strong>¿Necesito otra app?</strong>
+                    <p className="muted">Solo si quieres activar esta capa extra. Klinip seguirá funcionando con correo y contraseña.</p>
                   </div>
-                  {mfaNewBackupCodes && (
-                    <div style={{ marginTop: "0.75rem" }}>
-                      <p className="muted" style={{ marginBottom: "0.4rem", fontSize: "0.85rem" }}>Nuevos códigos (guárdalos ahora):</p>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-                        {mfaNewBackupCodes.map((c) => (
-                          <code key={c} style={{ background: "#f1f5f9", padding: "3px 8px", borderRadius: "4px", fontFamily: "monospace", fontSize: "0.85rem" }}>{c}</code>
-                        ))}
+                  <div className="security-faq-item">
+                    <strong>¿Las apps autenticadoras son gratis?</strong>
+                    <p className="muted">Sí. Las más conocidas son gratuitas y muestran un código de 6 dígitos que cambia cada pocos segundos.</p>
+                  </div>
+                </div>
+              ) : null}
+
+              {mfaStatus && !mfaStatus.mfa_enabled && !mfaEnrollData ? (
+                <div className="privacy-actions">
+                  <button className="primary-btn" type="button" onClick={handleMfaEnrollStart} disabled={mfaLoading}>
+                    {mfaLoading ? "Preparando..." : "Activar app autenticadora"}
+                  </button>
+                </div>
+              ) : null}
+
+              {mfaEnrollData ? (
+                <div className="security-mfa-enroll">
+                  <div className="security-step-list">
+                    <div className="security-step-card">
+                      <span className="security-step-number">1</span>
+                      <div>
+                        <strong>Escanea el código QR</strong>
+                        <p className="muted">
+                          Abre tu app autenticadora, toca “Agregar cuenta” y escanea este QR. Si no puedes escanearlo, usa la clave manual.
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
-                <div>
-                  <p className="muted" style={{ marginBottom: "0.5rem", fontSize: "0.85rem" }}>
-                    Desactivar MFA (requiere código TOTP o código de respaldo):
-                  </p>
-                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <input
-                      className="input-field"
-                      type="text"
-                      value={mfaDisableCode}
-                      onChange={(e) => setMfaDisableCode(e.target.value.slice(0, 10))}
-                      placeholder="Código TOTP o respaldo"
-                      style={{ width: "200px" }}
-                    />
-                    <button className="secondary-btn danger" type="button" onClick={handleMfaDisable} disabled={mfaLoading || !mfaDisableCode}>
-                      Desactivar MFA
-                    </button>
+                    <div className="security-mfa-qr">
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mfaEnrollData.totp_uri)}`}
+                        alt="Código QR para MFA"
+                        width={200}
+                        height={200}
+                      />
+                    </div>
+                    <div className="security-mfa-secret">
+                      <span className="security-inline-label">Clave manual</span>
+                      <code>{mfaEnrollData.secret}</code>
+                    </div>
+
+                    <div className="security-step-card">
+                      <span className="security-step-number">2</span>
+                      <div>
+                        <strong>Guarda tus códigos de respaldo</strong>
+                        <p className="muted">Sirven si pierdes acceso al celular. Se muestran solo una vez.</p>
+                      </div>
+                    </div>
+                    <div className="security-code-grid">
+                      {mfaEnrollData.backup_codes.map((code) => (
+                        <code key={code} className="security-code-chip">{code}</code>
+                      ))}
+                    </div>
+
+                    <div className="security-step-card">
+                      <span className="security-step-number">3</span>
+                      <div>
+                        <strong>Confirma con el código de la app</strong>
+                        <p className="muted">Ingresa el código de 6 dígitos que ahora ves en tu app autenticadora.</p>
+                      </div>
+                    </div>
+                    <div className="security-inline-form">
+                      <input
+                        className="input-field security-code-input"
+                        type="text"
+                        inputMode="numeric"
+                        value={mfaEnrollCode}
+                        onChange={(event) => setMfaEnrollCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="000000"
+                        maxLength={6}
+                      />
+                      <button
+                        className="primary-btn"
+                        type="button"
+                        onClick={handleMfaEnrollConfirm}
+                        disabled={mfaLoading || mfaEnrollCode.length < 6}
+                      >
+                        {mfaLoading ? "Verificando..." : "Confirmar activación"}
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        type="button"
+                        onClick={() => {
+                          setMfaEnrollData(null);
+                          setMfaEnrollCode("");
+                          setMfaNotice("");
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
+              ) : null}
 
-          {/* ── Sesiones activas ── */}
-          <div className="privacy-card">
-            <div className="privacy-card-header">
-              <h4>Sesiones activas</h4>
-              <button className="secondary-btn danger" type="button" onClick={handleRevokeAllSessions} style={{ padding: "0.3rem 0.8rem", fontSize: "0.82rem" }}>
-                Cerrar todas
-              </button>
-            </div>
-            <p className="muted">Dispositivos con sesión abierta en tu cuenta.</p>
-            {sessionsLoading ? (
-              <p className="muted">Cargando sesiones...</p>
-            ) : sessions.length === 0 ? (
-              <p className="muted">No hay sesiones activas registradas.</p>
-            ) : (
-              <ul style={{ listStyle: "none", padding: 0, margin: "0.75rem 0 0", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                {sessions.map((s) => (
-                  <li key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", background: "#f8fafc", borderRadius: "6px", padding: "0.6rem 0.8rem", gap: "0.5rem" }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {s.device_label || "Dispositivo desconocido"}
-                      </p>
-                      <p className="muted" style={{ margin: 0, fontSize: "0.78rem" }}>
-                        IP: {s.ip_address || "—"} · {s.created_at ? new Date(s.created_at).toLocaleDateString("es") : ""}
-                      </p>
+              {mfaStatus?.mfa_enabled && !mfaEnrollData ? (
+                <div className="security-mfa-active">
+                  <div className="security-mini-stat">
+                    <span className="security-inline-label">Códigos de respaldo disponibles</span>
+                    <strong>{mfaStatus.backup_codes_remaining}</strong>
+                  </div>
+
+                  <div className="security-inline-block">
+                    <strong>Regenerar códigos de respaldo</strong>
+                    <p className="muted">Ingresa un código actual de tu app autenticadora para generar nuevos códigos de respaldo.</p>
+                    <div className="security-inline-form">
+                      <input
+                        className="input-field security-code-input"
+                        type="text"
+                        inputMode="numeric"
+                        value={mfaRegenCode}
+                        onChange={(event) => setMfaRegenCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        placeholder="Código de la app"
+                        maxLength={6}
+                      />
+                      <button
+                        className="secondary-btn"
+                        type="button"
+                        onClick={handleMfaRegenBackupCodes}
+                        disabled={mfaLoading || mfaRegenCode.length < 6}
+                      >
+                        Regenerar
+                      </button>
                     </div>
-                    <button className="secondary-btn danger" type="button" onClick={() => handleRevokeSession(s.id)} style={{ padding: "0.25rem 0.65rem", fontSize: "0.78rem", flexShrink: 0 }}>
-                      Revocar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+                    {mfaNewBackupCodes ? (
+                      <div className="security-code-grid">
+                        {mfaNewBackupCodes.map((code) => (
+                          <code key={code} className="security-code-chip">{code}</code>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="security-inline-block">
+                    <strong>Desactivar app autenticadora</strong>
+                    <p className="muted">Puedes apagarla cuando quieras usando un código de la app o un código de respaldo.</p>
+                    <div className="security-inline-form">
+                      <input
+                        className="input-field"
+                        type="text"
+                        value={mfaDisableCode}
+                        onChange={(event) => setMfaDisableCode(event.target.value.slice(0, 32))}
+                        placeholder="Código de la app o de respaldo"
+                      />
+                      <button
+                        className="secondary-btn danger"
+                        type="button"
+                        onClick={handleMfaDisable}
+                        disabled={mfaLoading || !mfaDisableCode}
+                      >
+                        Desactivar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="privacy-card security-sessions-card">
+              <div className="privacy-card-header security-card-heading">
+                <div>
+                  <h4>Sesiones activas</h4>
+                  <p className="muted">Dispositivos que mantienen acceso a tu cuenta en este momento.</p>
+                </div>
+                <button className="secondary-btn danger" type="button" onClick={handleRevokeAllSessions}>
+                  Cerrar todas
+                </button>
+              </div>
+
+              {sessionsLoading ? (
+                <p className="muted">Cargando sesiones...</p>
+              ) : sessions.length === 0 ? (
+                <p className="muted">No hay sesiones activas registradas.</p>
+              ) : (
+                <div className="security-session-list">
+                  {sessions.map((session) => {
+                    const deviceInfo = getSessionDeviceSummary(session.device_label);
+                    return (
+                      <div key={session.id} className="security-session-card">
+                        <div className="security-session-main">
+                          <div className="security-session-topline">
+                            <strong className="security-session-title">{deviceInfo.title}</strong>
+                            {session.is_current ? <span className="security-session-pill">Sesión actual</span> : null}
+                          </div>
+                          {deviceInfo.detail ? (
+                            <p className="security-session-detail">{deviceInfo.detail}</p>
+                          ) : null}
+                          <div className="security-session-meta">
+                            <span className="security-session-meta-item">
+                              <strong>IP</strong>
+                              <span>{session.ip_address || "No disponible"}</span>
+                            </span>
+                            <span className="security-session-meta-item">
+                              <strong>Creada</strong>
+                              <span>
+                                {session.created_at
+                                  ? new Date(session.created_at).toLocaleString("es-CL", {
+                                      dateStyle: "short",
+                                      timeStyle: "short",
+                                    })
+                                  : "Sin fecha"}
+                              </span>
+                            </span>
+                            <span className="security-session-meta-item">
+                              <strong>Último uso</strong>
+                              <span>
+                                {session.last_used_at
+                                  ? new Date(session.last_used_at).toLocaleString("es-CL", {
+                                      dateStyle: "short",
+                                      timeStyle: "short",
+                                    })
+                                  : "Sin registro"}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          className="secondary-btn danger security-session-action"
+                          type="button"
+                          onClick={() => handleRevokeSession(session.id)}
+                        >
+                          Revocar
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* ── Historial de seguridad ── */}
-          <div className="privacy-card" style={{ gridColumn: "1 / -1" }}>
-            <h4>Historial de seguridad</h4>
-            <p className="muted">Últimos eventos de acceso y cambios de cuenta.</p>
+          <div className="privacy-card security-audit-card">
+            <div className="security-card-heading">
+              <div>
+                <h4>Historial de seguridad</h4>
+                <p className="muted">Últimos eventos relacionados con acceso, verificación y cambios de seguridad.</p>
+              </div>
+            </div>
             {auditLoading ? (
               <p className="muted">Cargando historial...</p>
             ) : auditLogs.length === 0 ? (
               <p className="muted">Sin eventos registrados.</p>
             ) : (
-              <div style={{ maxHeight: "320px", overflowY: "auto", marginTop: "0.75rem" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
-                  <thead>
-                    <tr style={{ textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>Evento</th>
-                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>IP</th>
-                      <th style={{ padding: "0.4rem 0.5rem", fontWeight: 600, color: "#64748b" }}>Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {auditLogs.map((l) => (
-                      <tr key={l.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                        <td style={{ padding: "0.4rem 0.5rem" }}>
-                          <span style={{
-                            display: "inline-block", padding: "1px 7px", borderRadius: "999px", fontSize: "0.75rem",
-                            background: l.action.includes("fail") || l.action.includes("failed") ? "#fee2e2" : "#eff6ff",
-                            color: l.action.includes("fail") || l.action.includes("failed") ? "#dc2626" : "#1e40af",
-                            fontWeight: 500,
-                          }}>
-                            {l.action.replace(/_/g, " ")}
-                          </span>
-                        </td>
-                        <td style={{ padding: "0.4rem 0.5rem", color: "#64748b" }}>{l.ip_address || "—"}</td>
-                        <td style={{ padding: "0.4rem 0.5rem", color: "#64748b" }}>
-                          {l.created_at ? new Date(l.created_at).toLocaleString("es", { dateStyle: "short", timeStyle: "short" }) : ""}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="security-audit-list">
+                {auditLogs.map((log) => (
+                  <article key={log.id} className="security-audit-item">
+                    <div className="security-audit-main">
+                      <span className={`security-audit-badge ${getSecurityEventTone(log.action)}`}>
+                        {getSecurityEventLabel(log.action)}
+                      </span>
+                      <p className="muted">
+                        IP: {log.ip_address || "No disponible"}
+                      </p>
+                    </div>
+                    <time className="security-audit-date">
+                      {log.created_at
+                        ? new Date(log.created_at).toLocaleString("es-CL", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "Sin fecha"}
+                    </time>
+                  </article>
+                ))}
               </div>
             )}
           </div>
-
         </div>
       </div>
       )}

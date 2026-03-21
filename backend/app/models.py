@@ -754,6 +754,22 @@ class RefreshToken(Base):
 
 # ─── Seguridad: Audit Log ─────────────────────────────────────────────────────
 
+class StepUpEmailCode(Base):
+    __tablename__ = "stepup_email_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    code_hash = Column(String, nullable=False, index=True)
+    sent_to_email = Column(String, nullable=False, default="")
+    expires_at = Column(DateTime, nullable=False, index=True)
+    attempts = Column(Integer, default=0)
+    used = Column(Boolean, default=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    user = relationship("User")
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

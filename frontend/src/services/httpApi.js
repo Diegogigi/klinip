@@ -612,6 +612,11 @@ export async function stepUpVerify(payload) {
   return res.data;
 }
 
+export async function requestStepUpEmailCode() {
+  const res = await api.post("/auth/stepup/email/request");
+  return res.data;
+}
+
 /**
  * Realiza una petición GET con el step-up token en el header X-StepUp-Token.
  * Usado para descargar documentos clínicos protegidos.
@@ -763,4 +768,3 @@ export function getPostAttachmentUrl(postId, attachmentId) {
   const token = localStorage.getItem("token");
   return `${base}/feed/posts/${postId}/attachments/${attachmentId}/file?token=${token}`;
 }
-

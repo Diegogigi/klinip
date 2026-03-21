@@ -86,6 +86,7 @@ export const getLandingStats = api.getLandingStats;
 
 // Step-up auth
 export const stepUpVerify = api.stepUpVerify;
+export const requestStepUpEmailCode = api.requestStepUpEmailCode;
 export const getDocumentFileWithStepUp = api.getDocumentFileWithStepUp;
 
 // MFA
