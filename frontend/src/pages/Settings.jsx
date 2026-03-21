@@ -119,10 +119,10 @@ const getSessionDeviceSummary = (deviceLabel) => {
   else if (/Mac OS X|Macintosh/i.test(raw)) platform = "macOS";
   else if (/Linux/i.test(raw)) platform = "Linux";
 
-  const title = [browserName, platform].filter(Boolean).join(" · ") || raw.slice(0, 48);
+  const title = [browserName, platform].filter(Boolean).join(" · ") || "Dispositivo desconocido";
   return {
     title,
-    detail: raw !== title ? raw : "",
+    detail: "",
   };
 };
 

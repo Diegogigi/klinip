@@ -5802,14 +5802,14 @@ body.theme-dark .primary-btn {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 0.85rem;
-  padding: 0.85rem 0.9rem;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
 }
 
 .security-session-main {
   min-width: 0;
   flex: 1;
-  width: 100%;
+  overflow: hidden;
 }
 
 .security-session-topline {
@@ -5822,6 +5822,10 @@ body.theme-dark .primary-btn {
 .security-session-title {
   color: #0f172a;
   line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 
 .security-session-detail {
@@ -5879,6 +5883,8 @@ body.theme-dark .primary-btn {
 
 .security-session-action {
   align-self: flex-start;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .security-audit-item {
@@ -6272,10 +6278,15 @@ body.theme-dark .primary-btn {
   }
 
   .stepup-channel-card,
-  .security-session-card,
   .security-audit-item {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .security-session-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
   }
 
   .stepup-method-btn,
@@ -6292,11 +6303,16 @@ body.theme-dark .primary-btn {
   }
 
   .stepup-email-send,
-  .security-session-action,
   .security-inline-form > .primary-btn,
   .security-inline-form > .secondary-btn,
   .security-inline-form > .secondary-btn.danger {
     width: 100%;
+  }
+
+  .security-session-action {
+    align-self: stretch;
+    width: 100%;
+    justify-content: center;
   }
 
   .security-code-input,
@@ -6329,12 +6345,22 @@ body.theme-dark .primary-btn {
   }
 
   .security-session-meta {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
 
   .stepup-help-text {
     margin-top: 0.38rem;
     font-size: 0.76rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .security-session-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .security-session-title {
+    white-space: normal;
   }
 }
 
