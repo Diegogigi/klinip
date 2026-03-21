@@ -699,3 +699,59 @@ export async function getAuditLogs({ limit = 50, offset = 0 } = {}) {
   const res = await api.get("/audit/logs", { params: { limit, offset } });
   return res.data;
 }
+
+// ─── KlinipFeed ───────────────────────────────────────────────────────────────
+
+export async function getFamilyFeed({ skip = 0, limit = 20 } = {}) {
+  const res = await api.get("/feed/family", { params: { skip, limit } });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function createFeedPost(payload) {
+  const res = await api.post("/feed/posts", payload);
+  return res.data;
+}
+
+export async function deleteFeedPost(postId) {
+  await api.delete(`/feed/posts/${postId}`);
+}
+
+export async function reactToPost(postId, reactionType = "like") {
+  const res = await api.post(`/feed/posts/${postId}/reactions`, { reaction_type: reactionType });
+  return res.data;
+}
+
+export async function removeReaction(postId) {
+  await api.delete(`/feed/posts/${postId}/reactions`);
+}
+
+export async function getPostComments(postId) {
+  const res = await api.get(`/feed/posts/${postId}/comments`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function addPostComment(postId, content) {
+  const res = await api.post(`/feed/posts/${postId}/comments`, { content });
+  return res.data;
+}
+
+export async function deletePostComment(postId, commentId) {
+  await api.delete(`/feed/posts/${postId}/comments/${commentId}`);
+}
+
+export async function uploadPostAttachment(postId, file, attachmentType = "image") {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("attachment_type", attachmentType);
+  const res = await api.post(`/feed/posts/${postId}/attachments`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+export function getPostAttachmentUrl(postId, attachmentId) {
+  const base = api.defaults.baseURL || "";
+  const token = localStorage.getItem("token");
+  return `${base}/feed/posts/${postId}/attachments/${attachmentId}/file?token=${token}`;
+}
+

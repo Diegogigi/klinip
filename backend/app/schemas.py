@@ -871,6 +871,107 @@ class PrivacyRequestIn(BaseModel):
     include_tech: Optional[bool] = False
 
 
+# ─── KlinipFeed ───────────────────────────────────────────────────────────────
+
+class FeedPostCreate(BaseModel):
+    content: str = ""
+    post_type: str = "general"  # general | exam_result | doctor_visit | medication
+    privacy: str = "family"
+    profile_id: int
+    linked_document_id: Optional[int] = None
+    mention_profile_ids: list[int] = []
+
+
+class PostCommentCreate(BaseModel):
+    content: str
+
+
+class PostReactionCreate(BaseModel):
+    reaction_type: str = "like"  # like | heart | care
+
+
+class PostCommentOut(BaseModel):
+    id: int
+    post_id: int
+    user_id: int
+    user_name: Optional[str] = ""
+    content: str
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_comment_dt(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class PostReactionOut(BaseModel):
+    id: int
+    post_id: int
+    user_id: int
+    user_name: Optional[str] = ""
+    reaction_type: str
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_reaction_dt(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class PostAttachmentOut(BaseModel):
+    id: int
+    post_id: int
+    attachment_type: str
+    filename: str = ""
+    created_at: datetime
+
+    @field_serializer("created_at")
+    def serialize_attachment_dt(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class FeedPostOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: Optional[str] = ""
+    profile_id: int
+    profile_name: Optional[str] = ""
+    content: str = ""
+    post_type: str = "general"
+    privacy: str = "family"
+    linked_document_id: Optional[int] = None
+    mention_profile_ids: list[int] = []
+    reactions_count: int = 0
+    my_reaction: Optional[str] = None
+    comments_count: int = 0
+    attachments: list[PostAttachmentOut] = []
+    comments: list[PostCommentOut] = []
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_feed_post_dt(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
 class AiChatMessageIn(BaseModel):
     role: str
     content: str

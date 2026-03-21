@@ -110,3 +110,15 @@ export const updateRelationshipPermissions = api.updateRelationshipPermissions;
 export const getAuditLogs = api.getAuditLogs;
 
 export const getDocumentFile = api.getDocumentFile;
+
+// KlinipFeed
+export const getFamilyFeed = api.getFamilyFeed;
+export const createFeedPost = api.createFeedPost;
+export const deleteFeedPost = api.deleteFeedPost;
+export const reactToPost = api.reactToPost;
+export const removeReaction = api.removeReaction;
+export const getPostComments = api.getPostComments;
+export const addPostComment = api.addPostComment;
+export const deletePostComment = api.deletePostComment;
+export const uploadPostAttachment = api.uploadPostAttachment;
+export const getPostAttachmentUrl = api.getPostAttachmentUrl;

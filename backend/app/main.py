@@ -17563,6 +17563,352 @@ async def get_document_file(
     raise HTTPException(status_code=404, detail="Archivo no encontrado")
 
 
+# ─── KlinipFeed ───────────────────────────────────────────────────────────────
+
+def _get_family_user_ids(db: Session, current_user) -> set:
+    """Retorna el conjunto de user_ids que comparten al menos un perfil con current_user."""
+    owned_profile_ids = [
+        p.id for p in db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.owner_user_id == current_user.id,
+            models.HealthProfile.is_archived == False,
+        ).all()
+    ]
+    linked_profile_ids = [
+        r.profile_id for r in db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+        ).all()
+    ]
+    all_profile_ids = list(set(owned_profile_ids + linked_profile_ids))
+    if not all_profile_ids:
+        return {current_user.id}
+
+    owner_ids = [
+        p.owner_user_id for p in db.query(models.HealthProfile)
+        .filter(models.HealthProfile.id.in_(all_profile_ids)).all()
+    ]
+    relation_user_ids = [
+        r.user_id for r in db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id.in_(all_profile_ids),
+            models.ProfileRelationship.status == "accepted",
+        ).all()
+    ]
+    return set(owner_ids + relation_user_ids + [current_user.id])
+
+
+def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) -> dict:
+    my_reaction = None
+    for r in post.reactions:
+        if r.user_id == current_user_id:
+            my_reaction = r.reaction_type
+            break
+
+    return {
+        "id": post.id,
+        "user_id": post.user_id,
+        "user_name": post.user.name if post.user else "",
+        "profile_id": post.profile_id,
+        "profile_name": post.profile.full_name if post.profile else "",
+        "content": post.content,
+        "post_type": post.post_type,
+        "privacy": post.privacy,
+        "linked_document_id": post.linked_document_id,
+        "mention_profile_ids": [m.tagged_profile_id for m in post.mentions],
+        "reactions_count": len(post.reactions),
+        "my_reaction": my_reaction,
+        "comments_count": len(post.comments),
+        "attachments": [
+            {
+                "id": a.id,
+                "post_id": a.post_id,
+                "attachment_type": a.attachment_type,
+                "filename": a.filename,
+                "created_at": a.created_at.strftime("%Y-%m-%dT%H:%M:%S") if a.created_at else None,
+            }
+            for a in post.attachments
+        ],
+        "comments": [
+            {
+                "id": c.id,
+                "post_id": c.post_id,
+                "user_id": c.user_id,
+                "user_name": c.user.name if c.user else "",
+                "content": c.content,
+                "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
+            }
+            for c in sorted(post.comments, key=lambda x: x.created_at)
+        ],
+        "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%S") if post.created_at else None,
+        "updated_at": post.updated_at.strftime("%Y-%m-%dT%H:%M:%S") if post.updated_at else None,
+    }
+
+
+@app.get("/feed/family")
+def get_family_feed(
+    skip: int = 0,
+    limit: int = 20,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    family_ids = _get_family_user_ids(db, current_user)
+    posts = (
+        db.query(models.FeedPost)
+        .filter(
+            models.FeedPost.user_id.in_(family_ids),
+            models.FeedPost.privacy == "family",
+        )
+        .order_by(models.FeedPost.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_post(p, db, current_user.id) for p in posts]
+
+
+@app.post("/feed/posts", status_code=201)
+def create_feed_post(
+    payload: schemas.FeedPostCreate,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == payload.profile_id
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+
+    has_access = profile.owner_user_id == current_user.id or db.query(
+        models.ProfileRelationship
+    ).filter(
+        models.ProfileRelationship.profile_id == payload.profile_id,
+        models.ProfileRelationship.user_id == current_user.id,
+        models.ProfileRelationship.status == "accepted",
+    ).first() is not None
+
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Sin acceso a este perfil")
+
+    post = models.FeedPost(
+        user_id=current_user.id,
+        profile_id=payload.profile_id,
+        content=payload.content,
+        post_type=payload.post_type,
+        privacy=payload.privacy,
+        linked_document_id=payload.linked_document_id,
+    )
+    db.add(post)
+    db.flush()
+
+    for pid in (payload.mention_profile_ids or []):
+        db.add(models.PostMention(post_id=post.id, tagged_profile_id=pid))
+
+    db.commit()
+    db.refresh(post)
+    return _serialize_post(post, db, current_user.id)
+
+
+@app.post("/feed/posts/{post_id}/attachments", status_code=201)
+async def add_post_attachment(
+    post_id: int,
+    file: UploadFile = File(...),
+    attachment_type: str = Form("image"),
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No puedes modificar este post")
+
+    file_data = await file.read()
+    attachment = models.PostAttachment(
+        post_id=post_id,
+        attachment_type=attachment_type,
+        filename=file.filename or "",
+        file_data=file_data,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return {
+        "id": attachment.id,
+        "post_id": attachment.post_id,
+        "attachment_type": attachment.attachment_type,
+        "filename": attachment.filename,
+        "created_at": attachment.created_at.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+
+@app.get("/feed/posts/{post_id}/attachments/{attachment_id}/file")
+def get_attachment_file(
+    post_id: int,
+    attachment_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    attachment = db.query(models.PostAttachment).filter(
+        models.PostAttachment.id == attachment_id,
+        models.PostAttachment.post_id == post_id,
+    ).first()
+    if not attachment or not attachment.file_data:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+
+    post = attachment.post
+    family_ids = _get_family_user_ids(db, current_user)
+    if post.user_id not in family_ids and post.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Sin acceso")
+
+    mime_type, _ = mimetypes.guess_type(attachment.filename or "file.bin")
+    return Response(
+        content=attachment.file_data,
+        media_type=mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{attachment.filename}"'},
+    )
+
+
+@app.delete("/feed/posts/{post_id}", status_code=204)
+def delete_feed_post(
+    post_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No puedes eliminar este post")
+    db.delete(post)
+    db.commit()
+    return None
+
+
+@app.post("/feed/posts/{post_id}/reactions", status_code=201)
+def react_to_post(
+    post_id: int,
+    payload: schemas.PostReactionCreate,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+
+    existing = db.query(models.PostReaction).filter(
+        models.PostReaction.post_id == post_id,
+        models.PostReaction.user_id == current_user.id,
+    ).first()
+    if existing:
+        existing.reaction_type = payload.reaction_type
+        db.commit()
+        return {"id": existing.id, "reaction_type": existing.reaction_type}
+
+    reaction = models.PostReaction(
+        post_id=post_id,
+        user_id=current_user.id,
+        reaction_type=payload.reaction_type,
+    )
+    db.add(reaction)
+    db.commit()
+    db.refresh(reaction)
+    return {"id": reaction.id, "reaction_type": reaction.reaction_type}
+
+
+@app.delete("/feed/posts/{post_id}/reactions", status_code=204)
+def remove_reaction(
+    post_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    reaction = db.query(models.PostReaction).filter(
+        models.PostReaction.post_id == post_id,
+        models.PostReaction.user_id == current_user.id,
+    ).first()
+    if reaction:
+        db.delete(reaction)
+        db.commit()
+    return None
+
+
+@app.get("/feed/posts/{post_id}/comments")
+def get_post_comments(
+    post_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    comments = (
+        db.query(models.PostComment)
+        .filter(models.PostComment.post_id == post_id)
+        .order_by(models.PostComment.created_at)
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "post_id": c.post_id,
+            "user_id": c.user_id,
+            "user_name": c.user.name if c.user else "",
+            "content": c.content,
+            "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
+        }
+        for c in comments
+    ]
+
+
+@app.post("/feed/posts/{post_id}/comments", status_code=201)
+def add_comment(
+    post_id: int,
+    payload: schemas.PostCommentCreate,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    comment = models.PostComment(
+        post_id=post_id,
+        user_id=current_user.id,
+        content=payload.content,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return {
+        "id": comment.id,
+        "post_id": comment.post_id,
+        "user_id": comment.user_id,
+        "user_name": current_user.name,
+        "content": comment.content,
+        "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%S") if comment.created_at else None,
+    }
+
+
+@app.delete("/feed/posts/{post_id}/comments/{comment_id}", status_code=204)
+def delete_comment(
+    post_id: int,
+    comment_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    comment = db.query(models.PostComment).filter(
+        models.PostComment.id == comment_id,
+        models.PostComment.post_id == post_id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comentario no encontrado")
+    if comment.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No puedes eliminar este comentario")
+    db.delete(comment)
+    db.commit()
+    return None
+
+
 # Servir archivos subidos (mantener para compatibilidad, pero usar endpoint protegido)
 # app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
 

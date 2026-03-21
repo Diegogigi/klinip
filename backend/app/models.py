@@ -659,6 +659,81 @@ class ExternalClinicalRecord(Base):
     source = relationship("ExternalClinicalSource")
 
 
+# ─── KlinipFeed ───────────────────────────────────────────────────────────────
+
+class FeedPost(Base):
+    __tablename__ = "feed_posts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    content = Column(Text, default="")
+    post_type = Column(String, default="general")  # general | exam_result | doctor_visit | medication
+    privacy = Column(String, default="family")      # family | private
+    linked_document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+    linked_document = relationship("Document")
+    attachments = relationship("PostAttachment", back_populates="post", cascade="all, delete-orphan")
+    reactions = relationship("PostReaction", back_populates="post", cascade="all, delete-orphan")
+    comments = relationship("PostComment", back_populates="post", cascade="all, delete-orphan")
+    mentions = relationship("PostMention", back_populates="post", cascade="all, delete-orphan")
+
+
+class PostAttachment(Base):
+    __tablename__ = "post_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("feed_posts.id"), nullable=False, index=True)
+    attachment_type = Column(String, default="image")  # image | video | document | audio
+    filename = Column(String, default="")
+    file_data = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    post = relationship("FeedPost", back_populates="attachments")
+
+
+class PostReaction(Base):
+    __tablename__ = "post_reactions"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_post_reaction_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("feed_posts.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    reaction_type = Column(String, default="like")  # like | heart | care
+    created_at = Column(DateTime, default=datetime.now)
+
+    post = relationship("FeedPost", back_populates="reactions")
+    user = relationship("User")
+
+
+class PostComment(Base):
+    __tablename__ = "post_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("feed_posts.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    post = relationship("FeedPost", back_populates="comments")
+    user = relationship("User")
+
+
+class PostMention(Base):
+    __tablename__ = "post_mentions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey("feed_posts.id"), nullable=False, index=True)
+    tagged_profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+
+    post = relationship("FeedPost", back_populates="mentions")
+    tagged_profile = relationship("HealthProfile")
+
+
 # ─── Seguridad: Refresh Tokens ────────────────────────────────────────────────
 
 class RefreshToken(Base):

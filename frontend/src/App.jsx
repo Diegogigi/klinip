@@ -16,6 +16,7 @@ import AiKlinip from "./pages/AiKlinip";
 import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
 import Plans from "./pages/Plans";
+import KlinipFeed from "./pages/KlinipFeed";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
@@ -83,6 +84,12 @@ const icons = {
       <circle cx="16" cy="9" r="2.5" />
       <path d="M3.5 19a4.5 4.5 0 0 1 9 0" />
       <path d="M11.5 19a4.5 4.5 0 0 1 9 0" />
+    </svg>
+  ),
+  feed: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M8 10h8M8 14h5" />
     </svg>
   ),
   calendar: (
@@ -176,12 +183,13 @@ function Sidebar({
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
+    { to: "/feed", label: "KlinipFeed", icon: icons.feed },
   ];
   const mobilePrimaryLinks = ["/", "/appointments", "/ai", "/calendar"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
   const mobileOverflowLinks = links.filter((item) =>
-    ["/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
+    ["/stats", "/timeline", "/medications", "/documents", "/family", "/feed"].includes(item.to)
   );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
@@ -325,6 +333,7 @@ function Topbar({
     "/ai": "IA Klinip",
     "/timeline": "Historia",
     "/family": "Mi familia",
+    "/feed": "KlinipFeed",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
   };
@@ -2136,6 +2145,14 @@ export default function App() {
                       onUserUpdate={setUser}
                       initialSection="perfil"
                     />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/feed"
+                element={
+                  <ProtectedRoute user={user}>
+                    <KlinipFeed user={user} />
                   </ProtectedRoute>
                 }
               />
