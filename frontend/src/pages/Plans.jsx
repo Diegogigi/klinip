@@ -98,6 +98,16 @@ const PLAN_PAGE_COPY = {
           </svg>
         ),
       },
+      {
+        title: "KlinipFeed personal",
+        desc: "Publica avances y novedades de salud en un feed privado desde tu propia cuenta.",
+        tone: "amber",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        ),
+      },
     ],
     faqs: [
       {
@@ -197,6 +207,16 @@ const PLAN_PAGE_COPY = {
         icon: (
           <svg viewBox="0 0 24 24">
             <path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 4l-5 16" />
+          </svg>
+        ),
+      },
+      {
+        title: "KlinipFeed por hogar",
+        desc: "Sigue avances, resultados y publicaciones privadas entre hasta 3 perfiles administrados desde tu cuenta.",
+        tone: "green",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         ),
       },
@@ -304,6 +324,16 @@ const PLAN_PAGE_COPY = {
           </svg>
         ),
       },
+      {
+        title: "KlinipFeed familiar compartido",
+        desc: "Convierte Klinip en una pequeña red social privada para cuidadores y familia con actividad del grupo.",
+        tone: "teal",
+        icon: (
+          <svg viewBox="0 0 24 24">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+        ),
+      },
     ],
     faqs: [
       {
@@ -337,6 +367,14 @@ const COMPARISON_ROWS = [
       { label: "Medicamentos, citas y calendario", basico: true, plus: true, familiar: true },
       { label: "Lectura automática de documentos", basico: "Básica", plus: "Mejorada", familiar: "Mejorada" },
       { label: "Historial y reportes", basico: "Esencial", plus: "Completo", familiar: "Completo" },
+    ],
+  },
+  {
+    group: "KlinipFeed",
+    rows: [
+      { label: "Modo de feed", basico: "Personal", plus: "Hogar", familiar: "Familiar compartido" },
+      { label: "Publicaciones privadas de salud", basico: true, plus: true, familiar: true },
+      { label: "Actividad compartida entre cuidadores", basico: false, plus: false, familiar: true },
     ],
   },
   {
@@ -448,7 +486,7 @@ export default function Plans({ user }) {
         <div className="pp-hero-inner">
           <div className="pp-hero-eyebrow"><span />Planes y precios<span /></div>
           <h1>Elige el plan para tu <em>salud y tu familia</em></h1>
-          <p>Empieza gratis y escala cuando necesites más perfiles, más colaboración o IA completa.</p>
+          <p>Empieza gratis y escala cuando necesites más perfiles, más colaboración, IA completa o un KlinipFeed más compartido.</p>
 
           <div className="pp-billing-wrap">
             <span className={`pp-billing-label ${billing === "monthly" ? "is-on" : ""}`}>Mensual</span>

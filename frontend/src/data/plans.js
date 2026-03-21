@@ -6,7 +6,7 @@ export const PLAN_CATALOG = [
     priceYearly: "Gratis",
     yearlyEquivalent: "Sin costo",
     note: "Salud personal",
-    summary: "Para organizar tu salud personal con lo esencial y acceso a Klinip IA en modalidad básica.",
+    summary: "Para organizar tu salud personal con lo esencial, acceso a Klinip IA en modalidad básica y un KlinipFeed personal privado.",
     recommended: false,
     cta: "Empezar gratis",
     features: [
@@ -15,6 +15,7 @@ export const PLAN_CATALOG = [
       "Documentos médicos con lectura automática básica",
       "Recordatorios esenciales",
       "Klinip IA básica con hasta 15 consultas al día",
+      "KlinipFeed personal para actualizaciones privadas",
       "Acceso móvil y escritorio",
     ],
     detailSections: [
@@ -31,6 +32,7 @@ export const PLAN_CATALOG = [
           "Gestión de citas, medicamentos y documentos",
           "Historial básico de salud",
           "Klinip IA con capacidad diaria limitada para consultas rápidas",
+          "KlinipFeed personal para registrar avances desde tu cuenta",
           "Panel individual simple y rápido",
         ],
       },
@@ -48,7 +50,7 @@ export const PLAN_CATALOG = [
     priceYearly: "$39.990 / año",
     yearlyEquivalent: "$3.332 / mes",
     note: "Más perfiles + IA completa",
-    summary: "Más capacidad de perfiles y Klinip IA completa para quienes gestionan su salud y la de personas a su cargo desde una sola cuenta.",
+    summary: "Más capacidad de perfiles, Klinip IA completa y un KlinipFeed para seguir varias personas desde una sola cuenta.",
     recommended: true,
     cta: "Elegir Plus",
     features: [
@@ -57,6 +59,7 @@ export const PLAN_CATALOG = [
       "Historial completo y reportes",
       "Recordatorios avanzados",
       "Klinip IA completa",
+      "KlinipFeed para seguir hasta 3 perfiles desde tu cuenta",
       "Gestión individual de varios perfiles",
     ],
     detailSections: [
@@ -73,6 +76,7 @@ export const PLAN_CATALOG = [
           "Hasta 3 perfiles sin colaboración multiusuario",
           "Mayor profundidad en historial y documentos",
           "Klinip IA completa para consultas, resúmenes y seguimiento",
+          "KlinipFeed para compartir avances entre perfiles que administras",
         ],
       },
     ],
@@ -89,7 +93,7 @@ export const PLAN_CATALOG = [
     priceYearly: "$69.990 / año",
     yearlyEquivalent: "$5.832 / mes",
     note: "Ecosistema colaborativo",
-    summary: "Pensado para familias y cuidadores que coordinan la salud de varias personas con Klinip IA completa y colaboración multiusuario.",
+    summary: "Pensado para familias y cuidadores que coordinan la salud de varias personas con Klinip IA completa, colaboración multiusuario y un KlinipFeed familiar compartido.",
     recommended: false,
     cta: "Elegir Familiar",
     features: [
@@ -98,6 +102,7 @@ export const PLAN_CATALOG = [
       "Recordatorios por perfil",
       "Roles por cuidador y colaboración multiusuario",
       "Klinip IA completa para todo el grupo",
+      "KlinipFeed familiar compartido entre cuidadores y familia",
       "Historial y actividad por persona",
     ],
     detailSections: [
@@ -113,6 +118,7 @@ export const PLAN_CATALOG = [
         items: [
           "Panel familiar con contexto por integrante",
           "Colaboración entre cuidadores y responsables",
+          "KlinipFeed familiar para publicar avances y novedades del grupo",
           "Seguimiento diferenciado por perfil y actividad",
         ],
       },

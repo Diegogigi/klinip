@@ -46,6 +46,7 @@ _RATE_LIMITS: dict = {
     "login":            {"max": 10, "window": 60},
     "register":         {"max":  5, "window": 60},
     "forgot-password":  {"max":  5, "window": 60},
+    "stepup-email":     {"max":  5, "window": 600},
     "ai-transcribe":    {"max": 12, "window": 60},
 }
 
@@ -928,7 +929,7 @@ PLAN_DEFINITIONS = {
             "price_yearly": "Gratis",
             "yearly_equivalent": "Sin costo",
             "note": "Salud personal",
-            "summary": "Para organizar tu salud personal con lo esencial y acceso a Klinip IA en modalidad básica.",
+            "summary": "Para organizar tu salud personal con lo esencial, acceso a Klinip IA en modalidad básica y un KlinipFeed personal privado.",
             "recommended": False,
             "cta": "Empezar gratis",
             "features": [
@@ -937,6 +938,7 @@ PLAN_DEFINITIONS = {
                 "Documentos médicos con OCR básico",
                 "Recordatorios esenciales",
                 "Klinip IA básica con hasta 15 consultas al día",
+                "KlinipFeed personal para actualizaciones privadas",
                 "Acceso móvil y escritorio",
             ],
             "detail_sections": [
@@ -953,6 +955,7 @@ PLAN_DEFINITIONS = {
                         "Gestión de citas, medicamentos y documentos",
                         "Historial básico de salud",
                         "Klinip IA con capacidad diaria limitada para consultas rápidas",
+                        "KlinipFeed personal para registrar avances desde tu cuenta",
                         "Panel individual simple y rápido",
                     ],
                 },
@@ -979,7 +982,7 @@ PLAN_DEFINITIONS = {
             "price_yearly": "$39.990 / año",
             "yearly_equivalent": "$3.332 / mes",
             "note": "Más perfiles + IA completa",
-            "summary": "Más capacidad de perfiles y Klinip IA completa para quienes gestionan su salud y la de personas a su cargo desde una sola cuenta.",
+            "summary": "Más capacidad de perfiles, Klinip IA completa y un KlinipFeed para seguir varias personas desde una sola cuenta.",
             "recommended": True,
             "cta": "Probar Plus",
             "features": [
@@ -988,6 +991,7 @@ PLAN_DEFINITIONS = {
                 "Historial completo y reportes",
                 "Recordatorios avanzados",
                 "Klinip IA completa",
+                "KlinipFeed para seguir hasta 3 perfiles desde tu cuenta",
                 "Gestión individual de varios perfiles",
             ],
             "detail_sections": [
@@ -1004,6 +1008,7 @@ PLAN_DEFINITIONS = {
                         "Hasta 3 perfiles sin colaboración multiusuario",
                         "Mayor profundidad en historial y documentos",
                         "Klinip IA completa para consultas, resúmenes y seguimiento",
+                        "KlinipFeed para compartir avances entre perfiles que administras",
                     ],
                 },
             ],
@@ -1029,7 +1034,7 @@ PLAN_DEFINITIONS = {
             "price_yearly": "$69.990 / año",
             "yearly_equivalent": "$5.832 / mes",
             "note": "Ecosistema colaborativo",
-            "summary": "Pensado para familias y cuidadores que coordinan la salud de varias personas.",
+            "summary": "Pensado para familias y cuidadores que coordinan la salud de varias personas con un KlinipFeed familiar compartido.",
             "recommended": False,
             "cta": "Elegir Familiar",
             "features": [
@@ -1038,6 +1043,7 @@ PLAN_DEFINITIONS = {
                 "Recordatorios por perfil",
                 "Roles por cuidador y colaboración multiusuario",
                 "Klinip IA completa para todo el grupo",
+                "KlinipFeed familiar compartido entre cuidadores y familia",
                 "Historial y actividad por persona",
             ],
             "detail_sections": [
@@ -1053,6 +1059,7 @@ PLAN_DEFINITIONS = {
                     "items": [
                         "Panel familiar con contexto por integrante",
                         "Colaboración entre cuidadores y responsables",
+                        "KlinipFeed familiar para publicar avances y novedades del grupo",
                         "Seguimiento diferenciado por perfil y actividad",
                     ],
                 },
@@ -12764,6 +12771,102 @@ def _write_audit_log(
         db.rollback()
 
 
+STEPUP_EMAIL_CODE_LENGTH = 6
+STEPUP_EMAIL_CODE_EXPIRE_MINUTES = 5
+STEPUP_EMAIL_CODE_MAX_ATTEMPTS = 5
+
+
+def _mask_email_address(email: str) -> str:
+    local_part, _, domain = (email or "").partition("@")
+    if not local_part or not domain:
+        return email or ""
+    if len(local_part) <= 2:
+        visible_local = local_part[:1]
+    else:
+        visible_local = f"{local_part[:2]}***"
+    domain_name, dot, domain_suffix = domain.partition(".")
+    visible_domain = domain_name[:1] + "***" if domain_name else "***"
+    if dot and domain_suffix:
+        return f"{visible_local}@{visible_domain}.{domain_suffix}"
+    return f"{visible_local}@{visible_domain}"
+
+
+def _generate_stepup_email_code(length: int = STEPUP_EMAIL_CODE_LENGTH) -> str:
+    upper_bound = 10 ** max(length, 1)
+    return str(secrets.randbelow(upper_bound)).zfill(length)
+
+
+def _invalidate_pending_stepup_email_codes(db: Session, user_id: int) -> None:
+    pending_codes = (
+        db.query(models.StepUpEmailCode)
+        .filter(
+            models.StepUpEmailCode.user_id == user_id,
+            models.StepUpEmailCode.used.is_(False),
+        )
+        .all()
+    )
+    for item in pending_codes:
+        item.used = True
+        item.used_at = datetime.utcnow()
+        db.add(item)
+
+
+def _get_active_stepup_email_code(db: Session, user_id: int) -> models.StepUpEmailCode | None:
+    return (
+        db.query(models.StepUpEmailCode)
+        .filter(
+            models.StepUpEmailCode.user_id == user_id,
+            models.StepUpEmailCode.used.is_(False),
+        )
+        .order_by(models.StepUpEmailCode.created_at.desc())
+        .first()
+    )
+
+
+def _verify_stepup_email_code(
+    db: Session,
+    current_user: models.User,
+    code: str,
+) -> tuple[bool, str | None]:
+    active_code = _get_active_stepup_email_code(db, current_user.id)
+    if not active_code:
+        return False, "Primero solicita un código temporal por correo."
+
+    if active_code.expires_at <= datetime.utcnow():
+        active_code.used = True
+        active_code.used_at = datetime.utcnow()
+        db.add(active_code)
+        db.commit()
+        return False, "El código temporal expiró. Solicita uno nuevo."
+
+    if active_code.attempts >= STEPUP_EMAIL_CODE_MAX_ATTEMPTS:
+        active_code.used = True
+        active_code.used_at = datetime.utcnow()
+        db.add(active_code)
+        db.commit()
+        return False, "Se agotaron los intentos. Solicita un nuevo código."
+
+    normalized_code = re.sub(r"\D", "", code or "")
+    code_matches = (
+        len(normalized_code) == STEPUP_EMAIL_CODE_LENGTH
+        and auth.hash_token(normalized_code) == active_code.code_hash
+    )
+    if not code_matches:
+        active_code.attempts = int(active_code.attempts or 0) + 1
+        if active_code.attempts >= STEPUP_EMAIL_CODE_MAX_ATTEMPTS:
+            active_code.used = True
+            active_code.used_at = datetime.utcnow()
+        db.add(active_code)
+        db.commit()
+        return False, "El código ingresado no es válido."
+
+    active_code.used = True
+    active_code.used_at = datetime.utcnow()
+    db.add(active_code)
+    db.commit()
+    return True, None
+
+
 # ─── MFA endpoints ────────────────────────────────────────────────────────────
 
 @app.post("/auth/mfa/enroll", response_model=schemas.MfaEnrollOut)
@@ -12944,9 +13047,66 @@ def mfa_regenerate_backup_codes(
     return {"backup_codes": raw_codes}
 
 
+@app.post("/auth/stepup/email/request")
+def request_stepup_email_code(
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _check_rate_limit(request, "stepup-email")
+    if not current_user.email:
+        raise HTTPException(status_code=400, detail="Tu cuenta no tiene un correo disponible para verificación.")
+
+    code = _generate_stepup_email_code()
+    expires_at = datetime.utcnow() + timedelta(minutes=STEPUP_EMAIL_CODE_EXPIRE_MINUTES)
+    masked_email = _mask_email_address(current_user.email)
+
+    _invalidate_pending_stepup_email_codes(db, current_user.id)
+    email_code = models.StepUpEmailCode(
+        user_id=current_user.id,
+        code_hash=auth.hash_token(code),
+        sent_to_email=current_user.email,
+        expires_at=expires_at,
+    )
+    db.add(email_code)
+
+    try:
+        _send_templated_email(
+            to_email=current_user.email,
+            subject=f"Código temporal de seguridad - {_app_display_name()}",
+            template_name="security_stepup_code.html",
+            context={
+                "user_name": current_user.name or current_user.email,
+                "code": code,
+                "masked_email": masked_email,
+                "expires_minutes": STEPUP_EMAIL_CODE_EXPIRE_MINUTES,
+                "year": datetime.utcnow().year,
+            },
+            from_security=True,
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING stepup email: no se pudo enviar código temporal: {exc}")
+        raise HTTPException(status_code=503, detail="No se pudo enviar el código temporal. Intenta nuevamente.")
+
+    _write_audit_log(
+        db,
+        "stepup_email_requested",
+        user_id=current_user.id,
+        ip_address=_get_client_ip(request),
+        user_agent=request.headers.get("user-agent", ""),
+        metadata={"masked_email": masked_email},
+    )
+    return {
+        "masked_email": masked_email,
+        "expires_in": STEPUP_EMAIL_CODE_EXPIRE_MINUTES * 60,
+    }
+
+
 @app.post("/auth/stepup/verify", response_model=schemas.StepUpOut)
 def stepup_verify(
-    payload: schemas.StepUpVerifyIn,
+    payload: dict,
     request: Request,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -12954,48 +13114,65 @@ def stepup_verify(
     """
     Eleva el nivel de confianza del usuario para una acción sensible.
     Acepta como prueba:
-      - Código TOTP de 6 dígitos (si MFA activo)
-      - Backup code de MFA
-      - Contraseña actual (si MFA no activo o como alternativa)
+      - Contraseña actual
+      - Código temporal enviado al correo
+      - Código TOTP o código de respaldo si MFA está activo
     Devuelve un step-up token válido por 10 minutos.
     """
-    raw_proof = payload.proof or ""
+    payload = payload or {}
+    raw_proof = str(payload.get("proof") or "")
+    method = str(payload.get("method") or "password").strip().lower()
     normalized_proof = raw_proof.strip()
     if not normalized_proof:
         raise HTTPException(status_code=400, detail="Debes proporcionar una prueba de identidad.")
 
     verified = False
+    failure_detail = "Verificación incorrecta."
 
-    # Opción 1: TOTP (si MFA activo)
-    if current_user.mfa_enabled and current_user.mfa_secret:
+    if method == "email_code":
+        verified, failure_detail = _verify_stepup_email_code(db, current_user, normalized_proof)
+        if not verified:
+            _write_audit_log(
+                db,
+                "stepup_email_failed",
+                user_id=current_user.id,
+                ip_address=_get_client_ip(request),
+                user_agent=request.headers.get("user-agent", ""),
+            )
+
+    elif method == "authenticator":
+        if not current_user.mfa_enabled or not current_user.mfa_secret:
+            raise HTTPException(status_code=400, detail="Tu cuenta no tiene una app autenticadora activa.")
         if auth.verify_totp(current_user.mfa_secret, normalized_proof):
             verified = True
+        if not verified and current_user.mfa_backup_codes_json:
+            new_codes = auth.verify_backup_code(current_user.mfa_backup_codes_json, normalized_proof)
+            if new_codes is not None:
+                verified = True
+                current_user.mfa_backup_codes_json = new_codes
+                db.add(current_user)
+                db.commit()
+        if not verified:
+            failure_detail = "El código del autenticador o de respaldo no es válido."
 
-    # Opción 2: backup code de MFA
-    if not verified and current_user.mfa_enabled and current_user.mfa_backup_codes_json:
-        new_codes = auth.verify_backup_code(current_user.mfa_backup_codes_json, normalized_proof)
-        if new_codes is not None:
-            verified = True
-            current_user.mfa_backup_codes_json = new_codes
-            db.add(current_user)
-            db.commit()
-
-    # Opción 3: contraseña actual
-    if not verified:
+    else:
         if auth.verify_password(raw_proof, current_user.password_hash):
             verified = True
         elif raw_proof != normalized_proof and auth.verify_password(normalized_proof, current_user.password_hash):
             verified = True
+        else:
+            failure_detail = "Tu contraseña actual no coincide."
 
     if not verified:
         _write_audit_log(db, "stepup_failed", user_id=current_user.id,
                          ip_address=_get_client_ip(request))
-        raise HTTPException(status_code=403, detail="Verificación incorrecta.")
+        raise HTTPException(status_code=403, detail=failure_detail)
 
     stepup_token = auth.create_stepup_token(current_user.id)
     _write_audit_log(db, "stepup_granted", user_id=current_user.id,
                      ip_address=_get_client_ip(request),
-                     user_agent=request.headers.get("user-agent", ""))
+                     user_agent=request.headers.get("user-agent", ""),
+                     metadata={"method": method})
     return {"stepup_token": stepup_token, "expires_in": auth.STEPUP_TOKEN_EXPIRE_MINUTES * 60}
 
 

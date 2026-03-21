@@ -12,6 +12,7 @@ import {
   getHealthProfiles,
   uploadHealthProfileAvatar,
 } from "../api";
+import StepUpModal from "../components/StepUpModal";
 
 const API_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? "" : "http://localhost:8000");
@@ -563,7 +564,9 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
 
 // ─── Modal crear post ─────────────────────────────────────────────────────────
 
-function CreatePostModal({ profiles, userName, onClose, onCreate }) {
+const SENSITIVE_POST_TYPES = ["exam_result", "doctor_visit", "medication"];
+
+function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false }) {
   const [content, setContent] = useState("");
   const [postType, setPostType] = useState("general");
   const [profileId, setProfileId] = useState(profiles[0]?.id || "");
@@ -572,7 +575,10 @@ function CreatePostModal({ profiles, userName, onClose, onCreate }) {
   const [mentionIds, setMentionIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [stepUpOpen, setStepUpOpen] = useState(false);
   const fileInputRef = useRef(null);
+
+  const isSensitive = SENSITIVE_POST_TYPES.includes(postType) || files.length > 0;
 
   const toggleMention = (id) =>
     setMentionIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -580,18 +586,13 @@ function CreatePostModal({ profiles, userName, onClose, onCreate }) {
   const handleFiles = (selected) => {
     const arr = Array.from(selected);
     setFiles(arr);
-    // Generar previews locales
     const urls = arr.map((f) => ({ name: f.name, url: URL.createObjectURL(f), type: f.type }));
-    // Limpiar previews anteriores
     setPreviews((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.url)); return urls; });
   };
 
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!content.trim() && files.length === 0) { setError("Escribe algo o adjunta un archivo."); return; }
-    if (!profileId) { setError("Selecciona un perfil."); return; }
+  const doPublish = async () => {
     setSubmitting(true);
     setError("");
     try {
@@ -608,6 +609,22 @@ function CreatePostModal({ profiles, userName, onClose, onCreate }) {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!content.trim() && files.length === 0) { setError("Escribe algo o adjunta un archivo."); return; }
+    if (!profileId) { setError("Selecciona un perfil."); return; }
+    if (isSensitive) {
+      setStepUpOpen(true);
+    } else {
+      doPublish();
+    }
+  };
+
+  const handleStepUpVerified = () => {
+    setStepUpOpen(false);
+    doPublish();
   };
 
   const selectedProfile = profiles.find((p) => p.id === Number(profileId));
@@ -740,15 +757,34 @@ function CreatePostModal({ profiles, userName, onClose, onCreate }) {
             </ul>
           )}
 
+          {/* Aviso de contenido sensible */}
+          {isSensitive && (
+            <div className="kfeed-sensitive-notice">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15" style={{ flexShrink: 0 }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <span>Esta publicación contiene información médica sensible. Se requerirá verificación de identidad antes de publicar.</span>
+            </div>
+          )}
+
           {error && <p className="kfeed-modal-error">{error}</p>}
 
           <div className="kfeed-modal-footer">
             <button type="submit" className="kfeed-publish-btn" disabled={submitting || (!content.trim() && files.length === 0)}>
-              {submitting ? "Publicando…" : "Publicar"}
+              {submitting ? "Publicando…" : isSensitive ? "Continuar →" : "Publicar"}
             </button>
           </div>
         </form>
       </div>
+
+      <StepUpModal
+        open={stepUpOpen}
+        onClose={() => setStepUpOpen(false)}
+        onVerified={handleStepUpVerified}
+        hasMfa={hasMfa}
+        actionLabel="publicar información médica sensible"
+      />
     </div>
   );
 }
@@ -1115,6 +1151,7 @@ export default function KlinipFeed({ user }) {
             userName={user?.name || ""}
             onClose={() => setShowCreate(false)}
             onCreate={handleCreate}
+            hasMfa={!!user?.mfa_enabled}
           />
         )}
       </div>
