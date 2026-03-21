@@ -23655,6 +23655,7 @@ body.theme-dark .ob-quick-btn {
   justify-content: center;
   flex-shrink: 0;
   letter-spacing: -0.02em;
+  overflow: hidden;
 }
 
 /* ── Page layout ── */
@@ -23665,6 +23666,7 @@ body.theme-dark .ob-quick-btn {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  width: 100%;
 }
 
 /* ── Page header ── */
@@ -23993,6 +23995,7 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   white-space: nowrap;
 }
 .kfeed-action-btn:hover { background: var(--hover-bg, #f8fafc); color: #2563eb; }
+.kfeed-action-btn:disabled { cursor: default; opacity: 0.7; }
 .kfeed-action-btn--reacted { color: #2563eb; }
 .kfeed-action-icon { display: flex; align-items: center; font-size: 1.1rem; }
 .kfeed-action-label { font-size: 0.82rem; }
@@ -24139,6 +24142,8 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
 }
 .kfeed-comment-input-wrap {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -24146,11 +24151,13 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   border: 1.5px solid var(--border, #e2e8f0);
   border-radius: 30px;
   padding: 0.45rem 0.85rem;
+  overflow: hidden;
   transition: border-color 0.15s;
 }
 .kfeed-comment-input-wrap:focus-within { border-color: #2563eb; background: var(--card-bg, #fff); }
 .kfeed-comment-input {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   outline: none;
@@ -24163,10 +24170,13 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   background: none;
   border: none;
   cursor: pointer;
+  flex-shrink: 0;
+  min-width: 4.7rem;
   color: #2563eb;
   font-size: 0.82rem;
   font-weight: 700;
   padding: 0;
+  text-align: right;
   transition: color 0.15s;
   white-space: nowrap;
 }
@@ -24467,14 +24477,357 @@ body.theme-dark .kfeed-stats-row { border-color: #334155; }
 body.theme-dark .kfeed-media-card { border-color: #334155; }
 body.theme-dark .kfeed-media-card-body { border-color: #334155; }
 
+/* ── Avatar con imagen ── */
+.kfeed-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ── PDF viewer ── */
+.kfeed-pdf-viewer {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: var(--card-bg, #fff);
+  margin: 0.5rem 0;
+}
+.kfeed-pdf-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: var(--hover-bg, #f8fafc);
+}
+.kfeed-pdf-name {
+  flex: 1;
+  font-size: 0.82rem;
+  color: var(--text-primary, #0f172a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-pdf-open-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.kfeed-pdf-open-btn:hover { background: #1d4ed8; }
+.kfeed-pdf-embed {
+  display: block;
+  width: 100%;
+  height: 420px;
+  border: none;
+}
+.kfeed-pdf-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.83rem;
+  color: var(--text-secondary, #64748b);
+}
+body.theme-dark .kfeed-pdf-viewer { border-color: #334155; background: #1e293b; }
+body.theme-dark .kfeed-pdf-topbar { background: #0f172a; border-color: #334155; }
+body.theme-dark .kfeed-pdf-name { color: #f1f5f9; }
+
+/* ── Layout 2 columnas (desktop) ── */
+.kfeed-layout-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+.kfeed-layout-wrapper .kfeed-page {
+  flex: 1;
+  min-width: 0;
+  max-width: 660px;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* ── Botón abrir sidebar (solo móvil) ── */
+.kfeed-family-panel-btn {
+  display: none;
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Backdrop móvil ── */
+.kfeed-sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+  z-index: 1250;
+}
+.kfeed-sidebar-backdrop.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Header móvil del sidebar (solo visible en móvil) ── */
+.kfeed-sidebar-mobile-header {
+  display: none;
+}
+
+/* ── Botón cerrar sidebar (solo móvil) ── */
+.kfeed-sidebar-close-btn {
+  display: none;
+}
+
+/* ── Sidebar familia ── */
+.kfeed-sidebar {
+  display: none;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 300px;
+  flex-shrink: 0;
+  padding-top: 1.25rem;
+  position: sticky;
+  top: 1rem;
+}
+
+@media (min-width: 1050px) {
+  .kfeed-sidebar {
+    display: flex;
+  }
+}
+
+/* ── Móvil: sidebar como drawer deslizante ── */
+@media (max-width: 1049px) {
+  .kfeed-family-panel-btn {
+    display: flex;
+  }
+  .kfeed-sidebar-backdrop {
+    display: block;
+  }
+  .kfeed-sidebar-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.25rem 0.85rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--border, #e2e8f0);
+  }
+  .kfeed-sidebar-mobile-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary, #0f172a);
+  }
+  .kfeed-sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--hover-bg, #f1f5f9);
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary, #64748b);
+    transition: background 0.15s;
+  }
+  .kfeed-sidebar-close-btn:hover { background: var(--border, #e2e8f0); }
+  .kfeed-sidebar {
+    display: flex;
+    position: fixed;
+    top: 0.9rem;
+    right: 0.9rem;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    width: min(320px, calc(100vw - 1.8rem));
+    padding: 1.25rem 1rem;
+    background: var(--card-bg, #fff);
+    border-radius: 16px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
+    overflow-y: auto;
+    z-index: 1300;
+    transform: translateX(calc(100% + 1.8rem));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 0.22s ease, opacity 0.22s ease;
+  }
+  .kfeed-sidebar.is-open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .kfeed-sidebar {
+    top: 0.55rem;
+    right: 0.55rem;
+    width: min(300px, calc(100vw - 1.1rem));
+    bottom: calc(60px + env(safe-area-inset-bottom));
+  }
+}
+
+.kfeed-sidebar-user-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 0.25rem 0.85rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  margin-bottom: 0.5rem;
+}
+.kfeed-sidebar-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.kfeed-sidebar-avatar-edit-btn {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  padding: 0;
+  transition: background 0.15s;
+}
+.kfeed-sidebar-avatar-edit-btn:hover { background: #1d4ed8; }
+.kfeed-sidebar-avatar-edit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.kfeed-sidebar-avatar-edit-sm {
+  width: 17px;
+  height: 17px;
+}
+.kfeed-sidebar-user-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kfeed-sidebar-username {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-sidebar-userprofile {
+  font-size: 0.78rem;
+  color: var(--text-secondary, #64748b);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-sidebar-family-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.kfeed-sidebar-family-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kfeed-sidebar-member-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 0.25rem;
+  border-radius: 10px;
+  transition: background 0.12s;
+}
+.kfeed-sidebar-member-row:hover { background: var(--hover-bg, #f8fafc); }
+.kfeed-sidebar-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.kfeed-sidebar-member-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-sidebar-member-rel {
+  font-size: 0.76rem;
+  color: var(--text-secondary, #64748b);
+}
+body.theme-dark .kfeed-sidebar { background: #1e293b; }
+body.theme-dark .kfeed-sidebar-user-row,
+body.theme-dark .kfeed-sidebar-mobile-header { border-color: #334155; }
+body.theme-dark .kfeed-sidebar-mobile-title,
+body.theme-dark .kfeed-sidebar-username,
+body.theme-dark .kfeed-sidebar-member-name { color: #f1f5f9; }
+body.theme-dark .kfeed-sidebar-member-row:hover { background: #0f172a; }
+body.theme-dark .kfeed-sidebar-avatar-edit-btn { border-color: #1e293b; }
+body.theme-dark .kfeed-sidebar-close-btn { background: #0f172a; color: #94a3b8; }
+body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .kfeed-page { padding: 0.75rem 0.5rem 5rem; gap: 0.6rem; }
+  .kfeed-layout-wrapper { padding: 0; }
   .kfeed-modal-backdrop { align-items: flex-end; padding: 0; }
   .kfeed-modal { border-radius: 20px 20px 0 0; max-height: 92vh; }
   .kfeed-modal-header { border-radius: 20px 20px 0 0; }
   .kfeed-action-label { font-size: 0.76rem; }
   .kfeed-reaction-picker { left: 0; transform: none; }
   .kfeed-post-type-pill { display: none; }
+  .kfeed-comment-emoji-bar {
+    padding: 0.35rem 0.75rem 0.15rem;
+    gap: 0.05rem;
+    overflow-x: auto;
+  }
+  .kfeed-comment-composer {
+    gap: 0.4rem;
+    padding: 0.45rem 0.75rem 0.65rem;
+  }
+  .kfeed-comment-input-wrap {
+    padding: 0.4rem 0.65rem;
+    gap: 0.35rem;
+  }
+  .kfeed-comment-input {
+    font-size: 0.82rem;
+  }
+  .kfeed-comment-send-btn {
+    min-width: 4.95rem;
+    font-size: 0.78rem;
+  }
+  .kfeed-pdf-embed { height: 300px; }
 }
 

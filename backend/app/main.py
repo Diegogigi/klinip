@@ -13529,6 +13529,30 @@ async def update_health_profile(
     return _profile_out(profile, link)
 
 
+@app.post("/health-profiles/{profile_id}/avatar")
+async def upload_health_profile_avatar(
+    profile_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "admin")
+
+    data = await file.read()
+    if len(data) > 3 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="La imagen no puede superar 3MB")
+
+    mime_type, _ = mimetypes.guess_type(file.filename or "image.jpg")
+    mime_type = mime_type or "image/jpeg"
+    b64 = base64.b64encode(data).decode("utf-8")
+    profile.avatar_url = f"data:{mime_type};base64,{b64}"
+
+    db.add(profile)
+    db.commit()
+    return {"avatar_url": profile.avatar_url, "profile_id": profile_id}
+
+
 @app.post("/health-profiles/{profile_id}/set-active", response_model=schemas.HealthProfileOut)
 async def set_active_health_profile(
     profile_id: int,
@@ -17606,10 +17630,20 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
             my_reaction = r.reaction_type
             break
 
+    user_avatar_url = ""
+    if post.user:
+        primary = next(
+            (p for p in post.user.health_profiles_owned if p.is_primary_profile and not p.is_archived),
+            None,
+        )
+        if primary and primary.avatar_url and primary.avatar_url.startswith("data:"):
+            user_avatar_url = primary.avatar_url
+
     return {
         "id": post.id,
         "user_id": post.user_id,
         "user_name": post.user.name if post.user else "",
+        "user_avatar_url": user_avatar_url,
         "profile_id": post.profile_id,
         "profile_name": post.profile.full_name if post.profile else "",
         "content": post.content,

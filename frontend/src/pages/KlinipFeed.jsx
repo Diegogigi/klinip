@@ -10,6 +10,7 @@ import {
   deletePostComment,
   uploadPostAttachment,
   getHealthProfiles,
+  uploadHealthProfileAvatar,
 } from "../api";
 
 const API_URL = import.meta.env.VITE_API_URL ||
@@ -63,6 +64,38 @@ function AuthImage({ postId, attachmentId, filename, previewUrl, className, onCl
   return <img src={src} alt={filename} className={className} onClick={onClick} style={onClick ? { cursor: "pointer" } : {}} />;
 }
 
+function AuthPDF({ postId, attachmentId, filename, previewUrl }) {
+  const { src, loading } = useAuthFile(postId, attachmentId, previewUrl);
+  if (loading) return (
+    <div className="kfeed-pdf-loading">
+      <div className="kfeed-spinner" style={{ width: 20, height: 20 }} />
+      <span>Cargando PDF…</span>
+    </div>
+  );
+  if (!src) return null;
+  return (
+    <div className="kfeed-pdf-viewer">
+      <div className="kfeed-pdf-topbar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16" style={{ color: "#dc2626", flexShrink: 0 }}>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+          <polyline points="9 9 10 9"/>
+        </svg>
+        <span className="kfeed-pdf-name">{filename || "Documento PDF"}</span>
+        <button type="button" className="kfeed-pdf-open-btn" onClick={() => window.open(src, "_blank")}>
+          Abrir
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+        </button>
+      </div>
+      <embed src={src} type="application/pdf" className="kfeed-pdf-embed" />
+    </div>
+  );
+}
+
 function openAuthFile(postId, attachmentId) {
   const token = localStorage.getItem("token");
   axios
@@ -99,6 +132,15 @@ const REACTIONS = [
 
 const PRIMARY_REACTION = REACTIONS[0];
 
+function getReactionByType(type) {
+  return REACTIONS.find((reaction) => reaction.type === type) || PRIMARY_REACTION;
+}
+
+function getReactionLabel(reaction) {
+  if (!reaction) return PRIMARY_REACTION.label;
+  return reaction.type === "animo" ? "\u00c1nimo" : reaction.label;
+}
+
 const COMMENT_EMOJIS = ["❤️", "🙌", "🔥", "👏", "😢", "😍", "😮", "😂"];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -123,23 +165,26 @@ function getInitials(name = "") {
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
-function Avatar({ name, size = 44 }) {
+function Avatar({ name, size = 44, avatarUrl = null }) {
   return (
     <div className="kfeed-avatar" style={{ width: size, height: size, fontSize: size * 0.38 }}>
-      {getInitials(name)}
+      {avatarUrl
+        ? <img src={avatarUrl} alt={name} className="kfeed-avatar-img" />
+        : getInitials(name)
+      }
     </div>
   );
 }
 
 // ─── Reactions bar ────────────────────────────────────────────────────────────
 
-function ReactionsBar({ post, onReact }) {
+function ReactionsBar({ post, onReact, disabled = false }) {
   const [showPicker, setShowPicker] = useState(false);
   const pickerRef = useRef(null);
   const btnRef = useRef(null);
   const holdTimer = useRef(null);
 
-  const myReaction = REACTIONS.find((r) => r.type === post.my_reaction);
+  const myReaction = post.my_reaction ? getReactionByType(post.my_reaction) : null;
   const isReacted = !!myReaction;
 
   // Cerrar picker al click fuera
@@ -158,6 +203,7 @@ function ReactionsBar({ post, onReact }) {
   }, [showPicker]);
 
   const handleMainClick = async () => {
+    if (disabled) return;
     clearTimeout(holdTimer.current);
     setShowPicker(false);
     if (isReacted) {
@@ -168,11 +214,13 @@ function ReactionsBar({ post, onReact }) {
   };
 
   const handleMouseDown = () => {
+    if (disabled) return;
     holdTimer.current = setTimeout(() => setShowPicker(true), 400);
   };
   const handleMouseUp = () => clearTimeout(holdTimer.current);
 
   const handleReact = async (type) => {
+    if (disabled) return;
     setShowPicker(false);
     await onReact(post.id, post.my_reaction === type ? null : type);
   };
@@ -187,10 +235,10 @@ function ReactionsBar({ post, onReact }) {
               type="button"
               className={`kfeed-reaction-option ${post.my_reaction === r.type ? "selected" : ""}`}
               onClick={() => handleReact(r.type)}
-              title={r.label}
+              title={getReactionLabel(r)}
             >
               <span className="kfeed-reaction-emoji">{r.emoji}</span>
-              <span className="kfeed-reaction-label">{r.label}</span>
+              <span className="kfeed-reaction-label">{getReactionLabel(r)}</span>
             </button>
           ))}
         </div>
@@ -203,10 +251,12 @@ function ReactionsBar({ post, onReact }) {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        disabled={disabled}
+        aria-busy={disabled}
         title="Mantén presionado para elegir reacción"
       >
         <span className="kfeed-action-icon">{myReaction ? myReaction.emoji : PRIMARY_REACTION.emoji}</span>
-        <span className="kfeed-action-label">{myReaction ? myReaction.label : PRIMARY_REACTION.label}</span>
+        <span className="kfeed-action-label">{getReactionLabel(myReaction || PRIMARY_REACTION)}</span>
       </button>
     </div>
   );
@@ -288,16 +338,18 @@ function CommentsSection({ post, currentUserId, userName, onComment, onDeleteCom
           <input
             ref={inputRef}
             className="kfeed-comment-input"
-            placeholder="Únete a la conversación…"
+            placeholder="\u00danete a la conversaci\u00f3n..."
             value={text}
             onChange={(e) => setCommentText(e.target.value)}
             disabled={submitting}
           />
-          {text.trim() && (
-            <button type="submit" className="kfeed-comment-send-btn" disabled={submitting}>
-              Publicar
-            </button>
-          )}
+          <button
+            type="submit"
+            className="kfeed-comment-send-btn"
+            disabled={submitting || !text.trim()}
+          >
+            {submitting ? "Publicando..." : "Publicar"}
+          </button>
         </div>
       </form>
     </div>
@@ -306,18 +358,26 @@ function CommentsSection({ post, currentUserId, userName, onComment, onDeleteCom
 
 // ─── Media card ───────────────────────────────────────────────────────────────
 
+function isPdf(attachment) {
+  return (
+    (attachment.filename || "").toLowerCase().endsWith(".pdf") ||
+    attachment.attachment_type === "document"
+  );
+}
+
 function PostMediaCard({ post }) {
   const typeInfo = getPostTypeInfo(post.post_type);
   const images = (post.attachments || []).filter((a) => a.attachment_type === "image");
-  const docs   = (post.attachments || []).filter((a) => a.attachment_type !== "image");
-  const hasAny = images.length > 0 || docs.length > 0;
+  const pdfs   = (post.attachments || []).filter((a) => isPdf(a));
+  const otherDocs = (post.attachments || []).filter((a) => a.attachment_type !== "image" && !isPdf(a));
+  const hasAny = images.length > 0 || pdfs.length > 0 || otherDocs.length > 0;
 
   if (!hasAny && post.post_type === "general") return null;
 
   return (
     <div className="kfeed-media-card">
       {/* Imágenes */}
-      {images.map((img, i) => (
+      {images.map((img) => (
         <AuthImage
           key={img.id}
           postId={post.id}
@@ -326,6 +386,17 @@ function PostMediaCard({ post }) {
           previewUrl={img.preview_url || null}
           className="kfeed-media-img"
           onClick={() => openAuthFile(post.id, img.id)}
+        />
+      ))}
+
+      {/* PDFs inline */}
+      {pdfs.map((doc) => (
+        <AuthPDF
+          key={doc.id}
+          postId={post.id}
+          attachmentId={doc.id}
+          filename={doc.filename}
+          previewUrl={doc.preview_url || null}
         />
       ))}
 
@@ -344,10 +415,10 @@ function PostMediaCard({ post }) {
         <p className="kfeed-media-card-sub">Compartido de forma privada con tu familia</p>
       </div>
 
-      {/* Documentos */}
-      {docs.length > 0 && (
+      {/* Otros documentos (no PDF) */}
+      {otherDocs.length > 0 && (
         <div className="kfeed-media-docs">
-          {docs.map((a) => (
+          {otherDocs.map((a) => (
             <button
               key={a.id}
               type="button"
@@ -373,6 +444,7 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
   const [showComments, setShowComments] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const typeInfo = getPostTypeInfo(post.post_type);
+  const statsReaction = post.my_reaction ? getReactionByType(post.my_reaction) : PRIMARY_REACTION;
 
   const mentionNames = (post.mention_profile_ids || [])
     .map((id) => profiles.find((p) => p.id === id)?.full_name)
@@ -386,7 +458,7 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
     <article className="kfeed-post-card">
       {/* Header */}
       <div className="kfeed-post-header">
-        <Avatar name={post.user_name} size={46} />
+        <Avatar name={post.user_name} size={46} avatarUrl={post.user_avatar_url || null} />
         <div className="kfeed-post-header-info">
           <div className="kfeed-post-header-top">
             <span className="kfeed-post-author">{post.user_name}</span>
@@ -439,7 +511,7 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
         <div className="kfeed-stats-row">
           {post.reactions_count > 0 && (
             <span className="kfeed-stats-reactions">
-              <span className="kfeed-stats-emojis">{REACTIONS.slice(0, 3).map((r) => r.emoji).join("")}</span>
+              <span className="kfeed-stats-emojis" aria-hidden="true">{statsReaction.emoji}</span>
               {post.reactions_count}
             </span>
           )}
@@ -453,7 +525,7 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
 
       {/* Acciones */}
       <div className="kfeed-actions-row">
-        <ReactionsBar post={post} onReact={onReact} />
+        <ReactionsBar post={post} onReact={onReact} disabled={post.is_reacting} />
 
         <button type="button" className="kfeed-action-btn" onClick={() => setShowComments((v) => !v)}>
           <span className="kfeed-action-icon">
@@ -681,6 +753,131 @@ function CreatePostModal({ profiles, userName, onClose, onCreate }) {
   );
 }
 
+// ─── Sidebar de familia (desktop) ────────────────────────────────────────────
+
+function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose }) {
+  const primaryProfile = profiles.find((p) => p.is_primary_profile) || profiles[0];
+  const familyProfiles = profiles.filter((p) => !p.is_primary_profile && !p.is_archived);
+  const avatarInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !primaryProfile) return;
+    setUploading(true);
+    try {
+      await onAvatarUpload(primaryProfile.id, file);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <aside className={`kfeed-sidebar${isOpen ? " is-open" : ""}`}>
+      {/* Botón cerrar (solo móvil) */}
+      <div className="kfeed-sidebar-mobile-header">
+        <span className="kfeed-sidebar-mobile-title">Mi familia</span>
+        <button type="button" className="kfeed-sidebar-close-btn" onClick={onClose} aria-label="Cerrar panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Usuario actual */}
+      <div className="kfeed-sidebar-user-row">
+        <div className="kfeed-sidebar-avatar-wrap">
+          <Avatar name={user?.name || ""} size={46} avatarUrl={primaryProfile?.avatar_url || null} />
+          <button
+            type="button"
+            className="kfeed-sidebar-avatar-edit-btn"
+            title="Cambiar foto de perfil"
+            onClick={() => avatarInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading
+              ? <div className="kfeed-spinner" style={{ width: 11, height: 11 }} />
+              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+            }
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={handleAvatarChange}
+          />
+        </div>
+        <div className="kfeed-sidebar-user-info">
+          <span className="kfeed-sidebar-username">{user?.name || ""}</span>
+          <span className="kfeed-sidebar-userprofile">{primaryProfile?.full_name || ""}</span>
+        </div>
+      </div>
+
+      {/* Familia */}
+      {familyProfiles.length > 0 && (
+        <div className="kfeed-sidebar-family-section">
+          <div className="kfeed-sidebar-family-header">
+            <span>Tu familia</span>
+          </div>
+          {familyProfiles.slice(0, 6).map((p) => (
+            <FamilyMemberRow key={p.id} profile={p} onAvatarUpload={onAvatarUpload} />
+          ))}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function FamilyMemberRow({ profile, onAvatarUpload }) {
+  const inputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      await onAvatarUpload(profile.id, file);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  return (
+    <div className="kfeed-sidebar-member-row">
+      <div className="kfeed-sidebar-avatar-wrap">
+        <Avatar name={profile.full_name} size={38} avatarUrl={profile.avatar_url || null} />
+        <button
+          type="button"
+          className="kfeed-sidebar-avatar-edit-btn kfeed-sidebar-avatar-edit-sm"
+          title="Cambiar foto"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+        >
+          {uploading
+            ? <div className="kfeed-spinner" style={{ width: 9, height: 9 }} />
+            : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="9" height="9">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+          }
+        </button>
+        <input ref={inputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleChange} />
+      </div>
+      <div className="kfeed-sidebar-member-info">
+        <span className="kfeed-sidebar-member-name">{profile.full_name}</span>
+        <span className="kfeed-sidebar-member-rel">{profile.relation_with_owner || "Familiar"}</span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function KlinipFeed({ user }) {
@@ -691,8 +888,18 @@ export default function KlinipFeed({ user }) {
   const [showCreate, setShowCreate] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [familySidebarOpen, setFamilySidebarOpen] = useState(false);
   const skipRef = useRef(0);
   const LIMIT = 20;
+
+  async function handleAvatarUpload(profileId, file) {
+    const result = await uploadHealthProfileAvatar(profileId, file);
+    if (result?.avatar_url) {
+      setProfiles((prev) =>
+        prev.map((p) => p.id === profileId ? { ...p, avatar_url: result.avatar_url } : p)
+      );
+    }
+  }
 
   useEffect(() => { loadInitial(); }, []);
 
@@ -753,17 +960,44 @@ export default function KlinipFeed({ user }) {
   }
 
   async function handleReact(postId, reactionType) {
-    if (!reactionType) {
-      await removeReaction(postId);
-      setPosts((prev) => prev.map((p) =>
-        p.id !== postId ? p : { ...p, my_reaction: null, reactions_count: Math.max(0, p.reactions_count - 1) }
-      ));
-    } else {
+    const targetPost = posts.find((post) => post.id === postId);
+    if (!targetPost || targetPost.is_reacting) return;
+
+    setPosts((prev) => prev.map((p) =>
+      p.id !== postId ? p : { ...p, is_reacting: true }
+    ));
+
+    try {
+      if (!reactionType) {
+        await removeReaction(postId);
+        setPosts((prev) => prev.map((p) =>
+          p.id !== postId
+            ? p
+            : {
+                ...p,
+                my_reaction: null,
+                reactions_count: Math.max(0, p.reactions_count - 1),
+                is_reacting: false,
+              }
+        ));
+        return;
+      }
+
       await reactToPost(postId, reactionType);
       setPosts((prev) => prev.map((p) => {
         if (p.id !== postId) return p;
-        return { ...p, my_reaction: reactionType, reactions_count: p.my_reaction ? p.reactions_count : p.reactions_count + 1 };
+        return {
+          ...p,
+          my_reaction: reactionType,
+          reactions_count: p.my_reaction ? p.reactions_count : p.reactions_count + 1,
+          is_reacting: false,
+        };
       }));
+    } catch (error) {
+      setPosts((prev) => prev.map((p) =>
+        p.id !== postId ? p : { ...p, is_reacting: false }
+      ));
+      throw error;
     }
   }
 
@@ -785,26 +1019,41 @@ export default function KlinipFeed({ user }) {
     ));
   }
 
-  return (
-    <div className="kfeed-page">
-      {/* Header */}
-      <div className="kfeed-page-header">
-        <div className="kfeed-brand-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" style={{ color: "#2563eb" }}>
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-          </svg>
-          <h1 className="kfeed-page-title">KlinipFeed</h1>
-        </div>
-        <p className="kfeed-page-subtitle">Comparte tu salud con tu familia</p>
-      </div>
+  const primaryProfile = profiles.find((p) => p.is_primary_profile) || profiles[0];
+  const userAvatarUrl = primaryProfile?.avatar_url || null;
 
-      {/* Composer */}
-      <div className="kfeed-composer-card">
-        <Avatar name={user?.name || ""} size={44} />
-        <button type="button" className="kfeed-composer-trigger" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-          ¿Qué quieres compartir con tu familia?
-        </button>
-      </div>
+  return (
+    <div className="kfeed-layout-wrapper">
+      <div className="kfeed-page">
+        {/* Header */}
+        <div className="kfeed-page-header">
+          <div className="kfeed-brand-row">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" style={{ color: "#2563eb" }}>
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+            <h1 className="kfeed-page-title">KlinipFeed</h1>
+            {profiles.length > 0 && (
+              <button
+                type="button"
+                className="kfeed-family-panel-btn"
+                onClick={() => setFamilySidebarOpen(true)}
+                title="Ver familia"
+                aria-label="Abrir panel de familia"
+              >
+                <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
+              </button>
+            )}
+          </div>
+          <p className="kfeed-page-subtitle">Comparte tu salud con tu familia</p>
+        </div>
+
+        {/* Composer */}
+        <div className="kfeed-composer-card">
+          <Avatar name={user?.name || ""} size={44} avatarUrl={userAvatarUrl} />
+          <button type="button" className="kfeed-composer-trigger" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
+            ¿Qué quieres compartir con tu familia?
+          </button>
+        </div>
 
       {loading && (
         <div className="kfeed-state-center">
@@ -860,12 +1109,32 @@ export default function KlinipFeed({ user }) {
         </div>
       )}
 
-      {showCreate && profiles.length > 0 && (
-        <CreatePostModal
+        {showCreate && profiles.length > 0 && (
+          <CreatePostModal
+            profiles={profiles}
+            userName={user?.name || ""}
+            onClose={() => setShowCreate(false)}
+            onCreate={handleCreate}
+          />
+        )}
+      </div>
+
+      {/* Backdrop móvil */}
+      {profiles.length > 0 && (
+        <div
+          className={`kfeed-sidebar-backdrop${familySidebarOpen ? " is-visible" : ""}`}
+          onClick={() => setFamilySidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar (desktop columna / mobile drawer) */}
+      {profiles.length > 0 && (
+        <FamilySidebar
+          user={user}
           profiles={profiles}
-          userName={user?.name || ""}
-          onClose={() => setShowCreate(false)}
-          onCreate={handleCreate}
+          onAvatarUpload={handleAvatarUpload}
+          isOpen={familySidebarOpen}
+          onClose={() => setFamilySidebarOpen(false)}
         />
       )}
     </div>

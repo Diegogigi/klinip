@@ -749,6 +749,15 @@ export async function uploadPostAttachment(postId, file, attachmentType = "image
   return res.data;
 }
 
+export async function uploadHealthProfileAvatar(profileId, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await api.post(`/health-profiles/${profileId}/avatar`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
 export function getPostAttachmentUrl(postId, attachmentId) {
   const base = api.defaults.baseURL || "";
   const token = localStorage.getItem("token");

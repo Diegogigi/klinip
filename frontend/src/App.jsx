@@ -175,21 +175,21 @@ function Sidebar({
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
+    { to: "/feed", label: "KlinipFeed", icon: icons.feed },
+    { to: "/ai", label: "IA Klinip", icon: icons.aiMobile },
     { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
     { to: "/stats", label: "Stats", icon: icons.chart },
-    { to: "/ai", label: "IA Klinip", icon: icons.aiMobile },
     { to: "/timeline", label: "Historia", icon: icons.timeline },
     { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
-    { to: "/feed", label: "KlinipFeed", icon: icons.feed },
   ];
-  const mobilePrimaryLinks = ["/", "/appointments", "/ai", "/calendar"]
+  const mobilePrimaryLinks = ["/", "/feed", "/ai", "/appointments"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
   const mobileOverflowLinks = links.filter((item) =>
-    ["/stats", "/timeline", "/medications", "/documents", "/family", "/feed"].includes(item.to)
+    ["/calendar", "/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
   );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
@@ -1228,11 +1228,21 @@ export default function App() {
     let active = true;
 
     const initServiceWorker = async () => {
+      const justApplied = sessionStorage.getItem("klinip-sw-applied");
+      if (justApplied) {
+        sessionStorage.removeItem("klinip-sw-applied");
+        return;
+      }
       const reg = await registerServiceWorker().catch(() => null);
       if (!active) return;
       if (reg?.waiting && navigator.serviceWorker.controller) {
-        setUpdateRegistration(reg);
-        setUpdateAvailable(true);
+        const waitingKey = reg.waiting.scriptURL || reg.scope || "klinip-sw-update";
+        if (!seenUpdateKeysRef.current.has(waitingKey)) {
+          seenUpdateKeysRef.current.add(waitingKey);
+          setUpdateRegistration(reg);
+          setActiveUpdateKey(waitingKey);
+          setUpdateAvailable(true);
+        }
       }
     };
 
@@ -1258,6 +1268,7 @@ export default function App() {
         reg?.active?.scriptURL ||
         reg?.scope ||
         "klinip-sw-update";
+      if (sessionStorage.getItem("klinip-sw-applied")) return;
       const dismissedKey = dismissedUpdateKeyRef.current || "";
       if (dismissedKey && dismissedKey === updateKey) return;
       if (seenUpdateKeysRef.current.has(updateKey)) return;
@@ -1295,6 +1306,7 @@ export default function App() {
   };
 
   const handleApplyUpdate = async () => {
+    sessionStorage.setItem("klinip-sw-applied", "1");
     try {
       const reg = updateRegistration || (await navigator.serviceWorker.getRegistration());
       if (reg?.waiting) {
@@ -1305,9 +1317,6 @@ export default function App() {
     } catch (err) {
       window.location.reload();
     } finally {
-      if (activeUpdateKey) {
-        dismissedUpdateKeyRef.current = "";
-      }
       setUpdateAvailable(false);
     }
   };

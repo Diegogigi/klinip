@@ -122,3 +122,4 @@ export const addPostComment = api.addPostComment;
 export const deletePostComment = api.deletePostComment;
 export const uploadPostAttachment = api.uploadPostAttachment;
 export const getPostAttachmentUrl = api.getPostAttachmentUrl;
+export const uploadHealthProfileAvatar = api.uploadHealthProfileAvatar;
