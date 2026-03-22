@@ -6092,12 +6092,21 @@ def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship
 
 def _relationship_out(link: models.ProfileRelationship):
     user = link.user
+    user_avatar_url = ""
+    if user:
+        primary = next(
+            (p for p in user.health_profiles_owned if p.is_primary_profile and not p.is_archived),
+            None,
+        )
+        if primary and primary.avatar_url and primary.avatar_url.startswith("data:"):
+            user_avatar_url = primary.avatar_url
     return schemas.ProfileRelationshipOut(
         id=link.id,
         profile_id=link.profile_id,
         user_id=link.user_id,
         user_name=(user.name if user else ""),
         user_email=(user.email if user else ""),
+        user_avatar_url=user_avatar_url,
         relationship_type=link.relationship_type or "",
         role=link.role or "viewer",
         status=link.status or "accepted",
@@ -13772,6 +13781,14 @@ async def upload_health_profile_avatar(
 ):
     profile, link = _get_profile_access_or_404(db, current_user, profile_id)
     _require_role(link, "admin")
+
+    # Para perfiles primarios, solo el propietario puede cambiar el avatar
+    # (evita que un admin externo sobreescriba la foto personal de otra cuenta)
+    if profile.is_primary_profile and profile.owner_user_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el titular de la cuenta puede cambiar la foto de su perfil principal.",
+        )
 
     data = await file.read()
     if len(data) > 3 * 1024 * 1024:

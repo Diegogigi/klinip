@@ -141,6 +141,7 @@ class ProfileRelationshipOut(BaseModel):
     user_id: int
     user_name: Optional[str] = ""
     user_email: Optional[str] = ""
+    user_avatar_url: Optional[str] = ""
     relationship_type: Optional[str] = ""
     role: str
     status: str

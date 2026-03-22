@@ -973,7 +973,7 @@ function CaregiverRow({ caregiver }) {
   const name = caregiver.user_name || caregiver.user_email || `Usuario #${caregiver.user_id}`;
   return (
     <div className="kfeed-sidebar-member-row">
-      <Avatar name={name} size={38} avatarUrl={null} />
+      <Avatar name={name} size={38} avatarUrl={caregiver.user_avatar_url || null} />
       <div className="kfeed-sidebar-member-info">
         <span className="kfeed-sidebar-member-name">{name}</span>
         <span className="kfeed-sidebar-member-rel">{familyRoleLabel(caregiver.role)}</span>
@@ -1185,8 +1185,12 @@ export default function KlinipFeed({ user }) {
     ));
   }
 
-  const primaryProfile = profiles.find((p) => p.is_primary_profile) || profiles[0];
-  const userAvatarUrl = primaryProfile?.avatar_url || null;
+  const primaryProfile =
+    profiles.find((p) => p.is_primary_profile && p.owner_user_id === user?.id) ||
+    profiles.find((p) => p.owner_user_id === user?.id) ||
+    profiles.find((p) => p.is_primary_profile) ||
+    profiles[0];
+  const userAvatarUrl = (primaryProfile?.owner_user_id === user?.id ? primaryProfile?.avatar_url : null) || null;
 
   return (
     <div className="kfeed-layout-wrapper">
