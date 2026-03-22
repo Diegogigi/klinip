@@ -2891,7 +2891,8 @@ body.theme-dark .stepup-modal-title-wrap p {
 }
 
 body.theme-dark .stepup-intro-card,
-body.theme-dark .stepup-channel-card {
+body.theme-dark .stepup-channel-card,
+body.theme-dark .stepup-email-panel {
   background: #0f172a;
   border-color: #243244;
 }
@@ -2905,6 +2906,14 @@ body.theme-dark .stepup-intro-copy,
 body.theme-dark .stepup-channel-copy,
 body.theme-dark .stepup-method-btn-desc {
   color: #94a3b8;
+}
+
+body.theme-dark .stepup-email-title {
+  color: #cbd5e1;
+}
+
+body.theme-dark .stepup-inline-link {
+  color: #93c5fd;
 }
 
 body.theme-dark .stepup-modal-close {
@@ -2927,6 +2936,18 @@ body.theme-dark .stepup-method-btn {
 
 body.theme-dark .stepup-method-btn-badge {
   background: rgba(96, 165, 250, 0.16);
+  color: #bfdbfe;
+}
+
+body.theme-dark .stepup-alt-btn {
+  background: #111b2e;
+  border-color: #243244;
+  color: #cbd5e1;
+}
+
+body.theme-dark .stepup-alt-btn.is-active {
+  background: linear-gradient(135deg, rgba(30, 64, 175, 0.3) 0%, rgba(37, 99, 235, 0.24) 100%);
+  border-color: rgba(96, 165, 250, 0.42);
   color: #bfdbfe;
 }
 
@@ -6113,6 +6134,67 @@ body.theme-dark .primary-btn {
   display: none;
 }
 
+.stepup-email-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 0.95rem;
+  border-radius: 18px;
+  border: 1px solid #dbe5f2;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+  margin-bottom: 0.8rem;
+}
+
+.stepup-email-title {
+  margin: 0;
+  color: #334155;
+  font-size: 0.97rem;
+  line-height: 1.5;
+}
+
+.stepup-inline-link {
+  margin-top: 0.7rem;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #2563eb;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.stepup-inline-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stepup-alt-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.8rem;
+}
+
+.stepup-alt-btn {
+  min-height: 42px;
+  border-radius: 14px;
+  border: 1px solid #dbe5f2;
+  background: #f8fbff;
+  color: #475569;
+  font: inherit;
+  font-weight: 700;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.stepup-alt-btn.is-active {
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: rgba(37, 99, 235, 0.34);
+  color: #1d4ed8;
+}
+
 .stepup-intro-card {
   padding: 0.85rem 0.95rem;
   border-radius: 18px;
@@ -6407,6 +6489,21 @@ body.theme-dark .primary-btn {
 
   .security-session-meta {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .stepup-email-panel {
+    padding: 0.85rem;
+    border-radius: 16px;
+  }
+
+  .stepup-email-title {
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+
+  .stepup-alt-switch {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
   }
 
   .stepup-help-text {
