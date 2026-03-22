@@ -13601,7 +13601,40 @@ async def list_health_profiles(
         )
         .all()
     )
-    return [_profile_out(link.profile, link) for link in links if link.profile]
+
+    result = []
+    seen_ids = set()
+    external_owner_ids = set()
+
+    for link in links:
+        profile = link.profile
+        if not profile:
+            continue
+        seen_ids.add(profile.id)
+        result.append(_profile_out(profile, link))
+        # Si el usuario tiene acceso a una primary profile de otro dueño,
+        # registrar ese dueño para incluir también sus perfiles secundarios.
+        if profile.is_primary_profile and profile.owner_user_id != current_user.id:
+            external_owner_ids.add(profile.owner_user_id)
+
+    # Incluir perfiles secundarios de grupos externos (p.ej. hermana en el grupo de mamá)
+    if external_owner_ids:
+        secondary = (
+            db.query(models.HealthProfile)
+            .filter(
+                models.HealthProfile.owner_user_id.in_(external_owner_ids),
+                models.HealthProfile.is_primary_profile.is_(False),
+                models.HealthProfile.is_archived.is_(False),
+            )
+            .order_by(models.HealthProfile.full_name.asc())
+            .all()
+        )
+        for p in secondary:
+            if p.id not in seen_ids:
+                seen_ids.add(p.id)
+                result.append(_profile_out(p, None))
+
+    return result
 
 
 @app.get("/health-profiles/active", response_model=schemas.HealthProfileOut)

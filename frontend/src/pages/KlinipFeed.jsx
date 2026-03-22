@@ -792,8 +792,27 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 // ─── Sidebar de familia (desktop) ────────────────────────────────────────────
 
 function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose }) {
-  const primaryProfile = profiles.find((p) => p.is_primary_profile) || profiles[0];
-  const familyProfiles = profiles.filter((p) => !p.is_primary_profile && !p.is_archived);
+  // Perfiles del usuario actual (los que él administra)
+  const ownProfiles = profiles.filter((p) => p.owner_user_id === user?.id);
+  // Perfiles de otros grupos a los que fue invitado (dueño es otra persona)
+  const externalProfiles = profiles.filter((p) => p.owner_user_id !== user?.id);
+
+  const primaryProfile = ownProfiles.find((p) => p.is_primary_profile) || ownProfiles[0];
+  const familyProfiles = ownProfiles.filter((p) => !p.is_primary_profile && !p.is_archived);
+
+  // Grupos externos: agrupar por owner_user_id
+  const externalGroupMap = new Map();
+  for (const p of externalProfiles) {
+    const ownerId = p.owner_user_id;
+    if (!externalGroupMap.has(ownerId)) externalGroupMap.set(ownerId, []);
+    externalGroupMap.get(ownerId).push(p);
+  }
+  // Para cada grupo externo: el primary va primero
+  const externalGroups = Array.from(externalGroupMap.values()).map((group) => ({
+    primary: group.find((p) => p.is_primary_profile) || group[0],
+    members: group.filter((p) => !p.is_primary_profile && !p.is_archived),
+  }));
+
   const familyGroupSize = familyProfiles.length + (primaryProfile ? 1 : 0);
   const avatarInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -887,6 +906,48 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
             </div>
           )}
         </div>
+
+        {/* Grupos externos: grupos de otras personas a los que el usuario fue invitado */}
+        {externalGroups.map((group) => (
+          <div key={group.primary?.owner_user_id} className="kfeed-sidebar-external-group">
+            <div className="kfeed-sidebar-external-group-head">
+              <span className="kfeed-sidebar-group-kicker">Grupo compartido contigo</span>
+            </div>
+            {group.primary ? (
+              <div className="kfeed-sidebar-primary-card kfeed-sidebar-external-card">
+                <div className="kfeed-sidebar-user-row">
+                  <Avatar name={group.primary.full_name} size={42} avatarUrl={group.primary.avatar_url || null} />
+                  <div className="kfeed-sidebar-user-info">
+                    <span className="kfeed-sidebar-primary-badge kfeed-sidebar-external-badge">
+                      {group.primary.access_role === "viewer" ? "Lector" : group.primary.access_role === "caregiver" ? "Editor" : "Administrador"}
+                    </span>
+                    <span className="kfeed-sidebar-username">{group.primary.full_name}</span>
+                    <span className="kfeed-sidebar-userprofile">Titular del grupo</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {group.members.length > 0 && (
+              <div className="kfeed-sidebar-family-section">
+                <div className="kfeed-sidebar-family-header">
+                  <span>Familiares en este grupo</span>
+                  <span className="kfeed-sidebar-family-counter">{group.members.length}</span>
+                </div>
+                {group.members.slice(0, 8).map((p) => (
+                  <div key={p.id} className="kfeed-sidebar-member-row kfeed-sidebar-member-readonly">
+                    <Avatar name={p.full_name} size={34} avatarUrl={p.avatar_url || null} />
+                    <div className="kfeed-sidebar-member-info">
+                      <span className="kfeed-sidebar-member-name">{p.full_name}</span>
+                      {p.relation_with_owner ? (
+                        <span className="kfeed-sidebar-member-rel">{p.relation_with_owner}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
     </aside>
   );
