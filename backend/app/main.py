@@ -1296,7 +1296,10 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         )
         return True
     except WebPushException as exc:
-        print(f"WARNING push: fallo al enviar push: {exc}")
+        status = getattr(exc.response, "status_code", None) if exc.response else None
+        print(f"WARNING push: fallo al enviar push (status={status}): {exc}")
+        if status in (404, 410):
+            return "gone"
         return False
 
 
@@ -1311,10 +1314,31 @@ def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
     )
     if not subscriptions:
         return 0
+    # iOS acumula muchas suscripciones caducadas. Enviamos solo a las 3 más
+    # recientes para evitar que un usuario de iPhone reciba decenas de
+    # notificaciones duplicadas. Las demás se eliminan como limpieza proactiva.
+    active_subs = subscriptions[:3]
+    stale_subs = subscriptions[3:]
+    for sub in stale_subs:
+        db.delete(sub)
+    if stale_subs:
+        db.commit()
+
     sent = 0
-    for sub in subscriptions:
-        if send_web_push(sub, payload):
+    gone_ids = []
+    for sub in active_subs:
+        result = send_web_push(sub, payload)
+        if result is True:
             sent += 1
+        elif result == "gone":
+            gone_ids.append(sub.id)
+
+    if gone_ids:
+        db.query(models.PushSubscription).filter(
+            models.PushSubscription.id.in_(gone_ids)
+        ).delete(synchronize_session=False)
+        db.commit()
+
     return sent
 
 
@@ -16935,6 +16959,17 @@ async def subscribe_push(
     try:
         db.commit()
         db.refresh(sub)
+        # Limitar a 3 suscripciones por usuario para evitar acumulación en iOS
+        all_subs = (
+            db.query(models.PushSubscription)
+            .filter(models.PushSubscription.user_id == current_user.id)
+            .order_by(models.PushSubscription.created_at.desc())
+            .all()
+        )
+        if len(all_subs) > 3:
+            for old in all_subs[3:]:
+                db.delete(old)
+            db.commit()
         return sub
     except IntegrityError:
         db.rollback()

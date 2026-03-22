@@ -1276,7 +1276,10 @@ export default function App() {
       setUpdateRegistration(reg);
       setActiveUpdateKey(updateKey);
       setUpdateAvailable(true);
-      const pushNotifiedKey = pushNotifiedUpdateKeyRef.current || "";
+      const pushNotifiedKey =
+        pushNotifiedUpdateKeyRef.current ||
+        localStorage.getItem("klinip-sw-push-notified") ||
+        "";
       if (
         pushNotifiedKey !== updateKey &&
         "Notification" in window &&
@@ -1290,6 +1293,7 @@ export default function App() {
           })
           .then(() => {
             pushNotifiedUpdateKeyRef.current = updateKey;
+            localStorage.setItem("klinip-sw-push-notified", updateKey);
           })
           .catch(() => null);
       }
