@@ -10,6 +10,7 @@ import {
   deletePostComment,
   uploadPostAttachment,
   getHealthProfiles,
+  getProfileCaregivers,
   uploadHealthProfileAvatar,
 } from "../api";
 import StepUpModal from "../components/StepUpModal";
@@ -791,29 +792,46 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 
 // ─── Sidebar de familia (desktop) ────────────────────────────────────────────
 
-function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose }) {
-  // Perfiles del usuario actual (los que él administra)
+function familyRoleLabel(role) {
+  if (role === "viewer") return "Lector";
+  if (role === "caregiver") return "Editor";
+  return "Administrador";
+}
+
+function FamilySidebar({ user, profiles, groupCaregivers, onAvatarUpload, isOpen = false, onClose }) {
   const ownProfiles = profiles.filter((p) => p.owner_user_id === user?.id);
-  // Perfiles de otros grupos a los que fue invitado (dueño es otra persona)
   const externalProfiles = profiles.filter((p) => p.owner_user_id !== user?.id);
 
   const primaryProfile = ownProfiles.find((p) => p.is_primary_profile) || ownProfiles[0];
-  const familyProfiles = ownProfiles.filter((p) => !p.is_primary_profile && !p.is_archived);
 
-  // Grupos externos: agrupar por owner_user_id
+  // Caregivers del propio grupo (excluye al titular)
+  const ownCaregivers = primaryProfile
+    ? (groupCaregivers[primaryProfile.id] || []).filter(
+        (c) =>
+          c.status === "accepted" &&
+          c.user_id !== user?.id &&
+          String(c.relationship_type || "").toLowerCase() !== "self"
+      )
+    : [];
+
+  // Grupos externos agrupados por owner
   const externalGroupMap = new Map();
   for (const p of externalProfiles) {
     const ownerId = p.owner_user_id;
     if (!externalGroupMap.has(ownerId)) externalGroupMap.set(ownerId, []);
     externalGroupMap.get(ownerId).push(p);
   }
-  // Para cada grupo externo: el primary va primero
-  const externalGroups = Array.from(externalGroupMap.values()).map((group) => ({
-    primary: group.find((p) => p.is_primary_profile) || group[0],
-    members: group.filter((p) => !p.is_primary_profile && !p.is_archived),
-  }));
+  const externalGroups = Array.from(externalGroupMap.values()).map((group) => {
+    const primary = group.find((p) => p.is_primary_profile) || group[0];
+    const caregivers = primary
+      ? (groupCaregivers[primary.id] || []).filter(
+          (c) => c.status === "accepted" && String(c.relationship_type || "").toLowerCase() !== "self"
+        )
+      : [];
+    return { primary, caregivers };
+  });
 
-  const familyGroupSize = familyProfiles.length + (primaryProfile ? 1 : 0);
+  const totalSize = ownCaregivers.length + (primaryProfile ? 1 : 0);
   const avatarInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -831,7 +849,6 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
 
   return (
     <aside className={`kfeed-sidebar${isOpen ? " is-open" : ""}`}>
-      {/* Botón cerrar (solo móvil) */}
       <div className="kfeed-sidebar-mobile-header">
         <span className="kfeed-sidebar-mobile-title">Grupo familiar</span>
         <button type="button" className="kfeed-sidebar-close-btn" onClick={onClose} aria-label="Cerrar panel">
@@ -842,21 +859,23 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
       </div>
 
       <div className="kfeed-sidebar-group-shell">
+        {/* ── Encabezado propio ── */}
         <div className="kfeed-sidebar-group-head">
           <div>
             <span className="kfeed-sidebar-group-kicker">KlinipFeed familiar</span>
             <h3 className="kfeed-sidebar-group-title">Grupo familiar</h3>
           </div>
           <span className="kfeed-sidebar-group-count">
-            {familyGroupSize} {familyGroupSize === 1 ? "perfil" : "perfiles"}
+            {totalSize} {totalSize === 1 ? "perfil" : "perfiles"}
           </span>
         </div>
 
+        {/* ── Titular propio ── */}
         {primaryProfile ? (
           <div className="kfeed-sidebar-primary-card">
             <div className="kfeed-sidebar-user-row">
               <div className="kfeed-sidebar-avatar-wrap">
-                <Avatar name={primaryProfile?.full_name || user?.name || ""} size={50} avatarUrl={primaryProfile?.avatar_url || null} />
+                <Avatar name={primaryProfile.full_name || user?.name || ""} size={50} avatarUrl={primaryProfile.avatar_url || null} />
                 <button
                   type="button"
                   className="kfeed-sidebar-avatar-edit-btn"
@@ -872,84 +891,94 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
                       </svg>
                   }
                 </button>
-                <input
-                  ref={avatarInputRef}
-                  type="file"
-                  accept="image/*"
-                  style={{ display: "none" }}
-                  onChange={handleAvatarChange}
-                />
+                <input ref={avatarInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleAvatarChange} />
               </div>
               <div className="kfeed-sidebar-user-info">
                 <span className="kfeed-sidebar-primary-badge">Titular de la cuenta</span>
-                <span className="kfeed-sidebar-username">{primaryProfile?.full_name || user?.name || ""}</span>
-                <span className="kfeed-sidebar-userprofile">Administrado desde {user?.name || "tu cuenta"}</span>
+                <span className="kfeed-sidebar-username">{primaryProfile.full_name || user?.name || ""}</span>
+                <span className="kfeed-sidebar-userprofile">Administrado desde {primaryProfile.full_name || user?.name || "tu cuenta"}</span>
               </div>
             </div>
           </div>
         ) : null}
 
+        {/* ── Familiares del grupo propio (caregivers) ── */}
         <div className="kfeed-sidebar-family-section">
           <div className="kfeed-sidebar-family-header">
             <span>Familiares dentro de este grupo</span>
-            <span className="kfeed-sidebar-family-counter">{familyProfiles.length}</span>
+            <span className="kfeed-sidebar-family-counter">{ownCaregivers.length}</span>
           </div>
-
-          {familyProfiles.length > 0 ? (
-            familyProfiles.slice(0, 8).map((p) => (
-              <FamilyMemberRow key={p.id} profile={p} onAvatarUpload={onAvatarUpload} />
+          {ownCaregivers.length > 0 ? (
+            ownCaregivers.slice(0, 8).map((c) => (
+              <CaregiverRow key={c.id} caregiver={c} />
             ))
           ) : (
             <div className="kfeed-sidebar-family-empty">
               <strong>Aún no agregas familiares</strong>
-              <span>Cuando sumes perfiles al plan familiar, aparecerán aquí debajo del titular.</span>
+              <span>Invita personas a tu plan para que aparezcan aquí.</span>
             </div>
           )}
         </div>
 
-        {/* Grupos externos: grupos de otras personas a los que el usuario fue invitado */}
+        {/* ── Grupos externos — mismo diseño ── */}
         {externalGroups.map((group) => (
           <div key={group.primary?.owner_user_id} className="kfeed-sidebar-external-group">
-            <div className="kfeed-sidebar-external-group-head">
-              <span className="kfeed-sidebar-group-kicker">Grupo compartido contigo</span>
+            <div className="kfeed-sidebar-group-head kfeed-sidebar-external-head">
+              <div>
+                <span className="kfeed-sidebar-group-kicker">Grupo compartido contigo</span>
+                <h3 className="kfeed-sidebar-group-title">{group.primary?.full_name || "Grupo familiar"}</h3>
+              </div>
+              <span className="kfeed-sidebar-group-count">
+                {group.caregivers.length + (group.primary ? 1 : 0)}{" "}
+                {group.caregivers.length + (group.primary ? 1 : 0) === 1 ? "perfil" : "perfiles"}
+              </span>
             </div>
+
             {group.primary ? (
-              <div className="kfeed-sidebar-primary-card kfeed-sidebar-external-card">
+              <div className="kfeed-sidebar-primary-card">
                 <div className="kfeed-sidebar-user-row">
-                  <Avatar name={group.primary.full_name} size={42} avatarUrl={group.primary.avatar_url || null} />
+                  <Avatar name={group.primary.full_name} size={50} avatarUrl={group.primary.avatar_url || null} />
                   <div className="kfeed-sidebar-user-info">
-                    <span className="kfeed-sidebar-primary-badge kfeed-sidebar-external-badge">
-                      {group.primary.access_role === "viewer" ? "Lector" : group.primary.access_role === "caregiver" ? "Editor" : "Administrador"}
-                    </span>
+                    <span className="kfeed-sidebar-primary-badge">Titular de la cuenta</span>
                     <span className="kfeed-sidebar-username">{group.primary.full_name}</span>
-                    <span className="kfeed-sidebar-userprofile">Titular del grupo</span>
+                    <span className="kfeed-sidebar-userprofile">Administrado desde {group.primary.full_name}</span>
                   </div>
                 </div>
               </div>
             ) : null}
-            {group.members.length > 0 && (
-              <div className="kfeed-sidebar-family-section">
-                <div className="kfeed-sidebar-family-header">
-                  <span>Familiares en este grupo</span>
-                  <span className="kfeed-sidebar-family-counter">{group.members.length}</span>
-                </div>
-                {group.members.slice(0, 8).map((p) => (
-                  <div key={p.id} className="kfeed-sidebar-member-row kfeed-sidebar-member-readonly">
-                    <Avatar name={p.full_name} size={34} avatarUrl={p.avatar_url || null} />
-                    <div className="kfeed-sidebar-member-info">
-                      <span className="kfeed-sidebar-member-name">{p.full_name}</span>
-                      {p.relation_with_owner ? (
-                        <span className="kfeed-sidebar-member-rel">{p.relation_with_owner}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                ))}
+
+            <div className="kfeed-sidebar-family-section">
+              <div className="kfeed-sidebar-family-header">
+                <span>Familiares dentro de este grupo</span>
+                <span className="kfeed-sidebar-family-counter">{group.caregivers.length}</span>
               </div>
-            )}
+              {group.caregivers.length > 0 ? (
+                group.caregivers.slice(0, 8).map((c) => (
+                  <CaregiverRow key={c.id} caregiver={c} />
+                ))
+              ) : (
+                <div className="kfeed-sidebar-family-empty">
+                  <span>No hay otros miembros en este grupo.</span>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
     </aside>
+  );
+}
+
+function CaregiverRow({ caregiver }) {
+  const name = caregiver.user_name || caregiver.user_email || `Usuario #${caregiver.user_id}`;
+  return (
+    <div className="kfeed-sidebar-member-row">
+      <Avatar name={name} size={38} avatarUrl={null} />
+      <div className="kfeed-sidebar-member-info">
+        <span className="kfeed-sidebar-member-name">{name}</span>
+        <span className="kfeed-sidebar-member-rel">{familyRoleLabel(caregiver.role)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -1005,6 +1034,7 @@ export default function KlinipFeed({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [profiles, setProfiles] = useState([]);
+  const [groupCaregivers, setGroupCaregivers] = useState({});
   const [showCreate, setShowCreate] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -1035,6 +1065,22 @@ export default function KlinipFeed({ user }) {
       setProfiles(profs);
       skipRef.current = feed.length;
       setHasMore(feed.length === LIMIT);
+      // Cargar caregivers de todos los perfiles primarios para el sidebar
+      const primaryProfiles = profs.filter((p) => p.is_primary_profile);
+      if (primaryProfiles.length > 0) {
+        const results = await Promise.allSettled(
+          primaryProfiles.map((p) =>
+            getProfileCaregivers(p.id).then((list) => ({ profileId: p.id, list: list || [] }))
+          )
+        );
+        const map = {};
+        results.forEach((r) => {
+          if (r.status === "fulfilled" && r.value) {
+            map[r.value.profileId] = r.value.list;
+          }
+        });
+        setGroupCaregivers(map);
+      }
     } catch {
       setError("No se pudo cargar el feed.");
     } finally {
@@ -1253,6 +1299,7 @@ export default function KlinipFeed({ user }) {
         <FamilySidebar
           user={user}
           profiles={profiles}
+          groupCaregivers={groupCaregivers}
           onAvatarUpload={handleAvatarUpload}
           isOpen={familySidebarOpen}
           onClose={() => setFamilySidebarOpen(false)}
