@@ -794,6 +794,7 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose }) {
   const primaryProfile = profiles.find((p) => p.is_primary_profile) || profiles[0];
   const familyProfiles = profiles.filter((p) => !p.is_primary_profile && !p.is_archived);
+  const familyGroupSize = familyProfiles.length + (primaryProfile ? 1 : 0);
   const avatarInputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -813,7 +814,7 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
     <aside className={`kfeed-sidebar${isOpen ? " is-open" : ""}`}>
       {/* Botón cerrar (solo móvil) */}
       <div className="kfeed-sidebar-mobile-header">
-        <span className="kfeed-sidebar-mobile-title">Mi familia</span>
+        <span className="kfeed-sidebar-mobile-title">Grupo familiar</span>
         <button type="button" className="kfeed-sidebar-close-btn" onClick={onClose} aria-label="Cerrar panel">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
             <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -821,50 +822,72 @@ function FamilySidebar({ user, profiles, onAvatarUpload, isOpen = false, onClose
         </button>
       </div>
 
-      {/* Usuario actual */}
-      <div className="kfeed-sidebar-user-row">
-        <div className="kfeed-sidebar-avatar-wrap">
-          <Avatar name={user?.name || ""} size={46} avatarUrl={primaryProfile?.avatar_url || null} />
-          <button
-            type="button"
-            className="kfeed-sidebar-avatar-edit-btn"
-            title="Cambiar foto de perfil"
-            onClick={() => avatarInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading
-              ? <div className="kfeed-spinner" style={{ width: 11, height: 11 }} />
-              : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                  <circle cx="12" cy="13" r="4"/>
-                </svg>
-            }
-          </button>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={handleAvatarChange}
-          />
+      <div className="kfeed-sidebar-group-shell">
+        <div className="kfeed-sidebar-group-head">
+          <div>
+            <span className="kfeed-sidebar-group-kicker">KlinipFeed familiar</span>
+            <h3 className="kfeed-sidebar-group-title">Grupo familiar</h3>
+          </div>
+          <span className="kfeed-sidebar-group-count">
+            {familyGroupSize} {familyGroupSize === 1 ? "perfil" : "perfiles"}
+          </span>
         </div>
-        <div className="kfeed-sidebar-user-info">
-          <span className="kfeed-sidebar-username">{user?.name || ""}</span>
-          <span className="kfeed-sidebar-userprofile">{primaryProfile?.full_name || ""}</span>
-        </div>
-      </div>
 
-      {/* Familia */}
-      {familyProfiles.length > 0 && (
+        {primaryProfile ? (
+          <div className="kfeed-sidebar-primary-card">
+            <div className="kfeed-sidebar-user-row">
+              <div className="kfeed-sidebar-avatar-wrap">
+                <Avatar name={primaryProfile?.full_name || user?.name || ""} size={50} avatarUrl={primaryProfile?.avatar_url || null} />
+                <button
+                  type="button"
+                  className="kfeed-sidebar-avatar-edit-btn"
+                  title="Cambiar foto del titular"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploading}
+                >
+                  {uploading
+                    ? <div className="kfeed-spinner" style={{ width: 11, height: 11 }} />
+                    : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                  }
+                </button>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handleAvatarChange}
+                />
+              </div>
+              <div className="kfeed-sidebar-user-info">
+                <span className="kfeed-sidebar-primary-badge">Titular de la cuenta</span>
+                <span className="kfeed-sidebar-username">{primaryProfile?.full_name || user?.name || ""}</span>
+                <span className="kfeed-sidebar-userprofile">Administrado desde {user?.name || "tu cuenta"}</span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="kfeed-sidebar-family-section">
           <div className="kfeed-sidebar-family-header">
-            <span>Tu familia</span>
+            <span>Familiares dentro de este grupo</span>
+            <span className="kfeed-sidebar-family-counter">{familyProfiles.length}</span>
           </div>
-          {familyProfiles.slice(0, 6).map((p) => (
-            <FamilyMemberRow key={p.id} profile={p} onAvatarUpload={onAvatarUpload} />
-          ))}
+
+          {familyProfiles.length > 0 ? (
+            familyProfiles.slice(0, 8).map((p) => (
+              <FamilyMemberRow key={p.id} profile={p} onAvatarUpload={onAvatarUpload} />
+            ))
+          ) : (
+            <div className="kfeed-sidebar-family-empty">
+              <strong>Aún no agregas familiares</strong>
+              <span>Cuando sumes perfiles al plan familiar, aparecerán aquí debajo del titular.</span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </aside>
   );
 }
