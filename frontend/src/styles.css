@@ -25449,6 +25449,12 @@ body.theme-dark .kfeed-pdf-name { color: #f1f5f9; }
   padding-top: 1.25rem;
   position: sticky;
   top: 1rem;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.kfeed-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 @media (min-width: 1050px) {
@@ -25504,6 +25510,7 @@ body.theme-dark .kfeed-pdf-name { color: #f1f5f9; }
     border-radius: 16px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
     overflow-y: auto;
+    scrollbar-width: none;
     z-index: 1300;
     transform: translateX(calc(100% + 1.8rem));
     opacity: 0;
