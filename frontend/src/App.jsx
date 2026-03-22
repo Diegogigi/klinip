@@ -1142,7 +1142,7 @@ export default function App() {
     let cancelled = false;
 
     const syncNotifications = async () => {
-      const reg = await registerServiceWorker().catch(() => null);
+      const reg = await navigator.serviceWorker.getRegistration().catch(() => null);
       const target = reg?.active || reg?.waiting || reg?.installing || navigator.serviceWorker.controller;
       if (target) {
         target.postMessage({ type: "GET_RECEIVED_NOTIFICATIONS" });
@@ -1269,6 +1269,7 @@ export default function App() {
         reg?.scope ||
         "klinip-sw-update";
       if (sessionStorage.getItem("klinip-sw-applied")) return;
+      if (localStorage.getItem("klinip-sw-last-applied") === updateKey) return;
       const dismissedKey = dismissedUpdateKeyRef.current || "";
       if (dismissedKey && dismissedKey === updateKey) return;
       if (seenUpdateKeysRef.current.has(updateKey)) return;
@@ -1311,6 +1312,9 @@ export default function App() {
 
   const handleApplyUpdate = async () => {
     sessionStorage.setItem("klinip-sw-applied", "1");
+    if (activeUpdateKey) {
+      localStorage.setItem("klinip-sw-last-applied", activeUpdateKey);
+    }
     try {
       const reg = updateRegistration || (await navigator.serviceWorker.getRegistration());
       if (reg?.waiting) {

@@ -97,9 +97,17 @@ export function getPushSupportStatus() {
   return { supported: true, reason: "" };
 }
 
+let _swRegistrationPromise = null;
+
 export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
+  // Singleton: los listeners de update solo se crean una vez por sesión de página
+  if (_swRegistrationPromise) return _swRegistrationPromise;
+  _swRegistrationPromise = _doRegisterServiceWorker();
+  return _swRegistrationPromise;
+}
 
+async function _doRegisterServiceWorker() {
   try {
     if (import.meta.env.DEV) {
       const registrations = await navigator.serviceWorker.getRegistrations();
