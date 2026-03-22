@@ -6033,6 +6033,7 @@ body.theme-dark .primary-btn {
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 2.4rem);
+  overflow: hidden;
 }
 
 .stepup-modal-header {
@@ -6099,6 +6100,17 @@ body.theme-dark .primary-btn {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  touch-action: pan-y;
+}
+
+.stepup-modal-body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .stepup-intro-card {
@@ -6254,6 +6266,16 @@ body.theme-dark .primary-btn {
     padding: 0.6rem;
     padding-top: max(0.6rem, env(safe-area-inset-top));
     padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .stepup-modal-backdrop::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
 
   .stepup-modal-card {
@@ -6261,6 +6283,17 @@ body.theme-dark .primary-btn {
     max-height: calc(100dvh - 1.2rem);
     padding: 0.85rem;
     border-radius: 22px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    touch-action: pan-y;
+  }
+
+  .stepup-modal-card::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
 
   .stepup-modal-header {
