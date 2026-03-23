@@ -295,7 +295,7 @@ function CommentsSection({ post, currentUserId, userName, onComment, onDeleteCom
         <div className="kfeed-comments-list">
           {(post.comments || []).map((c) => (
             <div key={c.id} className="kfeed-ig-comment">
-              <Avatar name={c.user_name} size={32} />
+              <Avatar name={c.user_name} size={32} avatarUrl={c.user_avatar_url || null} />
               <div className="kfeed-ig-comment-body">
                 <div className="kfeed-ig-comment-line">
                   <span className="kfeed-ig-comment-author">{c.user_name}</span>

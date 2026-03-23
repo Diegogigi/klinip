@@ -17885,6 +17885,19 @@ def _get_family_user_ids(db: Session, current_user) -> set:
     return set(owner_ids + relation_user_ids + [current_user.id])
 
 
+def _get_user_avatar_url(user) -> str:
+    """Devuelve el avatar_url del perfil primario del usuario, o '' si no tiene."""
+    if not user:
+        return ""
+    primary = next(
+        (p for p in user.health_profiles_owned if p.is_primary_profile and not p.is_archived),
+        None,
+    )
+    if primary and primary.avatar_url and primary.avatar_url.startswith("data:"):
+        return primary.avatar_url
+    return ""
+
+
 def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) -> dict:
     my_reaction = None
     for r in post.reactions:
@@ -17892,14 +17905,7 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
             my_reaction = r.reaction_type
             break
 
-    user_avatar_url = ""
-    if post.user:
-        primary = next(
-            (p for p in post.user.health_profiles_owned if p.is_primary_profile and not p.is_archived),
-            None,
-        )
-        if primary and primary.avatar_url and primary.avatar_url.startswith("data:"):
-            user_avatar_url = primary.avatar_url
+    user_avatar_url = _get_user_avatar_url(post.user)
 
     return {
         "id": post.id,
@@ -17932,6 +17938,7 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
                 "post_id": c.post_id,
                 "user_id": c.user_id,
                 "user_name": c.user.name if c.user else "",
+                "user_avatar_url": _get_user_avatar_url(c.user),
                 "content": c.content,
                 "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
             }
@@ -18226,6 +18233,7 @@ def get_post_comments(
             "post_id": c.post_id,
             "user_id": c.user_id,
             "user_name": c.user.name if c.user else "",
+            "user_avatar_url": _get_user_avatar_url(c.user),
             "content": c.content,
             "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
         }
@@ -18260,6 +18268,7 @@ def add_comment(
         "post_id": comment.post_id,
         "user_id": comment.user_id,
         "user_name": current_user.name,
+        "user_avatar_url": _get_user_avatar_url(current_user),
         "content": comment.content,
         "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%S") if comment.created_at else None,
     }
