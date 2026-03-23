@@ -411,6 +411,7 @@ self.addEventListener("push", (event) => {
 
   const tag =
     data.tag ||
+    (data.postId && data.kind === "feed" ? `feed-post-${data.postId}` : null) ||
     (data.appointmentId ? `appointment-${data.appointmentId}` : null) ||
     (data.medicationId ? `medication-${data.medicationId}` : null) ||
     `push-${Date.now()}`;
@@ -449,14 +450,16 @@ self.addEventListener("push", (event) => {
         vibrate,
         requireInteraction,
         tag,
-        actions: [
-          {
-            action: "done",
-            title: data.medicationId ? "Realizado" : "Realizada",
-            icon: "/icons/android-chrome-192x192.png"
-          },
-          { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
-        ],
+        actions: data.kind === "feed"
+          ? [{ action: "open", title: "Ver en el feed", icon: "/icons/android-chrome-192x192.png" }]
+          : [
+            {
+              action: "done",
+              title: data.medicationId ? "Realizado" : "Realizada",
+              icon: "/icons/android-chrome-192x192.png"
+            },
+            { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
+          ],
         data: {
           url,
           timestamp: Date.now(),

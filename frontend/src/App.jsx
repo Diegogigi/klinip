@@ -661,8 +661,9 @@ const getPathFromNotification = (item) => {
 };
 
 function ProtectedRoute({ user, children }) {
+  const location = useLocation();
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return children;
 }
@@ -2028,7 +2029,18 @@ export default function App() {
               <Route
                 path="/login"
                 element={
-                  user ? <Navigate to="/" replace /> : <Login onAuthenticated={setUser} />
+                  user ? (
+                    <Navigate
+                      to={
+                        location.state?.from
+                          ? location.state.from.pathname + (location.state.from.search || "")
+                          : "/"
+                      }
+                      replace
+                    />
+                  ) : (
+                    <Login onAuthenticated={setUser} />
+                  )
                 }
               />
               <Route

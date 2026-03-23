@@ -17942,6 +17942,78 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
     }
 
 
+_REACTION_EMOJIS = {
+    "apoyo": "💙",
+    "animo": "💪",
+    "amor": "❤️",
+    "gracias": "🙏",
+    "alegra": "😊",
+}
+
+
+def _send_feed_notification_to_family(
+    db,
+    actor_user,
+    post,
+    notification_type: str,
+    extra: dict = None,
+):
+    """
+    Envía notificaciones push a todos los miembros del grupo familiar
+    (excepto el actor) cuando ocurre una acción en el feed.
+
+    notification_type: "post" | "comment" | "reaction"
+    extra: dict con datos adicionales (ej. reaction_type, comment_preview)
+    """
+    extra = extra or {}
+    try:
+        family_ids = _get_family_user_ids(db, actor_user)
+        recipients = family_ids - {actor_user.id}
+        if not recipients:
+            return
+
+        actor_name = actor_user.name or "Alguien"
+        profile_name = post.profile.full_name if post.profile else ""
+        content_preview = (post.content or "")[:60]
+        if len(post.content or "") > 60:
+            content_preview += "…"
+
+        if notification_type == "post":
+            title = f"Nueva publicación de {actor_name}"
+            body = content_preview if content_preview else f"Publicó en el feed de {profile_name}"
+            tag = f"feed-post-{post.id}"
+        elif notification_type == "comment":
+            comment_text = (extra.get("comment_content") or "")[:60]
+            if len(extra.get("comment_content") or "") > 60:
+                comment_text += "…"
+            title = f"{actor_name} comentó"
+            body = comment_text if comment_text else f"Comentó en una publicación de {profile_name}"
+            tag = f"feed-comment-{extra.get('comment_id', post.id)}"
+        elif notification_type == "reaction":
+            reaction_type = extra.get("reaction_type", "")
+            emoji = _REACTION_EMOJIS.get(reaction_type, "👍")
+            title = f"{actor_name} reaccionó {emoji}"
+            body = f"Reaccionó a una publicación de {profile_name}"
+            tag = f"feed-reaction-{post.id}-{actor_user.id}"
+        else:
+            return
+
+        for uid in recipients:
+            _send_push_to_user(db, uid, {
+                "title": title,
+                "body": body,
+                "url": "/#/feed",
+                "tag": tag,
+                "priority": "normal",
+                "sound": "default",
+                "kind": "feed",
+                "postId": post.id,
+                "userId": actor_user.id,
+            })
+    except Exception as exc:
+        print(f"WARNING feed push: error enviando notificacion feed: {exc}")
+
+
 @app.get("/feed/family")
 def get_family_feed(
     skip: int = 0,
@@ -18003,6 +18075,7 @@ def create_feed_post(
 
     db.commit()
     db.refresh(post)
+    _send_feed_notification_to_family(db, current_user, post, "post")
     return _serialize_post(post, db, current_user.id)
 
 
@@ -18110,6 +18183,9 @@ def react_to_post(
     db.add(reaction)
     db.commit()
     db.refresh(reaction)
+    _send_feed_notification_to_family(db, current_user, post, "reaction", {
+        "reaction_type": payload.reaction_type,
+    })
     return {"id": reaction.id, "reaction_type": reaction.reaction_type}
 
 
@@ -18175,6 +18251,10 @@ def add_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+    _send_feed_notification_to_family(db, current_user, post, "comment", {
+        "comment_id": comment.id,
+        "comment_content": payload.content,
+    })
     return {
         "id": comment.id,
         "post_id": comment.post_id,
