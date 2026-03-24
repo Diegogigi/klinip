@@ -1079,3 +1079,27 @@ class AiConversationMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Klinip Voice ───────────────────────────────────────────────────────────
+
+class VoiceSessionOut(BaseModel):
+    id: int
+    profile_id: int
+    created_at: datetime
+    audio_session_hash: str = ""
+    transcripcion_tecnica: Optional[str] = None
+    version_simple: Optional[str] = None
+    indicaciones: list = []
+    compartido_en: Optional[datetime] = None
+    link_seguro: Optional[str] = None
+    link_expira_en: Optional[datetime] = None
+
+    @field_serializer('created_at', 'compartido_en', 'link_expira_en')
+    def serialize_voice_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
