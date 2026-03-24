@@ -790,3 +790,17 @@ export function getPostAttachmentUrl(postId, attachmentId) {
   const token = localStorage.getItem("token");
   return `${base}/feed/posts/${postId}/attachments/${attachmentId}/file?token=${token}`;
 }
+
+// ── Klinip Voice ──────────────────────────────────────────────────────────
+
+export async function processVoiceSession({ audioConsent, audioSession, profileId }) {
+  const formData = new FormData();
+  formData.append("audio_consent", audioConsent, "consent.webm");
+  formData.append("audio_session", audioSession, "session.webm");
+  formData.append("profile_id", profileId);
+  const res = await api.post("/voice/process", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 300000,
+  });
+  return res.data;
+}

@@ -15416,6 +15416,158 @@ async def ai_chat_transcribe(
     }
 
 
+# ── Klinip Voice ───────────────────────────────────────────────────────────
+
+_VOICE_PROMPT_TECNICA = (
+    "Eres un asistente médico. Corrige y formatea la siguiente transcripción automática de una "
+    "consulta médica. Mantén terminología técnica, corrige errores obvios de transcripción, "
+    "organiza en párrafos por tema si hay más de uno. No agregues ni quites información clínica.\n\n"
+    "Transcripción raw:"
+)
+
+_VOICE_PROMPT_SIMPLE = (
+    "Eres un asistente de salud de Klinip. "
+    "Te paso la transcripción de una consulta médica. Tu tarea es:\n"
+    "1. Reescribir en lenguaje simple y claro, sin términos técnicos, lo que dijo el médico. "
+    "Máximo 3 párrafos cortos.\n"
+    "2. Extraer las indicaciones médicas concretas como lista estructurada. "
+    "Para cada indicación incluye:\n"
+    "   - texto: descripción simple de la indicación\n"
+    "   - tipo: medicamento | control | examen | dieta | ejercicio | otro\n"
+    "   - recordatorio_sugerido: true/false\n\n"
+    "Responde SOLO en JSON con este formato:\n"
+    '{"version_simple": "string", "indicaciones": [{"texto": "...", "tipo": "...", "recordatorio_sugerido": true}]}'
+)
+
+_VOICE_AUDIO_MAX_BYTES = 500 * 1024 * 1024  # 500 MB — sin límite práctico para consultas largas
+_VOICE_UPLOAD_DIR = os.environ.get("VOICE_UPLOAD_DIR", "/uploads/voice")
+
+
+def _voice_call_ai(system_prompt: str, message: str) -> tuple[str, str] | None:
+    """Call OpenAI with higher token limit for Voice processing."""
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key or OpenAI is None:
+        return None
+    model = _ai_model_name()
+    client = OpenAI(api_key=api_key, timeout=60.0)
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": message},
+    ]
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.15,
+            max_tokens=1200,
+        )
+        choices = getattr(completion, "choices", None) or []
+        if not choices:
+            return None
+        content = (getattr(choices[0].message, "content", "") or "").strip()
+        return (content, model) if content else None
+    except Exception as exc:
+        print(f"WARNING voice ai call failed: {exc}")
+        return None
+
+
+@app.post("/voice/process", response_model=schemas.VoiceSessionOut)
+async def voice_process(
+    request: Request,
+    audio_consent: UploadFile = File(...),
+    audio_session: UploadFile = File(...),
+    profile_id: int = Form(...),
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    _check_rate_limit(request, "ai-transcribe")
+
+    # Validate profile access
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+
+    # Read and validate audio files
+    consent_bytes = await audio_consent.read()
+    session_bytes = await audio_session.read()
+
+    if not consent_bytes:
+        raise HTTPException(status_code=400, detail="El audio de consentimiento está vacío.")
+    if not session_bytes:
+        raise HTTPException(status_code=400, detail="El audio de la consulta está vacío.")
+
+    _detected_mime_consent, safe_consent = _validate_ai_audio_upload(
+        consent_bytes, audio_consent.filename or "consent.webm", audio_consent.content_type,
+        max_bytes=_VOICE_AUDIO_MAX_BYTES,
+    )
+    _detected_mime_session, safe_session = _validate_ai_audio_upload(
+        session_bytes, audio_session.filename or "session.webm", audio_session.content_type,
+        max_bytes=_VOICE_AUDIO_MAX_BYTES,
+    )
+
+    # Hash del audio de sesión
+    audio_hash = hashlib.sha256(session_bytes).hexdigest()
+
+    # 1. Transcribir audio de la consulta
+    transcription = _transcribe_ai_audio(session_bytes, safe_session)
+    if not transcription:
+        raise HTTPException(status_code=503, detail="La transcripción de voz no está disponible en este momento.")
+    raw_transcript, _whisper_model = transcription
+    if not raw_transcript:
+        raise HTTPException(status_code=422, detail="No se detectó voz clara en el audio de la consulta.")
+
+    # 2. Generar transcripción técnica
+    tecnica_result = _voice_call_ai(_VOICE_PROMPT_TECNICA, raw_transcript)
+    transcripcion_tecnica = tecnica_result[0] if tecnica_result else raw_transcript
+
+    # 3. Generar versión simple + indicaciones
+    version_simple = ""
+    indicaciones = []
+    simple_result = _voice_call_ai(
+        _VOICE_PROMPT_SIMPLE,
+        f"Transcripción:\n{transcripcion_tecnica}",
+    )
+    if simple_result:
+        raw_json = simple_result[0]
+        # Limpiar markdown code fences si las hay
+        cleaned = raw_json.strip()
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+            cleaned = re.sub(r"\s*```$", "", cleaned)
+        try:
+            parsed = json.loads(cleaned)
+            version_simple = parsed.get("version_simple", "")
+            indicaciones = parsed.get("indicaciones", [])
+        except (json.JSONDecodeError, AttributeError):
+            version_simple = raw_json
+            indicaciones = []
+
+    # 4. Guardar archivos de audio en filesystem y paths en BD
+    import time as _time
+    voice_dir = os.path.join(_VOICE_UPLOAD_DIR, f"{current_user.id}_{profile.id}_{int(_time.time())}")
+    os.makedirs(voice_dir, exist_ok=True)
+    consent_path = os.path.join(voice_dir, "consent.webm")
+    session_path = os.path.join(voice_dir, "session.webm")
+    with open(consent_path, "wb") as f:
+        f.write(consent_bytes)
+    with open(session_path, "wb") as f:
+        f.write(session_bytes)
+
+    session_record = models.VoiceSession(
+        profile_id=profile.id,
+        user_id=current_user.id,
+        audio_consent=consent_path,
+        audio_session=session_path,
+        audio_session_hash=audio_hash,
+        transcripcion_tecnica=transcripcion_tecnica,
+        version_simple=version_simple,
+        indicaciones=indicaciones,
+    )
+    db.add(session_record)
+    db.commit()
+    db.refresh(session_record)
+
+    return session_record
+
+
 @app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
 async def get_ai_conversations(
     db: Session = Depends(auth.get_db),

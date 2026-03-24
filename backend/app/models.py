@@ -786,6 +786,30 @@ class StepUpEmailCode(Base):
     user = relationship("User")
 
 
+class VoiceSession(Base):
+    __tablename__ = "voice_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    audio_consent = Column(String, nullable=True)   # path del archivo en filesystem
+    audio_session = Column(String, nullable=True)   # path del archivo en filesystem
+    audio_session_hash = Column(String, default="")
+
+    transcripcion_tecnica = Column(Text, nullable=True)
+    version_simple = Column(Text, nullable=True)
+    indicaciones = Column(JSON, default=list)
+
+    compartido_en = Column(DateTime, nullable=True)
+    link_seguro = Column(String, nullable=True)
+    link_expira_en = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
