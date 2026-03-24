@@ -14413,6 +14413,22 @@ body.theme-dark .home-ops-action-icon {
   color: #bfdbfe;
 }
 
+.greeting-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 0.85em;
+  margin-left: 3px;
+  vertical-align: middle;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 1px;
+  animation: greeting-blink 0.75s step-end infinite;
+}
+
+@keyframes greeting-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .home-greeting-subtitle,
 .home-greeting-context {
   margin: 0.45rem 0 0;

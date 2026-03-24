@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -207,6 +207,85 @@ function renderIcon(name) {
   }
 }
 
+function useTypewriter(text, { speed = 32, startDelay = 0 } = {}) {
+  const [displayed, setDisplayed] = useState("");
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    setDisplayed("");
+    setDone(false);
+    if (!text) {
+      setDone(true);
+      return;
+    }
+    let i = 0;
+    let typeId;
+    const step = () => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i < text.length) {
+        typeId = window.setTimeout(step, speed);
+      } else {
+        setDone(true);
+      }
+    };
+    const delayId = window.setTimeout(step, startDelay);
+    return () => {
+      window.clearTimeout(typeId);
+      window.clearTimeout(delayId);
+    };
+  }, [text, speed, startDelay]);
+  return { displayed, done };
+}
+
+function buildContextualMessages({ firstName, activeMedications, adherence, nextAppointment, activeHealthAlerts, lowAdherenceItems, pendingDocuments }) {
+  const hour = new Date().getHours();
+  const msgs = [];
+
+  if (activeMedications.length > 0 && adherence > 0) {
+    if (adherence >= 80) {
+      msgs.push(`Adherencia al ${adherence}% — excelente seguimiento de tu plan de medicación.`);
+    } else if (adherence >= 50) {
+      msgs.push(`Tu adherencia es del ${adherence}%. Puedes mejorar el seguimiento de tus medicamentos.`);
+    } else {
+      msgs.push(`Adherencia al ${adherence}%. Tus medicamentos necesitan atención hoy.`);
+    }
+  }
+
+  if (nextAppointment) {
+    const apptDate = parseDate(nextAppointment.date_time);
+    if (apptDate) {
+      const rel = toRelativeDayLabel(apptDate);
+      const specialty = cleanUiText(nextAppointment.specialty || typeLabels[nextAppointment.type] || "Cita médica");
+      msgs.push(`Tienes una cita próxima: ${specialty} — ${rel}.`);
+    }
+  }
+
+  if (activeHealthAlerts.length > 0) {
+    const n = activeHealthAlerts.length;
+    msgs.push(`El radar detectó ${n} alerta${n > 1 ? "s" : ""} activa${n > 1 ? "s" : ""}. Revisa tu resumen.`);
+  }
+
+  if (lowAdherenceItems.length > 0) {
+    const med = cleanUiText(lowAdherenceItems[0]?.name || "");
+    if (med) msgs.push(`${med} tiene baja adherencia. ¿Necesitas ajustar el recordatorio?`);
+  }
+
+  if (pendingDocuments > 0) {
+    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisión.`);
+  }
+
+  if (activeMedications.length === 0) {
+    msgs.push("Registra tus medicamentos para comenzar el seguimiento de tu plan de salud.");
+  }
+
+  if (msgs.length === 0) {
+    const timeGreet = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+    msgs.push(`${timeGreet}, ${firstName}. Tu historial de salud está al día.`);
+  }
+
+  return msgs;
+}
+
 export default function Dashboard({ user }) {
   const navigate = useNavigate();
   const isMountedRef = useRef(false);
@@ -229,6 +308,9 @@ export default function Dashboard({ user }) {
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
+  const [greetStarted, setGreetStarted] = useState(false);
+  const [greetPhase, setGreetPhase] = useState(0);
+  const [aiMsgIndex, setAiMsgIndex] = useState(0);
 
   useEffect(() => {
     activeProfileIdRef.current = activeProfile?.id ? Number(activeProfile.id) : null;
@@ -671,6 +753,57 @@ export default function Dashboard({ user }) {
 
   const userName = user?.name || activeProfile?.full_name || "tu cuenta";
   const activeProfileName = activeProfile?.full_name || "Mi perfil";
+  const firstName = (user?.name || activeProfile?.full_name || "").split(" ")[0] || userName;
+  const greetText = greetStarted ? `Hola, ${firstName}` : "";
+  const contextMessages = useMemo(
+    () =>
+      greetStarted
+        ? buildContextualMessages({
+            firstName,
+            activeMedications,
+            adherence,
+            nextAppointment,
+            activeHealthAlerts,
+            lowAdherenceItems,
+            pendingDocuments,
+          })
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [greetStarted, activeMedications.length, adherence, nextAppointment?.id, activeHealthAlerts.length, lowAdherenceItems.length, pendingDocuments]
+  );
+  const titleTyper = useTypewriter(greetText, { speed: 55, startDelay: 300 });
+  const subtitleTyper = useTypewriter(greetPhase >= 1 ? "Este es tu resumen de salud para hoy." : "", { speed: 32 });
+  const contextTyper = useTypewriter(greetPhase >= 2 ? (contextMessages[aiMsgIndex] || "") : "", { speed: 28 });
+
+  // Start greeting when initial data load completes
+  useEffect(() => {
+    if (!loading && !greetStarted) {
+      setGreetStarted(true);
+      setGreetPhase(0);
+      setAiMsgIndex(0);
+    }
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Phase 0 → 1: after title finishes typing
+  useEffect(() => {
+    if (!titleTyper.done || greetPhase !== 0 || !greetStarted) return;
+    const t = window.setTimeout(() => setGreetPhase(1), 350);
+    return () => window.clearTimeout(t);
+  }, [titleTyper.done, greetPhase, greetStarted]);
+
+  // Phase 1 → 2: after subtitle finishes typing
+  useEffect(() => {
+    if (!subtitleTyper.done || greetPhase !== 1 || !contextMessages.length) return;
+    const t = window.setTimeout(() => setGreetPhase(2), 900);
+    return () => window.clearTimeout(t);
+  }, [subtitleTyper.done, greetPhase, contextMessages.length]);
+
+  // Phase 2: cycle through context messages
+  useEffect(() => {
+    if (!contextTyper.done || greetPhase !== 2 || contextMessages.length < 2) return;
+    const t = window.setTimeout(() => setAiMsgIndex((prev) => (prev + 1) % contextMessages.length), 4500);
+    return () => window.clearTimeout(t);
+  }, [contextTyper.done, greetPhase, contextMessages.length]);
 
   return (
     <section className="home-editorial">
@@ -680,9 +813,34 @@ export default function Dashboard({ user }) {
             <div className="home-greeting-copy">
               <p className="home-greeting-eyebrow">Resumen personal</p>
               <h1 className="home-greeting-title">
-                Hola, <em>{userName}</em>
+                {greetStarted ? (
+                  <>
+                    {titleTyper.displayed.length <= 6
+                      ? titleTyper.displayed
+                      : <>Hola, <em>{titleTyper.displayed.slice(6)}</em></>
+                    }
+                    {!titleTyper.done && <span className="greeting-cursor" aria-hidden="true" />}
+                  </>
+                ) : (
+                  <>Hola, <em>{userName}</em></>
+                )}
               </h1>
-              <p className="home-greeting-subtitle">Este es tu resumen de salud para hoy.</p>
+              <p className="home-greeting-subtitle">
+                {!greetStarted && "Este es tu resumen de salud para hoy."}
+                {greetStarted && greetPhase === 0 && "\u00A0"}
+                {greetPhase === 1 && (
+                  <>
+                    {subtitleTyper.displayed}
+                    {!subtitleTyper.done && <span className="greeting-cursor" aria-hidden="true" />}
+                  </>
+                )}
+                {greetPhase >= 2 && (
+                  <>
+                    {contextTyper.displayed}
+                    {!contextTyper.done && <span className="greeting-cursor" aria-hidden="true" />}
+                  </>
+                )}
+              </p>
               <div className="home-greeting-context">
                 <span className="status-badge status-badge-green">
                   <span className="status-badge-label">Perfil activo</span>
@@ -1013,5 +1171,3 @@ export default function Dashboard({ user }) {
     </section>
   );
 }
-
-
