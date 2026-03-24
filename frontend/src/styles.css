@@ -14895,6 +14895,21 @@ body.theme-dark .home-ops-action-icon {
   border-color: #1d4ed8;
 }
 
+.home-voice-btn {
+  border: none;
+  background: linear-gradient(135deg, #44c4ff 0%, #2563eb 58%, #1d4ed8 100%);
+  color: #ffffff;
+}
+
+.home-voice-btn:hover {
+  background: linear-gradient(135deg, #44c4ff 0%, #1d4ed8 58%, #1e40af 100%);
+}
+
+.home-voice-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
 .home-note-primary:disabled,
 .home-note-secondary:disabled,
 .home-note-action-btn:disabled {

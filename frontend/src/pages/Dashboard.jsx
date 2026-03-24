@@ -943,6 +943,27 @@ export default function Dashboard({ user }) {
             </div>
           </article>
 
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Sugerencias</h2>
+                <p className="home-panel-subtitle">Basadas en tu actividad reciente.</p>
+              </div>
+            </div>
+            <div className="home-suggestions-list">
+              {suggestionItems.length ? (
+                suggestionItems.map((item) => (
+                  <button key={item.id} type="button" className="home-suggestion-item">
+                    <span className="home-suggestion-icon">{renderIcon("ai")}</span>
+                    <span>{cleanUiText(item.text)}</span>
+                  </button>
+                ))
+              ) : (
+                <div className="home-empty-state">{"Tu resumen est\u00E1 al d\u00EDa por ahora."}</div>
+              )}
+            </div>
+          </article>
+
           <article className="home-panel-card home-upcoming-card">
             <div className="home-panel-head">
               <div>
@@ -1013,6 +1034,20 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-right">
+          <article className="home-panel-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Klinip Voice</h2>
+                <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
+              </div>
+            </div>
+            <div className="home-notes-list">
+              <button type="button" className="home-note-primary home-voice-btn" disabled>
+                Iniciar grabación
+              </button>
+            </div>
+          </article>
+
           <article className="home-panel-card">
             <div className="home-panel-head">
               <div>
@@ -1144,26 +1179,6 @@ export default function Dashboard({ user }) {
             </div>
           </article>
 
-          <article className="home-panel-card">
-            <div className="home-panel-head">
-              <div>
-                <h2 className="home-panel-title">Sugerencias</h2>
-                <p className="home-panel-subtitle">Basadas en tu actividad reciente.</p>
-              </div>
-            </div>
-            <div className="home-suggestions-list">
-              {suggestionItems.length ? (
-                suggestionItems.map((item) => (
-                  <button key={item.id} type="button" className="home-suggestion-item">
-                    <span className="home-suggestion-icon">{renderIcon("ai")}</span>
-                    <span>{cleanUiText(item.text)}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="home-empty-state">{"Tu resumen est\u00E1 al d\u00EDa por ahora."}</div>
-              )}
-            </div>
-          </article>
         </div>
       </div>
 
