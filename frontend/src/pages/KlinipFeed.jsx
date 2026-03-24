@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import {
   getFamilyFeed,
@@ -165,6 +165,119 @@ function getInitials(name = "") {
   return name.trim().split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
 }
 
+function escapeRegExp(value = "") {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildCommentTree(comments = []) {
+  const sorted = [...comments].sort((a, b) => {
+    const timeA = new Date(a.created_at || 0).getTime();
+    const timeB = new Date(b.created_at || 0).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.id || 0) - (b.id || 0);
+  });
+  const byParent = new Map();
+  sorted.forEach((comment) => {
+    const parentId = comment.parent_comment_id || 0;
+    const bucket = byParent.get(parentId) || [];
+    bucket.push(comment);
+    byParent.set(parentId, bucket);
+  });
+
+  const attachReplies = (parentId = 0, depth = 0) =>
+    (byParent.get(parentId) || []).map((comment) => ({
+      ...comment,
+      depth,
+      replies: attachReplies(comment.id, depth + 1),
+    }));
+
+  return attachReplies(0, 0);
+}
+
+function getMentionSearchState(value = "", caret = value.length) {
+  const beforeCaret = value.slice(0, caret);
+  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/);
+  if (!match) return null;
+  const query = match[2] || "";
+  return {
+    query: query.toLowerCase(),
+    start: caret - query.length - 1,
+    end: caret,
+  };
+}
+
+function extractMentionUserIds(content = "", mentionCandidates = []) {
+  const mentionIds = [];
+  mentionCandidates.forEach((candidate) => {
+    const pattern = new RegExp(`(^|\\s)@${escapeRegExp(candidate.label)}(?=\\s|$|[.,!?;:])`, "i");
+    if (pattern.test(content) && !mentionIds.includes(candidate.user_id)) {
+      mentionIds.push(candidate.user_id);
+    }
+  });
+  return mentionIds;
+}
+
+function buildMentionCandidates({ user, profiles, groupCaregivers, posts }) {
+  const rawCandidates = [];
+  const pushCandidate = (userId, baseLabel, avatarUrl = null) => {
+    const cleanLabel = (baseLabel || "").trim();
+    if (!userId || !cleanLabel) return;
+    rawCandidates.push({
+      user_id: Number(userId),
+      baseLabel: cleanLabel,
+      avatar_url: avatarUrl || null,
+    });
+  };
+
+  pushCandidate(user?.id, user?.name, null);
+
+  (profiles || []).forEach((profile) => {
+    pushCandidate(profile.owner_user_id, profile.full_name, profile.avatar_url || null);
+  });
+
+  Object.values(groupCaregivers || {}).forEach((group) => {
+    (group || []).forEach((caregiver) => {
+      pushCandidate(
+        caregiver.user_id,
+        caregiver.user_name || caregiver.user_email || `Usuario ${caregiver.user_id}`,
+        caregiver.user_avatar_url || null,
+      );
+    });
+  });
+
+  (posts || []).forEach((post) => {
+    pushCandidate(post.user_id, post.user_name, post.user_avatar_url || null);
+    (post.comments || []).forEach((comment) => {
+      pushCandidate(comment.user_id, comment.user_name, comment.user_avatar_url || null);
+    });
+  });
+
+  const grouped = rawCandidates.reduce((acc, candidate) => {
+    const key = String(candidate.user_id);
+    if (!acc[key]) acc[key] = candidate;
+    return acc;
+  }, {});
+
+  const duplicateCounts = rawCandidates.reduce((acc, candidate) => {
+    const key = candidate.baseLabel.toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  return Object.values(grouped)
+    .map((candidate) => {
+      const duplicateKey = candidate.baseLabel.toLowerCase();
+      return {
+        ...candidate,
+        label:
+          duplicateCounts[duplicateKey] > 1
+            ? `${candidate.baseLabel} ${candidate.user_id}`
+            : candidate.baseLabel,
+      };
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, "es", { sensitivity: "base" }));
+}
+
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ name, size = 44, avatarUrl = null }) {
@@ -266,18 +379,107 @@ function ReactionsBar({ post, onReact, disabled = false }) {
 
 // ─── Comments section (estilo Instagram) ─────────────────────────────────────
 
-function CommentsSection({ post, currentUserId, userName, onComment, onDeleteComment }) {
+function CommentThreadItem({
+  comment,
+  currentUserId,
+  postId,
+  onReply,
+  onDeleteComment,
+}) {
+  return (
+    <div className={`kfeed-comment-thread depth-${Math.min(comment.depth || 0, 3)}`}>
+      <div className="kfeed-ig-comment">
+        <Avatar name={comment.user_name} size={32} avatarUrl={comment.user_avatar_url || null} />
+        <div className="kfeed-ig-comment-body">
+          <div className="kfeed-ig-comment-line">
+            <span className="kfeed-ig-comment-author">{comment.user_name}</span>
+            <span className="kfeed-ig-comment-text">{comment.content}</span>
+          </div>
+          <div className="kfeed-ig-comment-meta">
+            <span className="kfeed-ig-comment-time">{timeAgo(comment.created_at)}</span>
+            <button
+              type="button"
+              className="kfeed-ig-comment-reply"
+              onClick={() => onReply(comment)}
+            >
+              Responder
+            </button>
+            {comment.user_id === currentUserId && (
+              <button
+                type="button"
+                className="kfeed-ig-comment-delete"
+                onClick={() => onDeleteComment(postId, comment.id)}
+              >
+                Eliminar
+              </button>
+            )}
+          </div>
+        </div>
+        <button type="button" className="kfeed-ig-comment-heart" aria-label="Me gusta comentario">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </button>
+      </div>
+      {(comment.replies || []).length > 0 && (
+        <div className="kfeed-comment-replies">
+          {comment.replies.map((reply) => (
+            <CommentThreadItem
+              key={reply.id}
+              comment={reply}
+              currentUserId={currentUserId}
+              postId={postId}
+              onReply={onReply}
+              onDeleteComment={onDeleteComment}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommentsSection({
+  post,
+  currentUserId,
+  userName,
+  mentionCandidates = [],
+  onComment,
+  onDeleteComment,
+}) {
   const [text, setCommentText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [replyTo, setReplyTo] = useState(null);
+  const [caretPosition, setCaretPosition] = useState(0);
   const inputRef = useRef(null);
+  const commentTree = buildCommentTree(post.comments || []);
+  const mentionState = getMentionSearchState(text, caretPosition);
+  const filteredMentions = mentionState
+    ? mentionCandidates
+        .filter((candidate) => candidate.user_id !== currentUserId)
+        .filter((candidate) => !mentionState.query || candidate.label.toLowerCase().includes(mentionState.query))
+        .slice(0, 5)
+    : [];
+
+  const syncCaret = (target) => {
+    if (!target) return;
+    setCaretPosition(target.selectionStart ?? target.value.length);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!text.trim()) return;
+    const content = text.trim();
+    if (!content) return;
     setSubmitting(true);
     try {
-      await onComment(post.id, text.trim());
+      await onComment(post.id, {
+        content,
+        parent_comment_id: replyTo?.id || null,
+        mention_user_ids: extractMentionUserIds(content, mentionCandidates),
+      });
       setCommentText("");
+      setReplyTo(null);
+      setCaretPosition(0);
     } finally {
       setSubmitting(false);
     }
@@ -288,38 +490,46 @@ function CommentsSection({ post, currentUserId, userName, onComment, onDeleteCom
     inputRef.current?.focus();
   };
 
+  const handleReply = (comment) => {
+    const replyPrefix = `@${comment.user_name} `;
+    setReplyTo(comment);
+    setCommentText((prev) => {
+      if (!prev.trim()) return replyPrefix;
+      return prev.includes(replyPrefix) ? prev : `${replyPrefix}${prev}`;
+    });
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const length = inputRef.current?.value?.length || 0;
+      inputRef.current?.setSelectionRange(length, length);
+      setCaretPosition(length);
+    });
+  };
+
+  const handleMentionSelect = (candidate) => {
+    if (!mentionState) return;
+    const nextValue = `${text.slice(0, mentionState.start)}@${candidate.label} ${text.slice(mentionState.end)}`;
+    setCommentText(nextValue);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      const nextCaret = mentionState.start + candidate.label.length + 2;
+      inputRef.current?.setSelectionRange(nextCaret, nextCaret);
+      setCaretPosition(nextCaret);
+    });
+  };
+
   return (
     <div className="kfeed-comments-section">
-      {/* Lista de comentarios estilo Instagram */}
       {(post.comments || []).length > 0 && (
         <div className="kfeed-comments-list">
-          {(post.comments || []).map((c) => (
-            <div key={c.id} className="kfeed-ig-comment">
-              <Avatar name={c.user_name} size={32} avatarUrl={c.user_avatar_url || null} />
-              <div className="kfeed-ig-comment-body">
-                <div className="kfeed-ig-comment-line">
-                  <span className="kfeed-ig-comment-author">{c.user_name}</span>
-                  <span className="kfeed-ig-comment-text">{c.content}</span>
-                </div>
-                <div className="kfeed-ig-comment-meta">
-                  <span className="kfeed-ig-comment-time">{timeAgo(c.created_at)}</span>
-                  {c.user_id === currentUserId && (
-                    <button
-                      type="button"
-                      className="kfeed-ig-comment-delete"
-                      onClick={() => onDeleteComment(post.id, c.id)}
-                    >
-                      Eliminar
-                    </button>
-                  )}
-                </div>
-              </div>
-              <button type="button" className="kfeed-ig-comment-heart" aria-label="Me gusta comentario">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
-              </button>
-            </div>
+          {commentTree.map((comment) => (
+            <CommentThreadItem
+              key={comment.id}
+              comment={comment}
+              currentUserId={currentUserId}
+              postId={post.id}
+              onReply={handleReply}
+              onDeleteComment={onDeleteComment}
+            />
           ))}
         </div>
       )}
@@ -333,25 +543,55 @@ function CommentsSection({ post, currentUserId, userName, onComment, onDeleteCom
         ))}
       </div>
 
-      {/* Input de comentario */}
       <form className="kfeed-comment-composer" onSubmit={handleSubmit}>
         <Avatar name={userName || ""} size={32} />
-        <div className="kfeed-comment-input-wrap">
-          <input
-            ref={inputRef}
-            className="kfeed-comment-input"
-            placeholder="\u00danete a la conversaci\u00f3n..."
-            value={text}
-            onChange={(e) => setCommentText(e.target.value)}
-            disabled={submitting}
-          />
-          <button
-            type="submit"
-            className="kfeed-comment-send-btn"
-            disabled={submitting || !text.trim()}
-          >
-            {submitting ? "Publicando..." : "Publicar"}
-          </button>
+        <div className="kfeed-comment-compose-shell">
+          {replyTo && (
+            <div className="kfeed-comment-replying">
+              <span>Respondiendo a {replyTo.user_name}</span>
+              <button type="button" onClick={() => setReplyTo(null)}>
+                Cancelar
+              </button>
+            </div>
+          )}
+          <div className="kfeed-comment-input-wrap">
+            <input
+              ref={inputRef}
+              className="kfeed-comment-input"
+              placeholder="\u00danete a la conversaci\u00f3n..."
+              value={text}
+              onChange={(e) => {
+                setCommentText(e.target.value);
+                syncCaret(e.target);
+              }}
+              onClick={(e) => syncCaret(e.target)}
+              onKeyUp={(e) => syncCaret(e.target)}
+              disabled={submitting}
+            />
+            <button
+              type="submit"
+              className="kfeed-comment-send-btn"
+              disabled={submitting || !text.trim()}
+            >
+              {submitting ? "Publicando..." : "Publicar"}
+            </button>
+          </div>
+          {mentionState && filteredMentions.length > 0 && (
+            <div className="kfeed-comment-mentions-menu">
+              {filteredMentions.map((candidate) => (
+                <button
+                  key={candidate.user_id}
+                  type="button"
+                  className="kfeed-comment-mention-option"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => handleMentionSelect(candidate)}
+                >
+                  <Avatar name={candidate.label} size={24} avatarUrl={candidate.avatar_url || null} />
+                  <span>@{candidate.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </form>
     </div>
@@ -442,7 +682,17 @@ function PostMediaCard({ post }) {
 
 // ─── Post card ────────────────────────────────────────────────────────────────
 
-function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, onComment, onDeleteComment }) {
+function PostCard({
+  post,
+  currentUserId,
+  userName,
+  profiles,
+  mentionCandidates,
+  onDelete,
+  onReact,
+  onComment,
+  onDeleteComment,
+}) {
   const [showComments, setShowComments] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const typeInfo = getPostTypeInfo(post.post_type);
@@ -555,6 +805,7 @@ function PostCard({ post, currentUserId, userName, profiles, onDelete, onReact, 
           post={post}
           currentUserId={currentUserId}
           userName={userName}
+          mentionCandidates={mentionCandidates}
           onComment={onComment}
           onDeleteComment={onDeleteComment}
         />
@@ -1167,8 +1418,8 @@ export default function KlinipFeed({ user }) {
     }
   }
 
-  async function handleComment(postId, content) {
-    const comment = await addPostComment(postId, content);
+  async function handleComment(postId, payload) {
+    const comment = await addPostComment(postId, payload);
     setPosts((prev) => prev.map((p) =>
       p.id !== postId ? p : { ...p, comments: [...(p.comments || []), comment], comments_count: p.comments_count + 1 }
     ));
@@ -1179,7 +1430,13 @@ export default function KlinipFeed({ user }) {
     setPosts((prev) => prev.map((p) =>
       p.id !== postId ? p : {
         ...p,
-        comments: (p.comments || []).filter((c) => c.id !== commentId),
+        comments: (p.comments || [])
+          .filter((c) => c.id !== commentId)
+          .map((c) => (
+            c.parent_comment_id === commentId
+              ? { ...c, parent_comment_id: null }
+              : c
+          )),
         comments_count: Math.max(0, p.comments_count - 1),
       }
     ));
@@ -1191,6 +1448,12 @@ export default function KlinipFeed({ user }) {
     profiles.find((p) => p.is_primary_profile) ||
     profiles[0];
   const userAvatarUrl = (primaryProfile?.owner_user_id === user?.id ? primaryProfile?.avatar_url : null) || null;
+  const mentionCandidates = buildMentionCandidates({
+    user,
+    profiles,
+    groupCaregivers,
+    posts,
+  });
 
   return (
     <div className="kfeed-layout-wrapper">
@@ -1263,6 +1526,7 @@ export default function KlinipFeed({ user }) {
             currentUserId={user?.id}
             userName={user?.name || ""}
             profiles={profiles}
+            mentionCandidates={mentionCandidates}
             onDelete={handleDelete}
             onReact={handleReact}
             onComment={handleComment}

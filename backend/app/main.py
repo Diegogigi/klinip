@@ -547,6 +547,53 @@ def ensure_health_profile_schema():
 
 ensure_health_profile_schema()
 
+
+def ensure_feed_schema():
+    """Garantiza columnas nuevas usadas por comentarios del feed."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("post_comments"):
+            return
+
+        columns = {col["name"] for col in inspector.get_columns("post_comments")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        def add_comment_column(name: str, pg_stmt: str, sqlite_stmt: str):
+            if name in columns:
+                return
+            statements.append(pg_stmt if backend == "postgresql" else sqlite_stmt)
+            added_columns.append(name)
+
+        add_comment_column(
+            "parent_comment_id",
+            "ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS parent_comment_id INTEGER NULL",
+            "ALTER TABLE post_comments ADD COLUMN parent_comment_id INTEGER",
+        )
+        add_comment_column(
+            "mentions_json",
+            "ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS mentions_json TEXT DEFAULT ''",
+            "ALTER TABLE post_comments ADD COLUMN mentions_json TEXT DEFAULT ''",
+        )
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+            print(
+                "DEBUG ensure_feed_schema: columnas agregadas a post_comments: "
+                + ", ".join(added_columns)
+            )
+        else:
+            print("DEBUG ensure_feed_schema: tabla post_comments ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_feed_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_feed_schema()
+
+
 def ensure_medication_schema():
     """
     Garantiza que la tabla medications tenga columnas nuevas usadas por la app.
@@ -17898,6 +17945,84 @@ def _get_user_avatar_url(user) -> str:
     return ""
 
 
+def _parse_comment_mentions(raw_value) -> list[int]:
+    if not raw_value:
+        return []
+    if isinstance(raw_value, list):
+        values = raw_value
+    else:
+        try:
+            values = json.loads(raw_value)
+        except Exception:
+            return []
+
+    mention_ids = []
+    for value in values:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            continue
+        if parsed not in mention_ids:
+            mention_ids.append(parsed)
+    return mention_ids
+
+
+def _serialize_comment(comment: models.PostComment) -> dict:
+    return {
+        "id": comment.id,
+        "post_id": comment.post_id,
+        "user_id": comment.user_id,
+        "user_name": comment.user.name if comment.user else "",
+        "user_avatar_url": _get_user_avatar_url(comment.user),
+        "parent_comment_id": comment.parent_comment_id,
+        "mention_user_ids": _parse_comment_mentions(getattr(comment, "mentions_json", "")),
+        "content": comment.content,
+        "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%S") if comment.created_at else None,
+    }
+
+
+def _can_access_feed_post(db: Session, current_user, post: models.FeedPost) -> bool:
+    if not post:
+        return False
+    if post.user_id == current_user.id:
+        return True
+    family_ids = _get_family_user_ids(db, current_user)
+    return post.user_id in family_ids
+
+
+def _ensure_feed_post_access(db: Session, current_user, post: models.FeedPost) -> None:
+    if not _can_access_feed_post(db, current_user, post):
+        raise HTTPException(status_code=403, detail="Sin acceso a esta publicación")
+
+
+def _resolve_feed_comment_mentions(
+    db: Session,
+    current_user,
+    post: models.FeedPost,
+    requested_ids,
+) -> list[int]:
+    allowed_user_ids = _get_family_user_ids(db, current_user) | {post.user_id}
+    mention_ids = []
+    for raw_id in requested_ids or []:
+        try:
+            user_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id in allowed_user_ids and user_id not in mention_ids:
+            mention_ids.append(user_id)
+    return mention_ids
+
+
+def _get_feed_comment_participants(db: Session, post_id: int) -> set[int]:
+    rows = (
+        db.query(models.PostComment.user_id)
+        .filter(models.PostComment.post_id == post_id)
+        .distinct()
+        .all()
+    )
+    return {int(row[0]) for row in rows if row and row[0] is not None}
+
+
 def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) -> dict:
     my_reaction = None
     for r in post.reactions:
@@ -17933,16 +18058,8 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
             for a in post.attachments
         ],
         "comments": [
-            {
-                "id": c.id,
-                "post_id": c.post_id,
-                "user_id": c.user_id,
-                "user_name": c.user.name if c.user else "",
-                "user_avatar_url": _get_user_avatar_url(c.user),
-                "content": c.content,
-                "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
-            }
-            for c in sorted(post.comments, key=lambda x: x.created_at)
+            _serialize_comment(c)
+            for c in sorted(post.comments, key=lambda x: (x.created_at or datetime.min, x.id or 0))
         ],
         "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%S") if post.created_at else None,
         "updated_at": post.updated_at.strftime("%Y-%m-%dT%H:%M:%S") if post.updated_at else None,
@@ -17958,6 +18075,88 @@ _REACTION_EMOJIS = {
 }
 
 
+def _build_feed_notification_payload(
+    actor_user,
+    post,
+    notification_type: str,
+    recipient_user_id: int,
+    extra: dict | None = None,
+):
+    extra = extra or {}
+    actor_name = actor_user.name or "Alguien"
+    profile_name = post.profile.full_name if post.profile else ""
+    content_preview = (post.content or "")[:60]
+    if len(post.content or "") > 60:
+        content_preview += "…"
+
+    if notification_type == "post":
+        title = f"Nueva publicación de {actor_name}"
+        body = content_preview if content_preview else f"Publicó en el feed de {profile_name}"
+        tag = f"feed-post-{post.id}-{recipient_user_id}"
+    elif notification_type == "comment":
+        comment_content = extra.get("comment_content") or ""
+        comment_text = comment_content[:60]
+        if len(comment_content) > 60:
+            comment_text += "…"
+        mention_user_ids = set(extra.get("mention_user_ids") or [])
+        parent_comment_user_id = extra.get("parent_comment_user_id")
+        if recipient_user_id in mention_user_ids:
+            title = f"{actor_name} te mencionó"
+            body = comment_text if comment_text else f"Te mencionó en una publicación de {profile_name}"
+        elif extra.get("is_reply") and recipient_user_id == parent_comment_user_id:
+            title = f"{actor_name} respondió tu comentario"
+            body = comment_text if comment_text else f"Respondió en una publicación de {profile_name}"
+        elif recipient_user_id == post.user_id:
+            title = f"{actor_name} comentó tu publicación"
+            body = comment_text if comment_text else f"Hay actividad en una publicación de {profile_name}"
+        else:
+            title = f"{actor_name} comentó"
+            body = comment_text if comment_text else f"Hay actividad en una publicación de {profile_name}"
+        tag = f"feed-comment-{extra.get('comment_id', post.id)}-{recipient_user_id}"
+    elif notification_type == "reaction":
+        reaction_type = extra.get("reaction_type", "")
+        emoji = _REACTION_EMOJIS.get(reaction_type, "👍")
+        title = f"{actor_name} reaccionó {emoji}"
+        body = f"Reaccionó a una publicación de {profile_name}"
+        tag = f"feed-reaction-{post.id}-{actor_user.id}-{recipient_user_id}"
+    else:
+        return None
+
+    return {
+        "title": title,
+        "body": body,
+        "url": f"/feed?postId={post.id}",
+        "tag": tag,
+        "priority": "normal",
+        "sound": "default",
+        "kind": "feed",
+        "postId": post.id,
+        "commentId": extra.get("comment_id"),
+        "parentCommentId": extra.get("parent_comment_id"),
+        "userId": recipient_user_id,
+        "actorUserId": actor_user.id,
+    }
+
+
+def _send_feed_notification_to_users(
+    db,
+    actor_user,
+    post,
+    notification_type: str,
+    recipients,
+    extra: dict | None = None,
+):
+    extra = extra or {}
+    recipient_ids = {int(uid) for uid in (recipients or set()) if uid is not None}
+    recipient_ids.discard(actor_user.id)
+    if not recipient_ids:
+        return
+    for uid in recipient_ids:
+        payload = _build_feed_notification_payload(actor_user, post, notification_type, uid, extra)
+        if payload:
+            _send_push_to_user(db, uid, payload)
+
+
 def _send_feed_notification_to_family(
     db,
     actor_user,
@@ -17965,60 +18164,52 @@ def _send_feed_notification_to_family(
     notification_type: str,
     extra: dict = None,
 ):
-    """
-    Envía notificaciones push a todos los miembros del grupo familiar
-    (excepto el actor) cuando ocurre una acción en el feed.
-
-    notification_type: "post" | "comment" | "reaction"
-    extra: dict con datos adicionales (ej. reaction_type, comment_preview)
-    """
-    extra = extra or {}
     try:
         family_ids = _get_family_user_ids(db, actor_user)
         recipients = family_ids - {actor_user.id}
-        if not recipients:
-            return
-
-        actor_name = actor_user.name or "Alguien"
-        profile_name = post.profile.full_name if post.profile else ""
-        content_preview = (post.content or "")[:60]
-        if len(post.content or "") > 60:
-            content_preview += "…"
-
-        if notification_type == "post":
-            title = f"Nueva publicación de {actor_name}"
-            body = content_preview if content_preview else f"Publicó en el feed de {profile_name}"
-            tag = f"feed-post-{post.id}"
-        elif notification_type == "comment":
-            comment_text = (extra.get("comment_content") or "")[:60]
-            if len(extra.get("comment_content") or "") > 60:
-                comment_text += "…"
-            title = f"{actor_name} comentó"
-            body = comment_text if comment_text else f"Comentó en una publicación de {profile_name}"
-            tag = f"feed-comment-{extra.get('comment_id', post.id)}"
-        elif notification_type == "reaction":
-            reaction_type = extra.get("reaction_type", "")
-            emoji = _REACTION_EMOJIS.get(reaction_type, "👍")
-            title = f"{actor_name} reaccionó {emoji}"
-            body = f"Reaccionó a una publicación de {profile_name}"
-            tag = f"feed-reaction-{post.id}-{actor_user.id}"
-        else:
-            return
-
-        for uid in recipients:
-            _send_push_to_user(db, uid, {
-                "title": title,
-                "body": body,
-                "url": "/#/feed",
-                "tag": tag,
-                "priority": "normal",
-                "sound": "default",
-                "kind": "feed",
-                "postId": post.id,
-                "userId": actor_user.id,
-            })
+        _send_feed_notification_to_users(
+            db,
+            actor_user,
+            post,
+            notification_type,
+            recipients,
+            extra,
+        )
     except Exception as exc:
         print(f"WARNING feed push: error enviando notificacion feed: {exc}")
+
+
+def _send_feed_comment_notifications(
+    db: Session,
+    actor_user,
+    post: models.FeedPost,
+    comment: models.PostComment,
+    mention_user_ids: list[int],
+    parent_comment: models.PostComment | None = None,
+):
+    try:
+        family_ids = _get_family_user_ids(db, actor_user) | {post.user_id}
+        participant_ids = _get_feed_comment_participants(db, post.id)
+        recipients = ({post.user_id} | participant_ids | set(mention_user_ids or [])) & family_ids
+        if parent_comment and parent_comment.user_id in family_ids:
+            recipients.add(parent_comment.user_id)
+        _send_feed_notification_to_users(
+            db,
+            actor_user,
+            post,
+            "comment",
+            recipients,
+            {
+                "comment_id": comment.id,
+                "comment_content": comment.content,
+                "mention_user_ids": mention_user_ids or [],
+                "parent_comment_id": comment.parent_comment_id,
+                "parent_comment_user_id": parent_comment.user_id if parent_comment else None,
+                "is_reply": bool(parent_comment),
+            },
+        )
+    except Exception as exc:
+        print(f"WARNING feed push: error enviando notificacion de comentario: {exc}")
 
 
 @app.get("/feed/family")
@@ -18172,6 +18363,7 @@ def react_to_post(
     post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
 
     existing = db.query(models.PostReaction).filter(
         models.PostReaction.post_id == post_id,
@@ -18202,6 +18394,10 @@ def remove_reaction(
     db: Session = Depends(auth.get_db),
     current_user=Depends(auth.get_current_user),
 ):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
     reaction = db.query(models.PostReaction).filter(
         models.PostReaction.post_id == post_id,
         models.PostReaction.user_id == current_user.id,
@@ -18221,24 +18417,14 @@ def get_post_comments(
     post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
     comments = (
         db.query(models.PostComment)
         .filter(models.PostComment.post_id == post_id)
-        .order_by(models.PostComment.created_at)
+        .order_by(models.PostComment.created_at, models.PostComment.id)
         .all()
     )
-    return [
-        {
-            "id": c.id,
-            "post_id": c.post_id,
-            "user_id": c.user_id,
-            "user_name": c.user.name if c.user else "",
-            "user_avatar_url": _get_user_avatar_url(c.user),
-            "content": c.content,
-            "created_at": c.created_at.strftime("%Y-%m-%dT%H:%M:%S") if c.created_at else None,
-        }
-        for c in comments
-    ]
+    return [_serialize_comment(c) for c in comments]
 
 
 @app.post("/feed/posts/{post_id}/comments", status_code=201)
@@ -18251,27 +18437,44 @@ def add_comment(
     post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
     if not post:
         raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="El comentario no puede estar vacío")
+    parent_comment = None
+    if payload.parent_comment_id is not None:
+        parent_comment = db.query(models.PostComment).filter(
+            models.PostComment.id == payload.parent_comment_id,
+            models.PostComment.post_id == post_id,
+        ).first()
+        if not parent_comment:
+            raise HTTPException(status_code=404, detail="Comentario padre no encontrado")
+
+    mention_user_ids = _resolve_feed_comment_mentions(
+        db,
+        current_user,
+        post,
+        payload.mention_user_ids,
+    )
     comment = models.PostComment(
         post_id=post_id,
         user_id=current_user.id,
-        content=payload.content,
+        parent_comment_id=parent_comment.id if parent_comment else None,
+        content=content,
+        mentions_json=json.dumps(mention_user_ids),
     )
     db.add(comment)
     db.commit()
     db.refresh(comment)
-    _send_feed_notification_to_family(db, current_user, post, "comment", {
-        "comment_id": comment.id,
-        "comment_content": payload.content,
-    })
-    return {
-        "id": comment.id,
-        "post_id": comment.post_id,
-        "user_id": comment.user_id,
-        "user_name": current_user.name,
-        "user_avatar_url": _get_user_avatar_url(current_user),
-        "content": comment.content,
-        "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%S") if comment.created_at else None,
-    }
+    _send_feed_comment_notifications(
+        db,
+        current_user,
+        post,
+        comment,
+        mention_user_ids,
+        parent_comment,
+    )
+    return _serialize_comment(comment)
 
 
 @app.delete("/feed/posts/{post_id}/comments/{comment_id}", status_code=204)
@@ -18281,6 +18484,10 @@ def delete_comment(
     db: Session = Depends(auth.get_db),
     current_user=Depends(auth.get_current_user),
 ):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
     comment = db.query(models.PostComment).filter(
         models.PostComment.id == comment_id,
         models.PostComment.post_id == post_id,
@@ -18289,6 +18496,13 @@ def delete_comment(
         raise HTTPException(status_code=404, detail="Comentario no encontrado")
     if comment.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="No puedes eliminar este comentario")
+    db.query(models.PostComment).filter(
+        models.PostComment.parent_comment_id == comment.id,
+        models.PostComment.post_id == post_id,
+    ).update(
+        {"parent_comment_id": None},
+        synchronize_session=False,
+    )
     db.delete(comment)
     db.commit()
     return None

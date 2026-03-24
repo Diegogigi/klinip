@@ -716,7 +716,9 @@ class PostComment(Base):
     id = Column(Integer, primary_key=True, index=True)
     post_id = Column(Integer, ForeignKey("feed_posts.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    parent_comment_id = Column(Integer, ForeignKey("post_comments.id"), nullable=True, index=True)
     content = Column(Text, nullable=False)
+    mentions_json = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.now)
 
     post = relationship("FeedPost", back_populates="comments")

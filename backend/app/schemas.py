@@ -885,6 +885,8 @@ class FeedPostCreate(BaseModel):
 
 class PostCommentCreate(BaseModel):
     content: str
+    parent_comment_id: Optional[int] = None
+    mention_user_ids: list[int] = []
 
 
 class PostReactionCreate(BaseModel):
@@ -896,6 +898,9 @@ class PostCommentOut(BaseModel):
     post_id: int
     user_id: int
     user_name: Optional[str] = ""
+    user_avatar_url: Optional[str] = ""
+    parent_comment_id: Optional[int] = None
+    mention_user_ids: list[int] = []
     content: str
     created_at: datetime
 

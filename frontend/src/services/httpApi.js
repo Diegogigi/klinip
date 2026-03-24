@@ -735,8 +735,16 @@ export async function getPostComments(postId) {
   return Array.isArray(res.data) ? res.data : [];
 }
 
-export async function addPostComment(postId, content) {
-  const res = await api.post(`/feed/posts/${postId}/comments`, { content });
+export async function addPostComment(postId, payload) {
+  const body =
+    typeof payload === "string"
+      ? { content: payload }
+      : {
+          content: payload?.content || "",
+          parent_comment_id: payload?.parent_comment_id ?? null,
+          mention_user_ids: Array.isArray(payload?.mention_user_ids) ? payload.mention_user_ids : [],
+        };
+  const res = await api.post(`/feed/posts/${postId}/comments`, body);
   return res.data;
 }
 

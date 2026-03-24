@@ -24914,6 +24914,17 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   font-weight: 600;
   transition: color 0.15s;
 }
+.kfeed-ig-comment-reply {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: #64748b;
+  padding: 0;
+  font-weight: 600;
+  transition: color 0.15s;
+}
+.kfeed-ig-comment-reply:hover { color: #2563eb; }
 .kfeed-ig-comment-delete:hover { color: #ef4444; }
 .kfeed-ig-comment-heart {
   background: none;
@@ -24928,6 +24939,19 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   transition: color 0.15s;
 }
 .kfeed-ig-comment-heart:hover { color: #ef4444; }
+.kfeed-comment-thread {
+  display: flex;
+  flex-direction: column;
+}
+.kfeed-comment-thread.depth-1,
+.kfeed-comment-thread.depth-2,
+.kfeed-comment-thread.depth-3 {
+  margin-left: 2.25rem;
+}
+.kfeed-comment-replies {
+  display: flex;
+  flex-direction: column;
+}
 
 /* ── Comment emoji quick bar ── */
 .kfeed-comment-emoji-bar {
@@ -24959,6 +24983,37 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   padding: 0.5rem 1rem 0.75rem;
   border-top: 1px solid var(--border, #e2e8f0);
 }
+.kfeed-comment-compose-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.kfeed-comment-replying {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.1rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+.kfeed-comment-replying span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-comment-replying button {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0;
+  cursor: pointer;
+}
 .kfeed-comment-input-wrap {
   flex: 1;
   min-width: 0;
@@ -24985,6 +25040,32 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   font-family: inherit;
 }
 .kfeed-comment-input::placeholder { color: #94a3b8; }
+.kfeed-comment-mentions-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 16px;
+  background: var(--card-bg, #fff);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+}
+.kfeed-comment-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 12px;
+  padding: 0.35rem 0.45rem;
+  color: var(--text-primary, #0f172a);
+  text-align: left;
+  cursor: pointer;
+}
+.kfeed-comment-mention-option:hover {
+  background: var(--hover-bg, #f8fafc);
+}
 .kfeed-comment-send-btn {
   background: none;
   border: none;
@@ -25280,6 +25361,16 @@ body.theme-dark .kfeed-comment-input { color: #f1f5f9; }
 body.theme-dark .kfeed-comments-section,
 body.theme-dark .kfeed-comment-composer { border-color: #334155; }
 body.theme-dark .kfeed-comment-emoji-btn:hover { background: #334155; }
+body.theme-dark .kfeed-ig-comment-reply,
+body.theme-dark .kfeed-comment-replying { color: #cbd5e1; }
+body.theme-dark .kfeed-comment-replying button { color: #93c5fd; }
+body.theme-dark .kfeed-comment-mentions-menu {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 18px 32px rgba(2, 6, 23, 0.45);
+}
+body.theme-dark .kfeed-comment-mention-option { color: #f8fafc; }
+body.theme-dark .kfeed-comment-mention-option:hover { background: #1e293b; }
 body.theme-dark .kfeed-type-chip,
 body.theme-dark .kfeed-mention-chip,
 body.theme-dark .kfeed-file-item,
@@ -25803,6 +25894,26 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
   .kfeed-comment-composer {
     gap: 0.4rem;
     padding: 0.45rem 0.75rem 0.65rem;
+  }
+  .kfeed-comment-compose-shell {
+    gap: 0.25rem;
+  }
+  .kfeed-comment-thread.depth-1,
+  .kfeed-comment-thread.depth-2,
+  .kfeed-comment-thread.depth-3 {
+    margin-left: 1.35rem;
+  }
+  .kfeed-comment-replying {
+    font-size: 0.68rem;
+  }
+  .kfeed-comment-mentions-menu {
+    padding: 0.25rem;
+    border-radius: 14px;
+  }
+  .kfeed-comment-mention-option {
+    gap: 0.4rem;
+    padding: 0.3rem 0.35rem;
+    font-size: 0.78rem;
   }
   .kfeed-comment-input-wrap {
     padding: 0.4rem 0.65rem;
