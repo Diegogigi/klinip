@@ -717,6 +717,11 @@ export async function createFeedPost(payload) {
   return res.data;
 }
 
+export async function updateFeedPost(postId, payload) {
+  const res = await api.put(`/feed/posts/${postId}`, payload);
+  return res.data;
+}
+
 export async function deleteFeedPost(postId) {
   await api.delete(`/feed/posts/${postId}`);
 }

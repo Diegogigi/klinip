@@ -18269,6 +18269,26 @@ def _send_feed_comment_notifications(
         print(f"WARNING feed push: error enviando notificacion de comentario: {exc}")
 
 
+def _get_feed_profile_with_access(db: Session, current_user, profile_id: int):
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == profile_id
+    ).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+
+    has_access = profile.owner_user_id == current_user.id or db.query(
+        models.ProfileRelationship
+    ).filter(
+        models.ProfileRelationship.profile_id == profile_id,
+        models.ProfileRelationship.user_id == current_user.id,
+        models.ProfileRelationship.status == "accepted",
+    ).first() is not None
+
+    if not has_access:
+        raise HTTPException(status_code=403, detail="Sin acceso a este perfil")
+    return profile
+
+
 @app.get("/feed/family")
 def get_family_feed(
     skip: int = 0,
@@ -18297,22 +18317,7 @@ def create_feed_post(
     db: Session = Depends(auth.get_db),
     current_user=Depends(auth.get_current_user),
 ):
-    profile = db.query(models.HealthProfile).filter(
-        models.HealthProfile.id == payload.profile_id
-    ).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Perfil no encontrado")
-
-    has_access = profile.owner_user_id == current_user.id or db.query(
-        models.ProfileRelationship
-    ).filter(
-        models.ProfileRelationship.profile_id == payload.profile_id,
-        models.ProfileRelationship.user_id == current_user.id,
-        models.ProfileRelationship.status == "accepted",
-    ).first() is not None
-
-    if not has_access:
-        raise HTTPException(status_code=403, detail="Sin acceso a este perfil")
+    profile = _get_feed_profile_with_access(db, current_user, payload.profile_id)
 
     post = models.FeedPost(
         user_id=current_user.id,
@@ -18331,6 +18336,38 @@ def create_feed_post(
     db.commit()
     db.refresh(post)
     _send_feed_notification_to_family(db, current_user, post, "post")
+    return _serialize_post(post, db, current_user.id)
+
+
+@app.put("/feed/posts/{post_id}")
+def update_feed_post(
+    post_id: int,
+    payload: schemas.FeedPostUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    if post.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No puedes editar este post")
+
+    _get_feed_profile_with_access(db, current_user, payload.profile_id)
+
+    post.profile_id = payload.profile_id
+    post.content = payload.content
+    post.post_type = payload.post_type
+    post.privacy = payload.privacy
+    post.linked_document_id = payload.linked_document_id
+
+    db.query(models.PostMention).filter(
+        models.PostMention.post_id == post.id
+    ).delete(synchronize_session=False)
+    for pid in (payload.mention_profile_ids or []):
+        db.add(models.PostMention(post_id=post.id, tagged_profile_id=pid))
+
+    db.commit()
+    db.refresh(post)
     return _serialize_post(post, db, current_user.id)
 
 

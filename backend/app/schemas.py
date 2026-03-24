@@ -883,6 +883,15 @@ class FeedPostCreate(BaseModel):
     mention_profile_ids: list[int] = []
 
 
+class FeedPostUpdate(BaseModel):
+    content: str = ""
+    post_type: str = "general"
+    privacy: str = "family"
+    profile_id: int
+    linked_document_id: Optional[int] = None
+    mention_profile_ids: list[int] = []
+
+
 class PostCommentCreate(BaseModel):
     content: str
     parent_comment_id: Optional[int] = None

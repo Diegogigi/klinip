@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   getFamilyFeed,
   createFeedPost,
+  updateFeedPost,
   deleteFeedPost,
   reactToPost,
   removeReaction,
@@ -700,6 +701,7 @@ function PostCard({
   userName,
   profiles,
   mentionCandidates,
+  onEdit,
   onDelete,
   onReact,
   onComment,
@@ -741,11 +743,31 @@ function PostCard({
           </span>
         </div>
         {post.user_id === currentUserId && (
-          <button className="kfeed-post-menu-btn" type="button" onClick={() => onDelete(post.id)} title="Eliminar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18">
-              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
+          <div className="kfeed-post-tools">
+            <button
+              className="kfeed-post-menu-btn kfeed-post-menu-btn--edit"
+              type="button"
+              onClick={() => onEdit(post)}
+              title="Editar"
+              aria-label="Editar publicación"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button
+              className="kfeed-post-menu-btn"
+              type="button"
+              onClick={() => onDelete(post.id)}
+              title="Eliminar"
+              aria-label="Eliminar publicación"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          </div>
         )}
       </div>
 
@@ -832,19 +854,32 @@ function PostCard({
 
 const SENSITIVE_POST_TYPES = ["exam_result", "doctor_visit", "medication"];
 
-function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false }) {
-  const [content, setContent] = useState("");
-  const [postType, setPostType] = useState("general");
-  const [profileId, setProfileId] = useState(profiles[0]?.id || "");
+function CreatePostModal({
+  profiles,
+  userName,
+  onClose,
+  onSubmit,
+  hasMfa = false,
+  mode = "create",
+  initialPost = null,
+}) {
+  const isEdit = mode === "edit";
+  const existingAttachmentCount = initialPost?.attachments?.length || 0;
+  const [content, setContent] = useState(initialPost?.content || "");
+  const [postType, setPostType] = useState(initialPost?.post_type || "general");
+  const [profileId, setProfileId] = useState(initialPost?.profile_id || profiles[0]?.id || "");
   const [files, setFiles] = useState([]);
   const [previews, setPreviews] = useState([]);
-  const [mentionIds, setMentionIds] = useState([]);
+  const [mentionIds, setMentionIds] = useState(initialPost?.mention_profile_ids || []);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const fileInputRef = useRef(null);
 
-  const isSensitive = SENSITIVE_POST_TYPES.includes(postType) || files.length > 0;
+  const isSensitive =
+    SENSITIVE_POST_TYPES.includes(postType) ||
+    files.length > 0 ||
+    (isEdit && existingAttachmentCount > 0);
 
   const toggleMention = (id) =>
     setMentionIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -858,20 +893,21 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 
   useEffect(() => () => previews.forEach((p) => URL.revokeObjectURL(p.url)), []);
 
-  const doPublish = async () => {
+  const doSubmit = async () => {
     setSubmitting(true);
     setError("");
     try {
-      const post = await onCreate({
+      const post = await onSubmit({
         content: content.trim(),
         post_type: postType,
         privacy: "family",
         profile_id: Number(profileId),
+        linked_document_id: initialPost?.linked_document_id ?? null,
         mention_profile_ids: mentionIds,
       }, files, previews);
       if (post) onClose();
     } catch {
-      setError("No se pudo publicar. Intenta de nuevo.");
+      setError(isEdit ? "No se pudo guardar los cambios. Intenta de nuevo." : "No se pudo publicar. Intenta de nuevo.");
     } finally {
       setSubmitting(false);
     }
@@ -879,18 +915,21 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!content.trim() && files.length === 0) { setError("Escribe algo o adjunta un archivo."); return; }
+    if (!content.trim() && files.length === 0 && existingAttachmentCount === 0) {
+      setError("Escribe algo o adjunta un archivo.");
+      return;
+    }
     if (!profileId) { setError("Selecciona un perfil."); return; }
     if (isSensitive) {
       setStepUpOpen(true);
     } else {
-      doPublish();
+      doSubmit();
     }
   };
 
   const handleStepUpVerified = () => {
     setStepUpOpen(false);
-    doPublish();
+    doSubmit();
   };
 
   const selectedProfile = profiles.find((p) => p.id === Number(profileId));
@@ -900,7 +939,7 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
     <div className="kfeed-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="kfeed-modal">
         <div className="kfeed-modal-header">
-          <h3 className="kfeed-modal-title">Crear publicación</h3>
+          <h3 className="kfeed-modal-title">{isEdit ? "Editar publicación" : "Crear publicación"}</h3>
           <button className="kfeed-modal-close" type="button" onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -927,12 +966,18 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
 
           <textarea
             className="kfeed-modal-textarea"
-            placeholder="¿Qué quieres compartir con tu familia?"
+            placeholder={isEdit ? "Actualiza lo que quieres compartir con tu familia" : "¿Qué quieres compartir con tu familia?"}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             rows={4}
             autoFocus
           />
+
+          {isEdit && existingAttachmentCount > 0 && (
+            <div className="kfeed-modal-helper">
+              Los archivos adjuntos actuales se mantienen en esta edición.
+            </div>
+          )}
 
           {/* Previews de imágenes */}
           {previews.filter((p) => p.type.startsWith("image/")).length > 0 && (
@@ -977,32 +1022,33 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
             </div>
           )}
 
-          {/* Toolbar */}
-          <div className="kfeed-modal-toolbar">
-            <button type="button" className="kfeed-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-              <span>Foto / Video</span>
-            </button>
-            <button type="button" className="kfeed-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                <polyline points="14 2 14 8 20 8"/>
-              </svg>
-              <span>Documento</span>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,video/*,.pdf,.doc,.docx"
-              style={{ display: "none" }}
-              onChange={(e) => handleFiles(e.target.files)}
-            />
-          </div>
+          {!isEdit && (
+            <div className="kfeed-modal-toolbar">
+              <button type="button" className="kfeed-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <span>Foto / Video</span>
+              </button>
+              <button type="button" className="kfeed-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+                <span>Documento</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,.pdf,.doc,.docx"
+                style={{ display: "none" }}
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+            </div>
+          )}
 
           {/* Lista archivos no-imagen */}
           {previews.filter((p) => !p.type.startsWith("image/")).length > 0 && (
@@ -1030,15 +1076,27 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
                 <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
               </svg>
-              <span>Esta publicación contiene información médica sensible. Se requerirá verificación de identidad antes de publicar.</span>
+              <span>
+                {isEdit
+                  ? "Esta publicación contiene información médica sensible. Se requerirá verificación de identidad antes de guardar los cambios."
+                  : "Esta publicación contiene información médica sensible. Se requerirá verificación de identidad antes de publicar."}
+              </span>
             </div>
           )}
 
           {error && <p className="kfeed-modal-error">{error}</p>}
 
           <div className="kfeed-modal-footer">
-            <button type="submit" className="kfeed-publish-btn" disabled={submitting || (!content.trim() && files.length === 0)}>
-              {submitting ? "Publicando…" : isSensitive ? "Continuar →" : "Publicar"}
+            <button
+              type="submit"
+              className="kfeed-publish-btn"
+              disabled={submitting || (!content.trim() && files.length === 0 && existingAttachmentCount === 0)}
+            >
+              {submitting
+                ? (isEdit ? "Guardando..." : "Publicando...")
+                : isSensitive
+                  ? "Continuar →"
+                  : (isEdit ? "Guardar cambios" : "Publicar")}
             </button>
           </div>
         </form>
@@ -1049,7 +1107,7 @@ function CreatePostModal({ profiles, userName, onClose, onCreate, hasMfa = false
         onClose={() => setStepUpOpen(false)}
         onVerified={handleStepUpVerified}
         hasMfa={hasMfa}
-        actionLabel="publicar información médica sensible"
+        actionLabel={isEdit ? "guardar información médica sensible" : "publicar información médica sensible"}
       />
     </div>
   );
@@ -1301,6 +1359,7 @@ export default function KlinipFeed({ user }) {
   const [profiles, setProfiles] = useState([]);
   const [groupCaregivers, setGroupCaregivers] = useState({});
   const [showCreate, setShowCreate] = useState(false);
+  const [editingPost, setEditingPost] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [familySidebarOpen, setFamilySidebarOpen] = useState(false);
@@ -1384,9 +1443,24 @@ export default function KlinipFeed({ user }) {
     return post;
   }
 
+  async function handleEdit(payload) {
+    if (!editingPost) return null;
+    const updated = await updateFeedPost(editingPost.id, payload);
+    setPosts((prev) => prev.map((post) => (
+      post.id === editingPost.id
+        ? { ...post, ...updated }
+        : post
+    )));
+    setEditingPost(null);
+    return updated;
+  }
+
   async function handleDelete(postId) {
     if (!window.confirm("¿Eliminar esta publicación?")) return;
     await deleteFeedPost(postId);
+    if (editingPost?.id === postId) {
+      setEditingPost(null);
+    }
     setPosts((prev) => prev.filter((p) => p.id !== postId));
   }
 
@@ -1570,6 +1644,7 @@ export default function KlinipFeed({ user }) {
             userName={user?.name || ""}
             profiles={profiles}
             mentionCandidates={mentionCandidates}
+            onEdit={setEditingPost}
             onDelete={handleDelete}
             onReact={handleReact}
             onComment={handleComment}
@@ -1592,8 +1667,19 @@ export default function KlinipFeed({ user }) {
             profiles={profiles}
             userName={user?.name || ""}
             onClose={() => setShowCreate(false)}
-            onCreate={handleCreate}
+            onSubmit={handleCreate}
             hasMfa={!!user?.mfa_enabled}
+          />
+        )}
+        {editingPost && profiles.length > 0 && (
+          <CreatePostModal
+            profiles={profiles}
+            userName={user?.name || ""}
+            onClose={() => setEditingPost(null)}
+            onSubmit={handleEdit}
+            hasMfa={!!user?.mfa_enabled}
+            mode="edit"
+            initialPost={editingPost}
           />
         )}
       </div>

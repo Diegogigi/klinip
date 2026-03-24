@@ -62,6 +62,35 @@ function cleanUiText(value, fallback = "") {
   return cleaned || fallback;
 }
 
+function getDocumentFilename(doc) {
+  return cleanUiText(doc?.filename, doc?.id ? `documento-${doc.id}` : "documento");
+}
+
+function inferDocumentMimeType(filename, fallbackType = "") {
+  const normalized = String(filename || "").toLowerCase();
+  if (fallbackType) return fallbackType;
+  if (normalized.endsWith(".pdf")) return "application/pdf";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".gif")) return "image/gif";
+  if (normalized.endsWith(".bmp")) return "image/bmp";
+  if (normalized.endsWith(".svg")) return "image/svg+xml";
+  return "application/octet-stream";
+}
+
+function buildDocumentShareMessage(doc) {
+  const filename = getDocumentFilename(doc);
+  const typeLabel = cleanUiText(docLabels[doc?.doc_type] || doc?.doc_type || "Documento", "Documento");
+  const center = cleanUiText(doc?.center);
+  const dateLabel = doc?.date ? toLocaleDateOrEmpty(doc.date) : "";
+  const messageParts = [`Te comparto ${typeLabel.toLowerCase()} "${filename}" desde Klinip.`];
+  if (center) messageParts.push(`Centro: ${center}.`);
+  if (dateLabel) messageParts.push(`Fecha: ${dateLabel}.`);
+  messageParts.push("Para adjuntar el archivo real, usa la opción Compartir archivo o descárgalo primero desde Klinip.");
+  return messageParts.join(" ");
+}
+
 function inferViewerKind(doc) {
   const filename = String(doc?.filename || "").toLowerCase();
   if (filename.endsWith(".pdf")) return "pdf";
@@ -97,7 +126,9 @@ export default function Documents() {
   const [viewerKind, setViewerKind] = useState("other");
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerZoom, setViewerZoom] = useState(1);
+  const [viewerBlob, setViewerBlob] = useState(null);
   const [viewerStepUpToken, setViewerStepUpToken] = useState("");
+  const [viewerSharing, setViewerSharing] = useState(false);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [form, setForm] = useState(initialForm);
@@ -128,8 +159,10 @@ export default function Documents() {
     setViewerUrl("");
     setViewerKind("other");
     setViewerZoom(1);
+    setViewerBlob(null);
     setViewerStepUpToken("");
     setViewerLoading(false);
+    setViewerSharing(false);
   };
 
   const handleFormClose = () => {
@@ -284,6 +317,7 @@ export default function Documents() {
       setViewerTarget(doc);
       setViewerKind(inferViewerKind(doc));
       setViewerZoom(1);
+      setViewerBlob(blob);
       setViewerStepUpToken(stepUpToken || "");
       setViewerUrl(url);
       setViewerOpen(true);
@@ -309,7 +343,7 @@ export default function Documents() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = cleanUiText(doc.filename, `documento-${doc.id}`);
+      link.download = getDocumentFilename(doc);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -342,6 +376,93 @@ export default function Documents() {
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setDetailTarget(null);
+  };
+
+  const viewerFilename = useMemo(
+    () => (viewerTarget ? getDocumentFilename(viewerTarget) : ""),
+    [viewerTarget]
+  );
+
+  const viewerShareTitle = useMemo(
+    () => (viewerFilename ? `Klinip | ${viewerFilename}` : "Klinip"),
+    [viewerFilename]
+  );
+
+  const viewerShareMessage = useMemo(
+    () => (viewerTarget ? buildDocumentShareMessage(viewerTarget) : ""),
+    [viewerTarget]
+  );
+
+  const viewerShareFile = useMemo(() => {
+    if (!viewerTarget || !viewerBlob || typeof File === "undefined") return null;
+    return new File([viewerBlob], viewerFilename || `documento-${viewerTarget.id}`, {
+      type: inferDocumentMimeType(viewerFilename, viewerBlob.type),
+      lastModified: Date.now(),
+    });
+  }, [viewerBlob, viewerFilename, viewerTarget]);
+
+  const hasShareSheet = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  const canShareViewerFile = useMemo(() => {
+    if (!viewerShareFile || typeof navigator === "undefined" || typeof navigator.canShare !== "function") {
+      return false;
+    }
+    try {
+      return navigator.canShare({ files: [viewerShareFile] });
+    } catch (_) {
+      return false;
+    }
+  }, [viewerShareFile]);
+
+  const openExternalShareWindow = (url) => {
+    const popup = window.open(url, "_blank", "noopener,noreferrer");
+    if (!popup) {
+      window.location.href = url;
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!viewerTarget || !hasShareSheet) return;
+    setViewerSharing(true);
+    try {
+      if (canShareViewerFile && viewerShareFile) {
+        await navigator.share({
+          title: viewerShareTitle,
+          text: viewerShareMessage,
+          files: [viewerShareFile],
+        });
+        return;
+      }
+      await navigator.share({
+        title: viewerShareTitle,
+        text: viewerShareMessage,
+      });
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        console.error("No se pudo compartir el documento:", err);
+        window.alert("No se pudo abrir el menú de compartir en este dispositivo.");
+      }
+    } finally {
+      setViewerSharing(false);
+    }
+  };
+
+  const handleShortcutShare = (channel) => {
+    if (!viewerTarget) return;
+    const encodedTitle = encodeURIComponent(viewerShareTitle);
+    const encodedMessage = encodeURIComponent(viewerShareMessage);
+
+    if (channel === "email") {
+      window.location.href = `mailto:?subject=${encodedTitle}&body=${encodedMessage}`;
+      return;
+    }
+    if (channel === "whatsapp") {
+      openExternalShareWindow(`https://wa.me/?text=${encodedMessage}`);
+      return;
+    }
+    if (channel === "telegram") {
+      openExternalShareWindow(`https://t.me/share/url?text=${encodedMessage}`);
+    }
   };
 
   const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
@@ -533,7 +654,7 @@ export default function Documents() {
             <div className="document-viewer-header">
               <div>
                 <h3>Visualización de documento</h3>
-                <p>{cleanUiText(viewerTarget.filename, `documento-${viewerTarget.id}`)}</p>
+                <p>{viewerFilename}</p>
               </div>
               <button className="detail-close-btn" type="button" onClick={closeViewer} aria-label="Cerrar">
                 ×
@@ -585,6 +706,53 @@ export default function Documents() {
               >
                 Zoom +
               </button>
+            </div>
+
+            <div className="document-viewer-share">
+              <div className="document-viewer-share-copy">
+                <strong>Compartir documento</strong>
+                <span>
+                  {canShareViewerFile
+                    ? "Usa Compartir archivo para enviarlo por correo, WhatsApp, Telegram u otras apps de tu dispositivo."
+                    : "Correo, WhatsApp y Telegram abren un mensaje con el nombre del documento. Si tu navegador lo permite, también puedes usar Más opciones."}
+                </span>
+              </div>
+              <div className="document-viewer-share-grid">
+                {hasShareSheet ? (
+                  <button
+                    className="secondary-btn document-viewer-share-btn document-viewer-share-btn-system"
+                    type="button"
+                    onClick={handleNativeShare}
+                    disabled={viewerLoading || viewerSharing}
+                  >
+                    {viewerSharing ? "Compartiendo..." : canShareViewerFile ? "Compartir archivo" : "Más opciones"}
+                  </button>
+                ) : null}
+                <button
+                  className="secondary-btn document-viewer-share-btn"
+                  type="button"
+                  onClick={() => handleShortcutShare("email")}
+                  disabled={viewerLoading}
+                >
+                  Correo
+                </button>
+                <button
+                  className="secondary-btn document-viewer-share-btn"
+                  type="button"
+                  onClick={() => handleShortcutShare("whatsapp")}
+                  disabled={viewerLoading}
+                >
+                  WhatsApp
+                </button>
+                <button
+                  className="secondary-btn document-viewer-share-btn"
+                  type="button"
+                  onClick={() => handleShortcutShare("telegram")}
+                  disabled={viewerLoading}
+                >
+                  Telegram
+                </button>
+              </div>
             </div>
 
             <div className="document-viewer-actions">

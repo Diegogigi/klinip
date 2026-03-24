@@ -115,6 +115,7 @@ export const getDocumentFile = api.getDocumentFile;
 // KlinipFeed
 export const getFamilyFeed = api.getFamilyFeed;
 export const createFeedPost = api.createFeedPost;
+export const updateFeedPost = api.updateFeedPost;
 export const deleteFeedPost = api.deleteFeedPost;
 export const reactToPost = api.reactToPost;
 export const removeReaction = api.removeReaction;
