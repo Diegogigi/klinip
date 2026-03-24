@@ -127,8 +127,19 @@ export default function KlinipVoice({ profileId, canEdit }) {
       setResult(data);
       setStage("done");
     } catch (err) {
-      const detail = err?.response?.data?.detail || "Error al procesar el audio. Intenta de nuevo.";
-      setError(detail);
+      let msg;
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        msg = "La consulta fue muy larga para procesar. Intenta con un fragmento más corto.";
+      } else if (!err.response) {
+        msg = "Sin conexión. Verifica tu internet e intenta de nuevo.";
+      } else {
+        const status = err.response.status;
+        if (status === 413) msg = "El audio es muy largo. Intenta con una grabación más corta.";
+        else if (status === 422) msg = "No se detectó voz clara. ¿Hubo ruido en la consulta?";
+        else if (status === 503) msg = "El servicio de transcripción no está disponible. Intenta en unos minutos.";
+        else msg = err.response.data?.detail || "Error al procesar el audio. Intenta de nuevo.";
+      }
+      setError(msg);
       setStage("idle");
     }
   }
