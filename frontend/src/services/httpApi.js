@@ -752,6 +752,15 @@ export async function deletePostComment(postId, commentId) {
   await api.delete(`/feed/posts/${postId}/comments/${commentId}`);
 }
 
+export async function likePostComment(postId, commentId) {
+  const res = await api.post(`/feed/posts/${postId}/comments/${commentId}/like`);
+  return res.data;
+}
+
+export async function unlikePostComment(postId, commentId) {
+  await api.delete(`/feed/posts/${postId}/comments/${commentId}/like`);
+}
+
 export async function uploadPostAttachment(postId, file, attachmentType = "image") {
   const formData = new FormData();
   formData.append("file", file);

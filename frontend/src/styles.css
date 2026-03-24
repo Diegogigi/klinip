@@ -24929,9 +24929,13 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
 .kfeed-ig-comment-heart {
   background: none;
   border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
   cursor: pointer;
   color: #94a3b8;
-  font-size: 0.85rem;
+  font-size: 0.74rem;
+  font-weight: 700;
   padding: 0;
   margin-left: auto;
   line-height: 1;
@@ -24939,6 +24943,7 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   transition: color 0.15s;
 }
 .kfeed-ig-comment-heart:hover { color: #ef4444; }
+.kfeed-ig-comment-heart.is-active { color: #ef4444; }
 .kfeed-comment-thread {
   display: flex;
   flex-direction: column;
@@ -25364,6 +25369,8 @@ body.theme-dark .kfeed-comment-emoji-btn:hover { background: #334155; }
 body.theme-dark .kfeed-ig-comment-reply,
 body.theme-dark .kfeed-comment-replying { color: #cbd5e1; }
 body.theme-dark .kfeed-comment-replying button { color: #93c5fd; }
+body.theme-dark .kfeed-ig-comment-heart { color: #94a3b8; }
+body.theme-dark .kfeed-ig-comment-heart.is-active { color: #fb7185; }
 body.theme-dark .kfeed-comment-mentions-menu {
   background: #0f172a;
   border-color: #334155;

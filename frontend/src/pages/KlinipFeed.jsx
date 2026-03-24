@@ -8,6 +8,8 @@ import {
   removeReaction,
   addPostComment,
   deletePostComment,
+  likePostComment,
+  unlikePostComment,
   uploadPostAttachment,
   getHealthProfiles,
   getProfileCaregivers,
@@ -384,6 +386,7 @@ function CommentThreadItem({
   currentUserId,
   postId,
   onReply,
+  onToggleLike,
   onDeleteComment,
 }) {
   return (
@@ -415,10 +418,16 @@ function CommentThreadItem({
             )}
           </div>
         </div>
-        <button type="button" className="kfeed-ig-comment-heart" aria-label="Me gusta comentario">
+        <button
+          type="button"
+          className={`kfeed-ig-comment-heart ${comment.my_like ? "is-active" : ""}`}
+          aria-label={comment.my_like ? "Quitar me gusta del comentario" : "Dar me gusta al comentario"}
+          onClick={() => onToggleLike(postId, comment.id, comment.my_like)}
+        >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
           </svg>
+          {comment.likes_count > 0 && <span>{comment.likes_count}</span>}
         </button>
       </div>
       {(comment.replies || []).length > 0 && (
@@ -430,6 +439,7 @@ function CommentThreadItem({
               currentUserId={currentUserId}
               postId={postId}
               onReply={onReply}
+              onToggleLike={onToggleLike}
               onDeleteComment={onDeleteComment}
             />
           ))}
@@ -445,6 +455,7 @@ function CommentsSection({
   userName,
   mentionCandidates = [],
   onComment,
+  onToggleLike,
   onDeleteComment,
 }) {
   const [text, setCommentText] = useState("");
@@ -528,6 +539,7 @@ function CommentsSection({
               currentUserId={currentUserId}
               postId={post.id}
               onReply={handleReply}
+              onToggleLike={onToggleLike}
               onDeleteComment={onDeleteComment}
             />
           ))}
@@ -691,6 +703,7 @@ function PostCard({
   onDelete,
   onReact,
   onComment,
+  onToggleCommentLike,
   onDeleteComment,
 }) {
   const [showComments, setShowComments] = useState(false);
@@ -807,6 +820,7 @@ function PostCard({
           userName={userName}
           mentionCandidates={mentionCandidates}
           onComment={onComment}
+          onToggleLike={onToggleCommentLike}
           onDeleteComment={onDeleteComment}
         />
       )}
@@ -1425,6 +1439,35 @@ export default function KlinipFeed({ user }) {
     ));
   }
 
+  async function handleToggleCommentLike(postId, commentId, isLiked) {
+    let response = null;
+    if (isLiked) {
+      await unlikePostComment(postId, commentId);
+      response = { my_like: false };
+    } else {
+      response = await likePostComment(postId, commentId);
+    }
+
+    setPosts((prev) => prev.map((p) => {
+      if (p.id !== postId) return p;
+      return {
+        ...p,
+        comments: (p.comments || []).map((comment) => {
+          if (comment.id !== commentId) return comment;
+          const nextLiked = typeof response?.my_like === "boolean" ? response.my_like : !comment.my_like;
+          const nextCount = typeof response?.likes_count === "number"
+            ? response.likes_count
+            : Math.max(0, (comment.likes_count || 0) + (nextLiked ? 1 : -1));
+          return {
+            ...comment,
+            my_like: nextLiked,
+            likes_count: nextCount,
+          };
+        }),
+      };
+    }));
+  }
+
   async function handleDeleteComment(postId, commentId) {
     await deletePostComment(postId, commentId);
     setPosts((prev) => prev.map((p) =>
@@ -1530,6 +1573,7 @@ export default function KlinipFeed({ user }) {
             onDelete={handleDelete}
             onReact={handleReact}
             onComment={handleComment}
+            onToggleCommentLike={handleToggleCommentLike}
             onDeleteComment={handleDeleteComment}
           />
         ))}

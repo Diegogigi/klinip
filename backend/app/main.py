@@ -10811,6 +10811,7 @@ def _build_chat_context_base(
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
     profile_notes: list[models.ProfileNote] = []
+    feed_posts: list[models.FeedPost] = []
     family_access = (
         _build_family_access_context(
             db,
@@ -10884,6 +10885,24 @@ def _build_chat_context_base(
                 .filter(models.ProfileNote.profile_id == profile.id)
                 .order_by(models.ProfileNote.updated_at.desc(), models.ProfileNote.created_at.desc())
                 .limit(6)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+    if modules.get("feed"):
+        _family_user_ids_for_feed = _get_family_user_ids(db, current_user)
+        feed_posts = _safe_ai_context_query(
+            db,
+            module_name="feed-posts",
+            loader=lambda: (
+                db.query(models.FeedPost)
+                .filter(models.FeedPost.user_id.in_(_family_user_ids_for_feed))
+                .order_by(models.FeedPost.created_at.desc())
+                .limit(10)
                 .all()
             ),
             default_value=[],
@@ -11250,6 +11269,7 @@ def _build_chat_context_base(
             "count": len((family_context or {}).get("profiles") or []),
             "enabled": bool(modules.get("family")) and bool(family_access.get("available")) and bool(family_context),
         },
+        {"key": "feed", "label": "KlinipFeed", "count": len(feed_posts), "enabled": bool(modules.get("feed")) and bool(feed_posts)},
     ]
 
     context = {
@@ -11301,6 +11321,7 @@ def _build_chat_context_base(
         "health_alerts": [],
         "profile_health_features": None,
         "family_context": family_context,
+        "feed_posts": feed_posts,
     }
     timing_info = {
         "db_load_ms": db_load_ms,
@@ -11666,6 +11687,18 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             }
             for item in (context.get("conversation_summaries") or [])[:conversation_summaries_limit]
         ]
+    if enabled_modules.get("feed") and context.get("feed_posts"):
+        payload["feed_posts"] = [
+            {
+                "author": (getattr(getattr(item, "user", None), "name", None) or ""),
+                "post_type": str(item.post_type or "general"),
+                "content": _clip_text(item.content or "", 300),
+                "reactions_count": len(getattr(item, "reactions", None) or []),
+                "comments_count": len(getattr(item, "comments", None) or []),
+                "created_at": _safe_iso_local(item.created_at, timezone_name),
+            }
+            for item in (context.get("feed_posts") or [])[:10]
+        ]
     payload["brief_profile_summary"] = _clip_text(payload.get("brief_profile_summary") or "", brief_summary_chars)
     # Texto OCR extraído del documento adjunto directamente en el chat
     chat_attachment_text = (context.get("chat_attachment_text") or "").strip()
@@ -11723,6 +11756,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "31. Si existe 'conversation_summaries', úsalo como memoria breve para continuidad, pero nunca por encima de datos estructurados actuales.\n"
         "32. Si existe 'profile_notes', úsalas como contexto declarado por el usuario para pendientes, recordatorios, objetivos o temas a resolver. No las presentes como hechos clínicos confirmados si la nota solo expresa una intención o tarea.\n"
         "33. No afirmes que guardaste, creaste, registraste o modificaste datos dentro de Klinip a menos que esa acción haya sido confirmada por el sistema. Si el usuario pide guardar algo y no hay confirmación del sistema, limita tu respuesta a redactar o preparar el contenido.\n"
+        "34. Si existe 'feed_posts' en el contexto, usalo para responder preguntas sobre publicaciones recientes de la familia en KlinipFeed: quién publicó, qué compartió, cuándo, tipo de publicación (general, examen, consulta, medicamento) y nivel de interacción (reacciones y comentarios). No inventes publicaciones si no existen en el contexto.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -15693,6 +15727,24 @@ def detect_chat_intent(message: str | None) -> str:
     ]
     if any(token in normalized for token in appointment_tokens):
         return "citas"
+    feed_tokens = [
+        "feed",
+        "klinipfeed",
+        "publicacion",
+        "publicaciones",
+        "publico",
+        "publico en el feed",
+        "compartio",
+        "compartió",
+        "compartieron",
+        "noticias",
+        "actualizacion familiar",
+        "actualización familiar",
+        "que hay de nuevo",
+        "novedades",
+    ]
+    if any(token in normalized for token in feed_tokens):
+        return "feed"
     return "general"
 
 
@@ -15716,6 +15768,8 @@ def select_context_modules(intent: str) -> dict:
         base_modules["appointments"] = True
     elif intent == "familiar":
         base_modules["family"] = True
+    elif intent == "feed":
+        base_modules["feed"] = True
     return base_modules
 
 
@@ -17967,7 +18021,8 @@ def _parse_comment_mentions(raw_value) -> list[int]:
     return mention_ids
 
 
-def _serialize_comment(comment: models.PostComment) -> dict:
+def _serialize_comment(comment: models.PostComment, current_user_id: int | None = None) -> dict:
+    likes = list(getattr(comment, "likes", []) or [])
     return {
         "id": comment.id,
         "post_id": comment.post_id,
@@ -17976,6 +18031,8 @@ def _serialize_comment(comment: models.PostComment) -> dict:
         "user_avatar_url": _get_user_avatar_url(comment.user),
         "parent_comment_id": comment.parent_comment_id,
         "mention_user_ids": _parse_comment_mentions(getattr(comment, "mentions_json", "")),
+        "likes_count": len(likes),
+        "my_like": any(like.user_id == current_user_id for like in likes) if current_user_id is not None else False,
         "content": comment.content,
         "created_at": comment.created_at.strftime("%Y-%m-%dT%H:%M:%S") if comment.created_at else None,
     }
@@ -18058,7 +18115,7 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
             for a in post.attachments
         ],
         "comments": [
-            _serialize_comment(c)
+            _serialize_comment(c, current_user_id)
             for c in sorted(post.comments, key=lambda x: (x.created_at or datetime.min, x.id or 0))
         ],
         "created_at": post.created_at.strftime("%Y-%m-%dT%H:%M:%S") if post.created_at else None,
@@ -18424,7 +18481,7 @@ def get_post_comments(
         .order_by(models.PostComment.created_at, models.PostComment.id)
         .all()
     )
-    return [_serialize_comment(c) for c in comments]
+    return [_serialize_comment(c, current_user.id) for c in comments]
 
 
 @app.post("/feed/posts/{post_id}/comments", status_code=201)
@@ -18474,7 +18531,7 @@ def add_comment(
         mention_user_ids,
         parent_comment,
     )
-    return _serialize_comment(comment)
+    return _serialize_comment(comment, current_user.id)
 
 
 @app.delete("/feed/posts/{post_id}/comments/{comment_id}", status_code=204)
@@ -18505,6 +18562,70 @@ def delete_comment(
     )
     db.delete(comment)
     db.commit()
+    return None
+
+
+@app.post("/feed/posts/{post_id}/comments/{comment_id}/like", status_code=201)
+def like_comment(
+    post_id: int,
+    comment_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
+    comment = db.query(models.PostComment).filter(
+        models.PostComment.id == comment_id,
+        models.PostComment.post_id == post_id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comentario no encontrado")
+
+    existing = db.query(models.PostCommentLike).filter(
+        models.PostCommentLike.comment_id == comment_id,
+        models.PostCommentLike.user_id == current_user.id,
+    ).first()
+    if existing:
+        likes_count = db.query(func.count(models.PostCommentLike.id)).filter(
+            models.PostCommentLike.comment_id == comment_id
+        ).scalar() or 0
+        return {"likes_count": int(likes_count), "my_like": True}
+
+    db.add(models.PostCommentLike(comment_id=comment_id, user_id=current_user.id))
+    db.commit()
+    likes_count = db.query(func.count(models.PostCommentLike.id)).filter(
+        models.PostCommentLike.comment_id == comment_id
+    ).scalar() or 0
+    return {"likes_count": int(likes_count), "my_like": True}
+
+
+@app.delete("/feed/posts/{post_id}/comments/{comment_id}/like", status_code=204)
+def unlike_comment(
+    post_id: int,
+    comment_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user=Depends(auth.get_current_user),
+):
+    post = db.query(models.FeedPost).filter(models.FeedPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post no encontrado")
+    _ensure_feed_post_access(db, current_user, post)
+    comment = db.query(models.PostComment).filter(
+        models.PostComment.id == comment_id,
+        models.PostComment.post_id == post_id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comentario no encontrado")
+
+    existing = db.query(models.PostCommentLike).filter(
+        models.PostCommentLike.comment_id == comment_id,
+        models.PostCommentLike.user_id == current_user.id,
+    ).first()
+    if existing:
+        db.delete(existing)
+        db.commit()
     return None
 
 

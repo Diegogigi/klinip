@@ -901,6 +901,8 @@ class PostCommentOut(BaseModel):
     user_avatar_url: Optional[str] = ""
     parent_comment_id: Optional[int] = None
     mention_user_ids: list[int] = []
+    likes_count: int = 0
+    my_like: bool = False
     content: str
     created_at: datetime
 

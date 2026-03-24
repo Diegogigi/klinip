@@ -723,6 +723,20 @@ class PostComment(Base):
 
     post = relationship("FeedPost", back_populates="comments")
     user = relationship("User")
+    likes = relationship("PostCommentLike", back_populates="comment", cascade="all, delete-orphan")
+
+
+class PostCommentLike(Base):
+    __tablename__ = "post_comment_likes"
+    __table_args__ = (UniqueConstraint("comment_id", "user_id", name="uq_post_comment_like_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    comment_id = Column(Integer, ForeignKey("post_comments.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    comment = relationship("PostComment", back_populates="likes")
+    user = relationship("User")
 
 
 class PostMention(Base):
