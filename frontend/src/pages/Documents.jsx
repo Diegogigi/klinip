@@ -401,10 +401,13 @@ export default function Documents() {
     });
   }, [viewerBlob, viewerFilename, viewerTarget]);
 
-  const hasShareSheet = typeof navigator !== "undefined" && typeof navigator.share === "function";
-
   const canShareViewerFile = useMemo(() => {
-    if (!viewerShareFile || typeof navigator === "undefined" || typeof navigator.canShare !== "function") {
+    if (
+      !viewerShareFile ||
+      typeof navigator === "undefined" ||
+      typeof navigator.share !== "function" ||
+      typeof navigator.canShare !== "function"
+    ) {
       return false;
     }
     try {
@@ -414,28 +417,14 @@ export default function Documents() {
     }
   }, [viewerShareFile]);
 
-  const openExternalShareWindow = (url) => {
-    const popup = window.open(url, "_blank", "noopener,noreferrer");
-    if (!popup) {
-      window.location.href = url;
-    }
-  };
-
   const handleNativeShare = async () => {
-    if (!viewerTarget || !hasShareSheet) return;
+    if (!viewerTarget || !canShareViewerFile || !viewerShareFile) return;
     setViewerSharing(true);
     try {
-      if (canShareViewerFile && viewerShareFile) {
-        await navigator.share({
-          title: viewerShareTitle,
-          text: viewerShareMessage,
-          files: [viewerShareFile],
-        });
-        return;
-      }
       await navigator.share({
         title: viewerShareTitle,
         text: viewerShareMessage,
+        files: [viewerShareFile],
       });
     } catch (err) {
       if (err?.name !== "AbortError") {
@@ -444,24 +433,6 @@ export default function Documents() {
       }
     } finally {
       setViewerSharing(false);
-    }
-  };
-
-  const handleShortcutShare = (channel) => {
-    if (!viewerTarget) return;
-    const encodedTitle = encodeURIComponent(viewerShareTitle);
-    const encodedMessage = encodeURIComponent(viewerShareMessage);
-
-    if (channel === "email") {
-      window.location.href = `mailto:?subject=${encodedTitle}&body=${encodedMessage}`;
-      return;
-    }
-    if (channel === "whatsapp") {
-      openExternalShareWindow(`https://wa.me/?text=${encodedMessage}`);
-      return;
-    }
-    if (channel === "telegram") {
-      openExternalShareWindow(`https://t.me/share/url?text=${encodedMessage}`);
     }
   };
 
@@ -710,47 +681,28 @@ export default function Documents() {
 
             <div className="document-viewer-share">
               <div className="document-viewer-share-copy">
-                <strong>Compartir documento</strong>
+                <span className="document-viewer-share-kicker">Salida segura</span>
+                <strong>Compartir archivo</strong>
                 <span>
                   {canShareViewerFile
-                    ? "Usa Compartir archivo para enviarlo por correo, WhatsApp, Telegram u otras apps de tu dispositivo."
-                    : "Correo, WhatsApp y Telegram abren un mensaje con el nombre del documento. Si tu navegador lo permite, también puedes usar Más opciones."}
+                    ? "Abre el menú nativo de tu dispositivo para enviar este archivo directamente."
+                    : "Este navegador no permite compartir el archivo desde el visor. Puedes descargarlo y enviarlo manualmente."}
                 </span>
               </div>
-              <div className="document-viewer-share-grid">
-                {hasShareSheet ? (
-                  <button
-                    className="secondary-btn document-viewer-share-btn document-viewer-share-btn-system"
-                    type="button"
-                    onClick={handleNativeShare}
-                    disabled={viewerLoading || viewerSharing}
-                  >
-                    {viewerSharing ? "Compartiendo..." : canShareViewerFile ? "Compartir archivo" : "Más opciones"}
-                  </button>
-                ) : null}
+              <div className="document-viewer-share-actions">
                 <button
-                  className="secondary-btn document-viewer-share-btn"
+                  className="secondary-btn document-viewer-share-btn document-viewer-share-cta"
                   type="button"
-                  onClick={() => handleShortcutShare("email")}
-                  disabled={viewerLoading}
+                  onClick={handleNativeShare}
+                  disabled={viewerLoading || viewerSharing || !canShareViewerFile}
                 >
-                  Correo
-                </button>
-                <button
-                  className="secondary-btn document-viewer-share-btn"
-                  type="button"
-                  onClick={() => handleShortcutShare("whatsapp")}
-                  disabled={viewerLoading}
-                >
-                  WhatsApp
-                </button>
-                <button
-                  className="secondary-btn document-viewer-share-btn"
-                  type="button"
-                  onClick={() => handleShortcutShare("telegram")}
-                  disabled={viewerLoading}
-                >
-                  Telegram
+                  <span className="document-viewer-share-cta-copy">
+                    <strong>{viewerSharing ? "Compartiendo..." : "Compartir archivo"}</strong>
+                    <span>{canShareViewerFile ? "Usar menú del dispositivo" : "No disponible en este navegador"}</span>
+                  </span>
+                  <span className="document-viewer-share-cta-mark" aria-hidden="true">
+                    +
+                  </span>
                 </button>
               </div>
             </div>
