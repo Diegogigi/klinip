@@ -819,7 +819,7 @@ export default function Dashboard({ user }) {
   return (
     <section className="home-editorial">
       <div className="home-editorial-layout">
-        <div className="home-editorial-left">
+        <div className="home-editorial-top">
           <article className="home-greeting-card home-summary-card">
             <div className="home-greeting-copy">
               <p className="home-greeting-eyebrow">Resumen personal</p>
@@ -880,7 +880,13 @@ export default function Dashboard({ user }) {
               </button>
             </div>
           </article>
+        </div>
 
+        <div className="home-editorial-voice">
+          <KlinipVoice profileId={activeProfile?.id} canEdit={canEditActiveProfile} />
+        </div>
+
+        <div className="home-editorial-left">
           {isReadOnlyProfile ? (
             <div className="card home-readonly-card">
               <div className="alert-info">
@@ -1045,8 +1051,6 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-right">
-          <KlinipVoice profileId={activeProfile?.id} canEdit={canEditActiveProfile} />
-
           <article className="home-panel-card home-notes-card">
             <div className="home-panel-head">
               <div>

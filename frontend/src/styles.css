@@ -14289,15 +14289,39 @@ body.theme-dark .home-ops-action-icon {
 .home-editorial-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.42fr) 360px;
-  gap: 1.3rem;
+  column-gap: 1.3rem;
+  row-gap: 1.3rem;
   align-items: start;
 }
 
+.home-editorial-top,
+.home-editorial-voice,
 .home-editorial-left,
 .home-editorial-right {
   display: flex;
   flex-direction: column;
   gap: 1.3rem;
+  min-width: 0;
+}
+
+.home-editorial-top {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.home-editorial-voice {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.home-editorial-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.home-editorial-right {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .home-panel-card {
@@ -15695,13 +15719,21 @@ body.theme-dark .home-suggestion-icon {
     grid-template-columns: 1fr;
   }
 
+  .home-editorial-top,
+  .home-editorial-voice,
+  .home-editorial-left,
   .home-editorial-right {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .home-editorial-right {
+    display: flex;
+    grid-template-columns: none;
   }
 
   .home-editorial-right .home-panel-card:last-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .home-radar-grid {
@@ -15720,22 +15752,14 @@ body.theme-dark .home-suggestion-icon {
     margin-right: 0;
   }
 
-  .home-editorial-layout {
-    display: flex;
-    flex-direction: column;
-  }
-
   .home-editorial-layout,
+  .home-editorial-top,
+  .home-editorial-voice,
   .home-editorial-left,
   .home-editorial-right {
     grid-template-columns: 1fr;
     width: 100%;
     min-width: 0;
-  }
-
-  .home-editorial-left,
-  .home-editorial-right {
-    display: contents;
   }
 
   .home-editorial-layout,
@@ -15750,38 +15774,6 @@ body.theme-dark .home-suggestion-icon {
   .home-suggestions-list {
     width: 100%;
     min-width: 0;
-  }
-
-  .home-summary-card {
-    order: 1;
-  }
-
-  .home-voice-card {
-    order: 2;
-  }
-
-  .home-readonly-card {
-    order: 3;
-  }
-
-  .home-actions-card {
-    order: 4;
-  }
-
-  .home-radar-card {
-    order: 5;
-  }
-
-  .home-suggestions-card {
-    order: 6;
-  }
-
-  .home-upcoming-card {
-    order: 7;
-  }
-
-  .home-notes-card {
-    order: 8;
   }
 
   .home-greeting-card {
@@ -15895,6 +15887,8 @@ body.theme-dark .home-suggestion-icon {
     padding-bottom: 0.3rem;
   }
 
+  .home-editorial-top,
+  .home-editorial-voice,
   .home-editorial-left,
   .home-editorial-right {
     gap: 0.9rem;
@@ -16137,6 +16131,8 @@ body.theme-dark .home-suggestion-icon {
 
   .home-editorial,
   .home-editorial-layout,
+  .home-editorial-top,
+  .home-editorial-voice,
   .home-editorial-left,
   .home-editorial-right {
     gap: 0.78rem;
