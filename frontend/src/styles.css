@@ -14896,18 +14896,88 @@ body.theme-dark .home-ops-action-icon {
 }
 
 .home-voice-btn {
+  width: 100%;
+  min-height: 56px;
   border: none;
-  background: linear-gradient(135deg, #44c4ff 0%, #2563eb 58%, #1d4ed8 100%);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #47b5f5 0%, #4f7de8 42%, #4e18f0 100%);
   color: #ffffff;
+  box-shadow: 0 16px 32px rgba(79, 125, 232, 0.28);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.62rem;
+  text-align: center;
 }
 
 .home-voice-btn:hover {
-  background: linear-gradient(135deg, #44c4ff 0%, #1d4ed8 58%, #1e40af 100%);
+  background: linear-gradient(90deg, #57bef8 0%, #5a87ee 42%, #5b27f3 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 20px 36px rgba(79, 125, 232, 0.32);
 }
 
-.home-voice-btn:disabled {
-  opacity: 0.72;
+.home-note-primary.home-voice-btn:disabled {
+  opacity: 1;
   cursor: not-allowed;
+}
+
+.home-voice-btn-icon {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  flex-shrink: 0;
+}
+
+.home-voice-btn-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-voice-btn-label {
+  line-height: 1;
+}
+
+.home-voice-card {
+  border-color: #d9d2ff;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfaff 100%);
+  box-shadow: 0 18px 34px rgba(117, 91, 225, 0.08);
+}
+
+.home-voice-card::before {
+  background: linear-gradient(135deg, rgba(143, 130, 255, 0.26), rgba(129, 212, 255, 0.12), rgba(157, 119, 255, 0.18));
+}
+
+.home-voice-card .home-panel-head {
+  margin-bottom: 0.9rem;
+}
+
+.home-voice-card .home-panel-title {
+  font-size: 0.9rem;
+  letter-spacing: 0.14em;
+  color: #0f1f5a;
+}
+
+.home-voice-card .home-panel-subtitle {
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  color: #57657f;
+}
+
+.home-voice-actions {
+  display: flex;
+  width: 100%;
 }
 
 .home-note-primary:disabled,
@@ -15139,6 +15209,33 @@ body.theme-dark .status-badge-label {
 
 body.theme-dark .status-badge-value {
   color: #f0fdf4;
+}
+
+body.theme-dark .home-voice-card {
+  border-color: #3d3f77;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(19, 24, 52, 0.98) 100%);
+  box-shadow: 0 22px 40px rgba(2, 6, 23, 0.34);
+}
+
+body.theme-dark .home-voice-card::before {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.3), rgba(96, 165, 250, 0.16), rgba(196, 181, 253, 0.22));
+}
+
+body.theme-dark .home-voice-card .home-panel-title {
+  color: #eef2ff;
+}
+
+body.theme-dark .home-voice-card .home-panel-subtitle {
+  color: #c7d2fe;
+}
+
+body.theme-dark .home-voice-btn {
+  background: linear-gradient(90deg, #47b5f5 0%, #4f7de8 42%, #5b27f3 100%);
+  box-shadow: 0 18px 34px rgba(79, 70, 229, 0.3);
+}
+
+body.theme-dark .home-voice-btn:hover {
+  background: linear-gradient(90deg, #57bef8 0%, #5a87ee 42%, #6a38f5 100%);
 }
 
 body.theme-dark .home-panel-title,
@@ -15474,6 +15571,35 @@ body.theme-dark .home-suggestion-icon {
     font-size: 1.35rem;
   }
 
+  .home-voice-card {
+    padding: 1rem 0.95rem;
+    border-radius: 18px;
+  }
+
+  .home-voice-card .home-panel-head {
+    margin-bottom: 0.72rem;
+  }
+
+  .home-voice-card .home-panel-title {
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+  }
+
+  .home-voice-card .home-panel-subtitle {
+    font-size: 0.86rem;
+  }
+
+  .home-voice-btn {
+    min-height: 50px;
+    font-size: 0.8rem;
+    gap: 0.56rem;
+  }
+
+  .home-voice-btn-icon {
+    width: 26px;
+    height: 26px;
+  }
+
   .home-panel-card {
     padding: 0.95rem;
     border-radius: 18px;
@@ -15711,6 +15837,38 @@ body.theme-dark .home-suggestion-icon {
   .home-greeting-profile {
     justify-content: flex-start;
     padding-right: 0.62rem;
+  }
+
+  .home-voice-card {
+    padding: 0.88rem 0.82rem;
+    border-radius: 16px;
+  }
+
+  .home-voice-card .home-panel-title {
+    font-size: 0.76rem;
+    letter-spacing: 0.11em;
+  }
+
+  .home-voice-card .home-panel-subtitle {
+    font-size: 0.8rem;
+    line-height: 1.45;
+  }
+
+  .home-voice-btn {
+    min-height: 46px;
+    font-size: 0.78rem;
+    box-shadow: 0 12px 24px rgba(122, 136, 238, 0.22);
+    gap: 0.48rem;
+  }
+
+  .home-voice-btn-icon {
+    width: 24px;
+    height: 24px;
+  }
+
+  .home-voice-btn-icon svg {
+    width: 14px;
+    height: 14px;
   }
 
   .home-panel-card {

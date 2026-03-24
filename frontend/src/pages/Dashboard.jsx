@@ -197,6 +197,15 @@ function renderIcon(name) {
           <path d="M12 16v-4M12 8h.01" />
         </svg>
       );
+    case "microphone":
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="9" y="3" width="6" height="11" rx="3" />
+          <path d="M19 11a7 7 0 0 1-14 0" />
+          <line x1="12" y1="18" x2="12" y2="21" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+        </svg>
+      );
     default:
       return (
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -1034,16 +1043,19 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-right">
-          <article className="home-panel-card">
+          <article className="home-panel-card home-voice-card">
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Klinip Voice</h2>
                 <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
               </div>
             </div>
-            <div className="home-notes-list">
+            <div className="home-voice-actions">
               <button type="button" className="home-note-primary home-voice-btn" disabled>
-                Iniciar grabación
+                <span className="home-voice-btn-icon" aria-hidden="true">
+                  {renderIcon("microphone")}
+                </span>
+                <span className="home-voice-btn-label">Iniciar grabación</span>
               </button>
             </div>
           </article>
