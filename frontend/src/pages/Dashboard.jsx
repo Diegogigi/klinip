@@ -13,7 +13,9 @@ import {
   getMedications,
   getProfileNotes,
   updateProfileNote,
+  processVoiceSession,
 } from "../api";
+import KlinipVoice from "../components/KlinipVoice";
 import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
@@ -880,7 +882,7 @@ export default function Dashboard({ user }) {
           </article>
 
           {isReadOnlyProfile ? (
-            <div className="card">
+            <div className="card home-readonly-card">
               <div className="alert-info">
                 <p>
                   <strong>Perfil en modo lectura.</strong> Puedes revisar el resumen y los registros, pero no crear ni editar elementos desde Inicio.
@@ -952,7 +954,7 @@ export default function Dashboard({ user }) {
             </div>
           </article>
 
-          <article className="home-panel-card">
+          <article className="home-panel-card home-suggestions-card">
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Sugerencias</h2>
@@ -1043,24 +1045,9 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-right">
-          <article className="home-panel-card home-voice-card">
-            <div className="home-panel-head">
-              <div>
-                <h2 className="home-panel-title">Klinip Voice</h2>
-                <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
-              </div>
-            </div>
-            <div className="home-voice-actions">
-              <button type="button" className="home-note-primary home-voice-btn" disabled>
-                <span className="home-voice-btn-icon" aria-hidden="true">
-                  {renderIcon("microphone")}
-                </span>
-                <span className="home-voice-btn-label">Iniciar grabación</span>
-              </button>
-            </div>
-          </article>
+          <KlinipVoice profileId={activeProfile?.id} canEdit={canEditActiveProfile} />
 
-          <article className="home-panel-card">
+          <article className="home-panel-card home-notes-card">
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">{"Notas r\u00E1pidas"}</h2>
