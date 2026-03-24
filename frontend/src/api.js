@@ -127,3 +127,6 @@ export const unlikePostComment = api.unlikePostComment;
 export const uploadPostAttachment = api.uploadPostAttachment;
 export const getPostAttachmentUrl = api.getPostAttachmentUrl;
 export const uploadHealthProfileAvatar = api.uploadHealthProfileAvatar;
+
+// Klinip Voice
+export const processVoiceSession = api.processVoiceSession;
