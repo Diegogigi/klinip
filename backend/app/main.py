@@ -7412,6 +7412,133 @@ def _medication_insights(medications: list[models.Medication], tz_name: str) -> 
     }
 
 
+def _voice_indication_type_key(value) -> str:
+    raw = str(value or "").strip().lower()
+    return raw if raw in {"medicamento", "control", "examen", "dieta", "ejercicio", "otro"} else "otro"
+
+
+def _voice_indications_to_ai_list(
+    items: list | None,
+    *,
+    limit: int = 4,
+    text_chars: int = 180,
+) -> list[dict]:
+    rows: list[dict] = []
+    for raw in items or []:
+        if len(rows) >= max(1, limit):
+            break
+        if isinstance(raw, dict):
+            text = _clip_text(
+                str(
+                    raw.get("texto")
+                    or raw.get("text")
+                    or raw.get("descripcion")
+                    or raw.get("description")
+                    or ""
+                ),
+                text_chars,
+            )
+            if not text:
+                continue
+            rows.append(
+                {
+                    "texto": text,
+                    "tipo": _voice_indication_type_key(raw.get("tipo")),
+                    "recordatorio_sugerido": bool(raw.get("recordatorio_sugerido")),
+                }
+            )
+            continue
+        text = _clip_text(str(raw or ""), text_chars)
+        if not text:
+            continue
+        rows.append(
+            {
+                "texto": text,
+                "tipo": "otro",
+                "recordatorio_sugerido": False,
+            }
+        )
+    return rows
+
+
+def _voice_session_to_ai_dict(
+    item: models.VoiceSession | None,
+    tz_name: str,
+    *,
+    technical_chars: int = 360,
+    simple_chars: int = 240,
+    indications_limit: int = 4,
+) -> dict | None:
+    if not item:
+        return None
+    indications = _voice_indications_to_ai_list(
+        getattr(item, "indicaciones", None),
+        limit=indications_limit,
+        text_chars=max(120, min(220, simple_chars)),
+    )
+    return {
+        "session_id": int(getattr(item, "id", 0) or 0),
+        "created_at": _safe_iso_local(getattr(item, "created_at", None), tz_name),
+        "transcripcion_tecnica": _clip_text(getattr(item, "transcripcion_tecnica", "") or "", technical_chars),
+        "version_simple": _clip_text(getattr(item, "version_simple", "") or "", simple_chars),
+        "indicaciones": indications,
+        "indicaciones_count": len(getattr(item, "indicaciones", None) or []),
+        "shared": bool(getattr(item, "compartido_en", None) or getattr(item, "link_seguro", None)),
+        "compartido_en": _safe_iso_local(getattr(item, "compartido_en", None), tz_name),
+        "link_expira_en": _safe_iso_local(getattr(item, "link_expira_en", None), tz_name),
+    }
+
+
+def _voice_session_insights(sessions: list[models.VoiceSession], tz_name: str) -> dict:
+    indication_types = ["medicamento", "control", "examen", "dieta", "ejercicio", "otro"]
+    if not sessions:
+        return {
+            "last_created": None,
+            "last_shared": None,
+            "total_sessions": 0,
+            "sessions_with_simple_version": 0,
+            "shared_sessions": 0,
+            "total_indications": 0,
+            "counts_by_indication_type": {key: 0 for key in indication_types},
+        }
+
+    def _ts(value: datetime | None) -> float:
+        localized = _ai_dt_in_tz(value, tz_name)
+        return localized.timestamp() if localized else float("-inf")
+
+    counts_by_type = {key: 0 for key in indication_types}
+    shared_sessions = 0
+    total_indications = 0
+    sessions_with_simple_version = 0
+    last_shared = None
+
+    for session in sessions:
+        if (getattr(session, "version_simple", "") or "").strip():
+            sessions_with_simple_version += 1
+        if getattr(session, "compartido_en", None) or getattr(session, "link_seguro", None):
+            shared_sessions += 1
+        if getattr(session, "compartido_en", None):
+            if not last_shared or _ts(getattr(session, "compartido_en", None)) > _ts(getattr(last_shared, "compartido_en", None)):
+                last_shared = session
+        session_indications = getattr(session, "indicaciones", None) or []
+        total_indications += len(session_indications)
+        for item in session_indications:
+            item_type = _voice_indication_type_key(item.get("tipo") if isinstance(item, dict) else "otro")
+            counts_by_type[item_type] += 1
+
+    with_created = [item for item in sessions if getattr(item, "created_at", None)]
+    last_created = max(with_created, key=lambda item: _ts(getattr(item, "created_at", None)), default=None)
+    return {
+        "last_created": _voice_session_to_ai_dict(last_created, tz_name, technical_chars=220, simple_chars=180, indications_limit=3),
+        "last_shared": _voice_session_to_ai_dict(last_shared, tz_name, technical_chars=180, simple_chars=160, indications_limit=2),
+        "total_sessions": len(sessions),
+        "sessions_with_simple_version": sessions_with_simple_version,
+        "shared_sessions": shared_sessions,
+        "total_indications": total_indications,
+        "counts_by_indication_type": counts_by_type,
+    }
+
+
 def _sanitize_ai_reply(text: str) -> str:
     if not text:
         return ""
@@ -10247,6 +10374,13 @@ def _ai_context_bundle_for_profile(
         .all()
     )
     medications = _attach_medication_adherence(db, medications, current_user)
+    voice_sessions = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.profile_id == profile.id)
+        .order_by(models.VoiceSession.created_at.desc(), models.VoiceSession.id.desc())
+        .limit(6)
+        .all()
+    )
     external_records = (
         db.query(models.ExternalClinicalRecord)
         .filter(models.ExternalClinicalRecord.profile_id == profile.id)
@@ -10296,6 +10430,7 @@ def _ai_context_bundle_for_profile(
     appointment_insights = _appointment_insights(appointments, timezone_name)
     document_insights = _document_insights(documents, timezone_name)
     medication_insights = _medication_insights(medications, timezone_name)
+    voice_session_insights = _voice_session_insights(voice_sessions, timezone_name)
     recent_conversations = _ai_recent_conversation_context(
         db,
         profile_id=profile.id,
@@ -10337,10 +10472,11 @@ def _ai_context_bundle_for_profile(
         {"key": "documents", "label": "Documentos", "count": len(documents), "enabled": True},
         {"key": "medications", "label": "Medicamentos", "count": len(medications), "enabled": True},
         {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": True},
+        {"key": "voice", "label": "Klinip Voice", "count": len(voice_sessions), "enabled": True},
         {
             "key": "timeline",
             "label": "Historial clinico",
-            "count": len(appointments) + len(documents) + len(medications),
+            "count": len(appointments) + len(documents) + len(medications) + len(voice_sessions),
             "enabled": True,
         },
         {
@@ -10389,11 +10525,13 @@ def _ai_context_bundle_for_profile(
         "appointments": appointments,
         "documents": documents,
         "medications": medications,
+        "voice_sessions": voice_sessions,
         "external_records": external_records,
         "upcoming": upcoming,
         "appointment_insights": appointment_insights,
         "document_insights": document_insights,
         "medication_insights": medication_insights,
+        "voice_session_insights": voice_session_insights,
         "recent_conversations": recent_conversations,
         "conversation_summaries": conversation_summaries,
         "active_medications": active_medications,
@@ -10810,6 +10948,7 @@ def _build_chat_context_base(
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
+    voice_sessions: list[models.VoiceSession] = []
     profile_notes: list[models.ProfileNote] = []
     feed_posts: list[models.FeedPost] = []
     family_access = (
@@ -10868,6 +11007,23 @@ def _build_chat_context_base(
                     models.Medication.id.desc(),
                 )
                 .limit(12)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+    if modules.get("voice_sessions") and permissions_validated.get("view_profile"):
+        voice_sessions = _safe_ai_context_query(
+            db,
+            module_name="voice-sessions",
+            loader=lambda: (
+                db.query(models.VoiceSession)
+                .filter(models.VoiceSession.profile_id == profile.id)
+                .order_by(models.VoiceSession.created_at.desc(), models.VoiceSession.id.desc())
+                .limit(5)
                 .all()
             ),
             default_value=[],
@@ -10953,6 +11109,7 @@ def _build_chat_context_base(
     appointment_insights = _appointment_insights(appointments, timezone_name) if modules.get("appointments") else {}
     document_insights = _document_insights(documents, timezone_name) if modules.get("documents") else {}
     medication_insights = _medication_insights(medications, timezone_name) if modules.get("medications") else {}
+    voice_session_insights = _voice_session_insights(voice_sessions, timezone_name) if modules.get("voice_sessions") else {}
     adherence_summary = (
         _safe_ai_context_query(
             db,
@@ -11261,6 +11418,12 @@ def _build_chat_context_base(
             "count": len(medications),
             "enabled": bool(modules.get("medications")) and bool(permissions_validated.get("view_medications")),
         },
+        {
+            "key": "voice",
+            "label": "Klinip Voice",
+            "count": len(voice_sessions),
+            "enabled": bool(modules.get("voice_sessions")) and bool(permissions_validated.get("view_profile")),
+        },
         {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": bool(modules.get("appointments"))},
         {"key": "conversation-memory", "label": "Memoria conversacional", "count": len(conversation_summaries), "enabled": bool(conversation_summaries)},
         {
@@ -11299,11 +11462,13 @@ def _build_chat_context_base(
         "appointments": appointments,
         "documents": documents,
         "medications": medications,
+        "voice_sessions": voice_sessions,
         "external_records": [],
         "upcoming": upcoming,
         "appointment_insights": appointment_insights,
         "document_insights": document_insights,
         "medication_insights": medication_insights,
+        "voice_session_insights": voice_session_insights,
         "recent_conversations": [],
         "conversation_summaries": conversation_summaries,
         "active_medications": active_medications,
@@ -11455,6 +11620,10 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     document_chunks_limit = max(1, int(prompt_profile.get("document_chunks_limit", 4) or 4))
     chunk_chars = max(180, int(prompt_profile.get("chunk_chars", 420) or 420))
     medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
+    voice_sessions_limit = max(1, int(prompt_profile.get("voice_sessions_limit", 3) or 3))
+    voice_indications_limit = max(1, int(prompt_profile.get("voice_indications_limit", 4) or 4))
+    voice_technical_chars = max(180, int(prompt_profile.get("voice_technical_chars", 360) or 360))
+    voice_simple_chars = max(140, int(prompt_profile.get("voice_simple_chars", 240) or 240))
     family_profiles_limit = max(1, int(prompt_profile.get("family_profiles_limit", 4) or 4))
     profile_notes_limit = max(1, int(prompt_profile.get("profile_notes_limit", 6) or 6))
     notes_chars = max(60, int(prompt_profile.get("notes_chars", 180) or 180))
@@ -11638,6 +11807,20 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             }
             for item in context["medications"][:medications_limit]
         ]
+    if enabled_modules.get("voice_sessions"):
+        payload["voice_session_insights"] = context.get("voice_session_insights") or {}
+        voice_rows = []
+        for item in (context.get("voice_sessions") or [])[:voice_sessions_limit]:
+            row = _voice_session_to_ai_dict(
+                item,
+                timezone_name,
+                technical_chars=voice_technical_chars,
+                simple_chars=voice_simple_chars,
+                indications_limit=voice_indications_limit,
+            )
+            if row:
+                voice_rows.append(row)
+        payload["voice_sessions"] = voice_rows
     if enabled_modules.get("adherence"):
         payload["adherence_summary"] = context.get("adherence_summary") or {}
     if enabled_modules.get("profile_notes") and context.get("profile_notes"):
@@ -11913,8 +12096,13 @@ def _transcribe_ai_audio(content: bytes, filename: str) -> tuple[str, str] | Non
 
     client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
     prompt = (
-        "Transcribe en español de forma fiel y clara. "
-        "Mantén medicamentos, dosis, fechas y términos clínicos lo más precisos posible."
+        "Transcripción de consulta médica en español latinoamericano. "
+        "Contexto: diálogo entre un profesional de salud y un paciente. "
+        "Prioridades: (1) nombres de medicamentos, dosis y frecuencias exactas, "
+        "(2) valores numéricos clínicos como presión arterial, frecuencia cardíaca, "
+        "temperatura, glicemia, (3) términos diagnósticos y anatómicos, "
+        "(4) fechas e intervalos de tiempo, (5) indicaciones y restricciones del profesional. "
+        "Mantén fidelidad absoluta — no interpretes ni resumas."
     )
 
     for model_name in _ai_transcription_model_candidates():
@@ -11932,7 +12120,7 @@ def _transcribe_ai_audio(content: bytes, filename: str) -> tuple[str, str] | Non
                 text_value = str(transcript.get("text") or "").strip()
             text_value = re.sub(r"\s+", " ", text_value).strip()
             if text_value:
-                return _clip_text(text_value, 4000), model_name
+                return _clip_text(text_value, 12000), model_name
         except Exception as exc:
             print(f"WARNING ai audio transcription failed with {model_name}: {exc}")
     return None
@@ -12285,6 +12473,8 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     active_medications = context.get("active_medications") or []
     upcoming = context.get("upcoming") or []
     profile_notes = context.get("profile_notes") or []
+    voice_sessions = context.get("voice_sessions") or []
+    voice_session_insights = context.get("voice_session_insights") or {}
     document_insights = context.get("document_insights") or {}
     medication_insights = context.get("medication_insights") or {}
     adherence_summary = context.get("adherence_summary") or {}
@@ -12347,6 +12537,65 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                 "kind": "medication-summary",
                 "label": "Resumen de estado de medicamentos",
                 "detail": f"Activos {status_counts.get('activa', 0)} | Realizados {status_counts.get('realizada', 0)}",
+            }
+        )
+
+    if voice_sessions and any(
+        token in normalized
+        for token in [
+            "audio",
+            "audios",
+            "transcripcion",
+            "transcripción",
+            "grabacion",
+            "grabación",
+            "klinip voice",
+            "consulta grabada",
+            "resumen de la consulta",
+            "resumen consulta",
+            "que dijo el medico",
+            "qué dijo el médico",
+            "indicaciones del medico",
+            "indicaciones del médico",
+        ]
+    ):
+        latest_voice = voice_sessions[0]
+        latest_voice_summary = _voice_session_to_ai_dict(
+            latest_voice,
+            context.get("timezone_name") or DEFAULT_TZ_NAME,
+            technical_chars=160,
+            simple_chars=140,
+            indications_limit=2,
+        ) or {}
+        refs.append(
+            {
+                "kind": "voice-session",
+                "label": "Klinip Voice más reciente",
+                "detail": " | ".join(
+                    [
+                        value
+                        for value in [
+                            latest_voice_summary.get("created_at") or "sin fecha",
+                            f"{latest_voice_summary.get('indicaciones_count', 0)} indicaciones",
+                            "compartida" if latest_voice_summary.get("shared") else "no compartida",
+                        ]
+                        if value
+                    ]
+                ),
+            }
+        )
+
+    if int(voice_session_insights.get("total_sessions", 0) or 0) > 0 and any(
+        token in normalized for token in ["indicaciones", "audio", "transcripcion", "transcripción", "grabacion", "grabación", "consulta grabada"]
+    ):
+        refs.append(
+            {
+                "kind": "voice-summary",
+                "label": "Resumen Klinip Voice",
+                "detail": (
+                    f"Sesiones {voice_session_insights.get('total_sessions', 0)} | "
+                    f"Indicaciones {voice_session_insights.get('total_indications', 0)}"
+                ),
             }
         )
 
@@ -15418,38 +15667,147 @@ async def ai_chat_transcribe(
 
 # ── Klinip Voice ───────────────────────────────────────────────────────────
 
-_VOICE_PROMPT_TECNICA = (
-    "Eres un asistente médico. Corrige y formatea la siguiente transcripción automática de una "
-    "consulta médica. Mantén terminología técnica, corrige errores obvios de transcripción, "
-    "organiza en párrafos por tema si hay más de uno. No agregues ni quites información clínica.\n\n"
-    "Transcripción raw:"
-)
+_VOICE_PROMPT_TECNICA = """\
+Eres un médico clínico experto en documentación de atenciones de salud en español latinoamericano.
 
-_VOICE_PROMPT_SIMPLE = (
-    "Eres un asistente de salud de Klinip. "
-    "Te paso la transcripción de una consulta médica. Tu tarea es:\n"
-    "1. Reescribir en lenguaje simple y claro, sin términos técnicos, lo que dijo el médico. "
-    "Máximo 3 párrafos cortos.\n"
-    "2. Extraer las indicaciones médicas concretas como lista estructurada. "
-    "Para cada indicación incluye:\n"
-    "   - texto: descripción simple de la indicación\n"
-    "   - tipo: medicamento | control | examen | dieta | ejercicio | otro\n"
-    "   - recordatorio_sugerido: true/false\n\n"
-    "Responde SOLO en JSON con este formato:\n"
-    '{"version_simple": "string", "indicaciones": [{"texto": "...", "tipo": "...", "recordatorio_sugerido": true}]}'
-)
+Se te entrega la transcripción automática de una consulta médica real entre un profesional de salud \
+y un paciente. Tu tarea es generar un REPORTE CLÍNICO TÉCNICO estructurado.
+
+REGLAS ESTRICTAS:
+- Fidelidad absoluta: no agregues diagnósticos, medicamentos ni indicaciones que no estén en la transcripción
+- Si una sección no tiene información suficiente, escribe "No registrado en la consulta"
+- Corrige errores obvios de transcripción automática (nombres de medicamentos mal escritos, fechas incoherentes)
+- Identifica al profesional de salud por su lenguaje clínico, uso de imperativos médicos y terminología técnica. Identifica al paciente por descripción de síntomas, respuestas y preguntas
+- Si hay marcadores [PAUSA Xm Ys] en la transcripción, respétalos como discontinuidades temporales reales de la consulta
+- Usa terminología clínica estándar en español
+
+FORMATO DE SALIDA — usa exactamente estas secciones:
+
+## DATOS DE LA ATENCIÓN
+Tipo de consulta: [medicina general / especialidad / control / urgencia / otro — inferir del contexto]
+Profesional: [especialidad inferida o "No identificado"]
+Duración estimada: [inferir del contenido]
+
+## MOTIVO DE CONSULTA
+[Razón principal por la que el paciente consulta, en términos clínicos]
+
+## ANAMNESIS
+[Antecedentes relevantes mencionados, evolución del cuadro, síntomas referidos por el paciente]
+
+## EXAMEN FÍSICO Y SIGNOS VITALES
+[Hallazgos mencionados: TA, FC, FR, T°, peso, saturación u otros. Si no hay, escribir "No registrado en la consulta"]
+
+## DIAGNÓSTICO O IMPRESIÓN CLÍNICA
+[Diagnóstico mencionado o impresión clínica del profesional]
+
+## PLAN TERAPÉUTICO
+### Farmacológico
+[Medicamentos con nombre, dosis, frecuencia y duración exactos]
+### No farmacológico
+[Indicaciones de dieta, reposo, ejercicio, cuidados generales]
+### Exámenes solicitados
+[Exámenes de laboratorio, imágenes u otros solicitados]
+### Derivaciones
+[Interconsultas o derivaciones a especialista]
+
+## PRÓXIMOS PASOS
+[Control, seguimiento, condiciones de retorno o urgencia]
+
+## OBSERVACIONES CLÍNICAS
+[Información relevante no categorizada en las secciones anteriores]"""
+
+_VOICE_PROMPT_SIMPLE = """\
+Eres el asistente de salud de Klinip. Tu rol es traducir una consulta médica técnica a lenguaje claro y humano para el paciente y su familia.
+
+Se te entrega el reporte clínico técnico de una consulta médica real.
+
+REGLAS ESTRICTAS:
+- Usa lenguaje simple, cálido y directo — como si explicaras a un familiar sin estudios médicos
+- No uses términos técnicos sin explicarlos
+- Fidelidad absoluta: no inventes indicaciones ni diagnósticos que no estén en el reporte
+- Si algo no está claro en el reporte, no lo incluyas — es mejor omitir que confundir
+- Tono: tranquilizador, nunca alarmista
+- Español latinoamericano neutro
+
+TAREA 1 — resumen_simple:
+Escribe un resumen en 2-4 párrafos cortos que explique:
+(a) por qué fue el paciente
+(b) qué encontró o dijo el médico
+(c) qué debe hacer ahora
+Máximo 200 palabras. Párrafos separados por \\n\\n.
+
+TAREA 2 — indicaciones:
+Extrae TODAS las indicaciones concretas del reporte.
+Para cada indicación:
+- texto: descripción clara en lenguaje simple
+- tipo: "medicamento" | "control" | "examen" | "dieta" | "ejercicio" | "reposo" | "cuidado" | "otro"
+- recordatorio_sugerido: true si tiene fecha, frecuencia o plazo concreto, false si es general
+- prioridad: "alta" si es urgente o crítico, "media" si es importante, "baja" si es recomendación
+- detalle_recordatorio: string con frecuencia/plazo si aplica, null si no aplica
+  Ejemplos:
+  medicamento → "Cada 8 horas por 5 días"
+  control → "En 2 semanas"
+  examen → "Esta semana"
+
+TAREA 3 — hablantes:
+Identifica los fragmentos principales de cada hablante. Máximo 3 fragmentos por hablante.
+- profesional: lo más relevante que dijo el médico
+- paciente: síntomas o preguntas más importantes
+
+TAREA 4 — metadata_clinica:
+- tipo_consulta: inferido del contenido
+- especialidad_inferida: inferida del lenguaje
+- tiene_diagnostico: true/false
+- tiene_medicamentos: true/false
+- tiene_examenes: true/false
+- tiene_derivacion: true/false
+- nivel_urgencia: "normal" | "seguimiento" | "urgente"
+- pausas_detectadas: número de [PAUSA] encontrados
+
+RESPONDE SOLO EN JSON VÁLIDO con esta estructura exacta — sin texto antes ni después, sin markdown:
+{
+  "resumen_simple": "string",
+  "indicaciones": [
+    {
+      "texto": "string",
+      "tipo": "string",
+      "recordatorio_sugerido": true,
+      "prioridad": "string",
+      "detalle_recordatorio": "string | null"
+    }
+  ],
+  "hablantes": {
+    "profesional": ["string"],
+    "paciente": ["string"]
+  },
+  "metadata_clinica": {
+    "tipo_consulta": "string",
+    "especialidad_inferida": "string",
+    "tiene_diagnostico": true,
+    "tiene_medicamentos": true,
+    "tiene_examenes": true,
+    "tiene_derivacion": false,
+    "nivel_urgencia": "string",
+    "pausas_detectadas": 0
+  }
+}"""
 
 _VOICE_AUDIO_MAX_BYTES = 500 * 1024 * 1024  # 500 MB — sin límite práctico para consultas largas
 _VOICE_UPLOAD_DIR = os.environ.get("VOICE_UPLOAD_DIR", "/uploads/voice")
 
 
-def _voice_call_ai(system_prompt: str, message: str) -> tuple[str, str] | None:
-    """Call OpenAI with higher token limit for Voice processing."""
+def _voice_call_ai(
+    system_prompt: str,
+    message: str,
+    max_tokens: int = 2500,
+    temperature: float = 0.15,
+) -> tuple[str, str] | None:
+    """Call OpenAI for Voice clinical processing."""
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key or OpenAI is None:
         return None
     model = _ai_model_name()
-    client = OpenAI(api_key=api_key, timeout=60.0)
+    client = OpenAI(api_key=api_key, timeout=120.0)
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": message},
@@ -15458,13 +15816,15 @@ def _voice_call_ai(system_prompt: str, message: str) -> tuple[str, str] | None:
         completion = client.chat.completions.create(
             model=model,
             messages=messages,
-            temperature=0.15,
-            max_tokens=1200,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         choices = getattr(completion, "choices", None) or []
         if not choices:
             return None
-        content = (getattr(choices[0].message, "content", "") or "").strip()
+        content = (
+            getattr(choices[0].message, "content", "") or ""
+        ).strip()
         return (content, model) if content else None
     except Exception as exc:
         print(f"WARNING voice ai call failed: {exc}")
@@ -15477,6 +15837,7 @@ async def voice_process(
     audio_consent: UploadFile = File(...),
     audio_session: UploadFile = File(...),
     profile_id: int = Form(...),
+    pause_timestamps: str = Form(default=""),
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -15514,16 +15875,38 @@ async def voice_process(
     if not raw_transcript:
         raise HTTPException(status_code=422, detail="No se detectó voz clara en el audio de la consulta.")
 
-    # 2. Generar transcripción técnica
-    tecnica_result = _voice_call_ai(_VOICE_PROMPT_TECNICA, raw_transcript)
+    # Inyectar marcadores de pausa si el frontend los envió
+    if pause_timestamps:
+        try:
+            pauses = json.loads(pause_timestamps)
+            # Insertar de atrás hacia adelante para no desplazar offsets
+            for pause in sorted(pauses, key=lambda p: p.get("at_char", 0), reverse=True):
+                duration_s = int(pause.get("duration_s", 0))
+                marker = f" [PAUSA {duration_s // 60}m{duration_s % 60}s] "
+                insert_at = pause.get("at_char", len(raw_transcript))
+                raw_transcript = raw_transcript[:insert_at] + marker + raw_transcript[insert_at:]
+        except Exception:
+            pass
+
+    # 2. Generar transcripción técnica (reporte clínico estructurado)
+    tecnica_result = _voice_call_ai(
+        _VOICE_PROMPT_TECNICA,
+        raw_transcript,
+        max_tokens=3000,
+        temperature=0.1,
+    )
     transcripcion_tecnica = tecnica_result[0] if tecnica_result else raw_transcript
 
-    # 3. Generar versión simple + indicaciones
+    # 3. Generar versión simple + indicaciones + hablantes + metadata
     version_simple = ""
     indicaciones = []
+    hablantes = {}
+    metadata_clinica = {}
     simple_result = _voice_call_ai(
         _VOICE_PROMPT_SIMPLE,
-        f"Transcripción:\n{transcripcion_tecnica}",
+        f"Reporte clínico técnico:\n{transcripcion_tecnica}",
+        max_tokens=2500,
+        temperature=0.25,
     )
     if simple_result:
         raw_json = simple_result[0]
@@ -15534,11 +15917,15 @@ async def voice_process(
             cleaned = re.sub(r"\s*```$", "", cleaned)
         try:
             parsed = json.loads(cleaned)
-            version_simple = parsed.get("version_simple", "")
+            version_simple = parsed.get("resumen_simple", parsed.get("version_simple", ""))
             indicaciones = parsed.get("indicaciones", [])
+            hablantes = parsed.get("hablantes", {})
+            metadata_clinica = parsed.get("metadata_clinica", {})
         except (json.JSONDecodeError, AttributeError):
             version_simple = raw_json
             indicaciones = []
+            hablantes = {}
+            metadata_clinica = {}
 
     # 4. Guardar archivos de audio en filesystem y paths en BD
     import time as _time
@@ -15560,6 +15947,8 @@ async def voice_process(
         transcripcion_tecnica=transcripcion_tecnica,
         version_simple=version_simple,
         indicaciones=indicaciones,
+        hablantes=hablantes,
+        metadata_clinica=metadata_clinica,
     )
     db.add(session_record)
     db.commit()
@@ -15996,6 +16385,24 @@ def detect_chat_intent(message: str | None) -> str:
     normalized = _normalize_text(message or "")
     if _message_needs_family_context(message):
         return "familiar"
+    voice_tokens = [
+        "klinip voice",
+        "audio",
+        "audios",
+        "transcripcion",
+        "transcripción",
+        "grabacion",
+        "grabación",
+        "consulta grabada",
+        "resumen de la consulta",
+        "resumen consulta",
+        "que dijo el medico",
+        "qué dijo el médico",
+        "indicaciones del medico",
+        "indicaciones del médico",
+    ]
+    if any(token in normalized for token in voice_tokens):
+        return "voice"
     medication_tokens = [
         "medicamento",
         "medicamentos",
@@ -16062,6 +16469,7 @@ def detect_chat_intent(message: str | None) -> str:
 def select_context_modules(intent: str) -> dict:
     base_modules = {
         "profile_notes": True,
+        "voice_sessions": True,
         "appointments": False,
         "documents": False,
         "document_summaries": False,
@@ -16069,7 +16477,9 @@ def select_context_modules(intent: str) -> dict:
         "adherence": False,
         "family": False,
     }
-    if intent == "medicamentos":
+    if intent == "voice":
+        base_modules["voice_sessions"] = True
+    elif intent == "medicamentos":
         base_modules["medications"] = True
         base_modules["adherence"] = True
     elif intent == "documentos":
