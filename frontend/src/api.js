@@ -135,3 +135,6 @@ export const getVoiceSession = api.getVoiceSession;
 export const voiceShareLink = api.voiceShareLink;
 export const voiceShareEmail = api.voiceShareEmail;
 export const voiceDownloadPdf = api.voiceDownloadPdf;
+export const voiceAudioUrl = api.voiceAudioUrl;
+export const getSharedVoiceSession = api.getSharedVoiceSession;
+export const sharedVoiceAudioUrl = api.sharedVoiceAudioUrl;

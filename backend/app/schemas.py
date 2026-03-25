@@ -1091,6 +1091,8 @@ class VoiceSessionOut(BaseModel):
     transcripcion_tecnica: Optional[str] = None
     version_simple: Optional[str] = None
     indicaciones: list = []
+    hablantes: Optional[dict] = None
+    metadata_clinica: Optional[dict] = None
     compartido_en: Optional[datetime] = None
     link_seguro: Optional[str] = None
     link_expira_en: Optional[datetime] = None

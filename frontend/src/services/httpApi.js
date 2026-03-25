@@ -834,3 +834,16 @@ export async function voiceDownloadPdf(sessionId) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export function voiceAudioUrl(sessionId) {
+  return `${API_URL}/voice/${sessionId}/audio`;
+}
+
+export async function getSharedVoiceSession(token) {
+  const res = await axios.get(`${API_URL}/voice/shared/${token}`);
+  return res.data;
+}
+
+export function sharedVoiceAudioUrl(token) {
+  return `${API_URL}/voice/shared/${token}/audio`;
+}

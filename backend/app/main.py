@@ -16116,6 +16116,88 @@ async def voice_download_pdf(
     )
 
 
+@app.get("/voice/shared/{token}")
+async def voice_shared_view(token: str, db: Session = Depends(auth.get_db)):
+    """Public endpoint — no authentication required. Returns session data for shared link."""
+    session = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.link_seguro.contains(token))
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Enlace no encontrado o inválido.")
+    if session.link_expira_en and session.link_expira_en < datetime.now():
+        raise HTTPException(status_code=410, detail="Este enlace ha expirado.")
+
+    profile = db.query(models.HealthProfile).filter(models.HealthProfile.id == session.profile_id).first()
+    profile_name = getattr(profile, "full_name", None) or getattr(profile, "nombre", None) or "Paciente"
+    created = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else None
+    consent_ts = session.created_at.strftime("%Y-%m-%dT%H:%M:%S") if session.created_at else None
+
+    return {
+        "id": session.id,
+        "profile_name": profile_name,
+        "created_at": created,
+        "consent_timestamp": consent_ts,
+        "transcripcion_tecnica": session.transcripcion_tecnica,
+        "indicaciones": session.indicaciones or [],
+        "metadata_clinica": session.metadata_clinica or {},
+        "audio_session_hash": session.audio_session_hash or "",
+        "has_audio": bool(session.audio_session and os.path.isfile(session.audio_session)),
+        "expires_at": session.link_expira_en.isoformat() if session.link_expira_en else None,
+    }
+
+
+@app.get("/voice/shared/{token}/audio")
+async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
+    """Public endpoint — streams the session audio for a valid shared link."""
+    session = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.link_seguro.contains(token))
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Enlace no encontrado.")
+    if session.link_expira_en and session.link_expira_en < datetime.now():
+        raise HTTPException(status_code=410, detail="Este enlace ha expirado.")
+    if not session.audio_session or not os.path.isfile(session.audio_session):
+        raise HTTPException(status_code=404, detail="Audio no disponible.")
+
+    return FileResponse(
+        session.audio_session,
+        media_type="audio/webm",
+        filename=f"consulta-{session.id}.webm",
+    )
+
+
+@app.get("/voice/{session_id}/audio")
+async def voice_session_audio(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Authenticated endpoint — streams audio for the session owner."""
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    session = (
+        db.query(models.VoiceSession)
+        .filter(
+            models.VoiceSession.id == session_id,
+            models.VoiceSession.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    if not session.audio_session or not os.path.isfile(session.audio_session):
+        raise HTTPException(status_code=404, detail="Audio no disponible.")
+
+    return FileResponse(
+        session.audio_session,
+        media_type="audio/webm",
+        filename=f"consulta-{session.id}.webm",
+    )
+
+
 @app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
 async def get_ai_conversations(
     db: Session = Depends(auth.get_db),

@@ -801,6 +801,8 @@ class VoiceSession(Base):
     transcripcion_tecnica = Column(Text, nullable=True)
     version_simple = Column(Text, nullable=True)
     indicaciones = Column(JSON, default=list)
+    hablantes = Column(JSON, nullable=True)
+    metadata_clinica = Column(JSON, nullable=True)
 
     compartido_en = Column(DateTime, nullable=True)
     link_seguro = Column(String, nullable=True)

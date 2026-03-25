@@ -1,5 +1,89 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { processVoiceSession, voiceShareLink, voiceShareEmail, voiceDownloadPdf } from "../api";
+import { processVoiceSession, voiceShareLink, voiceShareEmail, voiceDownloadPdf, voiceAudioUrl } from "../api";
+
+/* ── Audio Player ─────────────────────────────────────────────────────────── */
+
+function IvAudioPlayer({ sessionId }) {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const token = localStorage.getItem("token");
+  const src = voiceAudioUrl(sessionId);
+
+  function toggle() {
+    const a = audioRef.current;
+    if (!a) return;
+    if (playing) a.pause();
+    else a.play();
+    setPlaying(!playing);
+  }
+
+  function handleSeek(e) {
+    const a = audioRef.current;
+    if (!a || !duration) return;
+    a.currentTime = Number(e.target.value);
+  }
+
+  function fmt(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+
+  // We need to fetch audio with auth header since the endpoint requires authentication
+  const [audioSrc, setAudioSrc] = useState(null);
+  useEffect(() => {
+    if (!sessionId || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(src, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (!cancelled) setAudioSrc(URL.createObjectURL(blob));
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [sessionId, token, src]);
+
+  if (!audioSrc) return null;
+
+  return (
+    <div className="iv-audio-player">
+      <audio
+        ref={audioRef}
+        src={audioSrc}
+        preload="metadata"
+        onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+        onEnded={() => setPlaying(false)}
+      />
+      <button type="button" className="iv-audio-btn" onClick={toggle}>
+        {playing ? (
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M8 5v14l11-7z" /></svg>
+        )}
+      </button>
+      <div className="iv-audio-track">
+        <input
+          type="range"
+          className="iv-audio-range"
+          min="0"
+          max={duration || 0}
+          step="0.1"
+          value={currentTime}
+          onChange={handleSeek}
+        />
+        <div className="iv-audio-times">
+          <span>{fmt(currentTime)}</span>
+          <span>{duration ? fmt(duration) : "--:--"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 
@@ -452,6 +536,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
           </div>
           <h2 className="iv-title" style={{ marginTop: "1rem" }}>Consulta procesada</h2>
           <p className="iv-subtitle">Klinip IA analizó tu consulta</p>
+          {result.id && <IvAudioPlayer sessionId={result.id} />}
         </div>
 
         {/* Bottom sheet */}

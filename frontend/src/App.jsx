@@ -18,6 +18,7 @@ import Landing from "./pages/Landing";
 import Plans from "./pages/Plans";
 import KlinipFeed from "./pages/KlinipFeed";
 import KlinipVoicePage from "./pages/KlinipVoicePage";
+import SharedVoicePage from "./pages/SharedVoicePage";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
@@ -161,6 +162,7 @@ function Sidebar({
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isLegalRoute = location.pathname.startsWith("/legal/");
+  const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
@@ -218,7 +220,7 @@ function Sidebar({
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
 
-  if (isAuthRoute || isPlansRoute || isLegalRoute) return null;
+  if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute) return null;
 
   return (
     <aside className="sidebar">
@@ -332,6 +334,7 @@ function Topbar({
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isLegalRoute = location.pathname.startsWith("/legal/");
+  const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
   const titles = {
     "/": "Resumen",
     "/appointments": "Citas",
@@ -401,7 +404,7 @@ function Topbar({
       ? "Plan Plus"
       : "Plan Básico";
 
-  if (isAuthRoute || isPlansRoute || isLegalRoute || (!user && location.pathname === "/")) return null;
+  if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute || (!user && location.pathname === "/")) return null;
 
   return (
     <header className="topbar">
@@ -1597,8 +1600,9 @@ export default function App() {
   const isPlansRoute =
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isLegalRoute = location.pathname.startsWith("/legal/");
+  const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
   const isPublicMarketingRoute = (!user && location.pathname === "/") || isPlansRoute;
-  const isPublicStandaloneRoute = isPublicMarketingRoute || isLegalRoute;
+  const isPublicStandaloneRoute = isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute;
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname === "/settings";
@@ -2071,6 +2075,7 @@ export default function App() {
               <Route path="/legal/terms" element={<LegalTerms />} />
               <Route path="/legal/consent" element={<LegalConsent />} />
               <Route path="/legal/notificaciones" element={<LegalNotifications />} />
+              <Route path="/voice/shared/:token" element={<SharedVoicePage />} />
               <Route
                 path="/planes"
                 element={<Plans user={user} />}
