@@ -1146,8 +1146,10 @@ export default function Dashboard({ user }) {
               )}
             </div>
           </article>
+        </div>
 
-          <article className="home-panel-card">
+        <div className="home-editorial-recent">
+          <article className="home-panel-card home-recent-card">
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Actividad reciente</h2>
@@ -1181,7 +1183,6 @@ export default function Dashboard({ user }) {
               )}
             </div>
           </article>
-
         </div>
       </div>
 
