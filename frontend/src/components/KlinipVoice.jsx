@@ -19,6 +19,17 @@ const TIPO_TONES = {
   otro: "neutral",
 };
 
+function renderVoiceIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-4a3.5 3.5 0 1 0-7 0v4A3.5 3.5 0 0 0 12 15Z" />
+      <path d="M18 11.5a6 6 0 0 1-12 0" />
+      <path d="M12 17.5v3" />
+      <path d="M9.5 20.5h5" />
+    </svg>
+  );
+}
+
 function formatTimer(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");
@@ -88,8 +99,6 @@ export default function KlinipVoice({ profileId, canEdit }) {
     });
   }
 
-  // ── Stage handlers ──
-
   function handleStart() {
     setError("");
     setStage("consent_digital");
@@ -154,8 +163,6 @@ export default function KlinipVoice({ profileId, canEdit }) {
     consentBlobRef.current = null;
   }
 
-  // ── Render ──
-
   if (stage === "idle") {
     return (
       <article className="home-panel-card home-voice-card">
@@ -173,7 +180,8 @@ export default function KlinipVoice({ profileId, canEdit }) {
             disabled={!canEdit}
             onClick={handleStart}
           >
-            Iniciar grabación
+            <span className="home-voice-btn-icon">{renderVoiceIcon()}</span>
+            <span className="home-voice-btn-label">Iniciar grabación</span>
           </button>
         </div>
       </article>
@@ -273,7 +281,6 @@ export default function KlinipVoice({ profileId, canEdit }) {
     );
   }
 
-  // stage === "done"
   if (stage === "done" && result) {
     const indicaciones = result.indicaciones || [];
     return (
