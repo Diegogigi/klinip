@@ -17,6 +17,7 @@ import ClinicalReports from "./pages/ClinicalReports";
 import Landing from "./pages/Landing";
 import Plans from "./pages/Plans";
 import KlinipFeed from "./pages/KlinipFeed";
+import KlinipVoicePage from "./pages/KlinipVoicePage";
 import LegalPrivacy from "./pages/LegalPrivacy";
 import LegalTerms from "./pages/LegalTerms";
 import LegalConsent from "./pages/LegalConsent";
@@ -120,6 +121,13 @@ const icons = {
     </svg>
   ),
   aiMobile: <span className="icon-k" aria-hidden="true">K</span>,
+  voice: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 17v4M8 21h8" />
+    </svg>
+  ),
 };
 
 function getHealthProfileAccessLabel(item, userId) {
@@ -177,6 +185,7 @@ function Sidebar({
     { to: "/", label: "Inicio", icon: icons.home },
     { to: "/feed", label: "KlinipFeed", icon: icons.feed },
     { to: "/ai", label: "IA Klinip", icon: icons.aiMobile },
+    { to: "/voice", label: "Klinip Voice", icon: icons.voice },
     { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
     { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
     { to: "/stats", label: "Stats", icon: icons.chart },
@@ -185,11 +194,11 @@ function Sidebar({
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
   ];
-  const mobilePrimaryLinks = ["/", "/feed", "/ai", "/appointments"]
+  const mobilePrimaryLinks = ["/", "/feed", "/ai", "/voice"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
   const mobileOverflowLinks = links.filter((item) =>
-    ["/calendar", "/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
+    ["/appointments", "/calendar", "/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
   );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
@@ -334,6 +343,7 @@ function Topbar({
     "/timeline": "Historia",
     "/family": "Mi familia",
     "/feed": "KlinipFeed",
+    "/voice": "Klinip Voice",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
   };
@@ -2182,6 +2192,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <KlinipFeed user={user} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/voice"
+                element={
+                  <ProtectedRoute user={user}>
+                    <KlinipVoicePage key={`voice-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

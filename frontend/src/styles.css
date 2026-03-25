@@ -15276,6 +15276,12 @@ body.theme-dark .home-ops-action-icon {
   font-style: italic;
 }
 
+.voice-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem;
+}
+
 /* Dark theme */
 body.theme-dark .voice-error {
   background: rgba(185, 28, 28, 0.15);
