@@ -1,5 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { processVoiceSession } from "../api";
+import {
+  buildRecordedVoiceBlob,
+  getPreferredVoiceRecorderOption,
+  resolveVoiceMimeInfo,
+} from "../utils/voiceRecording";
 
 const TIPO_LABELS = {
   medicamento: "Medicamento",
@@ -50,6 +55,7 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
   const chunksRef = useRef([]);
   const consentBlobRef = useRef(null);
   const timerRef = useRef(null);
+  const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -71,7 +77,19 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
-      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm", audioBitsPerSecond: 64000 });
+      const preferredOption = getPreferredVoiceRecorderOption();
+      let recorder;
+      try {
+        recorder = preferredOption.mimeType
+          ? new MediaRecorder(stream, { mimeType: preferredOption.mimeType, audioBitsPerSecond: 64000 })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+      } catch {
+        recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+      }
+      recorderOptionRef.current = resolveVoiceMimeInfo(
+        recorder.mimeType || preferredOption.mimeType || "",
+        preferredOption.extension || "webm"
+      );
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
@@ -88,12 +106,17 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
   function stopRecording() {
     return new Promise((resolve) => {
       const recorder = mediaRecorderRef.current;
+      const blob = () => buildRecordedVoiceBlob(
+        chunksRef.current,
+        recorder?.mimeType || recorderOptionRef.current?.mimeType || "",
+        recorderOptionRef.current?.extension || "webm"
+      );
       if (!recorder || recorder.state === "inactive") {
-        resolve(new Blob(chunksRef.current, { type: "audio/webm" }));
+        resolve(blob());
         return;
       }
       recorder.onstop = () => {
-        resolve(new Blob(chunksRef.current, { type: "audio/webm" }));
+        resolve(blob());
       };
       recorder.stop();
     });

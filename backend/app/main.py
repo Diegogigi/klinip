@@ -12089,6 +12089,21 @@ def _validate_ai_audio_upload(
     return detected_mime, safe_filename
 
 
+def _voice_audio_response_meta(file_path: str | None, fallback_stem: str) -> tuple[str, str]:
+    ext = Path(file_path or "").suffix.lower()
+    mime_by_ext = {
+        ".webm": "audio/webm",
+        ".ogg": "audio/ogg",
+        ".wav": "audio/wav",
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".aac": "audio/aac",
+    }
+    media_type = mime_by_ext.get(ext) or (mimetypes.guess_type(file_path or "")[0] or "").strip().lower() or "application/octet-stream"
+    safe_ext = ext if ext in mime_by_ext else _AI_AUDIO_ALLOWED_MIME_TYPES.get(media_type, ".webm")
+    return media_type, f"{fallback_stem}{safe_ext or '.webm'}"
+
+
 def _transcribe_ai_audio(content: bytes, filename: str) -> tuple[str, str] | None:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key or OpenAI is None:
@@ -15931,8 +15946,8 @@ async def voice_process(
     import time as _time
     voice_dir = os.path.join(_VOICE_UPLOAD_DIR, f"{current_user.id}_{profile.id}_{int(_time.time())}")
     os.makedirs(voice_dir, exist_ok=True)
-    consent_path = os.path.join(voice_dir, "consent.webm")
-    session_path = os.path.join(voice_dir, "session.webm")
+    consent_path = os.path.join(voice_dir, safe_consent)
+    session_path = os.path.join(voice_dir, safe_session)
     with open(consent_path, "wb") as f:
         f.write(consent_bytes)
     with open(session_path, "wb") as f:
@@ -16163,10 +16178,11 @@ async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
     if not session.audio_session or not os.path.isfile(session.audio_session):
         raise HTTPException(status_code=404, detail="Audio no disponible.")
 
+    media_type, download_name = _voice_audio_response_meta(session.audio_session, f"consulta-{session.id}")
     return FileResponse(
         session.audio_session,
-        media_type="audio/webm",
-        filename=f"consulta-{session.id}.webm",
+        media_type=media_type,
+        filename=download_name,
     )
 
 
@@ -16191,10 +16207,11 @@ async def voice_session_audio(
     if not session.audio_session or not os.path.isfile(session.audio_session):
         raise HTTPException(status_code=404, detail="Audio no disponible.")
 
+    media_type, download_name = _voice_audio_response_meta(session.audio_session, f"consulta-{session.id}")
     return FileResponse(
         session.audio_session,
-        media_type="audio/webm",
-        filename=f"consulta-{session.id}.webm",
+        media_type=media_type,
+        filename=download_name,
     )
 
 

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { buildVoiceUploadName } from "../utils/voiceRecording";
 
 // Usar variable de entorno en producción, o localhost en desarrollo
 const API_URL = import.meta.env.VITE_API_URL || 
@@ -795,8 +796,8 @@ export function getPostAttachmentUrl(postId, attachmentId) {
 
 export async function processVoiceSession({ audioConsent, audioSession, profileId }) {
   const formData = new FormData();
-  formData.append("audio_consent", audioConsent, "consent.webm");
-  formData.append("audio_session", audioSession, "session.webm");
+  formData.append("audio_consent", audioConsent, buildVoiceUploadName("consent", audioConsent));
+  formData.append("audio_session", audioSession, buildVoiceUploadName("session", audioSession));
   formData.append("profile_id", profileId);
   const res = await api.post("/voice/process", formData, {
     headers: { "Content-Type": "multipart/form-data" },
