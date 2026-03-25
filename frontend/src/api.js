@@ -130,3 +130,8 @@ export const uploadHealthProfileAvatar = api.uploadHealthProfileAvatar;
 
 // Klinip Voice
 export const processVoiceSession = api.processVoiceSession;
+export const getVoiceSessions = api.getVoiceSessions;
+export const getVoiceSession = api.getVoiceSession;
+export const voiceShareLink = api.voiceShareLink;
+export const voiceShareEmail = api.voiceShareEmail;
+export const voiceDownloadPdf = api.voiceDownloadPdf;

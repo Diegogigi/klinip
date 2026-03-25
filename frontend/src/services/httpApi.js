@@ -804,3 +804,33 @@ export async function processVoiceSession({ audioConsent, audioSession, profileI
   });
   return res.data;
 }
+
+export async function getVoiceSessions() {
+  const res = await api.get("/voice/sessions");
+  return res.data;
+}
+
+export async function getVoiceSession(sessionId) {
+  const res = await api.get(`/voice/sessions/${sessionId}`);
+  return res.data;
+}
+
+export async function voiceShareLink(sessionId) {
+  const res = await api.post(`/voice/${sessionId}/share/link`);
+  return res.data;
+}
+
+export async function voiceShareEmail(sessionId, email) {
+  const res = await api.post(`/voice/${sessionId}/share/email`, { email });
+  return res.data;
+}
+
+export async function voiceDownloadPdf(sessionId) {
+  const res = await api.get(`/voice/${sessionId}/pdf`, { responseType: "blob" });
+  const url = URL.createObjectURL(res.data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `klinip-voice-${sessionId}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}

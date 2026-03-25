@@ -36,7 +36,7 @@ function formatTimer(seconds) {
   return `${m}:${s}`;
 }
 
-export default function KlinipVoice({ profileId, canEdit }) {
+export default function KlinipVoice({ profileId, canEdit, onDone }) {
   // States: idle | consent_digital | recording_consent | recording_session | processing | done
   const [stage, setStage] = useState("idle");
   const [error, setError] = useState("");
@@ -135,6 +135,7 @@ export default function KlinipVoice({ profileId, canEdit }) {
       });
       setResult(data);
       setStage("done");
+      if (onDone) onDone(data);
     } catch (err) {
       let msg;
       if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {

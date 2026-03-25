@@ -15568,6 +15568,165 @@ async def voice_process(
     return session_record
 
 
+@app.get("/voice/sessions", response_model=List[schemas.VoiceSessionOut])
+async def get_voice_sessions(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    sessions = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.profile_id == profile.id)
+        .order_by(models.VoiceSession.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return sessions
+
+
+@app.get("/voice/sessions/{session_id}", response_model=schemas.VoiceSessionOut)
+async def get_voice_session(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    session = (
+        db.query(models.VoiceSession)
+        .filter(
+            models.VoiceSession.id == session_id,
+            models.VoiceSession.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    return session
+
+
+@app.post("/voice/{session_id}/share/link")
+async def voice_share_link(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    session = (
+        db.query(models.VoiceSession)
+        .filter(
+            models.VoiceSession.id == session_id,
+            models.VoiceSession.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now() + timedelta(hours=48)
+    base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
+    url = f"{base_url}/voice/shared/{token}"
+
+    session.link_seguro = url
+    session.link_expira_en = expires
+    session.compartido_en = datetime.now()
+    db.commit()
+
+    return {"url": url, "expires_at": expires.isoformat()}
+
+
+@app.post("/voice/{session_id}/share/email")
+async def voice_share_email(
+    session_id: int,
+    request: Request,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    body = await request.json()
+    email = (body.get("email") or "").strip()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=422, detail="Email inválido.")
+
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    session = (
+        db.query(models.VoiceSession)
+        .filter(
+            models.VoiceSession.id == session_id,
+            models.VoiceSession.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+
+    # Log the share attempt (real email sending comes later)
+    session.compartido_en = datetime.now()
+    db.commit()
+    print(f"VOICE SHARE EMAIL: session={session_id} to={email} by user={current_user.id}")
+
+    return {"ok": True}
+
+
+@app.get("/voice/{session_id}/pdf")
+async def voice_download_pdf(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, _ = _get_active_profile_context(db, current_user)
+    session = (
+        db.query(models.VoiceSession)
+        .filter(
+            models.VoiceSession.id == session_id,
+            models.VoiceSession.profile_id == profile.id,
+        )
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+
+    # Build plain-text PDF content
+    created = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else "—"
+    lines = [
+        "KLINIP VOICE — Registro de Consulta",
+        "=" * 42,
+        "",
+        f"Fecha:       {created}",
+        f"Perfil ID:   {session.profile_id}",
+        f"Sesión ID:   {session.id}",
+        f"Hash audio:  {session.audio_session_hash or '—'}",
+        "",
+        "-" * 42,
+        "TRANSCRIPCIÓN TÉCNICA",
+        "-" * 42,
+        "",
+        session.transcripcion_tecnica or "(sin transcripción)",
+        "",
+        "-" * 42,
+        "INDICACIONES EXTRAÍDAS",
+        "-" * 42,
+        "",
+    ]
+    for ind in (session.indicaciones or []):
+        tipo = ind.get("tipo", "otro")
+        texto = ind.get("texto", "")
+        lines.append(f"  [{tipo.upper()}] {texto}")
+    if not session.indicaciones:
+        lines.append("  (sin indicaciones)")
+    lines.append("")
+    lines.append("-" * 42)
+    lines.append("Generado por Klinip Voice · klinip.cl")
+
+    content = "\n".join(lines)
+    return Response(
+        content=content.encode("utf-8"),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="klinip-voice-{session.id}.pdf"',
+        },
+    )
+
+
 @app.get("/ai/conversations", response_model=List[schemas.AiConversationSummaryOut])
 async def get_ai_conversations(
     db: Session = Depends(auth.get_db),

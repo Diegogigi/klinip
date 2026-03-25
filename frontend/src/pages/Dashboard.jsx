@@ -13,9 +13,7 @@ import {
   getMedications,
   getProfileNotes,
   updateProfileNote,
-  processVoiceSession,
 } from "../api";
-import KlinipVoice from "../components/KlinipVoice";
 import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
@@ -883,7 +881,32 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-voice">
-          <KlinipVoice profileId={activeProfile?.id} canEdit={canEditActiveProfile} />
+          <article className="home-panel-card home-voice-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Klinip Voice</h2>
+                <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
+              </div>
+            </div>
+            <div className="voice-body">
+              <button
+                type="button"
+                className="home-note-primary home-voice-btn"
+                disabled={!canEditActiveProfile}
+                onClick={() => navigate("/voice?record=1")}
+              >
+                <span className="home-voice-btn-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 15a3.5 3.5 0 0 0 3.5-3.5v-4a3.5 3.5 0 1 0-7 0v4A3.5 3.5 0 0 0 12 15Z" />
+                    <path d="M18 11.5a6 6 0 0 1-12 0" />
+                    <path d="M12 17.5v3" />
+                    <path d="M9.5 20.5h5" />
+                  </svg>
+                </span>
+                <span className="home-voice-btn-label">Iniciar grabación</span>
+              </button>
+            </div>
+          </article>
         </div>
 
         <div className="home-editorial-left">

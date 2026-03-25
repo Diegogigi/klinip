@@ -1,0 +1,602 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { processVoiceSession, voiceShareLink, voiceShareEmail, voiceDownloadPdf } from "../api";
+
+/* ── Helpers ───────────────────────────────────────────────────────────────── */
+
+function formatTimer(seconds) {
+  const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const s = (seconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+const TIPO_COLORS = {
+  medicamento: "#A78BFA",
+  control: "#34D399",
+  examen: "#60A5FA",
+  dieta: "#34D399",
+  ejercicio: "#A78BFA",
+  otro: "rgba(255,255,255,0.3)",
+};
+
+const TIPO_LABELS = {
+  medicamento: "Medicamento",
+  control: "Control",
+  examen: "Examen",
+  dieta: "Dieta",
+  ejercicio: "Ejercicio",
+  otro: "Otro",
+};
+
+/* ── SVG Icons ─────────────────────────────────────────────────────────────── */
+
+function MicSvg() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="iv-orb-mic">
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0" />
+      <path d="M12 17v4M8 21h8" />
+    </svg>
+  );
+}
+
+function CheckSvg() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-orb-check">
+      <polyline points="6 12 10 16 18 8" />
+    </svg>
+  );
+}
+
+function EmailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M22 7l-10 7L2 7" />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+    </svg>
+  );
+}
+
+function PdfIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
+}
+
+/* ── Sub-components ────────────────────────────────────────────────────────── */
+
+function StepDots({ current, total }) {
+  return (
+    <div className="iv-dots">
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i} className={`iv-dot ${i < current ? "iv-dot-filled" : ""} ${i === current ? "iv-dot-active" : ""}`} />
+      ))}
+    </div>
+  );
+}
+
+function AudioWaves() {
+  return (
+    <div className="iv-waves">
+      {Array.from({ length: 9 }, (_, i) => (
+        <span key={i} className="iv-wave-bar" style={{ animationDelay: `${i * 0.12}s` }} />
+      ))}
+    </div>
+  );
+}
+
+/* ── Done Sheet: Tab "Para ti" ─────────────────────────────────────────────── */
+
+function TabParaTi({ result }) {
+  const indicaciones = result.indicaciones || [];
+  return (
+    <div className="iv-tab-content">
+      <div className="iv-summary-card">
+        <span className="iv-summary-label">RESUMEN SIMPLE</span>
+        <p className="iv-summary-text">{result.version_simple || "Sin resumen disponible."}</p>
+      </div>
+      {indicaciones.length > 0 && (
+        <div className="iv-indicaciones-list">
+          {indicaciones.map((ind, i) => {
+            const color = TIPO_COLORS[ind.tipo] || TIPO_COLORS.otro;
+            const label = TIPO_LABELS[ind.tipo] || ind.tipo;
+            const actionLabel = ind.tipo === "control" || ind.tipo === "examen" ? "+ Agenda" : "+ Recordatorio";
+            return (
+              <div key={i} className="iv-indicacion-item">
+                <span className="iv-indicacion-dot" style={{ background: color }} />
+                <div className="iv-indicacion-body">
+                  <p className="iv-indicacion-text">{ind.texto}</p>
+                </div>
+                <span className="iv-indicacion-badge" style={{ color }}>{label}</span>
+                <button type="button" className="iv-indicacion-action" disabled>{actionLabel}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Done Sheet: Tab "Técnica" ─────────────────────────────────────────────── */
+
+function TabTecnica({ result }) {
+  return (
+    <div className="iv-tab-content">
+      <div className="iv-tecnica-box">
+        {result.transcripcion_tecnica || "Sin transcripción disponible."}
+      </div>
+    </div>
+  );
+}
+
+/* ── Done Sheet: Tab "Compartir" ───────────────────────────────────────────── */
+
+function TabCompartir({ sessionId }) {
+  const [shareLink, setShareLink] = useState(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailModal, setEmailModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState("");
+
+  async function handleShareLink() {
+    setLoading("whatsapp");
+    try {
+      const data = await voiceShareLink(sessionId);
+      setShareLink(data.url);
+      const text = encodeURIComponent(`Registro de consulta Klinip Voice:\n${data.url}`);
+      window.open(`https://wa.me/?text=${text}`, "_blank");
+    } catch { /* ignore */ }
+    setLoading("");
+  }
+
+  async function handleSendEmail() {
+    if (!emailInput.trim()) return;
+    setLoading("email");
+    try {
+      await voiceShareEmail(sessionId, emailInput.trim());
+      setEmailSent(true);
+      setEmailModal(false);
+    } catch { /* ignore */ }
+    setLoading("");
+  }
+
+  async function handlePdf() {
+    setLoading("pdf");
+    try {
+      await voiceDownloadPdf(sessionId);
+    } catch { /* ignore */ }
+    setLoading("");
+  }
+
+  async function handleCopy() {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="iv-tab-content">
+      <h3 className="iv-share-title">Compartir con el profesional</h3>
+      <p className="iv-share-subtitle">Audio y transcripción técnica</p>
+
+      <div className="iv-share-cards">
+        {/* Email */}
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={() => setEmailModal(true)}
+          disabled={loading === "email" || emailSent}
+        >
+          <span className="iv-share-card-icon iv-share-icon-blue"><EmailIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">{emailSent ? "Email enviado" : "Correo electrónico"}</span>
+            <span className="iv-share-card-sub">Audio + PDF técnico adjunto</span>
+          </div>
+        </button>
+
+        {/* WhatsApp */}
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={handleShareLink}
+          disabled={loading === "whatsapp"}
+        >
+          <span className="iv-share-card-icon iv-share-icon-green"><WhatsAppIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">WhatsApp</span>
+            <span className="iv-share-card-sub">Link seguro · expira en 48h</span>
+          </div>
+        </button>
+
+        {/* PDF */}
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={handlePdf}
+          disabled={loading === "pdf"}
+        >
+          <span className="iv-share-card-icon iv-share-icon-yellow"><PdfIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">PDF descargable</span>
+            <span className="iv-share-card-sub">Transcripción + metadatos</span>
+          </div>
+        </button>
+      </div>
+
+      {/* Link preview */}
+      {shareLink && (
+        <div className="iv-link-preview">
+          <span className="iv-link-url">{shareLink.length > 50 ? shareLink.slice(0, 50) + "…" : shareLink}</span>
+          <button type="button" className="iv-link-copy" onClick={handleCopy}>
+            {copied ? "Copiado" : "Copiar link"}
+          </button>
+        </div>
+      )}
+
+      {/* Email modal */}
+      {emailModal && (
+        <div className="iv-email-modal">
+          <p className="iv-email-modal-title">Enviar por correo</p>
+          <input
+            type="email"
+            className="iv-email-input"
+            placeholder="correo@ejemplo.cl"
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            autoFocus
+          />
+          <div className="iv-email-modal-actions">
+            <button type="button" className="iv-btn iv-btn-ghost" onClick={() => setEmailModal(false)}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="iv-btn iv-btn-primary"
+              onClick={handleSendEmail}
+              disabled={!emailInput.trim() || loading === "email"}
+            >
+              {loading === "email" ? "Enviando..." : "Enviar"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Main ImmersiveVoice Component
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+export default function ImmersiveVoice({ profileId, onDone, onClose, initialSession }) {
+  // If initialSession provided, start in "done" state
+  const [stage, setStage] = useState(initialSession ? "done" : "consent");
+  const [error, setError] = useState("");
+  const [timer, setTimer] = useState(0);
+  const [closing, setClosing] = useState(false);
+  const [result, setResult] = useState(initialSession || null);
+  const [activeTab, setActiveTab] = useState("parati");
+
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const consentBlobRef = useRef(null);
+  const timerRef = useRef(null);
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => stopStream();
+  }, [stopStream]);
+
+  function animateClose(callback) {
+    setClosing(true);
+    setTimeout(() => {
+      if (callback) callback();
+      if (onClose) onClose();
+    }, 300);
+  }
+
+  async function startMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const recorder = new MediaRecorder(stream, {
+        mimeType: "audio/webm",
+        audioBitsPerSecond: 64000,
+      });
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(500);
+      return true;
+    } catch {
+      setError("No se pudo acceder al micrófono. Revisa los permisos del navegador.");
+      setStage("error");
+      return false;
+    }
+  }
+
+  function stopRecording() {
+    return new Promise((resolve) => {
+      const recorder = mediaRecorderRef.current;
+      if (!recorder || recorder.state === "inactive") {
+        resolve(new Blob(chunksRef.current, { type: "audio/webm" }));
+        return;
+      }
+      recorder.onstop = () => {
+        resolve(new Blob(chunksRef.current, { type: "audio/webm" }));
+      };
+      recorder.stop();
+    });
+  }
+
+  /* ── Stage handlers ──────────────────────────────────────────────────────── */
+
+  async function handleStartConsent() {
+    setStage("recording_consent");
+    await startMic();
+  }
+
+  async function handleConsentDone() {
+    const blob = await stopRecording();
+    consentBlobRef.current = blob;
+    stopStream();
+    setStage("recording_session");
+    setTimer(0);
+    const ok = await startMic();
+    if (ok) {
+      timerRef.current = setInterval(() => setTimer((t) => t + 1), 1000);
+    }
+  }
+
+  async function handleStop() {
+    const sessionBlob = await stopRecording();
+    stopStream();
+    setStage("processing");
+
+    try {
+      const data = await processVoiceSession({
+        audioConsent: consentBlobRef.current,
+        audioSession: sessionBlob,
+        profileId,
+      });
+      setResult(data);
+      setStage("done");
+    } catch (err) {
+      let msg;
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        msg = "La consulta fue muy larga para procesar. Intenta con un fragmento más corto.";
+      } else if (!err.response) {
+        msg = "Sin conexión. Verifica tu internet e intenta de nuevo.";
+      } else {
+        const status = err.response.status;
+        if (status === 413) msg = "El audio es muy largo. Intenta con una grabación más corta.";
+        else if (status === 422) msg = "No se detectó voz clara en el audio.";
+        else if (status === 503) msg = "El servicio de transcripción no está disponible.";
+        else msg = err.response?.data?.detail || "Error al procesar. Intenta de nuevo.";
+      }
+      setError(msg);
+      setStage("error");
+    }
+  }
+
+  function handleRetry() {
+    setError("");
+    setTimer(0);
+    consentBlobRef.current = null;
+    setStage("consent");
+  }
+
+  function handleCancel() {
+    stopStream();
+    animateClose();
+  }
+
+  function handleSaveAndClose() {
+    animateClose(() => {
+      if (onDone && result) onDone(result);
+    });
+  }
+
+  /* ── Render: Done state with bottom sheet ────────────────────────────────── */
+
+  if (stage === "done" && result) {
+    const tabs = [
+      { key: "parati", label: "Para ti" },
+      { key: "tecnica", label: "Técnica" },
+      { key: "compartir", label: "Compartir" },
+    ];
+
+    return (
+      <div className={`iv-overlay ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+        <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        {/* Top area — orb + text */}
+        <div className="iv-done-top">
+          <div className="iv-orb iv-orb-green-solid">
+            <CheckSvg />
+          </div>
+          <h2 className="iv-title" style={{ marginTop: "1rem" }}>Consulta procesada</h2>
+          <p className="iv-subtitle">Klinip IA analizó tu consulta</p>
+        </div>
+
+        {/* Bottom sheet */}
+        <div className="iv-sheet">
+          <div className="iv-sheet-handle" />
+
+          {/* Tab selector */}
+          <div className="iv-sheet-tabs">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                className={`iv-sheet-tab ${activeTab === t.key ? "iv-sheet-tab-active" : ""}`}
+                onClick={() => setActiveTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="iv-sheet-body">
+            {activeTab === "parati" && <TabParaTi result={result} />}
+            {activeTab === "tecnica" && <TabTecnica result={result} />}
+            {activeTab === "compartir" && <TabCompartir sessionId={result.id} />}
+          </div>
+
+          {/* Footer */}
+          <div className="iv-sheet-footer">
+            <button type="button" className="iv-btn iv-btn-primary iv-btn-full" onClick={handleSaveAndClose}>
+              Guardar en ficha y cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Render: Recording states ────────────────────────────────────────────── */
+
+  const orbClass =
+    stage === "consent" ? "iv-orb-amber" :
+    stage === "recording_consent" ? "iv-orb-purple" :
+    stage === "recording_session" ? "iv-orb-purple" :
+    stage === "processing" ? "iv-orb-green" :
+    "iv-orb-red";
+
+  const showWaves = stage === "recording_consent" || stage === "recording_session";
+  const stepIndex =
+    stage === "consent" ? 0 :
+    stage === "recording_consent" ? 1 :
+    stage === "recording_session" ? 2 : 2;
+
+  return (
+    <div className={`iv-overlay ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+      <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
+      <div className="iv-content">
+        {/* Orb */}
+        <div className={`iv-orb ${orbClass}`}>
+          {stage === "consent" && (
+            <>
+              <span className="iv-ring iv-ring-1" />
+              <span className="iv-ring iv-ring-2" />
+              <span className="iv-ring iv-ring-3" />
+            </>
+          )}
+          {stage === "processing" ? <span className="iv-orb-spinner" /> : <MicSvg />}
+        </div>
+
+        {showWaves && <AudioWaves />}
+
+        {stage === "recording_session" && (
+          <div className="iv-timer">{formatTimer(timer)}</div>
+        )}
+
+        <div className="iv-text">
+          {stage === "consent" && (
+            <>
+              <h2 className="iv-title">Pide autorización</h2>
+              <p className="iv-subtitle">Solicita al profesional que autorice verbalmente la grabación</p>
+            </>
+          )}
+          {stage === "recording_consent" && (
+            <>
+              <h2 className="iv-title">Grabando autorización</h2>
+              <p className="iv-subtitle">Pide que diga: Autorizo la grabación de esta consulta</p>
+            </>
+          )}
+          {stage === "recording_session" && (
+            <>
+              <h2 className="iv-title">Grabando consulta</h2>
+              <p className="iv-subtitle">La consulta se está grabando</p>
+            </>
+          )}
+          {stage === "processing" && (
+            <>
+              <h2 className="iv-title">Klinip IA procesando</h2>
+              <p className="iv-subtitle">Transcribiendo y traduciendo tu consulta...</p>
+            </>
+          )}
+          {stage === "error" && (
+            <>
+              <h2 className="iv-title">Error</h2>
+              <p className="iv-subtitle">{error}</p>
+            </>
+          )}
+        </div>
+
+        {stage !== "processing" && stage !== "error" && (
+          <StepDots current={stepIndex} total={3} />
+        )}
+
+        <div className="iv-actions">
+          {stage === "consent" && (
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleStartConsent}>
+              El profesional autorizó
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+            </button>
+          )}
+          {stage === "recording_consent" && (
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleConsentDone}>
+              Autorización registrada
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+            </button>
+          )}
+          {stage === "recording_session" && (
+            <div className="iv-session-controls">
+              <button type="button" className="iv-ctrl iv-ctrl-stop" onClick={handleStop} aria-label="Detener grabación">
+                <span className="iv-ctrl-square" />
+              </button>
+            </div>
+          )}
+          {stage === "error" && (
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleRetry}>
+              Intentar de nuevo
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
