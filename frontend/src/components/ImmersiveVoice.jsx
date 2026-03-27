@@ -389,6 +389,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   const consentBlobRef = useRef(null);
   const timerRef = useRef(null);
   const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
+  const [micReady, setMicReady] = useState(false);
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -435,7 +436,10 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
         preferredOption.extension || "webm"
       );
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          if (!micReady) setMicReady(true);
+        }
       };
       mediaRecorderRef.current = recorder;
       recorder.start(500);
@@ -469,14 +473,27 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   /* ── Stage handlers ──────────────────────────────────────────────────────── */
 
   async function handleStartConsent() {
+    setMicReady(false);
     setStage("recording_consent");
     await startMic();
   }
 
   async function handleConsentDone() {
+    // Request a final data chunk before stopping to ensure we capture everything
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try { recorder.requestData(); } catch { /* ignore */ }
+    }
     const blob = await stopRecording();
+    if (!blob || blob.size === 0) {
+      setError("No se capturó audio del consentimiento. Intenta de nuevo y habla durante al menos 2 segundos.");
+      setStage("error");
+      stopStream();
+      return;
+    }
     consentBlobRef.current = blob;
     stopStream();
+    setMicReady(false);
     setStage("recording_session");
     setTimer(0);
     const ok = await startMic();
@@ -486,8 +503,24 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   }
 
   async function handleStop() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try { recorder.requestData(); } catch { /* ignore */ }
+    }
     const sessionBlob = await stopRecording();
     stopStream();
+
+    if (!sessionBlob || sessionBlob.size === 0) {
+      setError("No se capturó audio de la consulta. Intenta de nuevo.");
+      setStage("error");
+      return;
+    }
+    if (!consentBlobRef.current || consentBlobRef.current.size === 0) {
+      setError("El audio de consentimiento está vacío. Intenta de nuevo desde el inicio.");
+      setStage("error");
+      return;
+    }
+
     setStage("processing");
 
     try {
@@ -519,6 +552,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   function handleRetry() {
     setError("");
     setTimer(0);
+    setMicReady(false);
     consentBlobRef.current = null;
     setStage("consent");
   }
@@ -686,8 +720,8 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
             </button>
           )}
           {stage === "recording_consent" && (
-            <button type="button" className="iv-btn iv-btn-primary" onClick={handleConsentDone}>
-              Autorización registrada
+            <button type="button" className="iv-btn iv-btn-primary" disabled={!micReady} onClick={handleConsentDone}>
+              {micReady ? "Autorización registrada" : "Esperando audio..."}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
             </button>
           )}

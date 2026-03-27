@@ -56,6 +56,7 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
   const consentBlobRef = useRef(null);
   const timerRef = useRef(null);
   const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
+  const [micReady, setMicReady] = useState(false);
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
@@ -91,7 +92,10 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
         preferredOption.extension || "webm"
       );
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          if (!micReady) setMicReady(true);
+        }
       };
       mediaRecorderRef.current = recorder;
       recorder.start(500);
@@ -128,14 +132,26 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
   }
 
   async function handleConsentAccepted() {
+    setMicReady(false);
     setStage("recording_consent");
     await startMic();
   }
 
   async function handleConsentDone() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try { recorder.requestData(); } catch { /* ignore */ }
+    }
     const blob = await stopRecording();
+    if (!blob || blob.size === 0) {
+      setError("No se capturó audio del consentimiento. Intenta de nuevo y habla durante al menos 2 segundos.");
+      setStage("idle");
+      stopStream();
+      return;
+    }
     consentBlobRef.current = blob;
     stopStream();
+    setMicReady(false);
 
     setStage("recording_session");
     setTimer(0);
@@ -146,8 +162,24 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
   }
 
   async function handleStopSession() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try { recorder.requestData(); } catch { /* ignore */ }
+    }
     const sessionBlob = await stopRecording();
     stopStream();
+
+    if (!sessionBlob || sessionBlob.size === 0) {
+      setError("No se capturó audio de la consulta. Intenta de nuevo.");
+      setStage("idle");
+      return;
+    }
+    if (!consentBlobRef.current || consentBlobRef.current.size === 0) {
+      setError("El audio de consentimiento está vacío. Intenta de nuevo desde el inicio.");
+      setStage("idle");
+      return;
+    }
+
     setStage("processing");
 
     try {
@@ -184,6 +216,7 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
     setTimer(0);
     setActiveTab("simple");
     setShareOpen(false);
+    setMicReady(false);
     consentBlobRef.current = null;
   }
 
@@ -257,8 +290,8 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
           <p className="voice-consent-text">
             Pide al profesional que autorice verbalmente la grabación.
           </p>
-          <button type="button" className="home-note-primary home-voice-btn" onClick={handleConsentDone}>
-            El profesional acaba de autorizar →
+          <button type="button" className="home-note-primary home-voice-btn" disabled={!micReady} onClick={handleConsentDone}>
+            {micReady ? "El profesional acaba de autorizar →" : "Esperando audio..."}
           </button>
         </div>
       </article>

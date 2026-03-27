@@ -111,7 +111,8 @@ self.addEventListener("fetch", (event) => {
     event.request.url.includes("/plans/me") ||
     event.request.url.includes("/appointments") ||
     event.request.url.includes("/medications") ||
-    event.request.url.includes("/documents")
+    event.request.url.includes("/documents") ||
+    event.request.url.includes("/voice")
   ) {
     event.respondWith(fetchWithNetworkFallback(event.request));
     return;
