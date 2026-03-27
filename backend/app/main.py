@@ -12109,12 +12109,22 @@ def _voice_audio_response_meta(file_path: str | None, fallback_stem: str) -> tup
     return media_type, f"{fallback_stem}{safe_ext or '.webm'}"
 
 
+def _ai_transcription_timeout_seconds() -> float:
+    """Timeout for audio transcription — needs to be much higher than chat completions."""
+    raw = (os.getenv("OPENAI_TRANSCRIPTION_TIMEOUT") or "180").strip()
+    try:
+        value = float(raw)
+    except Exception:
+        return 180.0
+    return max(30.0, min(600.0, value))
+
+
 def _transcribe_ai_audio(content: bytes, filename: str) -> tuple[str, str] | None:
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if not api_key or OpenAI is None:
         return None
 
-    client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
+    client = OpenAI(api_key=api_key, timeout=_ai_transcription_timeout_seconds())
     prompt = (
         "Transcripción de consulta médica en español latinoamericano. "
         "Contexto: diálogo entre un profesional de salud y un paciente. "
@@ -15813,7 +15823,10 @@ RESPONDE SOLO EN JSON VÁLIDO con esta estructura exacta — sin texto antes ni 
 }"""
 
 _VOICE_AUDIO_MAX_BYTES = 500 * 1024 * 1024  # 500 MB — sin límite práctico para consultas largas
-_VOICE_UPLOAD_DIR = os.environ.get("VOICE_UPLOAD_DIR", "/uploads/voice")
+_VOICE_UPLOAD_DIR = os.environ.get(
+    "VOICE_UPLOAD_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads", "voice"),
+)
 
 
 def _voice_call_ai(
@@ -15950,29 +15963,38 @@ async def voice_process(
     # 4. Guardar archivos de audio en filesystem y paths en BD
     import time as _time
     voice_dir = os.path.join(_VOICE_UPLOAD_DIR, f"{current_user.id}_{profile.id}_{int(_time.time())}")
-    os.makedirs(voice_dir, exist_ok=True)
-    consent_path = os.path.join(voice_dir, safe_consent)
-    session_path = os.path.join(voice_dir, safe_session)
-    with open(consent_path, "wb") as f:
-        f.write(consent_bytes)
-    with open(session_path, "wb") as f:
-        f.write(session_bytes)
+    try:
+        os.makedirs(voice_dir, exist_ok=True)
+        consent_path = os.path.join(voice_dir, safe_consent)
+        session_path = os.path.join(voice_dir, safe_session)
+        with open(consent_path, "wb") as f:
+            f.write(consent_bytes)
+        with open(session_path, "wb") as f:
+            f.write(session_bytes)
+    except OSError as exc:
+        print(f"WARNING voice file I/O failed: {exc}")
+        raise HTTPException(status_code=500, detail="Error al guardar los archivos de audio.")
 
-    session_record = models.VoiceSession(
-        profile_id=profile.id,
-        user_id=current_user.id,
-        audio_consent=consent_path,
-        audio_session=session_path,
-        audio_session_hash=audio_hash,
-        transcripcion_tecnica=transcripcion_tecnica,
-        version_simple=version_simple,
-        indicaciones=indicaciones,
-        hablantes=hablantes,
-        metadata_clinica=metadata_clinica,
-    )
-    db.add(session_record)
-    db.commit()
-    db.refresh(session_record)
+    try:
+        session_record = models.VoiceSession(
+            profile_id=profile.id,
+            user_id=current_user.id,
+            audio_consent=consent_path,
+            audio_session=session_path,
+            audio_session_hash=audio_hash,
+            transcripcion_tecnica=transcripcion_tecnica,
+            version_simple=version_simple,
+            indicaciones=indicaciones,
+            hablantes=hablantes,
+            metadata_clinica=metadata_clinica,
+        )
+        db.add(session_record)
+        db.commit()
+        db.refresh(session_record)
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING voice db save failed: {exc}")
+        raise HTTPException(status_code=500, detail="Error al guardar la sesión de voz.")
 
     return session_record
 

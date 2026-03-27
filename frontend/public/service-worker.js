@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v14";
+const CACHE_NAME = "klinip-cache-v15";
 const ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -18,7 +18,11 @@ const BADGE_STORE = "klinip-badge";
 function fetchWithNetworkFallback(request, fallback = null) {
   return fetch(request).catch(() => {
     if (fallback) return fallback();
-    return Response.error();
+    return new Response("Network unavailable", {
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   });
 }
 

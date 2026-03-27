@@ -85,6 +85,8 @@ api.interceptors.response.use(
       // Sin refresh token → cerrar sesión
       if (!refreshToken) {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
+        window.dispatchEvent(new CustomEvent("klinip:session-expired"));
         return Promise.reject(normalizedError);
       }
 
@@ -122,6 +124,7 @@ api.interceptors.response.use(
         _processRefreshQueue(refreshError, null);
         localStorage.removeItem("token");
         localStorage.removeItem("refresh_token");
+        window.dispatchEvent(new CustomEvent("klinip:session-expired"));
         return Promise.reject(refreshError);
       } finally {
         _isRefreshing = false;

@@ -756,6 +756,16 @@ export default function App() {
     bootstrap();
   }, []);
 
+  // Redirect to login when session expires (refresh token failed)
+  useEffect(() => {
+    const onSessionExpired = () => {
+      setUser(null);
+      navigate("/login", { replace: true });
+    };
+    window.addEventListener("klinip:session-expired", onSessionExpired);
+    return () => window.removeEventListener("klinip:session-expired", onSessionExpired);
+  }, [navigate]);
+
   useEffect(() => {
     let mounted = true;
     const loadFamilyContext = async () => {
