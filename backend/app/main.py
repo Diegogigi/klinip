@@ -16004,7 +16004,13 @@ async def get_voice_sessions(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, _ = _get_active_profile_context(db, current_user)
+    try:
+        profile, _, _ = _get_active_profile_context(db, current_user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"WARNING voice sessions profile context failed: {exc}")
+        return []
     sessions = (
         db.query(models.VoiceSession)
         .filter(models.VoiceSession.profile_id == profile.id)

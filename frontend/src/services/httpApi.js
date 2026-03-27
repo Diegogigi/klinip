@@ -79,7 +79,9 @@ api.interceptors.response.use(
     }
 
     // 401: intentar renovar el access token con el refresh token
-    if (normalizedError.response?.status === 401 && !originalRequest._retry) {
+    // No reintentar requests con FormData (blobs se consumen en el primer intento)
+    const hasFormData = originalRequest.data instanceof FormData;
+    if (normalizedError.response?.status === 401 && !originalRequest._retry && !hasFormData) {
       const refreshToken = localStorage.getItem("refresh_token");
 
       // Sin refresh token → cerrar sesión
@@ -134,6 +136,41 @@ api.interceptors.response.use(
     return Promise.reject(normalizedError);
   }
 );
+
+/**
+ * Ensure token is fresh before sending requests with FormData (blobs).
+ * Blobs cannot survive a 401-retry cycle because they are consumed on first send.
+ */
+async function _ensureFreshToken() {
+  const token = localStorage.getItem("token");
+  if (!token) return;
+  try {
+    // Decode JWT payload to check expiry (without verifying signature)
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const expiresAt = (payload.exp || 0) * 1000;
+    const margin = 30_000; // 30s margin
+    if (Date.now() < expiresAt - margin) return; // token still valid
+  } catch {
+    // If decoding fails, try refreshing anyway
+  }
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) return;
+  try {
+    const res = await refreshApi.post("/auth/token/refresh", {
+      refresh_token: refreshToken,
+    });
+    const newAccessToken = res.data?.access_token;
+    if (newAccessToken) {
+      localStorage.setItem("token", newAccessToken);
+      if (res.data?.refresh_token) {
+        localStorage.setItem("refresh_token", res.data.refresh_token);
+      }
+    }
+  } catch {
+    // If refresh fails here, the actual request will fail with 401 and
+    // the interceptor will handle session expiry.
+  }
+}
 
 export async function register({ name, email, password }) {
   const res = await api.post("/auth/register", { name, email, password });
@@ -798,6 +835,9 @@ export function getPostAttachmentUrl(postId, attachmentId) {
 // ── Klinip Voice ──────────────────────────────────────────────────────────
 
 export async function processVoiceSession({ audioConsent, audioSession, profileId }) {
+  // Ensure token is fresh BEFORE building FormData — blobs are consumed on send
+  // and cannot survive a 401-retry cycle.
+  await _ensureFreshToken();
   const formData = new FormData();
   formData.append("audio_consent", audioConsent, buildVoiceUploadName("consent", audioConsent));
   formData.append("audio_session", audioSession, buildVoiceUploadName("session", audioSession));
