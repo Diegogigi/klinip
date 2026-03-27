@@ -1074,6 +1074,41 @@ export default function Dashboard({ user }) {
         </div>
 
         <div className="home-editorial-right">
+          <article className="home-panel-card home-recent-card">
+            <div className="home-panel-head">
+              <div>
+                <h2 className="home-panel-title">Actividad reciente</h2>
+                <p className="home-panel-subtitle">{"\u00DAltimas acciones en la aplicaci\u00F3n."}</p>
+              </div>
+              <button type="button" className="home-panel-link" onClick={() => navigate("/timeline")}>
+                Ver historial
+              </button>
+            </div>
+            <div className="home-recent-list">
+              {recentActivity.length ? (
+                recentActivity.map((item) => (
+                  <div key={item.id} className="home-recent-row">
+                    <span className={`home-recent-icon tone-${kindToneMap[item.kind] || "blue"}`}>
+                      {renderIcon(item.kind)}
+                    </span>
+                    <span className="home-recent-copy">
+                      <strong>{cleanUiText(item.title)}</strong>
+                      <small>{cleanUiText(item.subtitle)}</small>
+                    </span>
+                    <span className="home-recent-time">
+                      {parseDate(item.time)?.toLocaleDateString("es-CL", {
+                        day: "2-digit",
+                        month: "short",
+                      }) || ""}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="home-empty-state">{"A\u00FAn no hay actividad reciente."}</div>
+              )}
+            </div>
+          </article>
+
           <article className="home-panel-card home-notes-card">
             <div className="home-panel-head">
               <div>
@@ -1166,43 +1201,6 @@ export default function Dashboard({ user }) {
                 ))
               ) : (
                 <div className="home-empty-state">{"Todav\u00EDa no guardas notas r\u00E1pidas."}</div>
-              )}
-            </div>
-          </article>
-        </div>
-
-        <div className="home-editorial-recent">
-          <article className="home-panel-card home-recent-card">
-            <div className="home-panel-head">
-              <div>
-                <h2 className="home-panel-title">Actividad reciente</h2>
-                <p className="home-panel-subtitle">{"\u00DAltimas acciones en la aplicaci\u00F3n."}</p>
-              </div>
-              <button type="button" className="home-panel-link" onClick={() => navigate("/timeline")}>
-                Ver historial
-              </button>
-            </div>
-            <div className="home-recent-list">
-              {recentActivity.length ? (
-                recentActivity.map((item) => (
-                  <div key={item.id} className="home-recent-row">
-                    <span className={`home-recent-icon tone-${kindToneMap[item.kind] || "blue"}`}>
-                      {renderIcon(item.kind)}
-                    </span>
-                    <span className="home-recent-copy">
-                      <strong>{cleanUiText(item.title)}</strong>
-                      <small>{cleanUiText(item.subtitle)}</small>
-                    </span>
-                    <span className="home-recent-time">
-                      {parseDate(item.time)?.toLocaleDateString("es-CL", {
-                        day: "2-digit",
-                        month: "short",
-                      }) || ""}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <div className="home-empty-state">{"A\u00FAn no hay actividad reciente."}</div>
               )}
             </div>
           </article>

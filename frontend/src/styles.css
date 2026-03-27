@@ -14297,8 +14297,7 @@ body.theme-dark .home-ops-action-icon {
 .home-editorial-top,
 .home-editorial-voice,
 .home-editorial-left,
-.home-editorial-right,
-.home-editorial-recent {
+.home-editorial-right {
   display: flex;
   flex-direction: column;
   gap: 1.3rem;
@@ -14323,11 +14322,6 @@ body.theme-dark .home-ops-action-icon {
 .home-editorial-right {
   grid-column: 2;
   grid-row: 2;
-}
-
-.home-editorial-recent {
-  grid-column: 2;
-  grid-row: 3;
 }
 
 .home-panel-card {
@@ -17812,8 +17806,7 @@ body.theme-dark .home-suggestion-icon {
   .home-editorial-top,
   .home-editorial-voice,
   .home-editorial-left,
-  .home-editorial-right,
-  .home-editorial-recent {
+  .home-editorial-right {
     grid-column: 1;
     grid-row: auto;
   }
@@ -17847,8 +17840,7 @@ body.theme-dark .home-suggestion-icon {
   .home-editorial-top,
   .home-editorial-voice,
   .home-editorial-left,
-  .home-editorial-right,
-  .home-editorial-recent {
+  .home-editorial-right {
     grid-template-columns: 1fr;
     width: 100%;
     min-width: 0;
@@ -17982,8 +17974,7 @@ body.theme-dark .home-suggestion-icon {
   .home-editorial-top,
   .home-editorial-voice,
   .home-editorial-left,
-  .home-editorial-right,
-  .home-editorial-recent {
+  .home-editorial-right {
     gap: 0.9rem;
   }
 
@@ -18227,8 +18218,7 @@ body.theme-dark .home-suggestion-icon {
   .home-editorial-top,
   .home-editorial-voice,
   .home-editorial-left,
-  .home-editorial-right,
-  .home-editorial-recent {
+  .home-editorial-right {
     gap: 0.78rem;
   }
 
