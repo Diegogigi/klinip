@@ -12,13 +12,15 @@ import {
 
 /* ── Audio Player ─────────────────────────────────────────────────────────── */
 
-function IvAudioPlayer({ sessionId }) {
+function IvAudioPlayer({ sessionId, fallbackBlob }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const token = localStorage.getItem("token");
   const src = voiceAudioUrl(sessionId);
+  const [localAudioSrc, setLocalAudioSrc] = useState(null);
+  const [remoteAudioSrc, setRemoteAudioSrc] = useState(null);
 
   function toggle() {
     const a = audioRef.current;
@@ -40,21 +42,47 @@ function IvAudioPlayer({ sessionId }) {
     return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
-  // We need to fetch audio with auth header since the endpoint requires authentication
-  const [audioSrc, setAudioSrc] = useState(null);
   useEffect(() => {
-    if (!sessionId || !token) return;
+    if (!fallbackBlob) {
+      setLocalAudioSrc(null);
+      return undefined;
+    }
+
+    const objectUrl = URL.createObjectURL(fallbackBlob);
+    setLocalAudioSrc(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [fallbackBlob]);
+
+  // We need to fetch audio with auth header since the endpoint requires authentication
+  useEffect(() => {
+    if (!sessionId || !token) {
+      setRemoteAudioSrc(null);
+      return undefined;
+    }
+
     let cancelled = false;
+    let objectUrl = null;
+
     (async () => {
       try {
         const res = await fetch(src, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) return;
         const blob = await res.blob();
-        if (!cancelled) setAudioSrc(URL.createObjectURL(blob));
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setRemoteAudioSrc(objectUrl);
       } catch { /* ignore */ }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [sessionId, token, src]);
+
+  const audioSrc = remoteAudioSrc || localAudioSrc;
 
   if (!audioSrc) return null;
 
@@ -454,6 +482,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   const [professionalRole, setProfessionalRole] = useState(
     initialSession?.metadata_clinica?.profesional_clave || ""
   );
+  const [sessionPreviewBlob, setSessionPreviewBlob] = useState(null);
 
   const sheetRef = useRef(null);
   const dragRef = useRef({ active: false, startY: 0, startH: 0 });
@@ -595,6 +624,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
       return;
     }
 
+    setSessionPreviewBlob(sessionBlob);
     setStage("processing");
 
     try {
@@ -629,11 +659,13 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
     setTimer(0);
     setMicReady(false);
     consentBlobRef.current = null;
+    setSessionPreviewBlob(null);
     setStage("consent");
   }
 
   function handleCancel() {
     stopStream();
+    setSessionPreviewBlob(null);
     animateClose();
   }
 
@@ -705,7 +737,9 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
           </div>
           <h2 className="iv-title" style={{ marginTop: "1rem" }}>Consulta procesada</h2>
           <p className="iv-subtitle">Klinip IA analizó tu consulta</p>
-          {result.id && <IvAudioPlayer sessionId={result.id} />}
+          {(result.id || sessionPreviewBlob) && (
+            <IvAudioPlayer sessionId={result.id} fallbackBlob={sessionPreviewBlob} />
+          )}
         </div>
 
         {/* Bottom sheet */}

@@ -16439,17 +16439,9 @@ async def voice_download_pdf(
     )
 
 
-@app.get("/voice/shared/{token}")
-async def voice_shared_view(token: str, request: Request, db: Session = Depends(auth.get_db)):
-    """Public endpoint — no authentication required. Returns session data for shared link.
-    Browser navigation (Accept: text/html) → serve SPA index.html.
-    API call (Accept: application/json) → return JSON data."""
-    accept = request.headers.get("accept", "")
-    if "text/html" in accept and "application/json" not in accept:
-        _static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
-        _index = os.path.join(_static_dir, "index.html")
-        if os.path.exists(_index):
-            return FileResponse(_index, media_type="text/html", headers={"Cache-Control": "no-store"})
+@app.get("/api/voice/shared/{token}")
+async def voice_shared_view(token: str, db: Session = Depends(auth.get_db)):
+    """Public API endpoint — no authentication required. Returns session data for shared link."""
     session = (
         db.query(models.VoiceSession)
         .filter(models.VoiceSession.link_seguro.contains(token))
@@ -16479,7 +16471,7 @@ async def voice_shared_view(token: str, request: Request, db: Session = Depends(
     }
 
 
-@app.get("/voice/shared/{token}/audio")
+@app.get("/api/voice/shared/{token}/audio")
 async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
     """Public endpoint — streams the session audio for a valid shared link."""
     session = (

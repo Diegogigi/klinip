@@ -885,12 +885,10 @@ export function voiceAudioUrl(sessionId) {
 }
 
 export async function getSharedVoiceSession(token) {
-  const res = await axios.get(`${API_URL}/voice/shared/${token}`, {
-    headers: { Accept: "application/json" },
-  });
+  const res = await axios.get(`${API_URL}/api/voice/shared/${token}`);
   return res.data;
 }
 
 export function sharedVoiceAudioUrl(token) {
-  return `${API_URL}/voice/shared/${token}/audio`;
+  return `${API_URL}/api/voice/shared/${token}/audio`;
 }
