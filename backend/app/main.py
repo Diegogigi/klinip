@@ -788,6 +788,126 @@ def ensure_medication_intake_schema():
 ensure_medication_intake_schema()
 
 
+def ensure_voice_session_schema():
+    """Garantiza que la tabla voice_sessions tenga todas las columnas usadas por Klinip Voice."""
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("voice_sessions"):
+            Base.metadata.create_all(bind=engine)
+            inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("voice_sessions")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        def add_voice_column(name: str, pg_stmt: str, sqlite_stmt: str):
+            if name in columns:
+                return
+            statements.append(pg_stmt if backend == "postgresql" else sqlite_stmt)
+            added_columns.append(name)
+
+        add_voice_column(
+            "audio_consent",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS audio_consent TEXT",
+            "ALTER TABLE voice_sessions ADD COLUMN audio_consent TEXT",
+        )
+        add_voice_column(
+            "audio_session",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS audio_session TEXT",
+            "ALTER TABLE voice_sessions ADD COLUMN audio_session TEXT",
+        )
+        add_voice_column(
+            "audio_session_hash",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS audio_session_hash TEXT DEFAULT ''",
+            "ALTER TABLE voice_sessions ADD COLUMN audio_session_hash TEXT DEFAULT ''",
+        )
+        add_voice_column(
+            "transcripcion_tecnica",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS transcripcion_tecnica TEXT",
+            "ALTER TABLE voice_sessions ADD COLUMN transcripcion_tecnica TEXT",
+        )
+        add_voice_column(
+            "version_simple",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS version_simple TEXT",
+            "ALTER TABLE voice_sessions ADD COLUMN version_simple TEXT",
+        )
+        add_voice_column(
+            "indicaciones",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS indicaciones JSONB DEFAULT '[]'::jsonb",
+            "ALTER TABLE voice_sessions ADD COLUMN indicaciones TEXT DEFAULT '[]'",
+        )
+        add_voice_column(
+            "hablantes",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS hablantes JSONB",
+            "ALTER TABLE voice_sessions ADD COLUMN hablantes TEXT",
+        )
+        add_voice_column(
+            "metadata_clinica",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS metadata_clinica JSONB",
+            "ALTER TABLE voice_sessions ADD COLUMN metadata_clinica TEXT",
+        )
+        add_voice_column(
+            "compartido_en",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS compartido_en TIMESTAMP",
+            "ALTER TABLE voice_sessions ADD COLUMN compartido_en DATETIME",
+        )
+        add_voice_column(
+            "link_seguro",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS link_seguro TEXT",
+            "ALTER TABLE voice_sessions ADD COLUMN link_seguro TEXT",
+        )
+        add_voice_column(
+            "link_expira_en",
+            "ALTER TABLE voice_sessions ADD COLUMN IF NOT EXISTS link_expira_en TIMESTAMP",
+            "ALTER TABLE voice_sessions ADD COLUMN link_expira_en DATETIME",
+        )
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+                if any(name in added_columns for name in ["audio_session_hash", "indicaciones"]):
+                    conn.execute(
+                        text(
+                            "UPDATE voice_sessions SET "
+                            "audio_session_hash = COALESCE(audio_session_hash, ''), "
+                            "indicaciones = COALESCE(indicaciones, '[]')"
+                        )
+                    )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_voice_sessions_profile_id ON voice_sessions (profile_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_voice_sessions_user_id ON voice_sessions (user_id)"
+                    )
+                )
+            print(
+                "DEBUG ensure_voice_session_schema: columnas agregadas a voice_sessions: "
+                + ", ".join(added_columns)
+            )
+        else:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_voice_sessions_profile_id ON voice_sessions (profile_id)"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_voice_sessions_user_id ON voice_sessions (user_id)"
+                    )
+                )
+            print("DEBUG ensure_voice_session_schema: tabla voice_sessions ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_voice_session_schema: no se pudo ajustar la tabla: {exc}")
+
+
+ensure_voice_session_schema()
+
+
 def ensure_medication_performance_indexes():
     try:
         backend = engine.url.get_backend_name()

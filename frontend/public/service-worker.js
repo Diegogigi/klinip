@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v15";
+const CACHE_NAME = "klinip-cache-v16";
 const ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -15,14 +15,24 @@ const NOTIFICATIONS_STORE = "klinip-notifications";
 const RECEIVED_STORE = "klinip-received-notifications";
 const BADGE_STORE = "klinip-badge";
 
+function buildNetworkUnavailableResponse() {
+  return new Response("Network unavailable", {
+    status: 503,
+    statusText: "Service Unavailable",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
 function fetchWithNetworkFallback(request, fallback = null) {
-  return fetch(request).catch(() => {
-    if (fallback) return fallback();
-    return new Response("Network unavailable", {
-      status: 503,
-      statusText: "Service Unavailable",
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+  return fetch(request).catch(async () => {
+    if (!fallback) return buildNetworkUnavailableResponse();
+    try {
+      const fallbackResponse = await fallback();
+      if (fallbackResponse instanceof Response) return fallbackResponse;
+    } catch (_) {
+      // Si el fallback falla o no devuelve una Response válida, devolver 503.
+    }
+    return buildNetworkUnavailableResponse();
   });
 }
 

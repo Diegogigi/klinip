@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS voice_sessions (
     transcripcion_tecnica TEXT,
     version_simple  TEXT,
     indicaciones    JSONB DEFAULT '[]',
+    hablantes       JSONB,
+    metadata_clinica JSONB,
     compartido_en   TIMESTAMP,
     link_seguro     TEXT,
     link_expira_en  TIMESTAMP
