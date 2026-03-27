@@ -5647,6 +5647,7 @@ if is_production:
     # Configura ALLOWED_ORIGINS en Railway como lista separada por comas.
     _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
     allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+    allow_origin_regex = None
     allow_credentials = False
 else:
     allow_origins = [
@@ -5655,11 +5656,15 @@ else:
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+    # Permitir cualquier puerto local en desarrollo para no depender del puerto
+    # exacto que Vite asigne cuando 5173 ya está ocupado.
+    allow_origin_regex = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
     allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=allow_credentials,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],
