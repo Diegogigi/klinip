@@ -5,6 +5,10 @@ import {
   getPreferredVoiceRecorderOption,
   resolveVoiceMimeInfo,
 } from "../utils/voiceRecording";
+import {
+  getVoiceProfessionalMeta,
+  parseVoiceTechnicalSections,
+} from "../utils/voiceTranscriptFormat";
 
 /* ── Audio Player ─────────────────────────────────────────────────────────── */
 
@@ -116,6 +120,26 @@ const TIPO_LABELS = {
   otro: "Otro",
 };
 
+const PROFESSIONAL_ROLE_OPTIONS = [
+  { value: "medico", label: "Médico/a", helper: "Puede emitir diagnóstico médico." },
+  { value: "kinesiologo", label: "Kinesiólogo/a", helper: "Evaluación y rehabilitación." },
+  { value: "fonoaudiologo", label: "Fonoaudiólogo/a", helper: "Lenguaje, voz y deglución." },
+  { value: "psicologo", label: "Psicólogo/a", helper: "Salud mental y acompañamiento." },
+  { value: "nutricionista", label: "Nutricionista", helper: "Alimentación y plan nutricional." },
+  { value: "terapeuta_ocupacional", label: "Terapeuta ocupacional", helper: "Funcionalidad y autonomía." },
+  { value: "enfermeria", label: "Enfermería", helper: "Cuidados y seguimiento." },
+  { value: "otro", label: "Otro profesional", helper: "Otro rol de salud." },
+];
+
+function getProfessionalRoleLabel(value) {
+  return PROFESSIONAL_ROLE_OPTIONS.find((item) => item.value === value)?.label || "Profesional de salud";
+}
+
+function getResultProfessionalLabel(result) {
+  const meta = result?.metadata_clinica || {};
+  return meta.profesional_confirmado || meta.especialidad_inferida || "";
+}
+
 /* ── SVG Icons ─────────────────────────────────────────────────────────────── */
 
 function MicSvg() {
@@ -190,8 +214,24 @@ function AudioWaves() {
 
 function TabParaTi({ result }) {
   const indicaciones = result.indicaciones || [];
+  const meta = result.metadata_clinica || {};
+  const professionalLabel = getResultProfessionalLabel(result);
+  const nonDiagnosticRole = meta.puede_diagnosticar_medicamente === false;
   return (
     <div className="iv-tab-content">
+      {(professionalLabel || nonDiagnosticRole) && (
+        <div className="iv-context-card">
+          <span className="iv-context-label">CONTEXTO DE LA ATENCIÓN</span>
+          {professionalLabel ? (
+            <p className="iv-context-text">Profesional registrado: {professionalLabel}</p>
+          ) : null}
+          {nonDiagnosticRole ? (
+            <p className="iv-context-helper">
+              Esta atención se resumió distinguiendo entre profesional y paciente, sin asumir un diagnóstico médico nuevo.
+            </p>
+          ) : null}
+        </div>
+      )}
       <div className="iv-summary-card">
         <span className="iv-summary-label">RESUMEN SIMPLE</span>
         <p className="iv-summary-text">{result.version_simple || "Sin resumen disponible."}</p>
@@ -219,14 +259,37 @@ function TabParaTi({ result }) {
   );
 }
 
-/* ── Done Sheet: Tab "Técnica" ─────────────────────────────────────────────── */
+function TabTecnicaStructured({ result }) {
+  const meta = result.metadata_clinica || {};
+  const sections = parseVoiceTechnicalSections(result.transcripcion_tecnica, meta);
+  const professionalMeta = getVoiceProfessionalMeta(meta);
 
-function TabTecnica({ result }) {
   return (
     <div className="iv-tab-content">
-      <div className="iv-tecnica-box">
-        {result.transcripcion_tecnica || "Sin transcripción disponible."}
+      <div className="iv-context-card">
+        <span className="iv-context-label">CONTEXTO CLÍNICO</span>
+        <p className="iv-context-text">Rol confirmado: {professionalMeta.role}</p>
+        <p className="iv-context-helper">{professionalMeta.disclaimer}</p>
       </div>
+      {sections.length ? (
+        <div className="iv-tech-sections">
+          {sections.map((section) => (
+            <section key={section.id} className={`iv-tech-card tone-${section.tone.key}`}>
+              <div className="iv-tech-card-head">
+                <h3 className="iv-tech-card-title">{section.title}</h3>
+                <span className={`iv-tech-badge tone-${section.tone.key}`}>{section.tone.label}</span>
+              </div>
+              <div className="iv-tech-card-body">
+                {section.lines.map((line, index) => (
+                  <p key={`${section.id}-${index}`} className="iv-tech-line">{line}</p>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="iv-tecnica-box">Sin transcripción disponible.</div>
+      )}
     </div>
   );
 }
@@ -240,6 +303,7 @@ function TabCompartir({ sessionId }) {
   const [emailModal, setEmailModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   async function handleShareLink() {
     setLoading("whatsapp");
@@ -255,11 +319,14 @@ function TabCompartir({ sessionId }) {
   async function handleSendEmail() {
     if (!emailInput.trim()) return;
     setLoading("email");
+    setEmailError("");
     try {
       await voiceShareEmail(sessionId, emailInput.trim());
       setEmailSent(true);
       setEmailModal(false);
-    } catch { /* ignore */ }
+    } catch {
+      setEmailError("No se pudo enviar el correo. Intenta de nuevo.");
+    }
     setLoading("");
   }
 
@@ -351,8 +418,9 @@ function TabCompartir({ sessionId }) {
             onChange={(e) => setEmailInput(e.target.value)}
             autoFocus
           />
+          {emailError && <p style={{ color: "#f87171", fontSize: "0.8rem", margin: "0 0 0.5rem" }}>{emailError}</p>}
           <div className="iv-email-modal-actions">
-            <button type="button" className="iv-btn iv-btn-ghost" onClick={() => setEmailModal(false)}>
+            <button type="button" className="iv-btn iv-btn-ghost" onClick={() => { setEmailModal(false); setEmailError(""); }}>
               Cancelar
             </button>
             <button
@@ -382,7 +450,13 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
   const [closing, setClosing] = useState(false);
   const [result, setResult] = useState(initialSession || null);
   const [activeTab, setActiveTab] = useState("parati");
+  const [sheetHeight, setSheetHeight] = useState(null); // null = CSS default
+  const [professionalRole, setProfessionalRole] = useState(
+    initialSession?.metadata_clinica?.profesional_clave || ""
+  );
 
+  const sheetRef = useRef(null);
+  const dragRef = useRef({ active: false, startY: 0, startH: 0 });
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
@@ -528,6 +602,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
         audioConsent: consentBlobRef.current,
         audioSession: sessionBlob,
         profileId,
+        professionalRole,
       });
       setResult(data);
       setStage("done");
@@ -568,6 +643,43 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
     });
   }
 
+  /* ── Sheet drag (mobile) ────────────────────────────────────────────────── */
+
+  const handleSheetTouchStart = useCallback((e) => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const touch = e.touches[0];
+    dragRef.current = {
+      active: true,
+      startY: touch.clientY,
+      startH: sheet.getBoundingClientRect().height,
+    };
+  }, []);
+
+  const handleSheetTouchMove = useCallback((e) => {
+    const d = dragRef.current;
+    if (!d.active) return;
+    const touch = e.touches[0];
+    const delta = d.startY - touch.clientY; // positive = drag up
+    const vh = window.innerHeight;
+    const minH = 120;
+    const maxH = vh * 0.9;
+    const newH = Math.min(maxH, Math.max(minH, d.startH + delta));
+    setSheetHeight(newH);
+  }, []);
+
+  const handleSheetTouchEnd = useCallback(() => {
+    const d = dragRef.current;
+    if (!d.active) return;
+    d.active = false;
+    // Snap: if below 180px collapse to mini, otherwise keep
+    const sheet = sheetRef.current;
+    if (sheet) {
+      const h = sheet.getBoundingClientRect().height;
+      if (h < 180) setSheetHeight(180);
+    }
+  }, []);
+
   /* ── Render: Done state with bottom sheet ────────────────────────────────── */
 
   if (stage === "done" && result) {
@@ -578,7 +690,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
     ];
 
     return (
-      <div className={`iv-overlay ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+      <div className={`iv-overlay iv-overlay-done ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
         <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -597,8 +709,17 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
         </div>
 
         {/* Bottom sheet */}
-        <div className="iv-sheet">
-          <div className="iv-sheet-handle" />
+        <div
+          className="iv-sheet"
+          ref={sheetRef}
+          style={sheetHeight ? { height: `${sheetHeight}px`, maxHeight: '90vh' } : undefined}
+        >
+          <div
+            className="iv-sheet-handle"
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+          />
 
           {/* Tab selector */}
           <div className="iv-sheet-tabs">
@@ -617,7 +738,7 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
           {/* Tab content */}
           <div className="iv-sheet-body">
             {activeTab === "parati" && <TabParaTi result={result} />}
-            {activeTab === "tecnica" && <TabTecnica result={result} />}
+            {activeTab === "tecnica" && <TabTecnicaStructured result={result} />}
             {activeTab === "compartir" && <TabCompartir sessionId={result.id} />}
           </div>
 
@@ -712,9 +833,31 @@ export default function ImmersiveVoice({ profileId, onDone, onClose, initialSess
           <StepDots current={stepIndex} total={3} />
         )}
 
+        {stage === "consent" && (
+          <div className="iv-role-card">
+            <span className="iv-role-label">Profesional que estás grabando</span>
+            <div className="iv-role-grid">
+              {PROFESSIONAL_ROLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`iv-role-option ${professionalRole === option.value ? "is-active" : ""}`}
+                  onClick={() => setProfessionalRole(option.value)}
+                >
+                  <span className="iv-role-option-title">{option.label}</span>
+                  <span className="iv-role-option-helper">{option.helper}</span>
+                </button>
+              ))}
+            </div>
+            <p className="iv-role-disclaimer">
+              Klinip ajustará la transcripción según este rol y evitará asumir un diagnóstico médico cuando no corresponda.
+            </p>
+          </div>
+        )}
+
         <div className="iv-actions">
           {stage === "consent" && (
-            <button type="button" className="iv-btn iv-btn-primary" onClick={handleStartConsent}>
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleStartConsent} disabled={!professionalRole}>
               El profesional autorizó
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
             </button>

@@ -15817,72 +15817,187 @@ async def ai_chat_transcribe(
 
 # ── Klinip Voice ───────────────────────────────────────────────────────────
 
-_VOICE_PROMPT_TECNICA = """\
-Eres un médico clínico experto en documentación de atenciones de salud en español latinoamericano.
 
-Se te entrega la transcripción automática de una consulta médica real entre un profesional de salud \
-y un paciente. Tu tarea es generar un REPORTE CLÍNICO TÉCNICO estructurado.
+_VOICE_AUDIO_MAX_BYTES = 500 * 1024 * 1024  # 500 MB — sin límite práctico para consultas largas
+_VOICE_UPLOAD_DIR = os.environ.get(
+    "VOICE_UPLOAD_DIR",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads", "voice"),
+)
+_VOICE_PROFESSIONAL_ROLE_CATALOG = {
+    "medico": {
+        "label": "Médico",
+        "can_issue_medical_diagnosis": True,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "kinesiologo": {
+        "label": "Kinesiólogo",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "fonoaudiologo": {
+        "label": "Fonoaudiólogo",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "psicologo": {
+        "label": "Psicólogo",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "nutricionista": {
+        "label": "Nutricionista",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "terapeuta_ocupacional": {
+        "label": "Terapeuta ocupacional",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "enfermeria": {
+        "label": "Profesional de enfermería",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "otro": {
+        "label": "Otro profesional de salud",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "profesional confirmado por el usuario",
+    },
+    "no_identificado": {
+        "label": "Profesional de salud no identificado",
+        "can_issue_medical_diagnosis": False,
+        "source_hint": "rol no confirmado por el usuario",
+    },
+}
+
+
+def _resolve_voice_professional_role(role_value: str | None) -> dict:
+    normalized = _normalize_text(role_value or "").replace(" ", "_")
+    role_info = _VOICE_PROFESSIONAL_ROLE_CATALOG.get(normalized)
+    if role_info:
+        return {"key": normalized, **role_info}
+    return {"key": "no_identificado", **_VOICE_PROFESSIONAL_ROLE_CATALOG["no_identificado"]}
+
+
+def _build_voice_prompt_tecnica(role_info: dict) -> str:
+    role_label = role_info["label"]
+    if role_info["can_issue_medical_diagnosis"]:
+        role_rules = (
+            "- El profesional confirmado para esta atención es un médico. Puedes consignar diagnóstico médico "
+            "solo cuando esté explícitamente dicho en la transcripción.\n"
+            "- Si el paciente menciona diagnósticos previos, distínguelos de lo expresado por el profesional actual."
+        )
+        impression_section = (
+            "## DIAGNÓSTICO MÉDICO EXPLÍCITO O IMPRESIÓN CLÍNICA\n"
+            "[Diagnóstico mencionado por el médico o impresión clínica explícita. "
+            'Si no existe, escribir "No registrado en la consulta"]'
+        )
+    else:
+        role_rules = (
+            f"- El profesional confirmado para esta atención es: {role_label}. "
+            "No lo llames médico, doctor o doctora salvo que la transcripción mencione de forma explícita a otro médico.\n"
+            "- NO inventes ni redactes diagnósticos médicos propios para esta atención.\n"
+            "- Si el paciente relata un diagnóstico previo dado por un médico, regístralo solo como antecedente referido "
+            "por el paciente o antecedente previo, nunca como diagnóstico emitido en esta atención.\n"
+            "- Para profesiones no médicas, prioriza hallazgos funcionales, evaluación del profesional, objetivos terapéuticos, "
+            "ejercicios, cuidados, educación, seguimiento y derivaciones."
+        )
+        impression_section = (
+            "## HALLAZGOS E IMPRESIÓN DEL PROFESIONAL\n"
+            "[Hallazgos, evaluación funcional, objetivos terapéuticos o impresión explícita del profesional. "
+            'No redactes diagnóstico médico inferido. Si no hay contenido suficiente, escribir "No registrado en la consulta"]'
+        )
+
+    return f"""\
+Eres un asistente experto en documentación clínica y terapéutica de atenciones de salud en español latinoamericano.
+
+Se te entrega la transcripción automática de una atención real entre un profesional de salud y un paciente/usuario.
+Profesional confirmado por el usuario: {role_label} ({role_info["source_hint"]}).
 
 REGLAS ESTRICTAS:
 - Fidelidad absoluta: no agregues diagnósticos, medicamentos ni indicaciones que no estén en la transcripción
 - Si una sección no tiene información suficiente, escribe "No registrado en la consulta"
-- Corrige errores obvios de transcripción automática (nombres de medicamentos mal escritos, fechas incoherentes)
-- Identifica al profesional de salud por su lenguaje clínico, uso de imperativos médicos y terminología técnica. Identifica al paciente por descripción de síntomas, respuestas y preguntas
-- Si hay marcadores [PAUSA Xm Ys] en la transcripción, respétalos como discontinuidades temporales reales de la consulta
-- Usa terminología clínica estándar en español
+- Corrige errores obvios de transcripción automática sin alterar el sentido clínico o terapéutico
+- Distingue con claridad al profesional de salud del paciente/usuario
+- Solo usa "médico", "doctor" o "doctora" si el contexto confirmado es médico o si la transcripción lo dice de forma explícita
+- Si hay marcadores [PAUSA Xm Ys] en la transcripción, respétalos como discontinuidades temporales reales de la atención
+- Usa terminología clínica estándar, pero sin adjudicar competencias que el rol profesional no tiene
+{role_rules}
 
 FORMATO DE SALIDA — usa exactamente estas secciones:
 
 ## DATOS DE LA ATENCIÓN
-Tipo de consulta: [medicina general / especialidad / control / urgencia / otro — inferir del contexto]
-Profesional: [especialidad inferida o "No identificado"]
+Tipo de atención: [consulta / terapia / control / evaluación / seguimiento / urgencia / otro — inferir del contexto]
+Profesional: [{role_label}]
 Duración estimada: [inferir del contenido]
 
 ## MOTIVO DE CONSULTA
-[Razón principal por la que el paciente consulta, en términos clínicos]
+[Razón principal por la que el paciente/usuario consulta, sin agregar interpretación no mencionada]
 
-## ANAMNESIS
-[Antecedentes relevantes mencionados, evolución del cuadro, síntomas referidos por el paciente]
+## ANTECEDENTES Y RELATO DEL PACIENTE/USUARIO
+[Síntomas, antecedentes, evolución del cuadro, preocupaciones o contexto referido por la persona atendida]
 
-## EXAMEN FÍSICO Y SIGNOS VITALES
-[Hallazgos mencionados: TA, FC, FR, T°, peso, saturación u otros. Si no hay, escribir "No registrado en la consulta"]
+## EVALUACIÓN O INTERVENCIÓN DEL PROFESIONAL
+[Hallazgos, observaciones, maniobras, educación, ejercicios, indicaciones verbales y evaluación realizada por el profesional]
 
-## DIAGNÓSTICO O IMPRESIÓN CLÍNICA
-[Diagnóstico mencionado o impresión clínica del profesional]
+## EXAMEN FÍSICO Y SIGNOS REGISTRADOS
+[Hallazgos objetivos o signos mencionados. Si no hay, escribir "No registrado en la consulta"]
 
-## PLAN TERAPÉUTICO
+{impression_section}
+
+## PLAN DE MANEJO
 ### Farmacológico
-[Medicamentos con nombre, dosis, frecuencia y duración exactos]
+[Medicamentos mencionados, solo si fueron indicados explícitamente]
 ### No farmacológico
-[Indicaciones de dieta, reposo, ejercicio, cuidados generales]
+[Ejercicios, reposo, cuidados, educación, dieta, adaptación funcional u otras indicaciones]
 ### Exámenes solicitados
-[Exámenes de laboratorio, imágenes u otros solicitados]
+[Exámenes o evaluaciones complementarias solicitadas]
 ### Derivaciones
-[Interconsultas o derivaciones a especialista]
+[Interconsultas, derivaciones o sugerencia de evaluación por otro profesional]
 
 ## PRÓXIMOS PASOS
-[Control, seguimiento, condiciones de retorno o urgencia]
+[Seguimiento, controles, retorno, signos de alarma o próximas acciones]
 
-## OBSERVACIONES CLÍNICAS
+## OBSERVACIONES
 [Información relevante no categorizada en las secciones anteriores]"""
 
-_VOICE_PROMPT_SIMPLE = """\
-Eres el asistente de salud de Klinip. Tu rol es traducir una consulta médica técnica a lenguaje claro y humano para el paciente y su familia.
 
-Se te entrega el reporte clínico técnico de una consulta médica real.
+def _build_voice_prompt_simple(role_info: dict) -> str:
+    role_label = role_info["label"]
+    if role_info["can_issue_medical_diagnosis"]:
+        role_rules = (
+            "- Puedes mencionar diagnóstico solo cuando el reporte técnico lo consigne explícitamente como diagnóstico médico.\n"
+            "- Mantén la diferencia entre lo dicho por el médico y lo referido por el paciente."
+        )
+    else:
+        role_rules = (
+            f"- El profesional confirmado en esta atención es {role_label}. No lo llames médico, doctor o doctora.\n"
+            "- No uses frases como 'diagnosticó', 'el médico encontró' o equivalentes para esta atención.\n"
+            "- Si aparece un diagnóstico previo en el reporte, preséntalo solo como antecedente comentado o diagnóstico previo, "
+            "no como conclusión emitida en esta atención.\n"
+            "- Explica lo que observó, trabajó o indicó el profesional, distinguiéndolo de lo que sintió o relató el paciente/usuario."
+        )
+
+    return f"""\
+Eres el asistente de salud de Klinip. Tu rol es traducir una atención de salud técnica a lenguaje claro y humano para el paciente y su familia.
+
+Profesional confirmado por el usuario: {role_label}.
 
 REGLAS ESTRICTAS:
-- Usa lenguaje simple, cálido y directo — como si explicaras a un familiar sin estudios médicos
+- Usa lenguaje simple, cálido y directo
 - No uses términos técnicos sin explicarlos
-- Fidelidad absoluta: no inventes indicaciones ni diagnósticos que no estén en el reporte
-- Si algo no está claro en el reporte, no lo incluyas — es mejor omitir que confundir
-- Tono: tranquilizador, nunca alarmista
+- Fidelidad absoluta: no inventes indicaciones, hallazgos ni diagnósticos que no estén en el reporte
+- Si algo no está claro en el reporte, no lo incluyas
+- Tono: orientador, nunca alarmista
 - Español latinoamericano neutro
+- Diferencia siempre entre lo dicho por el profesional y lo referido por el paciente/usuario
+{role_rules}
 
 TAREA 1 — resumen_simple:
 Escribe un resumen en 2-4 párrafos cortos que explique:
-(a) por qué fue el paciente
-(b) qué encontró o dijo el médico
+(a) por qué fue el paciente/usuario
+(b) qué observó, explicó o indicó el profesional
 (c) qué debe hacer ahora
 Máximo 200 palabras. Párrafos separados por \\n\\n.
 
@@ -15894,20 +16009,18 @@ Para cada indicación:
 - recordatorio_sugerido: true si tiene fecha, frecuencia o plazo concreto, false si es general
 - prioridad: "alta" si es urgente o crítico, "media" si es importante, "baja" si es recomendación
 - detalle_recordatorio: string con frecuencia/plazo si aplica, null si no aplica
-  Ejemplos:
-  medicamento → "Cada 8 horas por 5 días"
-  control → "En 2 semanas"
-  examen → "Esta semana"
 
 TAREA 3 — hablantes:
 Identifica los fragmentos principales de cada hablante. Máximo 3 fragmentos por hablante.
-- profesional: lo más relevante que dijo el médico
-- paciente: síntomas o preguntas más importantes
+- profesional: lo más relevante que dijo el profesional tratante
+- paciente: síntomas, dudas o contexto más importante del paciente/usuario
 
 TAREA 4 — metadata_clinica:
 - tipo_consulta: inferido del contenido
-- especialidad_inferida: inferida del lenguaje
-- tiene_diagnostico: true/false
+- especialidad_inferida: inferida del lenguaje, respetando el profesional confirmado por el usuario
+- profesional_confirmado: "{role_label}"
+- puede_diagnosticar_medicamente: {str(role_info["can_issue_medical_diagnosis"]).lower()}
+- tiene_diagnostico: true solo si el reporte contiene un diagnóstico médico explícito
 - tiene_medicamentos: true/false
 - tiene_examenes: true/false
 - tiene_derivacion: true/false
@@ -15915,38 +16028,34 @@ TAREA 4 — metadata_clinica:
 - pausas_detectadas: número de [PAUSA] encontrados
 
 RESPONDE SOLO EN JSON VÁLIDO con esta estructura exacta — sin texto antes ni después, sin markdown:
-{
+{{
   "resumen_simple": "string",
   "indicaciones": [
-    {
+    {{
       "texto": "string",
       "tipo": "string",
       "recordatorio_sugerido": true,
       "prioridad": "string",
       "detalle_recordatorio": "string | null"
-    }
+    }}
   ],
-  "hablantes": {
+  "hablantes": {{
     "profesional": ["string"],
     "paciente": ["string"]
-  },
-  "metadata_clinica": {
+  }},
+  "metadata_clinica": {{
     "tipo_consulta": "string",
     "especialidad_inferida": "string",
+    "profesional_confirmado": "string",
+    "puede_diagnosticar_medicamente": true,
     "tiene_diagnostico": true,
     "tiene_medicamentos": true,
     "tiene_examenes": true,
     "tiene_derivacion": false,
     "nivel_urgencia": "string",
     "pausas_detectadas": 0
-  }
-}"""
-
-_VOICE_AUDIO_MAX_BYTES = 500 * 1024 * 1024  # 500 MB — sin límite práctico para consultas largas
-_VOICE_UPLOAD_DIR = os.environ.get(
-    "VOICE_UPLOAD_DIR",
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "uploads", "voice"),
-)
+  }}
+}}"""
 
 
 def _voice_call_ai(
@@ -15990,6 +16099,7 @@ async def voice_process(
     audio_consent: UploadFile = File(...),
     audio_session: UploadFile = File(...),
     profile_id: int = Form(...),
+    professional_role: str = Form(default=""),
     pause_timestamps: str = Form(default=""),
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
@@ -16019,6 +16129,7 @@ async def voice_process(
 
     # Hash del audio de sesión
     audio_hash = hashlib.sha256(session_bytes).hexdigest()
+    role_info = _resolve_voice_professional_role(professional_role)
 
     # 1. Transcribir audio de la consulta
     transcription = _transcribe_ai_audio(session_bytes, safe_session)
@@ -16043,7 +16154,7 @@ async def voice_process(
 
     # 2. Generar transcripción técnica (reporte clínico estructurado)
     tecnica_result = _voice_call_ai(
-        _VOICE_PROMPT_TECNICA,
+        _build_voice_prompt_tecnica(role_info),
         raw_transcript,
         max_tokens=3000,
         temperature=0.1,
@@ -16056,8 +16167,12 @@ async def voice_process(
     hablantes = {}
     metadata_clinica = {}
     simple_result = _voice_call_ai(
-        _VOICE_PROMPT_SIMPLE,
-        f"Reporte clínico técnico:\n{transcripcion_tecnica}",
+        _build_voice_prompt_simple(role_info),
+        (
+            f"Profesional confirmado por el usuario: {role_info['label']}\n"
+            f"Puede emitir diagnóstico médico: {'sí' if role_info['can_issue_medical_diagnosis'] else 'no'}\n\n"
+            f"Reporte clínico técnico:\n{transcripcion_tecnica}"
+        ),
         max_tokens=2500,
         temperature=0.25,
     )
@@ -16079,6 +16194,13 @@ async def voice_process(
             indicaciones = []
             hablantes = {}
             metadata_clinica = {}
+
+    metadata_clinica = {
+        **(metadata_clinica or {}),
+        "profesional_confirmado": role_info["label"],
+        "profesional_clave": role_info["key"],
+        "puede_diagnosticar_medicamente": bool(role_info["can_issue_medical_diagnosis"]),
+    }
 
     # 4. Guardar archivos de audio en filesystem y paths en BD
     import time as _time
@@ -16216,12 +16338,45 @@ async def voice_share_email(
     if not session:
         raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
 
-    # Log the share attempt (real email sending comes later)
+    # Generate share link if not already present
+    if not session.link_seguro:
+        token = secrets.token_urlsafe(32)
+        base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
+        session.link_seguro = f"{base_url}/voice/shared/{token}"
+        session.link_expira_en = datetime.now() + timedelta(hours=48)
+    elif session.link_expira_en and session.link_expira_en < datetime.now():
+        # Refresh expired link
+        token = secrets.token_urlsafe(32)
+        base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
+        session.link_seguro = f"{base_url}/voice/shared/{token}"
+        session.link_expira_en = datetime.now() + timedelta(hours=48)
+
     session.compartido_en = datetime.now()
     db.commit()
-    print(f"VOICE SHARE EMAIL: session={session_id} to={email} by user={current_user.id}")
 
-    return {"ok": True}
+    share_url = session.link_seguro
+    profile_obj = db.query(models.HealthProfile).filter(models.HealthProfile.id == session.profile_id).first()
+    patient_name = getattr(profile_obj, "full_name", None) or getattr(profile_obj, "nombre", None) or "Paciente"
+    created_date = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else "—"
+
+    try:
+        _send_templated_email(
+            to_email=email,
+            subject=f"{_app_display_name()} Voice - Registro de consulta compartido",
+            template_name="voice_share.html",
+            context={
+                "share_url": share_url,
+                "patient_name": patient_name,
+                "created_date": created_date,
+                "year": datetime.now().year,
+            },
+            from_security=False,
+        )
+    except Exception as exc:
+        print(f"ERROR sending voice share email: {exc}")
+        raise HTTPException(status_code=500, detail="No se pudo enviar el correo. Intenta de nuevo.")
+
+    return {"ok": True, "url": share_url}
 
 
 @app.get("/voice/{session_id}/pdf")
@@ -16285,8 +16440,16 @@ async def voice_download_pdf(
 
 
 @app.get("/voice/shared/{token}")
-async def voice_shared_view(token: str, db: Session = Depends(auth.get_db)):
-    """Public endpoint — no authentication required. Returns session data for shared link."""
+async def voice_shared_view(token: str, request: Request, db: Session = Depends(auth.get_db)):
+    """Public endpoint — no authentication required. Returns session data for shared link.
+    Browser navigation (Accept: text/html) → serve SPA index.html.
+    API call (Accept: application/json) → return JSON data."""
+    accept = request.headers.get("accept", "")
+    if "text/html" in accept and "application/json" not in accept:
+        _static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
+        _index = os.path.join(_static_dir, "index.html")
+        if os.path.exists(_index):
+            return FileResponse(_index, media_type="text/html", headers={"Cache-Control": "no-store"})
     session = (
         db.query(models.VoiceSession)
         .filter(models.VoiceSession.link_seguro.contains(token))

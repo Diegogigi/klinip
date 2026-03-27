@@ -5,6 +5,10 @@ import {
   getPreferredVoiceRecorderOption,
   resolveVoiceMimeInfo,
 } from "../utils/voiceRecording";
+import {
+  getVoiceProfessionalMeta,
+  parseVoiceTechnicalSections,
+} from "../utils/voiceTranscriptFormat";
 
 const TIPO_LABELS = {
   medicamento: "Medicamento",
@@ -340,6 +344,9 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
 
   if (stage === "done" && result) {
     const indicaciones = result.indicaciones || [];
+    const meta = result.metadata_clinica || {};
+    const technicalSections = parseVoiceTechnicalSections(result.transcripcion_tecnica, meta);
+    const professionalMeta = getVoiceProfessionalMeta(meta);
     return (
       <article className="home-panel-card home-voice-card voice-done">
         <div className="home-panel-head">
@@ -399,8 +406,45 @@ export default function KlinipVoice({ profileId, canEdit, onDone }) {
           )}
 
           {activeTab === "tecnica" && (
-            <div className="voice-tecnica-text">
-              {result.transcripcion_tecnica || "Sin transcripción disponible."}
+            <div className="voice-tecnica-structured">
+              <div className="voice-tecnica-context">
+                <span className="voice-tecnica-context-label">CONTEXTO CLÍNICO</span>
+                <p className="voice-tecnica-context-role">
+                  Rol confirmado: {professionalMeta.role}
+                </p>
+                <p className="voice-tecnica-context-helper">
+                  {professionalMeta.disclaimer}
+                </p>
+              </div>
+
+              {technicalSections.length ? (
+                <div className="voice-tech-sections">
+                  {technicalSections.map((section) => (
+                    <section
+                      key={section.id}
+                      className={`voice-tech-card tone-${section.tone.key}`}
+                    >
+                      <div className="voice-tech-card-head">
+                        <h3 className="voice-tech-card-title">{section.title}</h3>
+                        <span className={`voice-tech-badge tone-${section.tone.key}`}>
+                          {section.tone.label}
+                        </span>
+                      </div>
+                      <div className="voice-tech-card-body">
+                        {section.lines.map((line, index) => (
+                          <p key={`${section.id}-${index}`} className="voice-tech-line">
+                            {line}
+                          </p>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <div className="voice-tecnica-text">
+                  Sin transcripción disponible.
+                </div>
+              )}
             </div>
           )}
         </div>

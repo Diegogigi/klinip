@@ -834,7 +834,7 @@ export function getPostAttachmentUrl(postId, attachmentId) {
 
 // ── Klinip Voice ──────────────────────────────────────────────────────────
 
-export async function processVoiceSession({ audioConsent, audioSession, profileId }) {
+export async function processVoiceSession({ audioConsent, audioSession, profileId, professionalRole }) {
   // Ensure token is fresh BEFORE building FormData — blobs are consumed on send
   // and cannot survive a 401-retry cycle.
   await _ensureFreshToken();
@@ -842,6 +842,7 @@ export async function processVoiceSession({ audioConsent, audioSession, profileI
   formData.append("audio_consent", audioConsent, buildVoiceUploadName("consent", audioConsent));
   formData.append("audio_session", audioSession, buildVoiceUploadName("session", audioSession));
   formData.append("profile_id", profileId);
+  if (professionalRole) formData.append("professional_role", professionalRole);
   const res = await api.post("/voice/process", formData, {
     headers: { "Content-Type": "multipart/form-data" },
     timeout: 300000,
@@ -884,7 +885,9 @@ export function voiceAudioUrl(sessionId) {
 }
 
 export async function getSharedVoiceSession(token) {
-  const res = await axios.get(`${API_URL}/voice/shared/${token}`);
+  const res = await axios.get(`${API_URL}/voice/shared/${token}`, {
+    headers: { Accept: "application/json" },
+  });
   return res.data;
 }
 

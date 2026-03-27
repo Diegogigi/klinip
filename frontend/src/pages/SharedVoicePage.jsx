@@ -1,6 +1,10 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { getSharedVoiceSession, sharedVoiceAudioUrl } from "../api";
+import {
+  getVoiceProfessionalMeta,
+  parseVoiceTechnicalSections,
+} from "../utils/voiceTranscriptFormat";
 
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 
@@ -180,8 +184,8 @@ export default function SharedVoicePage() {
             {error === "expired"
               ? "Este enlace de consulta ha expirado. Solicite al paciente que genere uno nuevo desde la app Klinip."
               : error === "not_found"
-              ? "El enlace no es valido o ya no existe."
-              : "Hubo un problema al cargar el registro. Intente de nuevo mas tarde."}
+              ? "El enlace no es válido o ya no existe."
+              : "Hubo un problema al cargar el registro. Intente de nuevo más tarde."}
           </p>
         </div>
       </div>
@@ -191,6 +195,11 @@ export default function SharedVoicePage() {
   const audioSrc = data.has_audio ? sharedVoiceAudioUrl(token) : null;
   const indicaciones = data.indicaciones || [];
   const meta = data.metadata_clinica || {};
+  const professionalMeta = getVoiceProfessionalMeta(meta);
+  const technicalSections = parseVoiceTechnicalSections(
+    data.transcripcion_tecnica,
+    meta
+  );
 
   return (
     <div className="sv-page">
@@ -229,10 +238,12 @@ export default function SharedVoicePage() {
               </span>
             </div>
           )}
-          {meta.especialidad_inferida && (
+          {(meta.profesional_confirmado || meta.especialidad_inferida) && (
             <div className="sv-meta-row">
-              <span className="sv-meta-label">Especialidad inferida</span>
-              <span className="sv-meta-value">{meta.especialidad_inferida}</span>
+              <span className="sv-meta-label">Rol confirmado</span>
+              <span className="sv-meta-value">
+                {meta.profesional_confirmado || meta.especialidad_inferida}
+              </span>
             </div>
           )}
           {data.audio_session_hash && (
@@ -253,16 +264,51 @@ export default function SharedVoicePage() {
 
         {/* Transcription */}
         <div className="sv-section">
-          <h3 className="sv-section-title">Transcripcion clinica</h3>
+          <h3 className="sv-section-title">Transcripción clínica</h3>
           <div className="sv-transcription">
-            {data.transcripcion_tecnica || "Sin transcripcion disponible."}
+            <div className="sv-tech-context">
+              <span className="sv-tech-context-label">CONTEXTO CLÍNICO</span>
+              <p className="sv-tech-context-role">
+                Rol confirmado: {professionalMeta.role}
+              </p>
+              <p className="sv-tech-context-helper">
+                {professionalMeta.disclaimer}
+              </p>
+            </div>
+
+            {technicalSections.length ? (
+              <div className="sv-tech-sections">
+                {technicalSections.map((section) => (
+                  <section
+                    key={section.id}
+                    className={`sv-tech-card tone-${section.tone.key}`}
+                  >
+                    <div className="sv-tech-card-head">
+                      <h4 className="sv-tech-card-title">{section.title}</h4>
+                      <span className={`sv-tech-badge tone-${section.tone.key}`}>
+                        {section.tone.label}
+                      </span>
+                    </div>
+                    <div className="sv-tech-card-body">
+                      {section.lines.map((line, index) => (
+                        <p key={`${section.id}-${index}`} className="sv-tech-line">
+                          {line}
+                        </p>
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              "Sin transcripción disponible."
+            )}
           </div>
         </div>
 
         {/* Indicaciones */}
         {indicaciones.length > 0 && (
           <div className="sv-section">
-            <h3 className="sv-section-title">Indicaciones extraidas ({indicaciones.length})</h3>
+            <h3 className="sv-section-title">Indicaciones extraídas ({indicaciones.length})</h3>
             <div className="sv-indications">
               {indicaciones.map((ind, i) => {
                 const c = IND_COLORS[ind.tipo] || IND_COLORS.otro;
@@ -287,8 +333,8 @@ export default function SharedVoicePage() {
       <footer className="sv-footer">
         <p>Generado por Klinip Voice · klinip.cl</p>
         <p className="sv-footer-disclaimer">
-          Este documento fue generado automaticamente por inteligencia artificial a partir de una grabacion de consulta.
-          La transcripcion IA puede contener imprecisiones. El audio original es la fuente de verdad.
+          Este documento fue generado automáticamente por inteligencia artificial a partir de una grabación de consulta.
+          La transcripción IA puede contener imprecisiones. El audio original es la fuente de verdad.
         </p>
         {data.expires_at && (
           <p className="sv-footer-expires">
