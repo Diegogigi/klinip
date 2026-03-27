@@ -34,6 +34,15 @@ When closing a frontend task for Klinip, explicitly mention:
 - mobile compact adjustments
 - UI copy integrity checks
 
+## Encoding y caracteres
+
+- Todos los archivos del proyecto se guardan en UTF-8 sin BOM.
+- En Python, cualquier lectura o escritura de texto debe usar `encoding="utf-8"` explicito.
+- No introducir strings hardcodeados con mojibake, Latin-1 roto o caracteres corruptos.
+- Si se generan archivos `.md`, `.txt`, `.json` o `.csv`, deben escribirse en UTF-8 explicito.
+- La salida del servidor debe quedar configurada en UTF-8 al arranque para evitar corrupcion en logs y textos.
+- Consultar `prevencion_caracteres_corruptos.md` como referencia operativa antes de corregir o generar contenido textual.
+
 ## Skills
 A skill is a set of local instructions to follow that is stored in a `SKILL.md` file. Below is the list of skills that can be used. Each entry includes a name, description, and file path so you can open the source for full instructions when using a specific skill.
 ### Available skills

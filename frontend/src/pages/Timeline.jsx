@@ -1,44 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getActiveHealthProfile, getAiLifeTimeline, getHealthProfiles } from "../api";
 import { toLocaleDateOrEmpty } from "../utils/dates";
-
-const MOJIBAKE_FALLBACKS = [
-  // Vocales minúsculas acentuadas
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã¼", "ü"],
-  // Vocales mayúsculas acentuadas
-  ["Ã‰", "É"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Ã", "Á"],
-  ["Ã", "Í"],
-  // Signos de puntuación españoles
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
-  ["Â°", "°"],
-  // Comillas tipográficas (UTF-8 mal decodificado como Windows-1252)
-  ["â€", "“"],
-  ["â€", "”"],
-  ["â€™", "’"],
-  ["â€˜", "‘"],
-  // Guiones y puntos suspensivos
-  ["â€“", "–"],
-  ["â€”", "—"],
-  ["â€¦", "…"],
-  // Viñeta
-  ["â€¢", "•"],
-];
+import { cleanUiText } from "../utils/textEncoding";
 
 const SUMMARY_TOKEN_LABELS = [
   [/health_alerts?/gi, "alertas de salud"],
-  [/diagnostic_results?/gi, "resultados clínicos"],
+  [/diagnostic_results?/gi, "resultados cl\u00ednicos"],
   [/external_records?/gi, "registros externos"],
   [/appointments?/gi, "citas"],
   [/documents?/gi, "documentos"],
@@ -66,25 +33,15 @@ const filterMap = {
   results: "diagnostic_result",
 };
 
-function cleanUiText(value, fallback = "") {
-  const text = String(value ?? "");
-  const cleaned = MOJIBAKE_FALLBACKS.reduce(
-    (result, [search, replacement]) => result.split(search).join(replacement),
-    text
-  ).trim();
-  return cleaned || fallback;
-}
-
 function getTimelineIcon(eventType) {
-  if (eventType === "appointment") return "📅";
-  if (eventType === "document") return "📄";
-  if (eventType === "medication" || eventType === "treatment") return "💊";
-  if (eventType === "diagnostic_result") return "🧪";
-  if (eventType === "external_record") return "🔗";
-  if (eventType === "health_alert") return "⚠️";
-  return "📌";
+  if (eventType === "appointment") return "\u{1F4C5}";
+  if (eventType === "document") return "\u{1F4C4}";
+  if (eventType === "medication" || eventType === "treatment") return "\u{1F48A}";
+  if (eventType === "diagnostic_result") return "\u{1F9EA}";
+  if (eventType === "external_record") return "\u{1F517}";
+  if (eventType === "health_alert") return "\u26A0\uFE0F";
+  return "\u{1F4CC}";
 }
-
 function humanizeTimelineSummary(summary) {
   let text = cleanUiText(summary, "");
   if (!text) return { lead: "", detail: "", highlights: [] };
@@ -94,13 +51,13 @@ function humanizeTimelineSummary(summary) {
   });
 
   text = text
-    .replace(/\bEvolucion\b/g, "Evolución")
-    .replace(/\bclinicos\b/g, "clínicos")
-    .replace(/\bUltimos\b/g, "Últimos")
-    .replace(/\bmedica\b/g, "médica")
-    .replace(/\bcronologico\b/g, "cronológico");
+    .replace(/\bEvolucion\b/g, "Evoluci\u00f3n")
+    .replace(/\bclinicos\b/g, "cl\u00ednicos")
+    .replace(/\bUltimos\b/g, "\u00daltimos")
+    .replace(/\bmedica\b/g, "m\u00e9dica")
+    .replace(/\bcronologico\b/g, "cronol\u00f3gico");
 
-  const [leadPart = "", detailPart = ""] = text.split(/Últimos hitos:\s*/i);
+  const [leadPart = "", detailPart = ""] = text.split(/\u00daltimos hitos:\s*/i);
   const lead = leadPart.trim().replace(/\s+/g, " ");
   const highlights = detailPart
     .split(/\s*,\s*/)

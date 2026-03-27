@@ -16,6 +16,7 @@ import {
 import RowActionsMenu from "../components/RowActionsMenu";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
+import { cleanUiText } from "../utils/textEncoding";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -38,33 +39,6 @@ const statusLabels = {
   agendada: "Agendada",
   realizada: "Realizada",
 };
-
-const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
-];
-
-function cleanUiText(value, fallback = "") {
-  const text = String(value ?? "");
-  const cleaned = MOJIBAKE_FALLBACKS.reduce(
-    (result, [search, replacement]) => result.split(search).join(replacement),
-    text
-  ).trim();
-  return cleaned || fallback;
-}
 
 function formatAppointmentDateLabel(item) {
   if (!item?.date_time) return "Por agendar";
@@ -835,4 +809,3 @@ export default function Appointments() {
     </>
   );
 }
-

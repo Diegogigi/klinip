@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getAppointments,
@@ -11,6 +11,7 @@ import {
   toLocaleDateOrEmpty,
   toLocaleDateTimeOrEmpty,
 } from "../utils/dates";
+import { cleanUiText } from "../utils/textEncoding";
 
 const typeColors = {
   cita: "event-green",
@@ -20,33 +21,6 @@ const typeColors = {
 };
 
 const profileToneClasses = ["profile-blue", "profile-violet", "profile-teal", "profile-amber"];
-
-const MOJIBAKE_FALLBACKS = [
-  ["ÃƒÂ¡", "Ã¡"],
-  ["ÃƒÂ©", "Ã©"],
-  ["ÃƒÂ­", "Ã­"],
-  ["ÃƒÂ³", "Ã³"],
-  ["ÃƒÂº", "Ãº"],
-  ["ÃƒÂ±", "Ã±"],
-  ["ÃƒÂ", "Ã"],
-  ["Ãƒâ€°", "Ã‰"],
-  ["ÃƒÂ", "Ã"],
-  ["Ãƒâ€œ", "Ã“"],
-  ["ÃƒÅ¡", "Ãš"],
-  ["Ãƒâ€˜", "Ã‘"],
-  ["Ã‚Â¿", "Â¿"],
-  ["Ã‚Â¡", "Â¡"],
-  ["Ã‚Â·", "Â·"],
-];
-
-function cleanUiText(value, fallback = "") {
-  const text = String(value ?? "");
-  const cleaned = MOJIBAKE_FALLBACKS.reduce(
-    (result, [search, replacement]) => result.split(search).join(replacement),
-    text
-  ).trim();
-  return cleaned || fallback;
-}
 
 function startOfMonth(date) {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -638,4 +612,3 @@ export default function Calendar() {
     </>
   );
 }
-

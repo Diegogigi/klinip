@@ -1,4 +1,4 @@
-﻿from fastapi import (
+from fastapi import (
     FastAPI,
     Depends,
     HTTPException,
@@ -17,6 +17,7 @@ from sqlalchemy import text, inspect, func, or_
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 from typing import List
 import os
+import sys
 import mimetypes
 import base64
 from datetime import timedelta, datetime, timezone
@@ -36,6 +37,12 @@ import collections
 import math
 from difflib import SequenceMatcher
 import time
+
+# Fuerza UTF-8 en logs/salida para evitar mojibake por configuracion regional.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
 
 # ── Seguridad: Rate limiting en memoria ────────────────────────────────────
 _rl_store: dict = collections.defaultdict(list)
@@ -4217,38 +4224,38 @@ def _clean_center_line(line: str) -> str:
 
 def _extract_center_from_electronic_prescription(text: str) -> str | None:
     """
-    Extrae el centro mÃ©dico de recetas electrÃ³nicas chilenas
+    Extrae el centro médico de recetas electrónicas chilenas
     """
     if not text:
         return None
 
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # Buscar lÃ­neas con "DirecciÃ³n:" en recetas electrÃ³nicas
+    # Buscar líneas con "Dirección:" en recetas electrónicas
     for idx, line in enumerate(lines[:20]):
         normalized = _normalize_text(line)
         if "direccion" in normalized and ":" in line:
-            # La direcciÃ³n suele seguir despuÃ©s de los dos puntos
+            # La dirección suele seguir después de los dos puntos
             if idx + 1 < len(lines):
-                # La siguiente lÃ­nea suele contener la direcciÃ³n completa
+                # La siguiente línea suele contener la dirección completa
                 address_line = lines[idx + 1].strip()
-                # Limpiar la direcciÃ³n
-                # Formato tÃ­pico: "Pasaje El Boldo #654, Pudahuel, Santiago, Metropolitana de Santiago"
+                # Limpiar la dirección
+                # Formato típico: "Pasaje El Boldo #654, Pudahuel, Santiago, Metropolitana de Santiago"
                 # Queremos extraer "Pudahuel, Santiago" o similar
                 parts = address_line.split(",")
                 if len(parts) >= 2:
-                    # Tomar la comuna y regiÃ³n
+                    # Tomar la comuna y región
                     return _safe_text(
                         f"{parts[-3].strip()}, {parts[-2].strip()}"
                         if len(parts) >= 3
                         else f"{parts[0].strip()}, {parts[1].strip()}"
                     )
 
-    # Si no encuentra direcciÃ³n, buscar por profesiÃ³n/instituciÃ³n
+    # Si no encuentra dirección, buscar por profesión/institución
     for line in lines[:10]:
         normalized = _normalize_text(line)
         if "profesion" in normalized or "medico" in normalized:
-            # Buscar si menciona alguna instituciÃ³n
+            # Buscar si menciona alguna institución
             if (
                 "hospital" in normalized
                 or "clinica" in normalized
@@ -4263,7 +4270,7 @@ def _guess_center(text: str) -> str | None:
     """
     Detecta el centro de salud del documento
     """
-    # Primero verificar si es receta electrÃ³nica
+    # Primero verificar si es receta electrónica
     if _is_electronic_prescription(text):
         center = _extract_center_from_electronic_prescription(text)
         if center:
@@ -4303,7 +4310,7 @@ def _guess_center(text: str) -> str | None:
             cleaned = _clean_center_line(line)
             if cleaned:
                 return cleaned[:120]
-    # NO buscar en las primeras lÃ­neas para recetas electrÃ³nicas
+    # NO buscar en las primeras líneas para recetas electrónicas
     # porque puede capturar direcciones
     return None
 
@@ -4326,8 +4333,8 @@ def _guess_date(text: str) -> datetime | None:
                 except Exception:
                     pass
 
-    # PatrÃ³n especÃ­fico para recetas electrÃ³nicas chilenas
-    # Formato: "Fecha de emisiÃ³n: 2 de septiembre, 2025"
+    # Patrón específico para recetas electrónicas chilenas
+    # Formato: "Fecha de emisión: 2 de septiembre, 2025"
     month_names = {
         "enero": 1,
         "febrero": 2,
@@ -4360,7 +4367,7 @@ def _guess_date(text: str) -> datetime | None:
         except Exception:
             pass
 
-    # Patrones numÃ©ricos tradicionales
+    # Patrones numéricos tradicionales
     patterns = [
         r"(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})",
         r"(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})",
@@ -4391,19 +4398,19 @@ def _guess_notes(text: str) -> str | None:
     if not text:
         return None
 
-    # Si es receta electrÃ³nica, no intentar extraer notas genÃ©ricas
-    # Los medicamentos se extraerÃ¡n por separado
+    # Si es receta electrónica, no intentar extraer notas genéricas
+    # Los medicamentos se extraerán por separado
     if _is_electronic_prescription(text):
         # Buscar "Forma prescriptor" que tiene indicaciones especiales
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         for i, line in enumerate(lines):
             if "forma prescriptor" in _normalize_text(line):
-                # Las siguientes lÃ­neas pueden tener indicaciones importantes
+                # Las siguientes líneas pueden tener indicaciones importantes
                 if i + 1 < len(lines):
                     special_instructions = lines[i + 1].strip()
                     if special_instructions and len(special_instructions) > 10:
                         return f"Indicaciones especiales: {_safe_text(special_instructions)[:200]}"
-        return None  # No extraer notas genÃ©ricas para recetas electrÃ³nicas
+        return None  # No extraer notas genéricas para recetas electrónicas
 
     vaccine_notes = _extract_vaccine_notes(text)
     if vaccine_notes:
@@ -4425,7 +4432,7 @@ def _guess_notes(text: str) -> str | None:
         "laboratorio",
         "medicamento",
     )
-    # Excluir "indicacion" de keywords para evitar capturar texto genÃ©rico
+    # Excluir "indicacion" de keywords para evitar capturar texto genérico
     value_pattern = re.compile(
         r"([a-zA-Z][a-zA-Z\s]{2,})\s+(\d+(?:[.,]\d+)?)\s*(mg\/dl|mmol\/l|%|g\/l|mg\/l)",
         re.IGNORECASE,
@@ -4435,7 +4442,7 @@ def _guess_notes(text: str) -> str | None:
         "muestra",
         "corporacion municipal",
         "laboratorio clinico",
-        "indicacion de administracion",  # Ignorar este texto genÃ©rico de recetas
+        "indicacion de administracion",  # Ignorar este texto genérico de recetas
         "via de administracion",
         "metodo de administracion",
         "administrar",
@@ -4560,7 +4567,7 @@ def _extract_lab_results(text: str) -> list[str]:
     sample = ""
     sample_pattern = re.compile(r"muestra\s*[:\-]\s*(.+)", re.IGNORECASE)
     result_pattern = re.compile(
-        r"^([A-ZÃÃ‰ÃÃ“ÃšÃ‘][A-ZÃÃ‰ÃÃ“ÃšÃ‘\s]{2,})\s+[*\-]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z/%]+)\s*\[?\s*(\d+(?:[.,]\d+)?)\s*[-â€“]\s*(\d+(?:[.,]\d+)?)\s*\]?",
+        r"^([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ\s]{2,})\s+[*\-]?\s*(\d+(?:[.,]\d+)?)\s*([a-zA-Z/%]+)\s*\[?\s*(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*\]?",
         re.IGNORECASE,
     )
     for line in lines:
@@ -4758,7 +4765,7 @@ def _extract_post_sample_notes(lines: list[str]) -> list[str]:
             break
         if normalized.startswith("procedimientos relacionados"):
             break
-        cleaned = _safe_text(line.lstrip("â€¢-").strip())
+        cleaned = _safe_text(line.lstrip("•-").strip())
         if cleaned:
             notes.append(cleaned)
     return notes
@@ -4834,7 +4841,7 @@ def _extract_label_medication(text: str) -> dict | None:
     }
 
     name_candidate = ""
-    uppercase_words = re.findall(r"\b[A-ZÃÃ‰ÃÃ“ÃšÃ‘]{4,}\b", text)
+    uppercase_words = re.findall(r"\b[A-ZÁÉÍÓÚÑ]{4,}\b", text)
     for word in uppercase_words:
         if _normalize_text(word) in stop_words:
             continue
@@ -5027,13 +5034,13 @@ def _extract_order_schedule(text: str) -> dict | None:
 
 def _is_electronic_prescription(text: str) -> bool:
     """
-    Detecta si el documento es una receta electrÃ³nica chilena
+    Detecta si el documento es una receta electrónica chilena
     """
     if not text:
         return False
     normalized = _normalize_text(text)
 
-    # Indicadores de receta electrÃ³nica
+    # Indicadores de receta electrónica
     indicators = [
         "receta electronica",
         "rp prescripcion",
@@ -5045,7 +5052,7 @@ def _is_electronic_prescription(text: str) -> bool:
         "periodo de tratamiento",
     ]
 
-    # Si tiene cÃ³digo de barras o RUT con formato chileno
+    # Si tiene código de barras o RUT con formato chileno
     has_barcode = bool(re.search(r"(\d{13}|\*[A-Z0-9]+\*)", text))
     has_rut = bool(re.search(r"\d{1,2}\.\d{3}\.\d{3}[-]\d{1}[kK0-9]", text))
 
@@ -5056,26 +5063,26 @@ def _is_electronic_prescription(text: str) -> bool:
 
 def _extract_doctor_name(text: str) -> str | None:
     """
-    Extrae el nombre del profesional de la receta electrÃ³nica
+    Extrae el nombre del profesional de la receta electrónica
     """
     if not text:
         return None
 
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # Buscar nombre del profesional en las primeras 10 lÃ­neas
+    # Buscar nombre del profesional en las primeras 10 líneas
     for idx, line in enumerate(lines[:10]):
         normalized = _normalize_text(line)
 
-        # Buscar despuÃ©s de "profesional", "medico", "doctor", "dra", "dr"
+        # Buscar después de "profesional", "medico", "doctor", "dra", "dr"
         if any(
             keyword in normalized
             for keyword in ["profesional", "medico", "doctor", "dra", "dr"]
         ):
-            # El nombre suele estar en la misma lÃ­nea o en las siguientes
-            # PatrÃ³n: capturar nombre propio (2-4 palabras capitalizadas)
+            # El nombre suele estar en la misma línea o en las siguientes
+            # Patrón: capturar nombre propio (2-4 palabras capitalizadas)
             name_pattern = re.compile(
-                r"(?:dr\.?|dra\.?|doctor|doctora|profesional)?[\s:]+([A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+(?:\s+[A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+){1,3})",
+                r"(?:dr\.?|dra\.?|doctor|doctora|profesional)?[\s:]+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){1,3})",
                 re.IGNORECASE,
             )
             match = name_pattern.search(line)
@@ -5085,11 +5092,11 @@ def _extract_doctor_name(text: str) -> str | None:
                 if len(name) > 5 and "administracion" not in name.lower():
                     return _safe_text(name)
 
-            # Si no se encontrÃ³ en la misma lÃ­nea, buscar en las siguientes 2 lÃ­neas
+            # Si no se encontró en la misma línea, buscar en las siguientes 2 líneas
             for next_idx in range(idx + 1, min(idx + 3, len(lines))):
                 next_line = lines[next_idx]
-                # Buscar lÃ­nea con nombre propio
-                if re.search(r"^[A-ZÃÃ‰ÃÃ“ÃšÃ‘][a-zÃ¡Ã©Ã­Ã³ÃºÃ±]+\s+[A-ZÃÃ‰ÃÃ“ÃšÃ‘]", next_line):
+                # Buscar línea con nombre propio
+                if re.search(r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑ]", next_line):
                     return _safe_text(next_line)
 
     return None
@@ -5097,7 +5104,7 @@ def _extract_doctor_name(text: str) -> str | None:
 
 def _extract_rut(text: str) -> dict:
     """
-    Extrae RUTs de mÃ©dico y paciente de formato chileno
+    Extrae RUTs de médico y paciente de formato chileno
     """
     ruts = {"patient_rut": None, "doctor_rut": None, "doctor_registry": None}
 
@@ -5106,18 +5113,18 @@ def _extract_rut(text: str) -> dict:
 
     lines = text.splitlines()
 
-    # PatrÃ³n RUT chileno: XX.XXX.XXX-X o XXXXXXXX-X
+    # Patrón RUT chileno: XX.XXX.XXX-X o XXXXXXXX-X
     rut_pattern = re.compile(r"(\d{1,2}\.?\d{3}\.?\d{3}[-]\d{1}[kK0-9])")
 
-    # PatrÃ³n para registro profesional
+    # Patrón para registro profesional
     registry_pattern = re.compile(
         r"(?:registro|rut|run)[\s:]+[\w\d\.\-/]+[\s:]+(\d[\d\.\-/]+\d)", re.IGNORECASE
     )
 
-    for idx, line in enumerate(lines[:15]):  # Buscar en primeras 15 lÃ­neas
+    for idx, line in enumerate(lines[:15]):  # Buscar en primeras 15 líneas
         normalized = _normalize_text(line)
 
-        # Buscar RUT del mÃ©dico (usualmente al inicio)
+        # Buscar RUT del médico (usualmente al inicio)
         if idx < 5:
             rut_matches = rut_pattern.findall(line)
             if rut_matches and not ruts["doctor_rut"]:
@@ -5129,11 +5136,11 @@ def _extract_rut(text: str) -> dict:
                 if reg_match:
                     ruts["doctor_registry"] = reg_match.group(1)
 
-        # Buscar RUT del paciente (despuÃ©s de "paciente" o "rut")
+        # Buscar RUT del paciente (después de "paciente" o "rut")
         if "paciente" in normalized or ("rut" in normalized and idx > 3):
             rut_matches = rut_pattern.findall(line)
             if rut_matches:
-                # El RUT del paciente suele ser diferente al del mÃ©dico
+                # El RUT del paciente suele ser diferente al del médico
                 for rut in rut_matches:
                     if rut != ruts["doctor_rut"]:
                         ruts["patient_rut"] = rut
@@ -5144,20 +5151,20 @@ def _extract_rut(text: str) -> dict:
 
 def _extract_electronic_prescription_meds(text: str) -> list[dict]:
     """
-    Extrae medicamentos de recetas electrÃ³nicas chilenas con formato especÃ­fico
-    Las recetas electrÃ³nicas chilenas tienen el formato:
+    Extrae medicamentos de recetas electrónicas chilenas con formato específico
+    Las recetas electrónicas chilenas tienen el formato:
 
     nombre_medicamento dosis forma
 
     Administrar:
     Dosis
     X comprimido
-    VÃ­a de AdministraciÃ³n
+    Vía de Administración
     oral
     Frecuencia
     Administrar cada X horas
     Periodo de Tratamiento
-    Durante X dÃ­as
+    Durante X días
     """
     if not text:
         return []
@@ -5165,10 +5172,10 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
     medications = []
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
 
-    # PatrÃ³n para detectar lÃ­nea de medicamento principal
+    # Patrón para detectar línea de medicamento principal
     # Formato: "nombre dosis unidad forma"
     med_name_pattern = re.compile(
-        r"^([a-zÃ¡Ã©Ã­Ã³ÃºÃ±\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ug|ui|%)\s+(comprimido|capsula|tableta|jarabe|suspension|solucion|gotas|crema|gel|pomada|iny)",
+        r"^([a-záéíóúñ\s]+?)\s+(\d+(?:[.,]\d+)?)\s*(mg|g|ml|mcg|ug|ui|%)\s+(comprimido|capsula|tableta|jarabe|suspension|solucion|gotas|crema|gel|pomada|iny)",
         re.IGNORECASE,
     )
 
@@ -5187,14 +5194,14 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
 
             dose = f"{dose_value} {dose_unit}"
 
-            # Buscar "Administrar:" en las siguientes lÃ­neas
+            # Buscar "Administrar:" en las siguientes líneas
             admin_amount = "1"
             via = ""
             method = ""
             frequency = ""
             duration_days = None
 
-            # Buscar en las siguientes 30 lÃ­neas o hasta encontrar otro medicamento
+            # Buscar en las siguientes 30 líneas o hasta encontrar otro medicamento
             j = i + 1
             while j < min(i + 30, len(lines)):
                 current_line = lines[j]
@@ -5205,9 +5212,9 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                 if med_name_pattern.search(current_line) and j > i + 2:
                     break
 
-                # Buscar cantidad a administrar (lÃ­nea despuÃ©s de "Dosis")
+                # Buscar cantidad a administrar (línea después de "Dosis")
                 if normalized == "dosis" and next_line:
-                    # La siguiente lÃ­nea tiene la cantidad
+                    # La siguiente línea tiene la cantidad
                     dose_match = re.search(
                         r"(\d+)\s*(comprimido|capsula|tableta|ml|g)",
                         next_line,
@@ -5216,9 +5223,9 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                     if dose_match:
                         admin_amount = dose_match.group(1)
 
-                # Buscar vÃ­a de administraciÃ³n (lÃ­nea despuÃ©s de "VÃ­a de AdministraciÃ³n" o "VÃ­a")
+                # Buscar vía de administración (línea después de "Vía de Administración" o "Vía")
                 if "via" in normalized and "administracion" in normalized:
-                    # La siguiente lÃ­nea tiene la vÃ­a
+                    # La siguiente línea tiene la vía
                     if next_line:
                         via_normalized = _normalize_text(next_line)
                         if via_normalized in [
@@ -5232,7 +5239,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                         ]:
                             via = next_line.lower()
 
-                # Buscar mÃ©todo (lÃ­nea despuÃ©s de "MÃ©todo de AdministraciÃ³n")
+                # Buscar método (línea después de "Método de Administración")
                 if "metodo" in normalized and "administracion" in normalized:
                     if next_line:
                         method_normalized = _normalize_text(next_line)
@@ -5247,7 +5254,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
 
                 # Buscar frecuencia
                 if "frecuencia" in normalized:
-                    # La siguiente lÃ­nea o la misma pueden tener la frecuencia
+                    # La siguiente línea o la misma pueden tener la frecuencia
                     freq_text = current_line + " " + next_line
                     freq_match = re.search(
                         r"cada\s+(\d+)\s+horas?", freq_text, re.IGNORECASE
@@ -5260,7 +5267,7 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
                 if "periodo" in normalized or "durante" in normalized:
                     period_text = current_line + " " + next_line
                     period_match = re.search(
-                        r"(\d+)\s+d[iÃ­]as?", period_text, re.IGNORECASE
+                        r"(\d+)\s+d[ií]as?", period_text, re.IGNORECASE
                     )
                     if period_match:
                         duration_days = int(period_match.group(1))
@@ -5270,26 +5277,26 @@ def _extract_electronic_prescription_meds(text: str) -> list[dict]:
             # Construir frecuencia completa
             full_frequency = f"{admin_amount} {form}"
             if via:
-                full_frequency += f", vÃ­a {via}"
+                full_frequency += f", vía {via}"
             if method:
                 full_frequency += f", {method}"
             if frequency:
                 full_frequency += f", {frequency}"
             elif not frequency and via:
-                # Si no hay frecuencia especÃ­fica, al menos mencionar que es diario
-                full_frequency += f", segÃºn indicaciÃ³n"
+                # Si no hay frecuencia específica, al menos mencionar que es diario
+                full_frequency += f", según indicación"
 
-            # Construir informaciÃ³n detallada de administraciÃ³n para las notas
+            # Construir información detallada de administración para las notas
             admin_details = []
             admin_details.append(f"Dosis: {admin_amount} {form}")
             if via:
-                admin_details.append(f"VÃ­a: {via}")
+                admin_details.append(f"Vía: {via}")
             if method:
-                admin_details.append(f"MÃ©todo: {method}")
+                admin_details.append(f"Método: {method}")
             if frequency:
                 admin_details.append(f"Frecuencia: {frequency}")
             if duration_days:
-                admin_details.append(f"DuraciÃ³n: {duration_days} dÃ­as")
+                admin_details.append(f"Duración: {duration_days} días")
 
             raw_info = f"{name} {dose}\n" + " | ".join(admin_details)
 
@@ -5322,10 +5329,10 @@ def _extract_medication_from_text(text: str) -> dict | None:
     dose_pattern = re.compile(r"(\d+(?:[.,]\d+)?)\s*(mg|ml|cc|g|mcg|ug)", re.IGNORECASE)
     freq_pattern = re.compile(r"cada\s+(\d+)\s+horas?", re.IGNORECASE)
     per_day_pattern = re.compile(r"(\d+)\s+veces\s+al\s+dia", re.IGNORECASE)
-    duration_pattern = re.compile(r"por\s+(\d+)\s+d[iÃ­]as?", re.IGNORECASE)
+    duration_pattern = re.compile(r"por\s+(\d+)\s+d[ií]as?", re.IGNORECASE)
     weeks_pattern = re.compile(r"por\s+(\d+)\s+semanas?", re.IGNORECASE)
     route_pattern = re.compile(
-        r"(oral|sublingual|topica|t[oÃ³]pica|intramuscular|intravenosa|subcutanea|inhalatoria)",
+        r"(oral|sublingual|topica|t[oó]pica|intramuscular|intravenosa|subcutanea|inhalatoria)",
         re.IGNORECASE,
     )
 
@@ -5516,7 +5523,7 @@ def _run_document_ocr(document_id: int):
                 doc.notes = guess_notes
 
         if doc.doc_type == models.DocumentType.receta:
-            # Detectar si es receta electrÃ³nica chilena
+            # Detectar si es receta electrónica chilena
             is_electronic = _is_electronic_prescription(text)
 
             if is_electronic:
@@ -5531,7 +5538,7 @@ def _run_document_ocr(document_id: int):
                         center_parts.append(f"RUT: {ruts['doctor_rut']}")
                     doc.center = " | ".join(center_parts)
 
-                # Construir informaciÃ³n para las notas
+                # Construir información para las notas
                 if ruts["patient_rut"] or ruts["doctor_rut"]:
                     rut_info_parts = []
 
@@ -5566,11 +5573,11 @@ def _run_document_ocr(document_id: int):
             if not existing_meds:
                 medications_to_add = []
 
-                # Intentar primero con extractor de recetas electrÃ³nicas
+                # Intentar primero con extractor de recetas electrónicas
                 if is_electronic:
                     medications_to_add = _extract_electronic_prescription_meds(text)
 
-                # Si no se encontraron medicamentos o no es receta electrÃ³nica, usar mÃ©todo general
+                # Si no se encontraron medicamentos o no es receta electrónica, usar método general
                 if not medications_to_add:
                     med = _extract_medication_from_text(text)
                     if med and (
@@ -5587,7 +5594,7 @@ def _run_document_ocr(document_id: int):
                         end_date = start_date + timedelta(days=duration_days)
                     duration_label = f"{duration_days} dias" if duration_days else ""
 
-                    # Para recetas electrÃ³nicas, usar el campo "raw" que tiene todos los detalles estructurados
+                    # Para recetas electrónicas, usar el campo "raw" que tiene todos los detalles estructurados
                     # Para otras recetas, construir las notas con la info disponible
                     if is_electronic and med.get("raw"):
                         med_notes = med.get("raw")
@@ -5619,7 +5626,7 @@ def _run_document_ocr(document_id: int):
                     )
 
                     # Agregar info detallada del medicamento a las notas del documento
-                    # Para recetas electrÃ³nicas, usar el formato estructurado completo
+                    # Para recetas electrónicas, usar el formato estructurado completo
                     if is_electronic and med.get("raw"):
                         med_summary = f"Detalle medicamento: {med.get('raw')}"
                     else:
@@ -5629,7 +5636,7 @@ def _run_document_ocr(document_id: int):
                         )
 
                     if doc.notes:
-                        # Evitar duplicados verificando si el nombre del medicamento ya estÃ¡
+                        # Evitar duplicados verificando si el nombre del medicamento ya está
                         if med.get("name") not in doc.notes:
                             doc.notes = f"{doc.notes}\n\n{med_summary}"
                     else:
@@ -5828,7 +5835,7 @@ async def security_headers_middleware(request: Request, call_next):
 @app.get("/health")
 def health_check(db: Session = Depends(auth.get_db)):
     try:
-        # Verificar conexiÃ³n a la base de datos
+        # Verificar conexión a la base de datos
         db.execute(text("SELECT 1"))
         db_status = "ok"
 
@@ -6399,7 +6406,7 @@ def _get_active_profile_context(
 ):
     """
     Resuelve el perfil activo y devuelve (profile, link, owner_user_id).
-    owner_user_id corresponde al dueÃ±o real de los datos clÃ­nicos.
+    owner_user_id corresponde al dueño real de los datos clínicos.
     """
     active_id = getattr(current_user, "active_health_profile_id", None)
     if active_id:
@@ -9204,7 +9211,7 @@ def _extract_clinical_signals_from_text(text: str | None) -> dict:
     ]
     metrics = []
     metric_pattern = re.compile(
-        r"(?P<label>[A-Za-zÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ±Ã‘0-9\s]+?)\s*[:=]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>%|mg/?dl|g/?dl|ui/?ml|m?mol/?l)?",
+        r"(?P<label>[A-Za-zÁÉÍÓÚáéíóúñÑ0-9\s]+?)\s*[:=]?\s*(?P<value>\d+(?:[.,]\d+)?)\s*(?P<unit>%|mg/?dl|g/?dl|ui/?ml|m?mol/?l)?",
         re.IGNORECASE,
     )
     for match in metric_pattern.finditer(raw):
@@ -9278,9 +9285,9 @@ def _build_ai_profile_memory(
             continue
         label = _safe_iso(item.date_time)
         if item.specialty:
-            label = f"{label} Â· {item.specialty}"
+            label = f"{label} · {item.specialty}"
         if item.center:
-            label = f"{label} Â· {item.center}"
+            label = f"{label} · {item.center}"
         next_appointments.append(_clip_text(label, 120))
 
     lines = [
@@ -9636,17 +9643,17 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
     lines = [_safe_text(ln) for ln in text.splitlines() if _safe_text(ln)]
     patterns = [
         re.compile(
-            r"^(?P<name>[A-Za-zÃÃ‰ÃÃ“ÃšÃ‘Ã¡Ã©Ã­Ã³ÃºÃ±0-9/%().,\- ]{3,80}?)[:\s]+"
+            r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ0-9/%().,\- ]{3,80}?)[:\s]+"
             r"(?P<value>[<>]?\d+(?:[.,]\d+)?)"
-            r"(?:\s+(?P<unit>[A-Za-z/%Âµ0-9.-]{1,24}))?"
-            r"(?:\s+(?P<range>(?:ref\.?|rango|vr)?\s*\d+(?:[.,]\d+)?\s*[-â€“a]\s*\d+(?:[.,]\d+)?))?$",
+            r"(?:\s+(?P<unit>[A-Za-z/%µ0-9.-]{1,24}))?"
+            r"(?:\s+(?P<range>(?:ref\.?|rango|vr)?\s*\d+(?:[.,]\d+)?\s*[-–a]\s*\d+(?:[.,]\d+)?))?$",
             re.IGNORECASE,
         ),
         re.compile(
-            r"^(?P<name>[A-Za-zÃÃ‰ÃÃ“ÃšÃ‘Ã¡Ã©Ã­Ã³ÃºÃ±0-9/%().,\- ]{3,80}?)\s+"
+            r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ0-9/%().,\- ]{3,80}?)\s+"
             r"(?P<value>[<>]?\d+(?:[.,]\d+)?)\s*"
-            r"(?P<unit>[A-Za-z/%Âµ0-9.-]{0,24})\s+"
-            r"(?P<range>\d+(?:[.,]\d+)?\s*[-â€“a]\s*\d+(?:[.,]\d+)?)$",
+            r"(?P<unit>[A-Za-z/%µ0-9.-]{0,24})\s+"
+            r"(?P<range>\d+(?:[.,]\d+)?\s*[-–a]\s*\d+(?:[.,]\d+)?)$",
             re.IGNORECASE,
         ),
     ]
@@ -9666,7 +9673,7 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
         try:
             numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
             if reference_range:
-                low_raw, high_raw = re.split(r"[-â€“a]", reference_range, maxsplit=1)
+                low_raw, high_raw = re.split(r"[-–a]", reference_range, maxsplit=1)
                 low_value = float(low_raw.replace(",", ".").strip())
                 high_value = float(high_raw.replace(",", ".").strip())
                 if numeric < low_value:
@@ -9760,8 +9767,8 @@ def _extract_prescription_entities(text: str) -> list[dict]:
     )
     frequency_pattern = re.compile(
         r"(?P<frequency>"
-        r"(?:cada|c\/)\s*\d+\s*(?:h|hr|hrs|hora|horas|d[iÃi]a|d[iÃi]as)"
-        r"|(?:una|dos|tres|cuatro|\d+)\s+veces\s+al\s+d[iÃi]a"
+        r"(?:cada|c\/)\s*\d+\s*(?:h|hr|hrs|hora|horas|d[ií]a|d[ií]as)"
+        r"|(?:una|dos|tres|cuatro|\d+)\s+veces\s+al\s+d[ií]a"
         r"|1-0-1|1-1-1|1-0-0|0-0-1|0-1-0|1-1-0|0-1-1"
         r"|en la manana|en la noche|manana y noche|desayuno|almuerzo|cena|al acostarse"
         r"|si es necesario|sos|prn|segun dolor)"
@@ -9770,7 +9777,7 @@ def _extract_prescription_entities(text: str) -> list[dict]:
     )
     duration_pattern = re.compile(
         r"(?P<duration>"
-        r"(?:por|durante|x)\s*\d+\s*(?:d[iÃi]as?|semanas?|mes(?:es)?)"
+        r"(?:por|durante|x)\s*\d+\s*(?:d[ií]as?|semanas?|mes(?:es)?)"
         r"|x\s*\d+"
         r"|hasta terminar"
         r"|tratamiento cronico"
@@ -9959,14 +9966,14 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
 
     if doc_type == "resultado":
         summary_plain = (
-            f"Resultado clÃ­nico en formato {file_format}. "
+            f"Resultado clínico en formato {file_format}. "
             + (f"Se detectaron {len(entities)} valores legibles por OCR. " if entities else "No se detectaron valores estructurados. ")
-            + (f"Hay {len(abnormal_values)} valor(es) posiblemente fuera de rango." if abnormal_values else "No se identificaron valores fuera de rango de forma automÃ¡tica.")
+            + (f"Hay {len(abnormal_values)} valor(es) posiblemente fuera de rango." if abnormal_values else "No se identificaron valores fuera de rango de forma automática.")
         )
         patient_friendly = (
             "Este documento parece corresponder a un resultado de examen. "
             + ("Algunos valores aparecen fuera del rango informado en el mismo documento. " if abnormal_values else "")
-            + "Conviene revisarlo junto a un profesional si tienes sÃ­ntomas o dudas."
+            + "Conviene revisarlo junto a un profesional si tienes síntomas o dudas."
         )
     elif doc_type == "receta":
         summary_plain = (
@@ -9989,20 +9996,20 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
                 + ", ".join(medication_labels)
             )
     elif doc_type == "orden":
-        summary_plain = f"Orden mÃ©dica en formato {file_format}. Puede contener exÃ¡menes o procedimientos solicitados."
-        patient_friendly = "Este documento parece una orden mÃ©dica. Puedo ayudarte a revisar quÃ© examen o trÃ¡mite fue indicado y si falta el resultado."
+        summary_plain = f"Orden médica en formato {file_format}. Puede contener exámenes o procedimientos solicitados."
+        patient_friendly = "Este documento parece una orden médica. Puedo ayudarte a revisar qué examen o trámite fue indicado y si falta el resultado."
     elif doc_type == "informe":
         summary_plain = (
-            f"Informe clÃ­nico en formato {file_format}. "
+            f"Informe clínico en formato {file_format}. "
             + (
                 f"Se detectaron {len(diagnosis_items)} diagnostico(s) o impresiones clinicas en el texto OCR. "
                 if diagnosis_items
-                else "El OCR capturÃ³ observaciones mÃ©dicas para resumen. "
+                else "El OCR capturó observaciones médicas para resumen. "
             )
             + "Conviene validar el contenido directamente con el informe original."
         )
         patient_friendly = (
-            "Este documento parece un informe mÃ©dico. "
+            "Este documento parece un informe médico. "
             + (
                 "Puedo resumir los diagnosticos o impresiones clinicas detectadas en lenguaje simple. "
                 if diagnosis_items
@@ -10011,8 +10018,8 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
             + "La lectura OCR puede contener errores y no reemplaza la explicacion de tu profesional."
         )
     else:
-        summary_plain = f"Documento de salud en formato {file_format}. El tipo clÃ­nico no se pudo confirmar con total certeza."
-        patient_friendly = "Este documento fue registrado, pero su tipo clÃ­nico no es completamente claro. Puedo intentar explicarlo con el texto OCR disponible."
+        summary_plain = f"Documento de salud en formato {file_format}. El tipo clínico no se pudo confirmar con total certeza."
+        patient_friendly = "Este documento fue registrado, pero su tipo clínico no es completamente claro. Puedo intentar explicarlo con el texto OCR disponible."
 
     if text:
         key_points.append("OCR: " + _clip_text(text, 220))
@@ -12112,7 +12119,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "20. Usa adherence_summary y health_alerts para explicar como va el tratamiento y riesgos detectados.\n"
         "21. Si el usuario pide preparar una cita, usa proximas citas, documentos y medicamentos activos para sugerir que llevar.\n"
         "22. Si interpretas resultados, usa document_summaries y abnormal_values_json; explica en lenguaje simple y sin diagnosticar.\n"
-        "23. Si el usuario pide un reporte clÃ­nico, resume los bloques disponibles y sugiere generar el reporte estructurado.\n"
+        "23. Si el usuario pide un reporte clínico, resume los bloques disponibles y sugiere generar el reporte estructurado.\n"
         "24. Si el usuario pregunta por su familia, primero usa family_access para explicar exactamente a que perfiles tiene acceso y con que rol. Usa family_context solo si existe y necesitas priorizar alertas activas, adherencia baja, citas proximas o documentos pendientes. Si family_access.available es verdadero, no respondas que no tiene acceso familiar aunque su plan personal sea basico.\n"
         "25. Si un informe medico contiene diagnosticos o impresiones clinicas detectadas por OCR, puedes resumirlos como hallazgos documentales sin presentarlos como diagnostico definitivo.\n"
         "26. Si el contexto incluye 'chat_attachment' con ocr_text, analiza ese documento prioritariamente: identifica su tipo (receta, examen, informe, orden), extrae la informacion clave (medicamentos y dosis si es receta; valores y rangos si es examen; diagnostico y hallazgos si es informe), entrega primero un resumen en lenguaje simple y luego responde la pregunta del usuario. Advierte si la calidad del OCR puede afectar la lectura.\n"
@@ -12903,8 +12910,8 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
             refs.append(
                 {
                     "kind": "appointment",
-                    "label": f"{appt_type.title()} prÃ³xima",
-                    "detail": " Â· ".join(
+                    "label": f"{appt_type.title()} próxima",
+                    "detail": " · ".join(
                         [value for value in [_safe_iso(item.date_time), item.specialty or "", item.center or ""] if value]
                     ),
                 }
@@ -18916,7 +18923,7 @@ async def cleanup_duplicate_subscriptions(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """
-    Elimina suscripciones duplicadas, manteniendo solo la mÃ¡s reciente
+    Elimina suscripciones duplicadas, manteniendo solo la más reciente
     """
     all_subs = (
         db.query(models.PushSubscription)
@@ -18928,7 +18935,7 @@ async def cleanup_duplicate_subscriptions(
     if len(all_subs) <= 1:
         return {"message": "No hay suscripciones duplicadas", "removed": 0}
 
-    # Mantener solo la mÃ¡s reciente (primera en la lista)
+    # Mantener solo la más reciente (primera en la lista)
     to_remove = all_subs[1:]
     for sub in to_remove:
         db.delete(sub)
@@ -19578,7 +19585,7 @@ async def delete_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    # Borrar archivo fÃ­sico
+    # Borrar archivo físico
     if doc.file_path and os.path.exists(doc.file_path):
         os.remove(doc.file_path)
 
@@ -20432,7 +20439,7 @@ def unlike_comment(
 # Servir archivos subidos (mantener para compatibilidad, pero usar endpoint protegido)
 # app.mount("/uploaded_docs", StaticFiles(directory=UPLOAD_DIR), name="uploaded_docs")
 
-# Servir archivos estÃ¡ticos del frontend
+# Servir archivos estáticos del frontend
 static_dir = os.path.join(os.path.dirname(__file__), "..", "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
@@ -20447,7 +20454,7 @@ if os.path.exists(static_dir):
 
         # Si es una ruta de API, no servir el SPA (dejar que FastAPI maneje el 404)
         # IMPORTANTE: NO interceptar rutas que terminan en /file (para documentos)
-        # Estas deben ser manejadas por el endpoint especÃ­fico /documents/{id}/file
+        # Estas deben ser manejadas por el endpoint específico /documents/{id}/file
         if "/file" in full_path:
             raise HTTPException(status_code=404, detail="Not found")
 
@@ -20466,7 +20473,7 @@ if os.path.exists(static_dir):
         if full_path.startswith(api_routes) or full_path in ("health", "debug"):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Para "documents", servir SPA cuando sea navegaciÃ³n HTML; mantener API para llamadas JSON.
+        # Para "documents", servir SPA cuando sea navegación HTML; mantener API para llamadas JSON.
         if full_path == "documents" or full_path == "documents/":
             accept = request.headers.get("accept", "")
             if "text/html" not in accept:
@@ -20484,7 +20491,7 @@ if os.path.exists(static_dir):
         ) and not os.path.isfile(file_path):
             raise HTTPException(status_code=404, detail="Not found")
 
-        # Extensiones de archivos estÃ¡ticos que deben servirse con su tipo MIME correcto
+        # Extensiones de archivos estáticos que deben servirse con su tipo MIME correcto
         static_extensions = {
             ".js",
             ".jsx",
@@ -20499,7 +20506,7 @@ if os.path.exists(static_dir):
             ".gif",
             ".svg",
             ".webp",
-            ".ico",  # ImÃ¡genes
+            ".ico",  # Imágenes
             ".woff",
             ".woff2",
             ".ttf",
@@ -20513,7 +20520,7 @@ if os.path.exists(static_dir):
             ".wasm",  # WebAssembly
         }
 
-        # Verificar si es un archivo estÃ¡tico por su extensiÃ³n
+        # Verificar si es un archivo estático por su extensión
         is_static_file = any(
             full_path.lower().endswith(ext) for ext in static_extensions
         )
@@ -20521,7 +20528,7 @@ if os.path.exists(static_dir):
         # Intentar servir el archivo solicitado
         file_path = os.path.join(static_dir, full_path)
 
-        # Si es un archivo estÃ¡tico y existe, servirlo con el tipo MIME correcto
+        # Si es un archivo estático y existe, servirlo con el tipo MIME correcto
         if is_static_file and os.path.exists(file_path) and os.path.isfile(file_path):
             # Detectar el tipo MIME
             mime_type, _ = mimetypes.guess_type(file_path)
@@ -20551,11 +20558,11 @@ if os.path.exists(static_dir):
                 },
             )
 
-        # Si es un archivo estÃ¡tico pero no existe, devolver 404 (no index.html)
+        # Si es un archivo estático pero no existe, devolver 404 (no index.html)
         if is_static_file:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # Para rutas que no son archivos estÃ¡ticos, verificar si existe el archivo
+        # Para rutas que no son archivos estáticos, verificar si existe el archivo
         if os.path.exists(file_path) and os.path.isfile(file_path):
             mime_type, _ = mimetypes.guess_type(file_path)
             return FileResponse(file_path, media_type=mime_type or "text/html")
@@ -20570,4 +20577,3 @@ if os.path.exists(static_dir):
             )
 
         raise HTTPException(status_code=404, detail="Not found")
-

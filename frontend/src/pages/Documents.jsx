@@ -7,6 +7,7 @@ import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import StepUpModal from "../components/StepUpModal";
+import { cleanUiText } from "../utils/textEncoding";
 
 const docLabels = {
   receta: "Receta",
@@ -30,37 +31,6 @@ const ocrLabels = {
   done: "OCR listo",
   skipped_size: "OCR omitido",
 };
-
-const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["Â·", "·"],
-  ["â€”", "—"],
-  ["â€“", "–"],
-  ["âˆ’", "-"],
-  ["Ã—", "×"],
-];
-
-function cleanUiText(value, fallback = "") {
-  const text = String(value ?? "");
-  const cleaned = MOJIBAKE_FALLBACKS.reduce(
-    (result, [search, replacement]) => result.split(search).join(replacement),
-    text
-  ).trim();
-  return cleaned || fallback;
-}
 
 function getDocumentFilename(doc) {
   return cleanUiText(doc?.filename, doc?.id ? `documento-${doc.id}` : "documento");
@@ -87,7 +57,7 @@ function buildDocumentShareMessage(doc) {
   const messageParts = [`Te comparto ${typeLabel.toLowerCase()} "${filename}" desde Klinip.`];
   if (center) messageParts.push(`Centro: ${center}.`);
   if (dateLabel) messageParts.push(`Fecha: ${dateLabel}.`);
-  messageParts.push("Para adjuntar el archivo real, usa la opción Compartir archivo o descárgalo primero desde Klinip.");
+  messageParts.push("Para adjuntar el archivo real, usa la opci\u00f3n Compartir archivo o desc\u00e1rgalo primero desde Klinip.");
   return messageParts.join(" ");
 }
 

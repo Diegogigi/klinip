@@ -2,36 +2,13 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLandingStats, getPublicPlans } from "../api";
 import { PLAN_CATALOG } from "../data/plans";
+import { cleanUiText } from "../utils/textEncoding";
 
 const LANDING_NAV_ITEMS = [
   { id: "features", label: "Funciones" },
   { id: "ia", label: "IA en salud" },
   { id: "planes", label: "Planes" },
 ];
-
-const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "\u00e1"],
-  ["Ã©", "\u00e9"],
-  ["Ã­", "\u00ed"],
-  ["Ã³", "\u00f3"],
-  ["Ãº", "\u00fa"],
-  ["Ã±", "\u00f1"],
-  ["Ã", "\u00c1"],
-  ["Ã‰", "\u00c9"],
-  ["Ã", "\u00cd"],
-  ["Ã“", "\u00d3"],
-  ["Ãš", "\u00da"],
-  ["Ã‘", "\u00d1"],
-  ["Â¿", "\u00bf"],
-  ["Â¡", "\u00a1"],
-  ["Â·", "\u00b7"],
-  ["Â©", "\u00a9"],
-];
-
-const cleanUiText = (value) => {
-  if (typeof value !== "string") return value ?? "";
-  return MOJIBAKE_FALLBACKS.reduce((text, [from, to]) => text.replaceAll(from, to), value);
-};
 
 const fallbackStats = {
   users: 1200,

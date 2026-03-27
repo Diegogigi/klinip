@@ -21,6 +21,7 @@ import {
   transcribeAiChatAudio,
 } from "../api";
 import { parseDate } from "../utils/dates";
+import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -54,56 +55,6 @@ const INITIAL_MESSAGE = {
   references: [],
   createdAt: null,
 };
-
-const MOJIBAKE_PATTERN = /(?:Ã.|Â.|â.|�)/;
-const MOJIBAKE_FALLBACKS = [
-  ["Ã¡", "á"],
-  ["Ã©", "é"],
-  ["Ã­", "í"],
-  ["Ã³", "ó"],
-  ["Ãº", "ú"],
-  ["Ã±", "ñ"],
-  ["Ã", "Á"],
-  ["Ã‰", "É"],
-  ["Ã", "Í"],
-  ["Ã“", "Ó"],
-  ["Ãš", "Ú"],
-  ["Ã‘", "Ñ"],
-  ["Â¿", "¿"],
-  ["Â¡", "¡"],
-  ["â", "'"],
-  ["â", '"'],
-  ["â", '"'],
-  ["â", "-"],
-  ["â", "-"],
-];
-
-function repairMojibakeText(value) {
-  const text = String(value ?? "");
-  if (!text || !MOJIBAKE_PATTERN.test(text)) return text;
-
-  if (typeof TextDecoder !== "undefined") {
-    try {
-      const bytes = Uint8Array.from(text, (char) => char.charCodeAt(0) & 0xff);
-      const decoded = new TextDecoder("utf-8").decode(bytes);
-      if (decoded && !decoded.includes("\u0000")) {
-        return decoded;
-      }
-    } catch {
-      // Fallback replacements handle the common browser-side mojibake cases.
-    }
-  }
-
-  return MOJIBAKE_FALLBACKS.reduce(
-    (result, [search, replacement]) => result.split(search).join(replacement),
-    text
-  );
-}
-
-function cleanUiText(value, fallback = "") {
-  const cleaned = repairMojibakeText(value).trim();
-  return cleaned || fallback;
-}
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
