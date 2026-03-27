@@ -1689,6 +1689,22 @@ def _email_config_error_detail(config_errors: list[str]) -> str:
     return f"{base} Missing: {', '.join(config_errors)}"
 
 
+def _frontend_link_base_url(default: str = "https://app.klinip.cl") -> str:
+    base = (
+        os.getenv("FRONTEND_BASE_URL")
+        or os.getenv("FRONTEND_URL")
+        or default
+    )
+    return base.strip().rstrip("/")
+
+
+def _build_hash_route_url(base_url: str, route_path: str, query: str | None = None) -> str:
+    normalized_path = "/" + (route_path or "").lstrip("/")
+    normalized_query = (query or "").strip().lstrip("?")
+    suffix = f"?{normalized_query}" if normalized_query else ""
+    return f"{base_url}/#{normalized_path}{suffix}"
+
+
 def _build_reset_url(request: Request, raw_token: str) -> str:
     frontend_base_url = (os.getenv("FRONTEND_BASE_URL") or "").strip().rstrip("/")
     if not frontend_base_url:
@@ -1699,7 +1715,7 @@ def _build_reset_url(request: Request, raw_token: str) -> str:
             frontend_base_url = origin
         else:
             frontend_base_url = str(request.base_url).rstrip("/")
-    return f"{frontend_base_url}/#/reset-password?token={raw_token}"
+    return _build_hash_route_url(frontend_base_url, "/reset-password", f"token={quote_plus(raw_token)}")
 
 
 def _warn_password_reset_config():
@@ -2386,8 +2402,8 @@ def _send_family_report_email_safe(
 
 
 def _build_family_invite_url(token: str) -> str:
-    base = (os.getenv("FRONTEND_BASE_URL") or "https://www.klinip.cl").strip().rstrip("/")
-    return f"{base}/settings?family_invite_token={quote_plus(token)}"
+    base = _frontend_link_base_url("https://www.klinip.cl")
+    return _build_hash_route_url(base, "/settings", f"family_invite_token={quote_plus(token)}")
 
 
 def _send_profile_invitation_email_safe(
@@ -16303,8 +16319,8 @@ async def voice_share_link(
 
     token = secrets.token_urlsafe(32)
     expires = datetime.now() + timedelta(hours=48)
-    base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
-    url = f"{base_url}/voice/shared/{token}"
+    base_url = _frontend_link_base_url("https://app.klinip.cl")
+    url = _build_hash_route_url(base_url, f"/voice/shared/{token}")
 
     session.link_seguro = url
     session.link_expira_en = expires
@@ -16341,14 +16357,14 @@ async def voice_share_email(
     # Generate share link if not already present
     if not session.link_seguro:
         token = secrets.token_urlsafe(32)
-        base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
-        session.link_seguro = f"{base_url}/voice/shared/{token}"
+        base_url = _frontend_link_base_url("https://app.klinip.cl")
+        session.link_seguro = _build_hash_route_url(base_url, f"/voice/shared/{token}")
         session.link_expira_en = datetime.now() + timedelta(hours=48)
     elif session.link_expira_en and session.link_expira_en < datetime.now():
         # Refresh expired link
         token = secrets.token_urlsafe(32)
-        base_url = os.getenv("FRONTEND_URL", "https://app.klinip.cl")
-        session.link_seguro = f"{base_url}/voice/shared/{token}"
+        base_url = _frontend_link_base_url("https://app.klinip.cl")
+        session.link_seguro = _build_hash_route_url(base_url, f"/voice/shared/{token}")
         session.link_expira_en = datetime.now() + timedelta(hours=48)
 
     session.compartido_en = datetime.now()
