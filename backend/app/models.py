@@ -812,6 +812,33 @@ class VoiceSession(Base):
     profile = relationship("HealthProfile")
 
 
+class VoiceFamilyShare(Base):
+    __tablename__ = "voice_family_shares"
+    __table_args__ = (
+        UniqueConstraint("voice_session_id", "recipient_user_id", name="uq_voice_family_share_recipient"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    voice_session_id = Column(Integer, ForeignKey("voice_sessions.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    sender_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    recipient_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    share_mode = Column(String, default="manual")
+    include_audio = Column(Boolean, default=True)
+    message_title = Column(String, default="")
+    sender_display_name = Column(String, default="")
+    shared_summary = Column(Text, nullable=True)
+    shared_indicaciones = Column(JSON, default=list)
+    status = Column(String, default="active", index=True)
+    shared_at = Column(DateTime, default=datetime.now, index=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    session = relationship("VoiceSession")
+    profile = relationship("HealthProfile")
+    sender_user = relationship("User", foreign_keys=[sender_user_id])
+    recipient_user = relationship("User", foreign_keys=[recipient_user_id])
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 

@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { processVoiceSession, voiceShareLink, voiceShareEmail, voiceDownloadPdf, voiceAudioUrl } from "../api";
+import {
+  processVoiceSession,
+  voiceShareLink,
+  voiceShareEmail,
+  voiceDownloadPdf,
+  voiceAudioUrl,
+  shareVoiceWithFamily,
+  revokeVoiceFamilyShare,
+} from "../api";
 import {
   buildRecordedVoiceBlob,
   getPreferredVoiceRecorderOption,
@@ -12,7 +20,7 @@ import {
 
 /* ── Audio Player ─────────────────────────────────────────────────────────── */
 
-function IvAudioPlayer({ sessionId, fallbackBlob }) {
+function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -58,7 +66,7 @@ function IvAudioPlayer({ sessionId, fallbackBlob }) {
 
   // We need to fetch audio with auth header since the endpoint requires authentication
   useEffect(() => {
-    if (!sessionId || !token) {
+    if (!allowRemote || !sessionId || !token) {
       setRemoteAudioSrc(null);
       return undefined;
     }
@@ -80,7 +88,7 @@ function IvAudioPlayer({ sessionId, fallbackBlob }) {
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [sessionId, token, src]);
+  }, [allowRemote, sessionId, token, src]);
 
   const audioSrc = remoteAudioSrc || localAudioSrc;
 
@@ -122,12 +130,882 @@ function IvAudioPlayer({ sessionId, fallbackBlob }) {
   );
 }
 
+const CLEAN_PROFESSIONAL_ROLE_OPTIONS = [
+  { value: "medico", label: "Médico/a", helper: "Puede emitir diagnóstico médico." },
+  { value: "kinesiologo", label: "Kinesiólogo/a", helper: "Evaluación y rehabilitación." },
+  { value: "fonoaudiologo", label: "Fonoaudiólogo/a", helper: "Lenguaje, voz y deglución." },
+  { value: "psicologo", label: "Psicólogo/a", helper: "Salud mental y acompañamiento." },
+  { value: "nutricionista", label: "Nutricionista", helper: "Alimentación y plan nutricional." },
+  { value: "terapeuta_ocupacional", label: "Terapeuta ocupacional", helper: "Funcionalidad y autonomía." },
+  { value: "enfermeria", label: "Enfermería", helper: "Cuidados y seguimiento." },
+  { value: "otro", label: "Otro profesional", helper: "Otro rol de salud." },
+];
+
+function TabParaTiClean({ result }) {
+  const indicaciones = Array.isArray(result?.indicaciones) ? result.indicaciones : [];
+  const meta = result?.metadata_clinica || {};
+  const professionalLabel = getResultProfessionalLabel(result);
+  const nonDiagnosticRole = meta.puede_diagnosticar_medicamente === false;
+
+  return (
+    <div className="iv-tab-content">
+      {result?.access_scope === "shared" && (
+        <div className="iv-shared-meta-card">
+          <span className="iv-context-label">COMPARTIDO CONTIGO</span>
+          <p className="iv-context-text">
+            {result.shared_by_name || "Un integrante de tu familia"} te compartió esta atención.
+          </p>
+          {result.shared_at ? (
+            <p className="iv-context-helper">Disponible desde {formatDateTime(result.shared_at)}</p>
+          ) : null}
+        </div>
+      )}
+
+      {(professionalLabel || nonDiagnosticRole) && (
+        <div className="iv-context-card">
+          <span className="iv-context-label">CONTEXTO DE LA ATENCIÓN</span>
+          {professionalLabel ? (
+            <p className="iv-context-text">Profesional registrado: {professionalLabel}</p>
+          ) : null}
+          {nonDiagnosticRole ? (
+            <p className="iv-context-helper">
+              Esta atención se resumió distinguiendo entre profesional y paciente, sin asumir un diagnóstico médico nuevo.
+            </p>
+          ) : null}
+        </div>
+      )}
+
+      <div className="iv-summary-card">
+        <span className="iv-summary-label">RESUMEN SIMPLE</span>
+        <p className="iv-summary-text">{result?.version_simple || "Sin resumen disponible."}</p>
+      </div>
+
+      {indicaciones.length > 0 && (
+        <div className="iv-indicaciones-list">
+          {indicaciones.map((ind, index) => {
+            const color = TIPO_COLORS[ind?.tipo] || TIPO_COLORS.otro;
+            const label = TIPO_LABELS[ind?.tipo] || ind?.tipo || "Otro";
+            const actionLabel = ind?.tipo === "control" || ind?.tipo === "examen" ? "+ Agenda" : "+ Recordatorio";
+            return (
+              <div key={`${ind?.tipo || "otro"}-${index}`} className="iv-indicacion-item">
+                <span className="iv-indicacion-dot" style={{ background: color }} />
+                <div className="iv-indicacion-body">
+                  <p className="iv-indicacion-text">{ind?.texto}</p>
+                </div>
+                <span className="iv-indicacion-badge" style={{ color }}>{label}</span>
+                <button type="button" className="iv-indicacion-action" disabled>{actionLabel}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabTecnicaStructuredClean({ result }) {
+  const meta = result?.metadata_clinica || {};
+  const sections = parseVoiceTechnicalSections(result?.transcripcion_tecnica, meta);
+  const professionalMeta = getVoiceProfessionalMeta(meta);
+
+  return (
+    <div className="iv-tab-content">
+      <div className="iv-context-card">
+        <span className="iv-context-label">CONTEXTO CLÍNICO</span>
+        <p className="iv-context-text">Rol confirmado: {professionalMeta.role}</p>
+        <p className="iv-context-helper">{professionalMeta.disclaimer}</p>
+      </div>
+      {sections.length ? (
+        <div className="iv-tech-sections">
+          {sections.map((section) => (
+            <section key={section.id} className={`iv-tech-card tone-${section.tone.key}`}>
+              <div className="iv-tech-card-head">
+                <h3 className="iv-tech-card-title">{section.title}</h3>
+                <span className={`iv-tech-badge tone-${section.tone.key}`}>{section.tone.label}</span>
+              </div>
+              <div className="iv-tech-card-body">
+                {section.lines.map((line, index) => (
+                  <p key={`${section.id}-${index}`} className="iv-tech-line">{line}</p>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      ) : (
+        <div className="iv-tecnica-box">Sin transcripción disponible.</div>
+      )}
+    </div>
+  );
+}
+
+function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
+  const [shareLink, setShareLink] = useState(null);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailModal, setEmailModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [familyError, setFamilyError] = useState("");
+  const [familyStatus, setFamilyStatus] = useState("");
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
+
+  const activeFamilyShares = Array.isArray(result?.family_shares)
+    ? result.family_shares.filter((item) => item.status === "active")
+    : [];
+
+  useEffect(() => {
+    setIncludeAudio(
+      activeFamilyShares.length ? activeFamilyShares.every((item) => item.include_audio !== false) : true
+    );
+    setSelectedRecipients(activeFamilyShares.map((item) => item.recipient_user_id));
+    setFamilyError("");
+    setFamilyStatus("");
+  }, [result?.id]);
+
+  async function handleShareLink() {
+    setLoading("whatsapp");
+    try {
+      const data = await voiceShareLink(result.id);
+      setShareLink(data.url);
+      const text = encodeURIComponent(`Registro de consulta Klinip Voice:\n${data.url}`);
+      window.open(`https://wa.me/?text=${text}`, "_blank");
+    } catch {
+      // ignore
+    }
+    setLoading("");
+  }
+
+  async function handleSendEmail() {
+    if (!emailInput.trim()) return;
+    setLoading("email");
+    setEmailError("");
+    try {
+      await voiceShareEmail(result.id, emailInput.trim());
+      setEmailSent(true);
+      setEmailModal(false);
+    } catch {
+      setEmailError("No se pudo enviar el correo. Intenta de nuevo.");
+    }
+    setLoading("");
+  }
+
+  async function handlePdf() {
+    setLoading("pdf");
+    try {
+      await voiceDownloadPdf(result.id);
+    } catch {
+      // ignore
+    }
+    setLoading("");
+  }
+
+  async function handleCopy() {
+    if (!shareLink) return;
+    try {
+      await navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
+
+  function toggleRecipient(userId) {
+    setSelectedRecipients((prev) =>
+      prev.includes(userId) ? prev.filter((item) => item !== userId) : [...prev, userId]
+    );
+  }
+
+  async function handleShareFamily() {
+    if (!selectedRecipients.length) {
+      setFamilyError("Selecciona al menos un integrante.");
+      return;
+    }
+    setLoading("family");
+    setFamilyError("");
+    setFamilyStatus("");
+    try {
+      const updated = await shareVoiceWithFamily(result.id, {
+        recipient_user_ids: selectedRecipients,
+        include_audio: includeAudio,
+      });
+      onSessionUpdated?.(updated);
+      setFamilyStatus("Atención compartida con la familia.");
+    } catch (err) {
+      setFamilyError(err?.response?.data?.detail || "No se pudo compartir con la familia.");
+    }
+    setLoading("");
+  }
+
+  async function handleRevokeShare(shareId) {
+    setLoading(`revoke-${shareId}`);
+    setFamilyError("");
+    setFamilyStatus("");
+    try {
+      const updated = await revokeVoiceFamilyShare(shareId);
+      onSessionUpdated?.(updated);
+      setFamilyStatus("Se revocó el acceso compartido.");
+    } catch (err) {
+      setFamilyError(err?.response?.data?.detail || "No se pudo revocar el compartido.");
+    }
+    setLoading("");
+  }
+
+  return (
+    <div className="iv-tab-content">
+      <h3 className="iv-share-title">Compartir con el profesional</h3>
+      <p className="iv-share-subtitle">Audio y transcripción técnica</p>
+
+      <div className="iv-share-cards">
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={() => setEmailModal(true)}
+          disabled={loading === "email" || emailSent}
+        >
+          <span className="iv-share-card-icon iv-share-icon-blue"><EmailIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">{emailSent ? "Email enviado" : "Correo electrónico"}</span>
+            <span className="iv-share-card-sub">Audio + PDF técnico adjunto</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={handleShareLink}
+          disabled={loading === "whatsapp"}
+        >
+          <span className="iv-share-card-icon iv-share-icon-green"><WhatsAppIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">WhatsApp</span>
+            <span className="iv-share-card-sub">Link seguro · expira en 48h</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          className="iv-share-card"
+          onClick={handlePdf}
+          disabled={loading === "pdf"}
+        >
+          <span className="iv-share-card-icon iv-share-icon-yellow"><PdfIcon /></span>
+          <div className="iv-share-card-info">
+            <span className="iv-share-card-title">PDF descargable</span>
+            <span className="iv-share-card-sub">Transcripción + metadatos</span>
+          </div>
+        </button>
+      </div>
+
+      {shareLink && (
+        <div className="iv-link-preview">
+          <span className="iv-link-url">{shareLink.length > 50 ? `${shareLink.slice(0, 50)}...` : shareLink}</span>
+          <button type="button" className="iv-link-copy" onClick={handleCopy}>
+            {copied ? "Copiado" : "Copiar link"}
+          </button>
+        </div>
+      )}
+
+      {result?.can_manage_family_shares && (
+        <div className="iv-family-share-block">
+          <div className="iv-family-share-head">
+            <div>
+              <h4 className="iv-family-share-title">Compartir con tu grupo familiar</h4>
+              <p className="iv-family-share-copy">
+                Comparte el resumen simple, las indicaciones y, si quieres, el audio original.
+              </p>
+            </div>
+            <label className="iv-family-audio-toggle">
+              <input
+                type="checkbox"
+                checked={includeAudio}
+                onChange={(e) => setIncludeAudio(e.target.checked)}
+              />
+              <span>Incluir audio</span>
+            </label>
+          </div>
+
+          {Array.isArray(shareTargets) && shareTargets.length > 0 ? (
+            <div className="iv-family-targets">
+              {shareTargets.map((target) => {
+                const isActive = activeFamilyShares.some((item) => item.recipient_user_id === target.user_id);
+                const isSelected = selectedRecipients.includes(target.user_id);
+                return (
+                  <label key={target.user_id} className={`iv-family-target ${isSelected ? "is-selected" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleRecipient(target.user_id)}
+                    />
+                    <span className="iv-family-target-main">
+                      <span className="iv-family-target-name">
+                        {target.user_name || target.user_email || `Usuario #${target.user_id}`}
+                      </span>
+                      <span className="iv-family-target-meta">
+                        {target.relationship_type || target.role || "Integrante"}{isActive ? " · compartido" : ""}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="iv-family-empty">No hay integrantes autorizados para compartir esta atención.</p>
+          )}
+
+          <div className="iv-family-actions">
+            <button
+              type="button"
+              className="iv-btn iv-btn-primary"
+              onClick={handleShareFamily}
+              disabled={loading === "family" || !selectedRecipients.length}
+            >
+              {loading === "family" ? "Compartiendo..." : "Compartir con seleccionados"}
+            </button>
+          </div>
+
+          {familyError ? <p className="iv-family-error">{familyError}</p> : null}
+          {familyStatus ? <p className="iv-family-status">{familyStatus}</p> : null}
+
+          {activeFamilyShares.length > 0 && (
+            <div className="iv-family-current-list">
+              <p className="iv-family-current-title">Accesos activos</p>
+              {activeFamilyShares.map((share) => (
+                <div className="iv-family-current-item" key={share.id}>
+                  <div>
+                    <p className="iv-family-current-name">
+                      {share.recipient_name || share.recipient_email || `Usuario #${share.recipient_user_id}`}
+                    </p>
+                    <p className="iv-family-current-meta">
+                      {share.share_mode === "automatic" ? "Automático" : "Manual"} · {share.include_audio ? "con audio" : "sin audio"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="iv-link-copy iv-link-copy-danger"
+                    onClick={() => handleRevokeShare(share.id)}
+                    disabled={loading === `revoke-${share.id}`}
+                  >
+                    {loading === `revoke-${share.id}` ? "Revocando..." : "Revocar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {emailModal && (
+        <div className="iv-email-modal">
+          <p className="iv-email-modal-title">Enviar por correo</p>
+          <input
+            type="email"
+            className="iv-email-input"
+            placeholder="correo@ejemplo.cl"
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            autoFocus
+          />
+          {emailError && <p style={{ color: "#f87171", fontSize: "0.8rem", margin: "0 0 0.5rem" }}>{emailError}</p>}
+          <div className="iv-email-modal-actions">
+            <button type="button" className="iv-btn iv-btn-ghost" onClick={() => { setEmailModal(false); setEmailError(""); }}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="iv-btn iv-btn-primary"
+              onClick={handleSendEmail}
+              disabled={!emailInput.trim() || loading === "email"}
+            >
+              {loading === "email" ? "Enviando..." : "Enviar"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ImmersiveVoice({
+  profileId,
+  onDone,
+  onClose,
+  initialSession,
+  shareTargets = [],
+}) {
+  const [stage, setStage] = useState(initialSession ? "done" : "consent");
+  const [error, setError] = useState("");
+  const [timer, setTimer] = useState(0);
+  const [closing, setClosing] = useState(false);
+  const [result, setResult] = useState(initialSession || null);
+  const [activeTab, setActiveTab] = useState("parati");
+  const [sheetHeight, setSheetHeight] = useState(null);
+  const [professionalRole, setProfessionalRole] = useState(
+    initialSession?.metadata_clinica?.profesional_clave || ""
+  );
+  const [sessionPreviewBlob, setSessionPreviewBlob] = useState(null);
+  const [micReady, setMicReady] = useState(false);
+
+  const sheetRef = useRef(null);
+  const dragRef = useRef({ active: false, startY: 0, startH: 0 });
+  const mediaRecorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const consentBlobRef = useRef(null);
+  const timerRef = useRef(null);
+  const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
+
+  const stopStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => stopStream(), [stopStream]);
+
+  useEffect(() => {
+    if (result?.access_scope === "shared") {
+      setActiveTab("parati");
+    }
+  }, [result?.access_scope, result?.id]);
+
+  const availableTabs = [
+    { key: "parati", label: "Para ti" },
+    ...(result?.can_view_technical ? [{ key: "tecnica", label: "Técnica" }] : []),
+    ...(result?.can_manage_family_shares ? [{ key: "compartir", label: "Compartir" }] : []),
+  ];
+
+  useEffect(() => {
+    if (!availableTabs.some((tab) => tab.key === activeTab)) {
+      setActiveTab("parati");
+    }
+  }, [activeTab, result?.id, result?.can_manage_family_shares, result?.can_view_technical]);
+
+  function animateClose(callback) {
+    setClosing(true);
+    setTimeout(() => {
+      if (callback) callback();
+      if (onClose) onClose();
+    }, 300);
+  }
+
+  async function startMic() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const preferredOption = getPreferredVoiceRecorderOption();
+      let recorder;
+      try {
+        recorder = preferredOption.mimeType
+          ? new MediaRecorder(stream, {
+              mimeType: preferredOption.mimeType,
+              audioBitsPerSecond: 64000,
+            })
+          : new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+      } catch {
+        recorder = new MediaRecorder(stream, { audioBitsPerSecond: 64000 });
+      }
+      recorderOptionRef.current = resolveVoiceMimeInfo(
+        recorder.mimeType || preferredOption.mimeType || "",
+        preferredOption.extension || "webm"
+      );
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunksRef.current.push(event.data);
+          if (!micReady) setMicReady(true);
+        }
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start(500);
+      return true;
+    } catch {
+      setError("No se pudo acceder al micrófono. Revisa los permisos del navegador.");
+      setStage("error");
+      return false;
+    }
+  }
+
+  function stopRecording() {
+    return new Promise((resolve) => {
+      const recorder = mediaRecorderRef.current;
+      const blob = () => buildRecordedVoiceBlob(
+        chunksRef.current,
+        recorder?.mimeType || recorderOptionRef.current?.mimeType || "",
+        recorderOptionRef.current?.extension || "webm"
+      );
+      if (!recorder || recorder.state === "inactive") {
+        resolve(blob());
+        return;
+      }
+      recorder.onstop = () => resolve(blob());
+      recorder.stop();
+    });
+  }
+
+  async function handleStartConsent() {
+    setMicReady(false);
+    setStage("recording_consent");
+    await startMic();
+  }
+
+  async function handleConsentDone() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try {
+        recorder.requestData();
+      } catch {
+        // ignore
+      }
+    }
+    const blob = await stopRecording();
+    if (!blob || blob.size === 0) {
+      setError("No se capturó audio del consentimiento. Intenta de nuevo y habla durante al menos 2 segundos.");
+      setStage("error");
+      stopStream();
+      return;
+    }
+    consentBlobRef.current = blob;
+    stopStream();
+    setMicReady(false);
+    setStage("recording_session");
+    setTimer(0);
+    const ok = await startMic();
+    if (ok) {
+      timerRef.current = setInterval(() => setTimer((value) => value + 1), 1000);
+    }
+  }
+
+  async function handleStop() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try {
+        recorder.requestData();
+      } catch {
+        // ignore
+      }
+    }
+    const sessionBlob = await stopRecording();
+    stopStream();
+
+    if (!sessionBlob || sessionBlob.size === 0) {
+      setError("No se capturó audio de la consulta. Intenta de nuevo.");
+      setStage("error");
+      return;
+    }
+    if (!consentBlobRef.current || consentBlobRef.current.size === 0) {
+      setError("El audio de consentimiento está vacío. Intenta de nuevo desde el inicio.");
+      setStage("error");
+      return;
+    }
+
+    setSessionPreviewBlob(sessionBlob);
+    setStage("processing");
+
+    try {
+      const data = await processVoiceSession({
+        audioConsent: consentBlobRef.current,
+        audioSession: sessionBlob,
+        profileId,
+        professionalRole,
+      });
+      setResult(data);
+      setStage("done");
+    } catch (err) {
+      let message;
+      if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
+        message = "La consulta fue muy larga para procesar. Intenta con un fragmento más corto.";
+      } else if (!err.response) {
+        message = "Sin conexión. Verifica tu internet e intenta de nuevo.";
+      } else {
+        const status = err.response.status;
+        if (status === 413) message = "El audio es muy largo. Intenta con una grabación más corta.";
+        else if (status === 422) message = "No se detectó voz clara en el audio.";
+        else if (status === 503) message = "El servicio de transcripción no está disponible.";
+        else message = err.response?.data?.detail || "Error al procesar. Intenta de nuevo.";
+      }
+      setError(message);
+      setStage("error");
+    }
+  }
+
+  function handleRetry() {
+    setError("");
+    setTimer(0);
+    setMicReady(false);
+    consentBlobRef.current = null;
+    setSessionPreviewBlob(null);
+    setStage("consent");
+  }
+
+  function handleCancel() {
+    stopStream();
+    setSessionPreviewBlob(null);
+    animateClose(() => {
+      if (stage === "done" && result && onDone) onDone(result);
+    });
+  }
+
+  function handleSaveAndClose() {
+    animateClose(() => {
+      if (onDone && result) onDone(result);
+    });
+  }
+
+  const handleSheetTouchStart = useCallback((event) => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const touch = event.touches[0];
+    dragRef.current = {
+      active: true,
+      startY: touch.clientY,
+      startH: sheet.getBoundingClientRect().height,
+    };
+  }, []);
+
+  const handleSheetTouchMove = useCallback((event) => {
+    const drag = dragRef.current;
+    if (!drag.active) return;
+    const touch = event.touches[0];
+    const delta = drag.startY - touch.clientY;
+    const viewportHeight = window.innerHeight;
+    const minHeight = 120;
+    const maxHeight = viewportHeight * 0.9;
+    setSheetHeight(Math.min(maxHeight, Math.max(minHeight, drag.startH + delta)));
+  }, []);
+
+  const handleSheetTouchEnd = useCallback(() => {
+    const drag = dragRef.current;
+    if (!drag.active) return;
+    drag.active = false;
+    const sheet = sheetRef.current;
+    if (sheet && sheet.getBoundingClientRect().height < 180) {
+      setSheetHeight(180);
+    }
+  }, []);
+
+  const showWaves = stage === "recording_consent" || stage === "recording_session";
+  const stepIndex =
+    stage === "consent" ? 0 :
+    stage === "recording_consent" ? 1 :
+    stage === "recording_session" ? 2 : 2;
+  const orbClass =
+    stage === "consent" ? "iv-orb-amber" :
+    stage === "recording_consent" ? "iv-orb-purple" :
+    stage === "recording_session" ? "iv-orb-purple" :
+    stage === "processing" ? "iv-orb-green" :
+    "iv-orb-red";
+  const stageCopy = {
+    consent: {
+      title: "Pide autorización",
+      subtitle: "Solicita al profesional que autorice verbalmente la grabación.",
+    },
+    recording_consent: {
+      title: "Grabando autorización",
+      subtitle: "Pide que diga: Autorizo la grabación de esta consulta.",
+    },
+    recording_session: {
+      title: "Grabando consulta",
+      subtitle: "La consulta se está grabando.",
+    },
+    processing: {
+      title: "Klinip IA procesando",
+      subtitle: "Transcribiendo y traduciendo tu consulta...",
+    },
+    error: {
+      title: "Error",
+      subtitle: error,
+    },
+  }[stage] || { title: "Error", subtitle: error };
+
+  if (stage === "done" && result) {
+    return (
+      <div className={`iv-overlay iv-overlay-done ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+        <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+
+        <div className="iv-done-top">
+          <div className="iv-orb iv-orb-green-solid">
+            <CheckSvg />
+          </div>
+          <h2 className="iv-title" style={{ marginTop: "1rem" }}>
+            {result.access_scope === "shared" ? "Atención compartida" : "Consulta procesada"}
+          </h2>
+          <p className="iv-subtitle">
+            {result.access_scope === "shared"
+              ? "Tu familia te compartió este resumen de Klinip Voice."
+              : "Klinip IA analizó tu consulta."}
+          </p>
+          {(result.id || sessionPreviewBlob) && (
+            <IvAudioPlayer
+              sessionId={result.id}
+              fallbackBlob={sessionPreviewBlob}
+              allowRemote={result.audio_available !== false}
+            />
+          )}
+        </div>
+
+        <div
+          className="iv-sheet"
+          ref={sheetRef}
+          style={sheetHeight ? { height: `${sheetHeight}px`, maxHeight: "90vh" } : undefined}
+        >
+          <div
+            className="iv-sheet-handle"
+            onTouchStart={handleSheetTouchStart}
+            onTouchMove={handleSheetTouchMove}
+            onTouchEnd={handleSheetTouchEnd}
+          />
+
+          <div className="iv-sheet-tabs">
+            {availableTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                className={`iv-sheet-tab ${activeTab === tab.key ? "iv-sheet-tab-active" : ""}`}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="iv-sheet-body">
+            {activeTab === "parati" && <TabParaTiClean result={result} />}
+            {activeTab === "tecnica" && result.can_view_technical && <TabTecnicaStructuredClean result={result} />}
+            {activeTab === "compartir" && result.can_manage_family_shares && (
+              <TabCompartirClean
+                result={result}
+                shareTargets={shareTargets}
+                onSessionUpdated={setResult}
+              />
+            )}
+          </div>
+
+          <div className="iv-sheet-footer">
+            <button type="button" className="iv-btn iv-btn-primary iv-btn-full" onClick={handleSaveAndClose}>
+              {result.access_scope === "shared" ? "Cerrar" : "Guardar en ficha y cerrar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`iv-overlay ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+      <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+
+      <div className="iv-content">
+        <div className={`iv-orb ${orbClass}`}>
+          {stage === "consent" && (
+            <>
+              <span className="iv-ring iv-ring-1" />
+              <span className="iv-ring iv-ring-2" />
+              <span className="iv-ring iv-ring-3" />
+            </>
+          )}
+          {stage === "processing" ? <span className="iv-orb-spinner" /> : <MicSvg />}
+        </div>
+
+        {showWaves && <AudioWaves />}
+        {stage === "recording_session" && <div className="iv-timer">{formatTimer(timer)}</div>}
+
+        <div className="iv-text">
+          <h2 className="iv-title">{stageCopy.title}</h2>
+          <p className="iv-subtitle">{stageCopy.subtitle}</p>
+        </div>
+
+        {stage !== "processing" && stage !== "error" && <StepDots current={stepIndex} total={3} />}
+
+        {stage === "consent" && (
+          <div className="iv-role-card">
+            <span className="iv-role-label">Profesional que estás grabando</span>
+            <div className="iv-role-grid">
+              {CLEAN_PROFESSIONAL_ROLE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`iv-role-option ${professionalRole === option.value ? "is-active" : ""}`}
+                  onClick={() => setProfessionalRole(option.value)}
+                >
+                  <span className="iv-role-option-title">{option.label}</span>
+                  <span className="iv-role-option-helper">{option.helper}</span>
+                </button>
+              ))}
+            </div>
+            <p className="iv-role-disclaimer">
+              Klinip ajustará la transcripción según este rol y evitará asumir un diagnóstico médico cuando no corresponda.
+            </p>
+          </div>
+        )}
+
+        <div className="iv-actions">
+          {stage === "consent" && (
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleStartConsent} disabled={!professionalRole}>
+              El profesional autorizó
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+            </button>
+          )}
+          {stage === "recording_consent" && (
+            <button type="button" className="iv-btn iv-btn-primary" disabled={!micReady} onClick={handleConsentDone}>
+              {micReady ? "Autorización registrada" : "Esperando audio..."}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="iv-btn-arrow"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+            </button>
+          )}
+          {stage === "recording_session" && (
+            <div className="iv-session-controls">
+              <button type="button" className="iv-ctrl iv-ctrl-stop" onClick={handleStop} aria-label="Detener grabación">
+                <span className="iv-ctrl-square" />
+              </button>
+            </div>
+          )}
+          {stage === "error" && (
+            <button type="button" className="iv-btn iv-btn-primary" onClick={handleRetry}>
+              Intentar de nuevo
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Helpers ───────────────────────────────────────────────────────────────── */
 
 function formatTimer(seconds) {
   const m = Math.floor(seconds / 60).toString().padStart(2, "0");
   const s = (seconds % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 const TIPO_COLORS = {
@@ -247,6 +1125,17 @@ function TabParaTi({ result }) {
   const nonDiagnosticRole = meta.puede_diagnosticar_medicamente === false;
   return (
     <div className="iv-tab-content">
+      {result.access_scope === "shared" && (
+        <div className="iv-shared-meta-card">
+          <span className="iv-context-label">COMPARTIDO CONTIGO</span>
+          <p className="iv-context-text">
+            {result.shared_by_name || "Un integrante de tu familia"} te compartio esta atencion.
+          </p>
+          {result.shared_at ? (
+            <p className="iv-context-helper">Disponible desde {formatDateTime(result.shared_at)}</p>
+          ) : null}
+        </div>
+      )}
       {(professionalLabel || nonDiagnosticRole) && (
         <div className="iv-context-card">
           <span className="iv-context-label">CONTEXTO DE LA ATENCIÓN</span>
@@ -324,7 +1213,7 @@ function TabTecnicaStructured({ result }) {
 
 /* ── Done Sheet: Tab "Compartir" ───────────────────────────────────────────── */
 
-function TabCompartir({ sessionId }) {
+function TabCompartir({ result, shareTargets, onSessionUpdated }) {
   const [shareLink, setShareLink] = useState(null);
   const [emailInput, setEmailInput] = useState("");
   const [emailSent, setEmailSent] = useState(false);
@@ -332,11 +1221,28 @@ function TabCompartir({ sessionId }) {
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [familyError, setFamilyError] = useState("");
+  const [familyStatus, setFamilyStatus] = useState("");
+  const [includeAudio, setIncludeAudio] = useState(true);
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
+
+  const activeFamilyShares = Array.isArray(result?.family_shares)
+    ? result.family_shares.filter((item) => item.status === "active")
+    : [];
+
+  useEffect(() => {
+    setIncludeAudio(
+      activeFamilyShares.length ? activeFamilyShares.every((item) => item.include_audio !== false) : true
+    );
+    setSelectedRecipients(activeFamilyShares.map((item) => item.recipient_user_id));
+    setFamilyError("");
+    setFamilyStatus("");
+  }, [result?.id]);
 
   async function handleShareLink() {
     setLoading("whatsapp");
     try {
-      const data = await voiceShareLink(sessionId);
+      const data = await voiceShareLink(result.id);
       setShareLink(data.url);
       const text = encodeURIComponent(`Registro de consulta Klinip Voice:\n${data.url}`);
       window.open(`https://wa.me/?text=${text}`, "_blank");
@@ -349,7 +1255,7 @@ function TabCompartir({ sessionId }) {
     setLoading("email");
     setEmailError("");
     try {
-      await voiceShareEmail(sessionId, emailInput.trim());
+      await voiceShareEmail(result.id, emailInput.trim());
       setEmailSent(true);
       setEmailModal(false);
     } catch {
@@ -361,7 +1267,7 @@ function TabCompartir({ sessionId }) {
   async function handlePdf() {
     setLoading("pdf");
     try {
-      await voiceDownloadPdf(sessionId);
+      await voiceDownloadPdf(result.id);
     } catch { /* ignore */ }
     setLoading("");
   }
@@ -373,6 +1279,47 @@ function TabCompartir({ sessionId }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* ignore */ }
+  }
+
+  function toggleRecipient(userId) {
+    setSelectedRecipients((prev) =>
+      prev.includes(userId) ? prev.filter((item) => item !== userId) : [...prev, userId]
+    );
+  }
+
+  async function handleShareFamily() {
+    if (!selectedRecipients.length) {
+      setFamilyError("Selecciona al menos un integrante.");
+      return;
+    }
+    setLoading("family");
+    setFamilyError("");
+    setFamilyStatus("");
+    try {
+      const updated = await shareVoiceWithFamily(result.id, {
+        recipient_user_ids: selectedRecipients,
+        include_audio: includeAudio,
+      });
+      onSessionUpdated?.(updated);
+      setFamilyStatus("Atencion compartida con la familia.");
+    } catch (err) {
+      setFamilyError(err?.response?.data?.detail || "No se pudo compartir con la familia.");
+    }
+    setLoading("");
+  }
+
+  async function handleRevokeShare(shareId) {
+    setLoading(`revoke-${shareId}`);
+    setFamilyError("");
+    setFamilyStatus("");
+    try {
+      const updated = await revokeVoiceFamilyShare(shareId);
+      onSessionUpdated?.(updated);
+      setFamilyStatus("Se revoco el acceso compartido.");
+    } catch (err) {
+      setFamilyError(err?.response?.data?.detail || "No se pudo revocar el compartido.");
+    }
+    setLoading("");
   }
 
   return (
@@ -434,6 +1381,94 @@ function TabCompartir({ sessionId }) {
         </div>
       )}
 
+      {Array.isArray(shareTargets) && shareTargets.length > 0 && result?.can_manage_family_shares && (
+        <div className="iv-family-share-block">
+          <div className="iv-family-share-head">
+            <div>
+              <h4 className="iv-family-share-title">Compartir con tu grupo familiar</h4>
+              <p className="iv-family-share-copy">
+                Comparte el resumen simple, las indicaciones y, si quieres, el audio original.
+              </p>
+            </div>
+            <label className="iv-family-audio-toggle">
+              <input
+                type="checkbox"
+                checked={includeAudio}
+                onChange={(e) => setIncludeAudio(e.target.checked)}
+              />
+              <span>Incluir audio</span>
+            </label>
+          </div>
+
+          <div className="iv-family-targets">
+            {shareTargets.map((target) => {
+              const isActive = activeFamilyShares.some((item) => item.recipient_user_id === target.user_id);
+              const isSelected = selectedRecipients.includes(target.user_id);
+              return (
+                <label
+                  key={target.user_id}
+                  className={`iv-family-target ${isSelected ? "is-selected" : ""}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleRecipient(target.user_id)}
+                  />
+                  <span className="iv-family-target-main">
+                    <span className="iv-family-target-name">
+                      {target.user_name || target.user_email || `Usuario #${target.user_id}`}
+                    </span>
+                    <span className="iv-family-target-meta">
+                      {target.relationship_type || target.role || "Integrante"}{isActive ? " · compartido" : ""}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="iv-family-actions">
+            <button
+              type="button"
+              className="iv-btn iv-btn-primary"
+              onClick={handleShareFamily}
+              disabled={loading === "family" || !selectedRecipients.length}
+            >
+              {loading === "family" ? "Compartiendo..." : "Compartir con seleccionados"}
+            </button>
+          </div>
+
+          {familyError ? <p className="iv-family-error">{familyError}</p> : null}
+          {familyStatus ? <p className="iv-family-status">{familyStatus}</p> : null}
+
+          {activeFamilyShares.length > 0 && (
+            <div className="iv-family-current-list">
+              <p className="iv-family-current-title">Accesos activos</p>
+              {activeFamilyShares.map((share) => (
+                <div className="iv-family-current-item" key={share.id}>
+                  <div>
+                    <p className="iv-family-current-name">
+                      {share.recipient_name || share.recipient_email || `Usuario #${share.recipient_user_id}`}
+                    </p>
+                    <p className="iv-family-current-meta">
+                      {share.share_mode === "automatic" ? "Automatico" : "Manual"} · {share.include_audio ? "con audio" : "sin audio"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="iv-link-copy iv-link-copy-danger"
+                    onClick={() => handleRevokeShare(share.id)}
+                    disabled={loading === `revoke-${share.id}`}
+                  >
+                    {loading === `revoke-${share.id}` ? "Revocando..." : "Revocar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Email modal */}
       {emailModal && (
         <div className="iv-email-modal">
@@ -470,7 +1505,13 @@ function TabCompartir({ sessionId }) {
    Main ImmersiveVoice Component
    ══════════════════════════════════════════════════════════════════════════════ */
 
-export default function ImmersiveVoice({ profileId, onDone, onClose, initialSession }) {
+function LegacyImmersiveVoice({
+  profileId,
+  onDone,
+  onClose,
+  initialSession,
+  shareTargets = [],
+}) {
   // If initialSession provided, start in "done" state
   const [stage, setStage] = useState(initialSession ? "done" : "consent");
   const [error, setError] = useState("");

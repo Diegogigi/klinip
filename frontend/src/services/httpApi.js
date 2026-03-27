@@ -860,6 +860,26 @@ export async function getVoiceSession(sessionId) {
   return res.data;
 }
 
+export async function getVoiceShareTargets(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/voice-share-targets`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function getVoiceReceivedSessions() {
+  const res = await api.get("/voice/shared/received");
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function shareVoiceWithFamily(sessionId, payload) {
+  const res = await api.post(`/voice/${sessionId}/share/family`, payload);
+  return res.data;
+}
+
+export async function revokeVoiceFamilyShare(shareId) {
+  const res = await api.delete(`/voice/family-shares/${shareId}`);
+  return res.data;
+}
+
 export async function voiceShareLink(sessionId) {
   const res = await api.post(`/voice/${sessionId}/share/link`);
   return res.data;

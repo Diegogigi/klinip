@@ -6014,7 +6014,44 @@ _DEFAULT_PROFILE_AUTOMATION_SETTINGS = {
     "inactivity_alerts": True,
     "weekly_family_report_enabled": False,
     "auto_email_caregivers": False,
+    "voice_auto_share_enabled": False,
+    "voice_auto_share_include_audio": True,
+    "voice_auto_share_recipient_ids": [],
 }
+
+
+_PROFILE_AUTOMATION_BOOL_KEYS = {
+    "smart_alerts_enabled",
+    "medication_overdue_alerts",
+    "upcoming_appointment_alerts",
+    "inactivity_alerts",
+    "weekly_family_report_enabled",
+    "auto_email_caregivers",
+    "voice_auto_share_enabled",
+    "voice_auto_share_include_audio",
+}
+
+
+_PROFILE_AUTOMATION_LIST_INT_KEYS = {
+    "voice_auto_share_recipient_ids",
+}
+
+
+def _normalize_profile_automation_list_int(value) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for raw in value:
+        try:
+            item = int(raw)
+        except Exception:
+            continue
+        if item <= 0 or item in seen:
+            continue
+        seen.add(item)
+        normalized.append(item)
+    return normalized
 
 
 def _profile_automation_settings(profile: models.HealthProfile) -> dict:
@@ -6030,7 +6067,10 @@ def _profile_automation_settings(profile: models.HealthProfile) -> dict:
     settings = dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
     for key in settings.keys():
         if key in parsed:
-            settings[key] = bool(parsed.get(key))
+            if key in _PROFILE_AUTOMATION_BOOL_KEYS:
+                settings[key] = bool(parsed.get(key))
+            elif key in _PROFILE_AUTOMATION_LIST_INT_KEYS:
+                settings[key] = _normalize_profile_automation_list_int(parsed.get(key))
     return settings
 
 
@@ -6038,7 +6078,10 @@ def _serialize_profile_automation_settings(settings: dict) -> str:
     normalized = dict(_DEFAULT_PROFILE_AUTOMATION_SETTINGS)
     for key in normalized.keys():
         if key in settings:
-            normalized[key] = bool(settings.get(key))
+            if key in _PROFILE_AUTOMATION_BOOL_KEYS:
+                normalized[key] = bool(settings.get(key))
+            elif key in _PROFILE_AUTOMATION_LIST_INT_KEYS:
+                normalized[key] = _normalize_profile_automation_list_int(settings.get(key))
     return json.dumps(normalized, ensure_ascii=False)
 
 
@@ -15076,7 +15119,8 @@ async def get_profile_automation_settings(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
     settings = _profile_automation_settings(profile)
     return schemas.ProfileAutomationSettingsOut(**settings)
 
@@ -15091,9 +15135,20 @@ async def update_profile_automation_settings(
     profile, link = _get_profile_access_or_404(db, current_user, profile_id)
     _require_role(link, "caregiver")
     current = _profile_automation_settings(profile)
+    allowed_voice_targets = {
+        int(item.user_id)
+        for item in _voice_allowed_share_targets(db, profile, exclude_user_id=current_user.id)
+    }
     for key, value in payload.dict(exclude_unset=True).items():
         if value is not None:
-            current[key] = bool(value)
+            if key in _PROFILE_AUTOMATION_BOOL_KEYS:
+                current[key] = bool(value)
+            elif key == "voice_auto_share_recipient_ids":
+                current[key] = [
+                    user_id
+                    for user_id in _normalize_profile_automation_list_int(value)
+                    if int(user_id) in allowed_voice_targets
+                ]
 
     profile.automation_settings_json = _serialize_profile_automation_settings(current)
     db.add(profile)
@@ -16074,6 +16129,351 @@ RESPONDE SOLO EN JSON VÁLIDO con esta estructura exacta — sin texto antes ni 
 }}"""
 
 
+def _voice_share_sender_name(user: models.User | None) -> str:
+    return (
+        (getattr(user, "name", None) or getattr(user, "email", None) or "Usuario Klinip")
+        .strip()
+    )
+
+
+def _voice_session_title(session: models.VoiceSession) -> str:
+    created = getattr(session, "created_at", None)
+    if created:
+        return f"Atencion Voice del {created.strftime('%d/%m/%Y %H:%M')}"
+    return f"Atencion Voice #{getattr(session, 'id', '')}".strip()
+
+
+def _voice_share_relationship_map(
+    db: Session,
+    profile_id: int,
+    user_ids: list[int] | None = None,
+) -> dict[int, models.ProfileRelationship]:
+    query = db.query(models.ProfileRelationship).filter(
+        models.ProfileRelationship.profile_id == int(profile_id)
+    )
+    if user_ids:
+        query = query.filter(models.ProfileRelationship.user_id.in_(user_ids))
+    rows = query.all()
+    mapping: dict[int, models.ProfileRelationship] = {}
+    for row in rows:
+        mapping[int(row.user_id)] = row
+    return mapping
+
+
+def _voice_family_share_out(
+    share: models.VoiceFamilyShare,
+    relationship_map: dict[int, models.ProfileRelationship] | None = None,
+) -> schemas.VoiceFamilyShareOut:
+    relationship_map = relationship_map or {}
+    relation = relationship_map.get(int(share.recipient_user_id))
+    recipient = getattr(share, "recipient_user", None)
+    return schemas.VoiceFamilyShareOut(
+        id=share.id,
+        recipient_user_id=share.recipient_user_id,
+        recipient_name=(getattr(recipient, "name", None) or ""),
+        recipient_email=(getattr(recipient, "email", None) or ""),
+        relationship_type=(getattr(relation, "relationship_type", None) or ""),
+        role=(getattr(relation, "role", None) or "viewer"),
+        share_mode=share.share_mode or "manual",
+        include_audio=bool(share.include_audio),
+        status=share.status or "active",
+        shared_at=share.shared_at,
+        revoked_at=share.revoked_at,
+    )
+
+
+def _voice_manager_can_access(
+    session: models.VoiceSession,
+    profile: models.HealthProfile,
+    current_user: models.User,
+) -> bool:
+    return int(current_user.id) in {
+        int(getattr(profile, "owner_user_id", 0) or 0),
+        int(getattr(session, "user_id", 0) or 0),
+    }
+
+
+def _voice_active_share_for_user(
+    db: Session,
+    session_id: int,
+    user_id: int,
+) -> models.VoiceFamilyShare | None:
+    return (
+        db.query(models.VoiceFamilyShare)
+        .filter(
+            models.VoiceFamilyShare.voice_session_id == int(session_id),
+            models.VoiceFamilyShare.recipient_user_id == int(user_id),
+            models.VoiceFamilyShare.status == "active",
+        )
+        .first()
+    )
+
+
+def _voice_session_family_shares_map(
+    db: Session,
+    session_ids: list[int],
+) -> dict[int, list[models.VoiceFamilyShare]]:
+    if not session_ids:
+        return {}
+    rows = (
+        db.query(models.VoiceFamilyShare)
+        .filter(models.VoiceFamilyShare.voice_session_id.in_(session_ids))
+        .order_by(
+            models.VoiceFamilyShare.shared_at.desc(),
+            models.VoiceFamilyShare.id.desc(),
+        )
+        .all()
+    )
+    grouped: dict[int, list[models.VoiceFamilyShare]] = {}
+    for row in rows:
+        grouped.setdefault(int(row.voice_session_id), []).append(row)
+    return grouped
+
+
+def _voice_session_out(
+    db: Session,
+    session: models.VoiceSession,
+    profile: models.HealthProfile,
+    current_user: models.User,
+    active_share: models.VoiceFamilyShare | None = None,
+    family_shares_map: dict[int, list[models.VoiceFamilyShare]] | None = None,
+    relationship_map: dict[int, models.ProfileRelationship] | None = None,
+) -> schemas.VoiceSessionOut:
+    is_manager = _voice_manager_can_access(session, profile, current_user)
+    shared_rows = []
+    if is_manager:
+        shared_rows = (family_shares_map or {}).get(int(session.id), [])
+    relationship_map = relationship_map or {}
+    audio_file_exists = bool(getattr(session, "audio_session", None) and os.path.isfile(session.audio_session))
+
+    if active_share and not is_manager:
+        sender_name = (
+            active_share.sender_display_name
+            or _voice_share_sender_name(getattr(active_share, "sender_user", None))
+        )
+        return schemas.VoiceSessionOut(
+            id=session.id,
+            profile_id=session.profile_id,
+            created_at=session.created_at,
+            audio_session_hash=session.audio_session_hash or "",
+            transcripcion_tecnica=None,
+            version_simple=(active_share.shared_summary or session.version_simple or ""),
+            indicaciones=active_share.shared_indicaciones or session.indicaciones or [],
+            hablantes=None,
+            metadata_clinica=session.metadata_clinica or {},
+            compartido_en=session.compartido_en,
+            link_seguro=None,
+            link_expira_en=None,
+            access_scope="shared",
+            shared_at=active_share.shared_at,
+            shared_by_name=sender_name,
+            received_share_id=active_share.id,
+            can_view_technical=False,
+            can_manage_family_shares=False,
+            audio_available=bool(active_share.include_audio and audio_file_exists),
+            family_share_active_count=0,
+            family_shares=[],
+        )
+
+    manager_scope = "owner" if int(profile.owner_user_id) == int(current_user.id) else "creator"
+    family_shares = [
+        _voice_family_share_out(item, relationship_map=relationship_map)
+        for item in shared_rows
+    ]
+    family_share_active_count = sum(1 for item in shared_rows if (item.status or "") == "active")
+    return schemas.VoiceSessionOut(
+        id=session.id,
+        profile_id=session.profile_id,
+        created_at=session.created_at,
+        audio_session_hash=session.audio_session_hash or "",
+        transcripcion_tecnica=session.transcripcion_tecnica,
+        version_simple=session.version_simple,
+        indicaciones=session.indicaciones or [],
+        hablantes=session.hablantes or {},
+        metadata_clinica=session.metadata_clinica or {},
+        compartido_en=session.compartido_en,
+        link_seguro=session.link_seguro,
+        link_expira_en=session.link_expira_en,
+        access_scope=manager_scope,
+        shared_at=None,
+        shared_by_name=None,
+        received_share_id=None,
+        can_view_technical=True,
+        can_manage_family_shares=True,
+        audio_available=audio_file_exists,
+        family_share_active_count=family_share_active_count,
+        family_shares=family_shares,
+    )
+
+
+def _voice_session_access_context(
+    db: Session,
+    current_user: models.User,
+    session_id: int,
+) -> tuple[models.VoiceSession, models.HealthProfile, models.ProfileRelationship, models.VoiceFamilyShare | None, bool]:
+    session = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.id == int(session_id))
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Sesion de voz no encontrada.")
+    profile, link = _get_profile_access_or_404(db, current_user, int(session.profile_id))
+    active_share = _voice_active_share_for_user(db, session.id, current_user.id)
+    can_manage = _voice_manager_can_access(session, profile, current_user)
+    if not can_manage and not active_share:
+        raise HTTPException(status_code=404, detail="Sesion de voz no encontrada.")
+    return session, profile, link, active_share, can_manage
+
+
+def _voice_allowed_share_targets(
+    db: Session,
+    profile: models.HealthProfile,
+    exclude_user_id: int | None = None,
+) -> list[models.ProfileRelationship]:
+    owner_user = db.query(models.User).filter(models.User.id == int(profile.owner_user_id)).first()
+    if not _plan_allows_collaboration_for_user(owner_user):
+        return []
+    query = (
+        db.query(models.ProfileRelationship)
+        .filter(
+            models.ProfileRelationship.profile_id == int(profile.id),
+            models.ProfileRelationship.status == "accepted",
+        )
+        .order_by(models.ProfileRelationship.created_at.asc())
+    )
+    rows = query.all()
+    if exclude_user_id is None:
+        return rows
+    return [row for row in rows if int(row.user_id) != int(exclude_user_id)]
+
+
+def _voice_share_targets_out(
+    db: Session,
+    profile: models.HealthProfile,
+    exclude_user_id: int | None = None,
+) -> list[schemas.VoiceShareTargetOut]:
+    settings = _profile_automation_settings(profile)
+    auto_recipient_ids = set(settings.get("voice_auto_share_recipient_ids", []))
+    rows = _voice_allowed_share_targets(db, profile, exclude_user_id=exclude_user_id)
+    items: list[schemas.VoiceShareTargetOut] = []
+    for row in rows:
+        user = getattr(row, "user", None)
+        items.append(
+            schemas.VoiceShareTargetOut(
+                user_id=row.user_id,
+                user_name=(getattr(user, "name", None) or ""),
+                user_email=(getattr(user, "email", None) or ""),
+                relationship_type=row.relationship_type or "",
+                role=row.role or "viewer",
+                is_auto_selected=int(row.user_id) in auto_recipient_ids,
+            )
+        )
+    return items
+
+
+def _upsert_voice_family_share(
+    db: Session,
+    session: models.VoiceSession,
+    profile: models.HealthProfile,
+    sender_user: models.User,
+    recipient_user_id: int,
+    include_audio: bool,
+    share_mode: str,
+) -> models.VoiceFamilyShare:
+    share = (
+        db.query(models.VoiceFamilyShare)
+        .filter(
+            models.VoiceFamilyShare.voice_session_id == int(session.id),
+            models.VoiceFamilyShare.recipient_user_id == int(recipient_user_id),
+        )
+        .first()
+    )
+    now = datetime.utcnow()
+    if not share:
+        share = models.VoiceFamilyShare(
+            voice_session_id=session.id,
+            profile_id=profile.id,
+            sender_user_id=sender_user.id,
+            recipient_user_id=int(recipient_user_id),
+        )
+    share.sender_user_id = sender_user.id
+    share.share_mode = (share_mode or "manual").strip().lower() or "manual"
+    share.include_audio = bool(include_audio)
+    share.message_title = _voice_session_title(session)
+    share.sender_display_name = _voice_share_sender_name(sender_user)
+    share.shared_summary = (session.version_simple or "").strip()
+    share.shared_indicaciones = session.indicaciones or []
+    share.status = "active"
+    share.shared_at = now
+    share.revoked_at = None
+    db.add(share)
+    return share
+
+
+def _send_voice_family_share_push(
+    db: Session,
+    share: models.VoiceFamilyShare,
+    profile: models.HealthProfile,
+) -> int:
+    sender_name = share.sender_display_name or "Tu familia"
+    return _send_push_to_user(
+        db,
+        int(share.recipient_user_id),
+        {
+            "title": "Nueva atencion compartida",
+            "body": (
+                f"{sender_name} compartio una atencion de {profile.full_name or 'tu perfil'} "
+                "en Klinip Voice."
+            ),
+            "url": (
+                f"/voice?view=shared&profile_id={int(profile.id)}&share_id={int(share.id)}"
+            ),
+            "priority": "high",
+            "sound": "default",
+            "kind": "voice-family-share",
+            "profileId": int(profile.id),
+            "voiceSessionId": int(share.voice_session_id),
+            "shareId": int(share.id),
+        },
+    )
+
+
+def _apply_voice_family_shares(
+    db: Session,
+    session: models.VoiceSession,
+    profile: models.HealthProfile,
+    sender_user: models.User,
+    recipient_user_ids: list[int],
+    include_audio: bool,
+    share_mode: str = "manual",
+) -> list[models.VoiceFamilyShare]:
+    valid_targets = {
+        int(row.user_id)
+        for row in _voice_allowed_share_targets(db, profile, exclude_user_id=sender_user.id)
+    }
+    normalized_ids = [
+        user_id
+        for user_id in _normalize_profile_automation_list_int(recipient_user_ids)
+        if int(user_id) in valid_targets
+    ]
+    if not normalized_ids:
+        return []
+    shares = [
+        _upsert_voice_family_share(
+            db,
+            session,
+            profile,
+            sender_user,
+            recipient_user_id=user_id,
+            include_audio=include_audio,
+            share_mode=share_mode,
+        )
+        for user_id in normalized_ids
+    ]
+    db.flush()
+    return shares
+
 def _voice_call_ai(
     system_prompt: str,
     message: str,
@@ -16254,7 +16654,59 @@ async def voice_process(
         print(f"WARNING voice db save failed: {exc}")
         raise HTTPException(status_code=500, detail="Error al guardar la sesión de voz.")
 
-    return session_record
+    auto_shared = []
+    try:
+        _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
+        automation = _profile_automation_settings(profile)
+        if automation.get("voice_auto_share_enabled", False):
+            auto_shared = _apply_voice_family_shares(
+                db,
+                session_record,
+                profile,
+                current_user,
+                recipient_user_ids=automation.get("voice_auto_share_recipient_ids", []),
+                include_audio=automation.get("voice_auto_share_include_audio", True),
+                share_mode="automatic",
+            )
+            if auto_shared:
+                _log_profile_activity(
+                    db,
+                    profile_id=profile.id,
+                    actor_user_id=current_user.id,
+                    action_type="voice_family_share_auto",
+                    description=(
+                        f"{current_user.name or current_user.email} compartio automaticamente "
+                        f"una atencion Voice con {len(auto_shared)} integrante(s)"
+                    ),
+                    metadata_json={
+                        "voice_session_id": session_record.id,
+                        "recipient_user_ids": [int(item.recipient_user_id) for item in auto_shared],
+                        "include_audio": bool(automation.get("voice_auto_share_include_audio", True)),
+                    },
+                )
+                db.commit()
+                for item in auto_shared:
+                    _send_voice_family_share_push(db, item, profile)
+    except HTTPException:
+        pass
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING voice auto share failed: {exc}")
+
+    family_shares_map = {int(session_record.id): auto_shared} if auto_shared else {}
+    relationship_map = _voice_share_relationship_map(
+        db,
+        profile.id,
+        user_ids=[int(item.recipient_user_id) for item in auto_shared],
+    ) if auto_shared else {}
+    return _voice_session_out(
+        db,
+        session_record,
+        profile,
+        current_user,
+        family_shares_map=family_shares_map,
+        relationship_map=relationship_map,
+    )
 
 
 @app.get("/voice/sessions", response_model=List[schemas.VoiceSessionOut])
@@ -16269,14 +16721,39 @@ async def get_voice_sessions(
     except Exception as exc:
         print(f"WARNING voice sessions profile context failed: {exc}")
         return []
+    query = db.query(models.VoiceSession).filter(models.VoiceSession.profile_id == profile.id)
+    if int(profile.owner_user_id) != int(current_user.id):
+        query = query.filter(models.VoiceSession.user_id == current_user.id)
     sessions = (
-        db.query(models.VoiceSession)
-        .filter(models.VoiceSession.profile_id == profile.id)
-        .order_by(models.VoiceSession.created_at.desc())
+        query.order_by(models.VoiceSession.created_at.desc())
         .limit(50)
         .all()
     )
-    return sessions
+    family_shares_map = _voice_session_family_shares_map(
+        db,
+        [int(item.id) for item in sessions],
+    )
+    recipient_user_ids = [
+        int(share.recipient_user_id)
+        for shares in family_shares_map.values()
+        for share in shares
+    ]
+    relationship_map = _voice_share_relationship_map(
+        db,
+        profile.id,
+        user_ids=recipient_user_ids,
+    ) if recipient_user_ids else {}
+    return [
+        _voice_session_out(
+            db,
+            item,
+            profile,
+            current_user,
+            family_shares_map=family_shares_map,
+            relationship_map=relationship_map,
+        )
+        for item in sessions
+    ]
 
 
 @app.get("/voice/sessions/{session_id}", response_model=schemas.VoiceSessionOut)
@@ -16285,18 +16762,186 @@ async def get_voice_session(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, _ = _get_active_profile_context(db, current_user)
-    session = (
-        db.query(models.VoiceSession)
+    session, profile, _, active_share, can_manage = _voice_session_access_context(
+        db,
+        current_user,
+        session_id,
+    )
+    family_shares_map = {}
+    relationship_map = {}
+    if can_manage:
+        family_shares_map = _voice_session_family_shares_map(db, [int(session.id)])
+        recipient_user_ids = [
+            int(item.recipient_user_id)
+            for item in family_shares_map.get(int(session.id), [])
+        ]
+        if recipient_user_ids:
+            relationship_map = _voice_share_relationship_map(
+                db,
+                profile.id,
+                user_ids=recipient_user_ids,
+            )
+    return _voice_session_out(
+        db,
+        session,
+        profile,
+        current_user,
+        active_share=active_share,
+        family_shares_map=family_shares_map,
+        relationship_map=relationship_map,
+    )
+
+
+@app.get("/health-profiles/{profile_id}/voice-share-targets", response_model=List[schemas.VoiceShareTargetOut])
+async def get_voice_share_targets(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    return _voice_share_targets_out(db, profile, exclude_user_id=current_user.id)
+
+
+@app.get("/voice/shared/received", response_model=List[schemas.VoiceSessionOut])
+async def get_voice_received_sessions(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    try:
+        profile, _, _ = _get_active_profile_context(db, current_user)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        print(f"WARNING voice received profile context failed: {exc}")
+        return []
+    shares = (
+        db.query(models.VoiceFamilyShare)
+        .join(models.VoiceSession, models.VoiceSession.id == models.VoiceFamilyShare.voice_session_id)
         .filter(
-            models.VoiceSession.id == session_id,
-            models.VoiceSession.profile_id == profile.id,
+            models.VoiceFamilyShare.profile_id == int(profile.id),
+            models.VoiceFamilyShare.recipient_user_id == int(current_user.id),
+            models.VoiceFamilyShare.status == "active",
         )
+        .order_by(models.VoiceFamilyShare.shared_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        _voice_session_out(
+            db,
+            item.session,
+            profile,
+            current_user,
+            active_share=item,
+        )
+        for item in shares
+        if getattr(item, "session", None)
+    ]
+
+
+@app.post("/voice/{session_id}/share/family", response_model=schemas.VoiceSessionOut)
+async def share_voice_with_family(
+    session_id: int,
+    payload: schemas.VoiceFamilyShareIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    session, profile, _, _, can_manage = _voice_session_access_context(db, current_user, session_id)
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="No tienes permisos para compartir esta atencion.")
+    _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
+    shares = _apply_voice_family_shares(
+        db,
+        session,
+        profile,
+        current_user,
+        recipient_user_ids=payload.recipient_user_ids,
+        include_audio=payload.include_audio,
+        share_mode="manual",
+    )
+    if not shares:
+        raise HTTPException(status_code=400, detail="Selecciona al menos un integrante valido para compartir.")
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="voice_family_share_manual",
+        description=(
+            f"{current_user.name or current_user.email} compartio una atencion Voice "
+            f"con {len(shares)} integrante(s)"
+        ),
+        metadata_json={
+            "voice_session_id": session.id,
+            "recipient_user_ids": [int(item.recipient_user_id) for item in shares],
+            "include_audio": bool(payload.include_audio),
+        },
+    )
+    db.commit()
+    for item in shares:
+        _send_voice_family_share_push(db, item, profile)
+    family_shares_map = _voice_session_family_shares_map(db, [int(session.id)])
+    relationship_map = _voice_share_relationship_map(
+        db,
+        profile.id,
+        user_ids=[int(item.recipient_user_id) for item in family_shares_map.get(int(session.id), [])],
+    )
+    return _voice_session_out(
+        db,
+        session,
+        profile,
+        current_user,
+        family_shares_map=family_shares_map,
+        relationship_map=relationship_map,
+    )
+
+
+@app.delete("/voice/family-shares/{share_id}", response_model=schemas.VoiceSessionOut)
+async def revoke_voice_family_share(
+    share_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    share = (
+        db.query(models.VoiceFamilyShare)
+        .filter(models.VoiceFamilyShare.id == int(share_id))
         .first()
     )
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
-    return session
+    if not share:
+        raise HTTPException(status_code=404, detail="Compartido de Voice no encontrado.")
+    session, profile, _, _, can_manage = _voice_session_access_context(db, current_user, int(share.voice_session_id))
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="No tienes permisos para revocar este compartido.")
+    share.status = "revoked"
+    share.revoked_at = datetime.utcnow()
+    db.add(share)
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="voice_family_share_revoked",
+        description=f"{current_user.name or current_user.email} revoco un compartido de Klinip Voice",
+        metadata_json={
+            "voice_session_id": session.id,
+            "recipient_user_id": int(share.recipient_user_id),
+            "share_id": int(share.id),
+        },
+    )
+    db.commit()
+    family_shares_map = _voice_session_family_shares_map(db, [int(session.id)])
+    relationship_map = _voice_share_relationship_map(
+        db,
+        profile.id,
+        user_ids=[int(item.recipient_user_id) for item in family_shares_map.get(int(session.id), [])],
+    )
+    return _voice_session_out(
+        db,
+        session,
+        profile,
+        current_user,
+        family_shares_map=family_shares_map,
+        relationship_map=relationship_map,
+    )
 
 
 @app.post("/voice/{session_id}/share/link")
@@ -16305,17 +16950,9 @@ async def voice_share_link(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, _ = _get_active_profile_context(db, current_user)
-    session = (
-        db.query(models.VoiceSession)
-        .filter(
-            models.VoiceSession.id == session_id,
-            models.VoiceSession.profile_id == profile.id,
-        )
-        .first()
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    session, profile, _, _, can_manage = _voice_session_access_context(db, current_user, session_id)
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="No tienes permisos para compartir esta atencion.")
 
     token = secrets.token_urlsafe(32)
     expires = datetime.now() + timedelta(hours=48)
@@ -16342,17 +16979,9 @@ async def voice_share_email(
     if not email or "@" not in email:
         raise HTTPException(status_code=422, detail="Email inválido.")
 
-    profile, _, _ = _get_active_profile_context(db, current_user)
-    session = (
-        db.query(models.VoiceSession)
-        .filter(
-            models.VoiceSession.id == session_id,
-            models.VoiceSession.profile_id == profile.id,
-        )
-        .first()
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    session, profile, _, _, can_manage = _voice_session_access_context(db, current_user, session_id)
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="No tienes permisos para compartir esta atencion.")
 
     # Generate share link if not already present
     if not session.link_seguro:
@@ -16401,17 +17030,9 @@ async def voice_download_pdf(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, _ = _get_active_profile_context(db, current_user)
-    session = (
-        db.query(models.VoiceSession)
-        .filter(
-            models.VoiceSession.id == session_id,
-            models.VoiceSession.profile_id == profile.id,
-        )
-        .first()
-    )
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    session, profile, _, active_share, can_manage = _voice_session_access_context(db, current_user, session_id)
+    if not can_manage and not active_share:
+        raise HTTPException(status_code=404, detail="Sesion de voz no encontrada.")
 
     # Build plain-text PDF content
     created = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else "—"
@@ -16517,17 +17138,15 @@ async def voice_session_audio(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     """Authenticated endpoint — streams audio for the session owner."""
-    profile, _, _ = _get_active_profile_context(db, current_user)
-    session = (
-        db.query(models.VoiceSession)
-        .filter(
-            models.VoiceSession.id == session_id,
-            models.VoiceSession.profile_id == profile.id,
-        )
-        .first()
+    session, profile, _, active_share, can_manage = _voice_session_access_context(
+        db,
+        current_user,
+        session_id,
     )
-    if not session:
-        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    if not can_manage and not active_share:
+        raise HTTPException(status_code=404, detail="Sesion de voz no encontrada.")
+    if active_share and not bool(active_share.include_audio):
+        raise HTTPException(status_code=403, detail="El audio no esta disponible para este compartido.")
     if not session.audio_session or not os.path.isfile(session.audio_session):
         raise HTTPException(status_code=404, detail="Audio no disponible.")
 

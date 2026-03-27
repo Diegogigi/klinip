@@ -238,6 +238,9 @@ class ProfileAutomationSettingsOut(BaseModel):
     inactivity_alerts: bool = True
     weekly_family_report_enabled: bool = False
     auto_email_caregivers: bool = False
+    voice_auto_share_enabled: bool = False
+    voice_auto_share_include_audio: bool = True
+    voice_auto_share_recipient_ids: list[int] = []
 
 
 class ProfileAutomationSettingsIn(BaseModel):
@@ -247,6 +250,9 @@ class ProfileAutomationSettingsIn(BaseModel):
     inactivity_alerts: Optional[bool] = None
     weekly_family_report_enabled: Optional[bool] = None
     auto_email_caregivers: Optional[bool] = None
+    voice_auto_share_enabled: Optional[bool] = None
+    voice_auto_share_include_audio: Optional[bool] = None
+    voice_auto_share_recipient_ids: Optional[list[int]] = None
 
 
 class FamilyAlertOut(BaseModel):
@@ -1083,6 +1089,40 @@ class AiConversationMessageOut(BaseModel):
 
 # ── Klinip Voice ───────────────────────────────────────────────────────────
 
+class VoiceShareTargetOut(BaseModel):
+    user_id: int
+    user_name: Optional[str] = ""
+    user_email: Optional[str] = ""
+    relationship_type: Optional[str] = ""
+    role: str = "viewer"
+    is_auto_selected: bool = False
+
+
+class VoiceFamilyShareIn(BaseModel):
+    recipient_user_ids: list[int]
+    include_audio: bool = True
+
+
+class VoiceFamilyShareOut(BaseModel):
+    id: int
+    recipient_user_id: int
+    recipient_name: Optional[str] = ""
+    recipient_email: Optional[str] = ""
+    relationship_type: Optional[str] = ""
+    role: str = "viewer"
+    share_mode: str = "manual"
+    include_audio: bool = True
+    status: str = "active"
+    shared_at: datetime
+    revoked_at: Optional[datetime] = None
+
+    @field_serializer('shared_at', 'revoked_at')
+    def serialize_voice_share_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class VoiceSessionOut(BaseModel):
     id: int
     profile_id: int
@@ -1096,8 +1136,17 @@ class VoiceSessionOut(BaseModel):
     compartido_en: Optional[datetime] = None
     link_seguro: Optional[str] = None
     link_expira_en: Optional[datetime] = None
+    access_scope: str = "owner"
+    shared_at: Optional[datetime] = None
+    shared_by_name: Optional[str] = None
+    received_share_id: Optional[int] = None
+    can_view_technical: bool = True
+    can_manage_family_shares: bool = False
+    audio_available: bool = True
+    family_share_active_count: int = 0
+    family_shares: list[VoiceFamilyShareOut] = []
 
-    @field_serializer('created_at', 'compartido_en', 'link_expira_en')
+    @field_serializer('created_at', 'compartido_en', 'link_expira_en', 'shared_at')
     def serialize_voice_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
