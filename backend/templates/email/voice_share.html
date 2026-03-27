@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Registro de consulta - Klinip Voice</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
+            <tr>
+              <td style="padding:28px 32px;background:linear-gradient(135deg,#4c1d95 0%,#6c47ff 100%);color:#ffffff;">
+                <div style="margin-bottom:16px;"><span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#ffffff;font-family:'Poppins','Inter',system-ui,sans-serif;">Klinip</span></div>
+                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Klinip Voice</div>
+                <h1 style="margin:0;font-size:24px;line-height:1.3;font-weight:700;">Registro de consulta compartido</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Estimado profesional,</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
+                  Un paciente ha compartido con usted el registro de una consulta realizada a traves de Klinip Voice.
+                </p>
+                <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Paciente:</strong> {{ patient_name }}</p>
+                  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Fecha de consulta:</strong> {{ created_date }}</p>
+                </div>
+                <p style="margin:20px 0 18px;font-size:15px;line-height:1.8;color:#334155;">
+                  En el siguiente enlace puede revisar la transcripcion tecnica, indicaciones y escuchar el audio de la consulta:
+                </p>
+                <div style="text-align:center;margin:24px 0;">
+                  <a href="{{ share_url }}" style="display:inline-block;padding:14px 32px;background:#6c47ff;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;border-radius:12px;">
+                    Ver registro de consulta
+                  </a>
+                </div>
+                <p style="margin:16px 0 0;font-size:13px;line-height:1.7;color:#94a3b8;">
+                  Este enlace expira en 48 horas por seguridad del paciente.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
+                  Este correo fue enviado porque un paciente de {{ app_name }} decidio compartir su registro de consulta con usted.
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                  {{ app_name }} | Klinip Voice | {{ year }}
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
