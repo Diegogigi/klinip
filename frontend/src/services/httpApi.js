@@ -9,26 +9,95 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-    console.log("Request interceptor: Token agregado al header", token.substring(0, 20) + "...");
-  } else {
-    console.warn("Request interceptor: No hay token en localStorage");
-  }
-  return config;
-});
-
 // Instancia separada para el refresh (no pasa por el interceptor de 401)
 const refreshApi = axios.create({ baseURL: API_URL });
 
-let _isRefreshing = false;
-let _refreshQueue = [];
+const AUTH_EXEMPT_PATH_PREFIXES = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/mfa/verify",
+  "/auth/token/refresh",
+  "/public/",
+  "/privacy/contact",
+];
 
-function _processRefreshQueue(error, token = null) {
-  _refreshQueue.forEach((cb) => (error ? cb.reject(error) : cb.resolve(token)));
-  _refreshQueue = [];
+let _refreshPromise = null;
+let _sessionExpiredNotified = false;
+
+function _clearStoredSession() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("refresh_token");
+}
+
+function _notifySessionExpired() {
+  if (_sessionExpiredNotified) return;
+  _sessionExpiredNotified = true;
+  window.dispatchEvent(new CustomEvent("klinip:session-expired"));
+}
+
+function _resetSessionExpiredSignal() {
+  _sessionExpiredNotified = false;
+}
+
+function _getRequestPath(config) {
+  const rawUrl = String(config?.url || "").trim();
+  if (!rawUrl) return "";
+  if (/^https?:\/\//i.test(rawUrl)) {
+    try {
+      return new URL(rawUrl).pathname.toLowerCase();
+    } catch {
+      return rawUrl.toLowerCase();
+    }
+  }
+  return rawUrl.split("?")[0].toLowerCase();
+}
+
+function _isAuthExemptRequest(config) {
+  const path = _getRequestPath(config);
+  return AUTH_EXEMPT_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function _decodeJwtPayload(token) {
+  try {
+    const base64Url = String(token || "").split(".")[1] || "";
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function _isTokenFresh(token, marginMs = 30_000) {
+  if (!token) return false;
+  const payload = _decodeJwtPayload(token);
+  const expiresAt = Number(payload?.exp || 0) * 1000;
+  if (!expiresAt) return false;
+  return Date.now() < expiresAt - marginMs;
+}
+
+function _buildAuthError(message, config, status = 401) {
+  const error = new Error(message);
+  error.name = "KlinipAuthError";
+  error.code = "ERR_AUTH_SESSION";
+  error.isAuthError = true;
+  error.config = config;
+  error.response = {
+    status,
+    data: { detail: message },
+    headers: {},
+  };
+  return error;
+}
+
+export function isAuthSessionError(error) {
+  return Boolean(
+    error?.isAuthError ||
+    error?.code === "ERR_AUTH_SESSION" ||
+    error?.response?.status === 401
+  );
 }
 
 async function _normalizeErrorResponse(error) {
@@ -67,21 +136,112 @@ async function _normalizeErrorResponse(error) {
   return error;
 }
 
+async function _refreshAccessTokenWithLock() {
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) {
+    _clearStoredSession();
+    _notifySessionExpired();
+    throw _buildAuthError("La sesión expiró. Inicia sesión nuevamente.");
+  }
+
+  if (_refreshPromise) {
+    return _refreshPromise;
+  }
+
+  _refreshPromise = (async () => {
+    try {
+      const res = await refreshApi.post("/auth/token/refresh", {
+        refresh_token: refreshToken,
+      });
+      const newAccessToken = res.data?.access_token;
+      if (!newAccessToken) {
+        throw new Error("No access_token en respuesta");
+      }
+
+      localStorage.setItem("token", newAccessToken);
+      if (res.data?.refresh_token) {
+        localStorage.setItem("refresh_token", res.data.refresh_token);
+      }
+      _resetSessionExpiredSignal();
+      return newAccessToken;
+    } catch (error) {
+      const normalizedError = await _normalizeErrorResponse(error);
+      _clearStoredSession();
+      _notifySessionExpired();
+      throw normalizedError;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+api.interceptors.request.use(async (config) => {
+  if (_isAuthExemptRequest(config)) {
+    return config;
+  }
+
+  const token = localStorage.getItem("token");
+  if (_isTokenFresh(token)) {
+    _resetSessionExpiredSignal();
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  }
+
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (refreshToken) {
+    const newAccessToken = await _refreshAccessTokenWithLock();
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${newAccessToken}`;
+    return config;
+  }
+
+  _clearStoredSession();
+  _notifySessionExpired();
+  throw _buildAuthError("La sesión expiró. Inicia sesión nuevamente.", config);
+});
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const normalizedError = await _normalizeErrorResponse(error);
-    const originalRequest = normalizedError.config;
+    const originalRequest = normalizedError.config || {};
 
     // 403 con step_up_required: propagar con bandera especial
     if (normalizedError.response?.status === 403) {
       return Promise.reject(normalizedError);
     }
 
+    const isFormDataRequest = originalRequest.data instanceof FormData;
+    if (
+      normalizedError.response?.status === 401 &&
+      !_isAuthExemptRequest(originalRequest) &&
+      !originalRequest._retry &&
+      !isFormDataRequest
+    ) {
+      originalRequest._retry = true;
+
+      try {
+        const newAccessToken = await _refreshAccessTokenWithLock();
+        originalRequest.headers = originalRequest.headers || {};
+        originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        return Promise.reject(refreshError);
+      }
+    }
+
+    if (normalizedError.response?.status === 401 && !_isAuthExemptRequest(originalRequest)) {
+      _clearStoredSession();
+      _notifySessionExpired();
+    }
+
     // 401: intentar renovar el access token con el refresh token
     // No reintentar requests con FormData (blobs se consumen en el primer intento)
     const hasFormData = originalRequest.data instanceof FormData;
-    if (normalizedError.response?.status === 401 && !originalRequest._retry && !hasFormData) {
+    if (false && normalizedError.response?.status === 401 && !originalRequest._retry && !hasFormData) {
       const refreshToken = localStorage.getItem("refresh_token");
 
       // Sin refresh token → cerrar sesión
@@ -144,6 +304,7 @@ api.interceptors.response.use(
 async function _ensureFreshToken() {
   const token = localStorage.getItem("token");
   if (!token) return;
+  if (_isTokenFresh(token)) return;
   try {
     // Decode JWT payload to check expiry (without verifying signature)
     const payload = JSON.parse(atob(token.split(".")[1]));
@@ -156,16 +317,7 @@ async function _ensureFreshToken() {
   const refreshToken = localStorage.getItem("refresh_token");
   if (!refreshToken) return;
   try {
-    const res = await refreshApi.post("/auth/token/refresh", {
-      refresh_token: refreshToken,
-    });
-    const newAccessToken = res.data?.access_token;
-    if (newAccessToken) {
-      localStorage.setItem("token", newAccessToken);
-      if (res.data?.refresh_token) {
-        localStorage.setItem("refresh_token", res.data.refresh_token);
-      }
-    }
+    await _refreshAccessTokenWithLock();
   } catch {
     // If refresh fails here, the actual request will fail with 401 and
     // the interceptor will handle session expiry.

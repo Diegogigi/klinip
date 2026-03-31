@@ -7,6 +7,7 @@ import {
   getMedicationIntakes,
   getMedications,
   getProfileCaregivers,
+  isAuthSessionError,
   markMedicationRefillPurchased,
   recordMedicationIntake,
   saveMedication,
@@ -242,22 +243,31 @@ export default function Medications() {
   const isReadOnlyProfile = isViewerProfile(activeProfile);
 
   const load = async () => {
-    const data = await getMedications();
-    const sortedData = [...(data || [])].sort(
-      (a, b) => getNewestMedicationRank(b) - getNewestMedicationRank(a)
-    );
-    setMeds(sortedData);
-    const missing = sortedData.find(
-      (m) => !m.frequency || m.frequency.trim() === ""
-    );
-    if (missing) {
-      const dismissedKey = `klinip_missing_freq_dismissed_${missing.id}`;
-      const dismissed = localStorage.getItem(dismissedKey) === "1";
-      setMissingFrequency(dismissed ? null : missing);
-    } else {
+    try {
+      const data = await getMedications();
+      const sortedData = [...(data || [])].sort(
+        (a, b) => getNewestMedicationRank(b) - getNewestMedicationRank(a)
+      );
+      setMeds(sortedData);
+      const missing = sortedData.find(
+        (m) => !m.frequency || m.frequency.trim() === ""
+      );
+      if (missing) {
+        const dismissedKey = `klinip_missing_freq_dismissed_${missing.id}`;
+        const dismissed = localStorage.getItem(dismissedKey) === "1";
+        setMissingFrequency(dismissed ? null : missing);
+      } else {
+        setMissingFrequency(null);
+      }
+      scheduleMedicationNotifications(sortedData);
+    } catch (error) {
+      if (!isAuthSessionError(error)) {
+        console.error("No se pudieron cargar los medicamentos", error);
+      }
+      setMeds([]);
       setMissingFrequency(null);
+      scheduleMedicationNotifications([]);
     }
-    scheduleMedicationNotifications(sortedData);
   };
 
   const loadFamilyContext = async () => {
@@ -279,7 +289,9 @@ export default function Medications() {
         setFamilyCaregivers([]);
       }
     } catch (error) {
-      console.error("No se pudo cargar el contexto familiar de medicamentos", error);
+      if (!isAuthSessionError(error)) {
+        console.error("No se pudo cargar el contexto familiar de medicamentos", error);
+      }
       setPlanInfo(null);
       setActiveProfile(null);
       setFamilyCaregivers([]);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile, getMfaStatus } from "../api";
+import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile, getMfaStatus, isAuthSessionError } from "../api";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { getDocumentFile, getDocumentFileWithStepUp } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
@@ -156,16 +156,24 @@ export default function Documents() {
   };
 
   async function load() {
-    const [data, profile] = await Promise.all([
-      getDocuments(),
-      getActiveHealthProfile().catch(() => null),
-    ]);
-    setActiveProfile(profile || null);
-    setDocs(
-      Array.isArray(data)
-        ? [...data].sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a))
-        : []
-    );
+    try {
+      const [data, profile] = await Promise.all([
+        getDocuments(),
+        getActiveHealthProfile().catch(() => null),
+      ]);
+      setActiveProfile(profile || null);
+      setDocs(
+        Array.isArray(data)
+          ? [...data].sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a))
+          : []
+      );
+    } catch (error) {
+      if (!isAuthSessionError(error)) {
+        console.error("No se pudieron cargar los documentos", error);
+      }
+      setActiveProfile(null);
+      setDocs([]);
+    }
   }
 
   useEffect(() => {

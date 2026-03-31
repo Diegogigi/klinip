@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getAppointments, getDocuments, getMedications } from "../api";
+import { getAppointments, getDocuments, getMedications, isAuthSessionError } from "../api";
 import { parseDate } from "../utils/dates";
 
 function RingChart({ value, label, tone = "blue" }) {
@@ -44,14 +44,23 @@ export default function Stats() {
 
   useEffect(() => {
     async function load() {
-      const [apptData, docData, medData] = await Promise.all([
-        getAppointments(),
-        getDocuments(),
-        getMedications(),
-      ]);
-      setAppointments(apptData || []);
-      setDocuments(docData || []);
-      setMedications(medData || []);
+      try {
+        const [apptData, docData, medData] = await Promise.all([
+          getAppointments(),
+          getDocuments(),
+          getMedications(),
+        ]);
+        setAppointments(apptData || []);
+        setDocuments(docData || []);
+        setMedications(medData || []);
+      } catch (error) {
+        if (!isAuthSessionError(error)) {
+          console.error("No se pudieron cargar las estadísticas", error);
+        }
+        setAppointments([]);
+        setDocuments([]);
+        setMedications([]);
+      }
     }
     load();
   }, []);

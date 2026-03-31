@@ -102,6 +102,7 @@ export const refreshAccessToken = api.refreshAccessToken;
 export const getSessions = api.getSessions;
 export const revokeSession = api.revokeSession;
 export const revokeAllSessions = api.revokeAllSessions;
+export const isAuthSessionError = api.isAuthSessionError;
 
 // Permissions
 export const getProfilePermissions = api.getProfilePermissions;

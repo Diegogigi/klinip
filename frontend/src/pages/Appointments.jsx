@@ -6,6 +6,7 @@ import {
   updateAppointment,
   deleteAppointment,
   getActiveHealthProfile,
+  isAuthSessionError,
 } from "../api";
 import {
   parseDate,
@@ -74,14 +75,22 @@ export default function Appointments() {
   const isReadOnlyProfile = isViewerProfile(activeProfile);
 
   async function load() {
-    const [data, profile] = await Promise.all([
-      getAppointments(),
-      getActiveHealthProfile().catch(() => null),
-    ]);
-    setActiveProfile(profile || null);
-    setAppointments(
-      [...data].sort((a, b) => getNewestAppointmentRank(b) - getNewestAppointmentRank(a))
-    );
+    try {
+      const [data, profile] = await Promise.all([
+        getAppointments(),
+        getActiveHealthProfile().catch(() => null),
+      ]);
+      setActiveProfile(profile || null);
+      setAppointments(
+        [...data].sort((a, b) => getNewestAppointmentRank(b) - getNewestAppointmentRank(a))
+      );
+    } catch (error) {
+      if (!isAuthSessionError(error)) {
+        console.error("No se pudieron cargar las citas", error);
+      }
+      setActiveProfile(null);
+      setAppointments([]);
+    }
   }
 
   useEffect(() => {

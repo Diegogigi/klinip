@@ -32,6 +32,7 @@ import {
   getHealthProfiles,
   getActiveHealthProfile,
   setActiveHealthProfile,
+  isAuthSessionError,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 
@@ -748,6 +749,7 @@ export default function App() {
         setUser(me);
       } catch (err) {
         localStorage.removeItem("token");
+        localStorage.removeItem("refresh_token");
         setUser(null);
       } finally {
         setBooting(false);
@@ -789,7 +791,9 @@ export default function App() {
         setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
       } catch (err) {
         if (!mounted) return;
-        console.error("No se pudo cargar contexto familiar para header:", err);
+        if (!isAuthSessionError(err)) {
+          console.error("No se pudo cargar contexto familiar para header:", err);
+        }
         setPlanInfo(null);
         setHealthProfiles([]);
         setActiveHealthProfileId(null);
