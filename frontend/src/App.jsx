@@ -35,6 +35,7 @@ import {
   isAuthSessionError,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
+import { clearScheduledNotifications } from "./services/notificationManager";
 
 const icons = {
   home: (
@@ -980,6 +981,10 @@ export default function App() {
     setOnboardingStep(0);
     setOnboardingOpen(true);
   }, [user, booting, consentOpen, notifConsentOpen]);
+
+  useEffect(() => {
+    clearScheduledNotifications();
+  }, []);
 
   useEffect(() => {
     if (!notifConsentOpen || !user) {

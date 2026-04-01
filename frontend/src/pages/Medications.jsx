@@ -13,10 +13,6 @@ import {
   saveMedication,
 } from "../api";
 import {
-  requestNotificationPermission,
-  scheduleMedicationNotifications,
-} from "../services/notifications";
-import {
   parseDate,
   toIsoOrNull,
   toLocalInputValue,
@@ -259,14 +255,12 @@ export default function Medications() {
       } else {
         setMissingFrequency(null);
       }
-      scheduleMedicationNotifications(sortedData);
     } catch (error) {
       if (!isAuthSessionError(error)) {
         console.error("No se pudieron cargar los medicamentos", error);
       }
       setMeds([]);
       setMissingFrequency(null);
-      scheduleMedicationNotifications([]);
     }
   };
 
@@ -319,8 +313,6 @@ export default function Medications() {
   useEffect(() => {
     load();
     loadFamilyContext();
-    requestNotificationPermission();
-    return () => scheduleMedicationNotifications([]);
   }, []);
 
   useEffect(() => {

@@ -1477,13 +1477,30 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         return False
 
 
+def _prune_push_subscriptions_for_user(db: Session, user_id: int, keep: int = 3) -> int:
+    keep_count = max(1, int(keep or 1))
+    subscriptions = (
+        db.query(models.PushSubscription)
+        .filter(models.PushSubscription.user_id == user_id)
+        .order_by(models.PushSubscription.created_at.desc(), models.PushSubscription.id.desc())
+        .all()
+    )
+    stale_subs = subscriptions[keep_count:]
+    if not stale_subs:
+        return 0
+    for sub in stale_subs:
+        db.delete(sub)
+    db.commit()
+    return len(stale_subs)
+
+
 def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
     if not (webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY):
         return 0
     subscriptions = (
         db.query(models.PushSubscription)
         .filter(models.PushSubscription.user_id == user_id)
-        .order_by(models.PushSubscription.created_at.desc())
+        .order_by(models.PushSubscription.created_at.desc(), models.PushSubscription.id.desc())
         .all()
     )
     if not subscriptions:
@@ -18861,9 +18878,11 @@ async def subscribe_push(
         existing.user_id = current_user.id
         existing.p256dh = p256dh
         existing.auth = auth_key
+        existing.created_at = datetime.now()
         try:
             db.commit()
             db.refresh(existing)
+            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
             return existing
         except Exception as exc:
             db.rollback()
@@ -18880,17 +18899,7 @@ async def subscribe_push(
     try:
         db.commit()
         db.refresh(sub)
-        # Limitar a 3 suscripciones por usuario para evitar acumulación en iOS
-        all_subs = (
-            db.query(models.PushSubscription)
-            .filter(models.PushSubscription.user_id == current_user.id)
-            .order_by(models.PushSubscription.created_at.desc())
-            .all()
-        )
-        if len(all_subs) > 3:
-            for old in all_subs[3:]:
-                db.delete(old)
-            db.commit()
+        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
         return sub
     except IntegrityError:
         db.rollback()
@@ -18903,9 +18912,11 @@ async def subscribe_push(
             recovered.user_id = current_user.id
             recovered.p256dh = p256dh
             recovered.auth = auth_key
+            recovered.created_at = datetime.now()
             try:
                 db.commit()
                 db.refresh(recovered)
+                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
                 return recovered
             except Exception as exc:
                 db.rollback()

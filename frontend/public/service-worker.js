@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v16";
+const CACHE_NAME = "klinip-cache-v17";
 const ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -102,7 +102,7 @@ self.addEventListener("activate", (event) => {
         Promise.all(keys.map((key) => (key !== CACHE_NAME ? caches.delete(key) : null)))
       )
       .then(() => self.clients.claim())
-      .then(() => checkAndShowPendingNotifications())
+      .then(() => clearAllScheduledNotifications())
   );
 });
 
@@ -384,12 +384,6 @@ async function removeScheduledNotification(id) {
     console.error("Error removing scheduled notification:", err);
   }
 }
-
-setInterval(() => {
-  checkAndShowPendingNotifications();
-}, 60000);
-
-checkAndShowPendingNotifications();
 
 const recentlyShownNotifications = new Map();
 const DEDUP_WINDOW_MS = 60000;

@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import {
-  requestNotificationPermission,
   getNotificationStats,
   clearScheduledNotifications,
-  scheduleReminderNotifications,
-  scheduleMedicationNotifications,
 } from "../services/notificationManager";
 import {
   ensurePushSubscription,
@@ -13,8 +10,6 @@ import {
   getCurrentPushSubscription,
 } from "../services/pwa";
 import {
-  getAppointments,
-  getMedications,
   getPushStatus,
   sendTestPush,
 } from "../services/httpApi";
@@ -26,6 +21,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
   const [pushSupport, setPushSupport] = useState(() => getPushSupportStatus());
   const pushSupported = pushSupport.supported;
   const [pushActionLoading, setPushActionLoading] = useState(false);
+  const [pushSubscriptionCount, setPushSubscriptionCount] = useState(0);
   const [pushEnabled, setPushEnabled] = useState(() => {
     const saved = localStorage.getItem("klinip_push_enabled");
     return saved === "true";
@@ -72,6 +68,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       if (!support.supported) {
         localStorage.setItem("klinip_push_enabled", "false");
         setPushEnabled(false);
+        setPushSubscriptionCount(0);
         return;
       }
 
@@ -81,6 +78,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
 
       localStorage.setItem("klinip_push_enabled", enabled.toString());
       setPushEnabled(enabled);
+      setPushSubscriptionCount(Number(backendStatus?.count || 0));
 
       if (clientState.browserHasSubscription !== backendStatus.enabled) {
         console.warn("Estado push desincronizado entre navegador y backend.");
@@ -89,6 +87,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       console.error("Error cargando el estado de push:", error);
       localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
+      setPushSubscriptionCount(0);
     }
   };
 
@@ -134,11 +133,20 @@ export default function NotificationSettings({ onClose, embedded = false }) {
   };
 
   const handleEnableNotifications = async () => {
-    const granted = await requestNotificationPermission();
-    setNotificationsEnabled(granted);
-    if (granted) {
-      await rescheduleNotifications();
+    if (!("Notification" in window)) {
+      window.alert("Este navegador no soporta notificaciones.");
+      return;
     }
+    const granted =
+      Notification.permission === "granted"
+        ? true
+        : (await Notification.requestPermission()) === "granted";
+    setNotificationsEnabled(granted);
+    if (!granted) {
+      window.alert("Debes permitir las notificaciones del navegador.");
+      return;
+    }
+    await loadPushStatus();
   };
 
   const handleEnablePush = async () => {
@@ -161,7 +169,6 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       });
 
       await loadPushStatus();
-      await rescheduleNotifications();
 
       window.alert(
         "Notificaciones push habilitadas correctamente. Recibir\u00e1s recordatorios autom\u00e1ticos."
@@ -205,103 +212,14 @@ export default function NotificationSettings({ onClose, embedded = false }) {
     }
   };
 
-  const rescheduleNotifications = async () => {
-    try {
-      clearScheduledNotifications();
-
-      let totalScheduled = 0;
-
-      if (settings.appointmentReminders) {
-        const appointments = await getAppointments();
-        const offsets = buildCustomOffsets();
-        scheduleReminderNotifications(appointments, offsets);
-        totalScheduled += appointments.length * offsets.length;
-      }
-
-      if (settings.medicationReminders) {
-        const medications = await getMedications();
-        scheduleMedicationNotifications(medications);
-        totalScheduled += medications.length;
-      }
-
-      updateStats();
-
-      if (!pushEnabled) {
-        window.alert(`${totalScheduled} notificaciones programadas.`);
-      }
-    } catch (error) {
-      console.error("Error reprogramando notificaciones:", error);
-      window.alert("Error al reprogramar notificaciones.");
-    }
-  };
-
-  const buildCustomOffsets = () => {
-    const offsets = [];
-
-    if (settings.customOffsets.days7) {
-      offsets.push({
-        days: 7,
-        label: "7 d\u00edas antes",
-        icon: "",
-        priority: "low",
-        sound: "appointment",
-      });
-    }
-    if (settings.customOffsets.days3) {
-      offsets.push({
-        days: 3,
-        label: "3 d\u00edas antes",
-        icon: "",
-        priority: "normal",
-        sound: "appointment",
-      });
-    }
-    if (settings.customOffsets.days1) {
-      offsets.push({
-        days: 1,
-        label: "1 d\u00eda antes",
-        icon: "",
-        priority: "high",
-        sound: "appointment",
-      });
-    }
-    if (settings.customOffsets.hours2) {
-      offsets.push({
-        hours: 2,
-        label: "2 horas antes",
-        icon: "",
-        priority: "urgent",
-        sound: "urgent",
-      });
-    }
-    if (settings.customOffsets.minutes30) {
-      offsets.push({
-        minutes: 30,
-        label: "30 minutos antes",
-        icon: "",
-        priority: "urgent",
-        sound: "urgent",
-      });
-    }
-    if (settings.customOffsets.minutes5) {
-      offsets.push({
-        minutes: 5,
-        label: "5 minutos antes",
-        icon: "",
-        priority: "urgent",
-        sound: "urgent",
-      });
-    }
-
-    return offsets;
-  };
-
   const handleClearAll = () => {
-    if (!window.confirm("\u00bfDeseas borrar todas las notificaciones programadas?")) return;
+    if (!window.confirm("\u00bfDeseas borrar los recordatorios locales heredados?")) return;
 
     clearScheduledNotifications();
     updateStats();
-    window.alert("Todas las notificaciones han sido borradas.");
+    window.alert(
+      "Se limpiaron los recordatorios locales heredados. Klinip enviará recordatorios por push."
+    );
   };
 
   const handleTestPush = async () => {
@@ -377,16 +295,12 @@ export default function NotificationSettings({ onClose, embedded = false }) {
               </span>
             </div>
             <div className="status-item">
-              <span className="status-label">Notificaciones programadas</span>
+              <span className="status-label">Suscripciones push registradas</span>
+              <span className="status-value">{pushSubscriptionCount}</span>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Recordatorios locales heredados</span>
               <span className="status-value">{stats.total}</span>
-            </div>
-            <div className="status-item">
-              <span className="status-label">Citas</span>
-              <span className="status-value">{stats.appointments}</span>
-            </div>
-            <div className="status-item">
-              <span className="status-label">Medicamentos</span>
-              <span className="status-value">{stats.medications}</span>
             </div>
           </div>
         </section>
@@ -397,7 +311,7 @@ export default function NotificationSettings({ onClose, embedded = false }) {
               Habilitar notificaciones del navegador
             </button>
             <p className="help-text">
-              Debes habilitar las notificaciones del navegador para recibir recordatorios.
+              Debes habilitar las notificaciones del navegador para registrar y recibir recordatorios push.
             </p>
           </section>
         )}
@@ -558,20 +472,18 @@ export default function NotificationSettings({ onClose, embedded = false }) {
         </section>
 
         <section className="settings-section actions">
-          <button className="primary-btn" onClick={rescheduleNotifications}>
-            Reprogramar notificaciones
-          </button>
-          <button className="danger-btn" onClick={handleClearAll}>
-            Borrar todas las notificaciones
-          </button>
           <button
-            className="secondary-btn"
-            onClick={() => {
+            className="primary-btn"
+            onClick={async () => {
+              await loadPushStatus();
               updateStats();
-              window.alert("Estad\u00edsticas actualizadas.");
+              window.alert("Estado de notificaciones actualizado.");
             }}
           >
-            Actualizar estad&iacute;sticas
+            Actualizar estado
+          </button>
+          <button className="danger-btn" onClick={handleClearAll}>
+            Limpiar recordatorios locales antiguos
           </button>
         </section>
       </div>

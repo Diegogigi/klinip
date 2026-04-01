@@ -218,7 +218,7 @@
                 
                 // 2. Limpiar localStorage
                 addStatus('🧹', 'Limpiando localStorage...');
-                const keys = ['klinip_scheduled_notifications', 'klinip_notification_settings'];
+                const keys = ['klinip_scheduled_notifications', 'klinip_notification_settings', 'klinip_push_enabled'];
                 keys.forEach(key => localStorage.removeItem(key));
                 addStatus('✅', 'localStorage limpiado');
                 
@@ -234,7 +234,7 @@
                 addStatus('💾', 'Limpiando IndexedDB...');
                 try {
                     await new Promise((resolve, reject) => {
-                        const request = indexedDB.deleteDatabase('klinip-notifications-db');
+                        const request = indexedDB.deleteDatabase('KlinipNotifications');
                         request.onsuccess = () => resolve();
                         request.onerror = () => reject();
                         request.onblocked = () => {
