@@ -42,7 +42,8 @@ def upgrade() -> None:
 
     if vector_extension_stmt:
         try:
-            bind.execute(text(vector_extension_stmt))
+            with bind.begin_nested():
+                bind.execute(text(vector_extension_stmt))
         except DBAPIError as exc:
             print(f"WARNING alembic: pgvector no disponible; se omite la extension vector ({exc})")
 
