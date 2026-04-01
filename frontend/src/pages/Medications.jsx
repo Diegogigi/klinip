@@ -24,6 +24,18 @@ import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 
 const MED_ALERT_POLL_MS = 15000;
+const FREQUENCY_PRESETS = [
+  { label: "Cada 24 horas", value: "Cada 24 horas" },
+  { label: "Cada 12 horas", value: "Cada 12 horas" },
+  { label: "Cada 8 horas", value: "Cada 8 horas" },
+  { label: "Cada 6 horas", value: "Cada 6 horas" },
+];
+const DURATION_PRESETS = [
+  { label: "3 días", value: "3 días" },
+  { label: "5 días", value: "5 días" },
+  { label: "7 días", value: "7 días" },
+  { label: "14 días", value: "14 días" },
+];
 
 function getNewestMedicationRank(item) {
   const createdAt = parseDate(item?.created_at);
@@ -233,6 +245,7 @@ export default function Medications() {
   const [purchaseTarget, setPurchaseTarget] = useState(null);
   const [purchaseNewStock, setPurchaseNewStock] = useState("");
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [showAdvancedForm, setShowAdvancedForm] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -418,6 +431,7 @@ export default function Medications() {
   }, [notifyOpen, notifyQueue, notifyTarget]);
 
   const resetForm = () => {
+    setShowAdvancedForm(false);
     setForm({
       id: null,
       name: "",
@@ -513,8 +527,28 @@ export default function Medications() {
     }
   };
 
+  const handleOpenCreateForm = () => {
+    if (!canEditActiveProfile) return;
+    resetForm();
+    setShowForm(true);
+  };
+
+  const handleCloseForm = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
   const handleEdit = (med) => {
     if (!canEditActiveProfile) return;
+    setShowAdvancedForm(
+      Boolean(
+        (med.duration || "").trim() ||
+        med.end_date ||
+        (med.notes || "").trim() ||
+        (med.schedule_time || "").trim() ||
+        med.refill_enabled
+      )
+    );
     setShowForm(true);
     setForm({
       id: med.id,
@@ -819,6 +853,12 @@ export default function Medications() {
     .map((item) => item?.user_name || item?.user_email || "")
     .filter(Boolean)
     .slice(0, 4);
+  const frequencyValue = String(form.frequency || "").trim();
+  const durationValue = String(form.duration || "").trim();
+  const medicationPreviewName = String(form.name || "").trim() || "Medicamento";
+  const medicationPreviewDose = String(form.dose || "").trim();
+  const medicationStartPreview = toLocaleDateTimeOrEmpty(form.start_at) || "";
+  const remindersReady = Boolean(frequencyValue && form.start_at);
 
   const formatTimelineStamp = (value) => {
     if (!value) return "Sin fecha";
@@ -912,7 +952,7 @@ export default function Medications() {
             className="primary-btn"
             type="button"
             style={{ width: "100%" }}
-            onClick={() => setShowForm(true)}
+            onClick={handleOpenCreateForm}
           >
             Agregar medicamento
           </button>
@@ -1047,253 +1087,331 @@ export default function Medications() {
       )}
 
       {showForm && canEditActiveProfile && (
-        <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
+        <div className="floating-form-backdrop" onClick={handleCloseForm}>
           <div className="floating-form-card" onClick={(e) => e.stopPropagation()}>
-            <div className="card-header" style={{ marginBottom: "0.5rem" }}>
-              <h3 className="card-title" style={{ margin: 0 }}>
-                {form.id ? "Editar medicamento" : "Nuevo medicamento"}
-              </h3>
-              <button className="secondary-btn" type="button" onClick={() => setShowForm(false)}>
+            <div className="card-header med-form-header" style={{ marginBottom: "0.5rem" }}>
+              <div>
+                <p className="med-form-kicker">
+                  {form.id ? "Editar tratamiento" : "Nuevo tratamiento"}
+                </p>
+                <h3 className="card-title" style={{ margin: 0 }}>
+                  {form.id ? "Actualiza lo importante" : "Guardar medicamento"}
+                </h3>
+                <p className="muted med-form-header-copy">
+                  Primero completa nombre, dosis, frecuencia y primera toma. El resto queda como opcional.
+                </p>
+              </div>
+              <button className="secondary-btn" type="button" onClick={handleCloseForm}>
                 Cerrar
               </button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Nombre</label>
-                  <input
-                    className="input-field"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    required
-                    placeholder="Ej: Paracetamol"
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Dosis</label>
-                  <input
-                    className="input-field"
-                    value={form.dose}
-                    onChange={(e) => setForm({ ...form, dose: e.target.value })}
-                    placeholder="500 mg"
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Frecuencia</label>
-                  <input
-                    className="input-field"
-                    value={form.frequency}
-                    onChange={(e) => setForm({ ...form, frequency: e.target.value })}
-                    placeholder="Cada 8 horas"
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Duración</label>
-                  <input
-                    className="input-field"
-                    value={form.duration}
-                    onChange={(e) => setForm({ ...form, duration: e.target.value })}
-                    placeholder="Por 5 días"
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Inicio del tratamiento</label>
-                  <input
-                    className="input-field"
-                    type="datetime-local"
-                    value={form.start_at}
-                    required={Boolean((form.frequency || "").trim())}
-                    onChange={(e) => {
-                      const nextStartAt = e.target.value;
-                      setForm((current) => ({
-                        ...current,
-                        start_at: nextStartAt,
-                        schedule_time:
-                          (current.schedule_time || !nextStartAt)
-                            ? current.schedule_time
-                            : nextStartAt.slice(11, 16),
-                      }));
-                    }}
-                  />
-                  <small className="muted">
-                    Indica la fecha y hora de la primera dosis para calcular correctamente las siguientes.
-                  </small>
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Fecha término</label>
-                  <input
-                    className="input-field"
-                    type="date"
-                    value={form.end_date}
-                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Horario base</label>
-                  <input
-                    className="input-field"
-                    type="time"
-                    value={form.schedule_time}
-                    onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="med-refill-settings">
-                <div className="med-refill-settings-head">
-                  <div>
-                    <h4>Reposición familiar</h4>
-                    <p>
-                      Activa alertas para avisar quién debe comprar el medicamento
-                      cuando quede poco stock.
-                    </p>
+              <div className="med-form-shell">
+                <section className="med-form-section is-primary">
+                  <div className="med-form-section-head">
+                    <div>
+                      <h4>Lo esencial</h4>
+                      <p className="muted">
+                        Esto basta para guardar el tratamiento y, si corresponde, activar recordatorios.
+                      </p>
+                    </div>
+                    <div className={`med-form-status ${remindersReady ? "is-ready" : "is-draft"}`}>
+                      {remindersReady ? "Recordatorios listos" : "Faltan datos para recordatorios"}
+                    </div>
                   </div>
-                  <label className="med-refill-toggle">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(form.refill_enabled)}
-                      disabled={!familyRefillAvailable}
-                      onChange={(e) =>
-                        setForm((current) => ({
-                          ...current,
-                          refill_enabled: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span>Activar</span>
-                  </label>
-                </div>
-                {familyRefillAvailable && form.refill_enabled ? (
-                  <>
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Dosis del envase</label>
-                        <input
-                          className="input-field"
-                          type="number"
-                          min="0"
-                          value={form.stock_total_doses}
-                          onChange={(e) =>
-                            setForm((current) => ({
-                              ...current,
-                              stock_total_doses: e.target.value,
-                            }))
-                          }
-                          placeholder="Ej: 30"
-                        />
-                      </div>
-                      <div className="input-group">
-                        <label className="input-label">Avisar cuando queden</label>
-                        <input
-                          className="input-field"
-                          type="number"
-                          min="0"
-                          value={form.refill_alert_threshold_doses}
-                          onChange={(e) =>
-                            setForm((current) => ({
-                              ...current,
-                              refill_alert_threshold_doses: e.target.value,
-                            }))
-                          }
-                          placeholder="Ej: 8"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Dosis por toma</label>
-                        <input
-                          className="input-field"
-                          type="number"
-                          min="0.01"
-                          step="0.5"
-                          value={form.doses_per_intake}
-                          onChange={(e) =>
-                            setForm((current) => ({ ...current, doses_per_intake: e.target.value }))
-                          }
-                          placeholder="Ej: 1"
-                        />
-                      </div>
-                      <div className="input-group">
-                        <label className="input-label">Tomas por día</label>
-                        <input
-                          className="input-field"
-                          type="number"
-                          min="0.01"
-                          step="0.5"
-                          value={form.frequency_per_day}
-                          onChange={(e) =>
-                            setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
-                          }
-                          placeholder="Ej: 2"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="input-group">
-                        <label className="input-label">Modo de asignación</label>
-                        <select
-                          className="select-field"
-                          value={form.refill_mode}
-                          onChange={(e) =>
-                            setForm((current) => ({ ...current, refill_mode: e.target.value }))
-                          }
-                        >
-                          <option value="rotativo">Rotativo (turno automático)</option>
-                          <option value="fijo">Fijo (siempre el mismo)</option>
-                        </select>
-                      </div>
-                      {form.refill_mode === "fijo" && (
-                        <div className="input-group">
-                          <label className="input-label">Responsable fijo</label>
-                          <select
-                            className="select-field"
-                            value={form.refill_fixed_user_id}
-                            onChange={(e) =>
-                              setForm((current) => ({ ...current, refill_fixed_user_id: e.target.value }))
-                            }
-                          >
-                            <option value="">Selecciona responsable</option>
-                            {familyCaregivers.map((c) => (
-                              <option key={c.user_id} value={String(c.user_id)}>
-                                {c.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                    <p className="med-refill-helper">
-                      {form.refill_mode === "fijo"
-                        ? `Responsable fijo para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""}.`
-                        : `Rotación automática para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""} entre: ${familyRefillNames.join(", ")}.`}
-                    </p>
-                  </>
-                ) : !familyRefillAvailable ? (
-                  <p className="med-refill-helper">
-                    Esta automatización se habilita cuando el perfil activo tiene
-                    colaboración familiar y al menos un colaborador aceptado.
-                  </p>
-                ) : null}
-              </div>
 
-              <div className="input-group">
-                <label className="input-label">Notas</label>
-                <textarea
-                  className="textarea-field"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Instrucciones especiales, efectos, etc."
-                />
+                  <div className="form-row">
+                    <div className="input-group">
+                      <label className="input-label">Nombre del medicamento</label>
+                      <input
+                        className="input-field"
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        required
+                        placeholder="Ej: Paracetamol"
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">Dosis</label>
+                      <input
+                        className="input-field"
+                        value={form.dose}
+                        onChange={(e) => setForm({ ...form, dose: e.target.value })}
+                        placeholder="Ej: 500 mg o 1 comprimido"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label className="input-label">Frecuencia</label>
+                    <input
+                      className="input-field"
+                      value={form.frequency}
+                      onChange={(e) => setForm({ ...form, frequency: e.target.value })}
+                      placeholder="Ej: Cada 8 horas"
+                    />
+                    <small className="muted med-form-helper">
+                      Puedes escribir la indicación tal como aparece en la receta o elegir una opción rápida.
+                    </small>
+                    <div className="med-form-chip-row" role="group" aria-label="Frecuencias sugeridas">
+                      {FREQUENCY_PRESETS.map((preset) => (
+                        <button
+                          key={preset.value}
+                          type="button"
+                          className={`med-form-chip ${frequencyValue === preset.value ? "is-active" : ""}`}
+                          onClick={() => setForm((current) => ({ ...current, frequency: preset.value }))}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="input-group">
+                      <label className="input-label">Primera toma</label>
+                      <input
+                        className="input-field"
+                        type="datetime-local"
+                        value={form.start_at}
+                        required={Boolean(frequencyValue)}
+                        onChange={(e) => {
+                          const nextStartAt = e.target.value;
+                          setForm((current) => ({
+                            ...current,
+                            start_at: nextStartAt,
+                            schedule_time:
+                              (current.schedule_time || !nextStartAt)
+                                ? current.schedule_time
+                                : nextStartAt.slice(11, 16),
+                          }));
+                        }}
+                      />
+                      <small className="muted med-form-helper">
+                        Si indicas frecuencia, esta fecha y hora se usa como punto de partida para los recordatorios.
+                      </small>
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">Duración</label>
+                      <input
+                        className="input-field"
+                        value={form.duration}
+                        onChange={(e) => setForm({ ...form, duration: e.target.value })}
+                        placeholder="Ej: 7 días o 2 semanas"
+                      />
+                      <div className="med-form-chip-row" role="group" aria-label="Duraciones sugeridas">
+                        {DURATION_PRESETS.map((preset) => (
+                          <button
+                            key={preset.value}
+                            type="button"
+                            className={`med-form-chip ${durationValue === preset.value ? "is-active" : ""}`}
+                            onClick={() => setForm((current) => ({ ...current, duration: preset.value }))}
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="med-form-summary" aria-live="polite">
+                    <strong>{medicationPreviewName}{medicationPreviewDose ? ` · ${medicationPreviewDose}` : ""}</strong>
+                    <span>{frequencyValue ? `Frecuencia: ${frequencyValue}` : "Aún no indicas la frecuencia."}</span>
+                    <span>{medicationStartPreview ? `Primera toma: ${medicationStartPreview}` : "Falta indicar la primera toma."}</span>
+                  </div>
+                </section>
+
+                <button
+                  type="button"
+                  className="med-form-advanced-toggle"
+                  onClick={() => setShowAdvancedForm((current) => !current)}
+                  aria-expanded={showAdvancedForm}
+                >
+                  {showAdvancedForm ? "Ocultar opciones opcionales" : "Ver opciones opcionales"}
+                </button>
+
+                {showAdvancedForm && (
+                  <section className="med-form-section">
+                    <div className="med-form-section-head">
+                      <div>
+                        <h4>Opciones opcionales</h4>
+                        <p className="muted">
+                          Úsalas solo si quieres afinar horarios, fecha de término, notas o reposición familiar.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="form-row">
+                      <div className="input-group">
+                        <label className="input-label">Fecha de término</label>
+                        <input
+                          className="input-field"
+                          type="date"
+                          value={form.end_date}
+                          onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Hora base</label>
+                        <input
+                          className="input-field"
+                          type="time"
+                          value={form.schedule_time}
+                          onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
+                        />
+                        <small className="muted med-form-helper">
+                          Si no la cambias, se usa la hora de la primera toma.
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="input-group">
+                      <label className="input-label">Notas</label>
+                      <textarea
+                        className="textarea-field"
+                        value={form.notes}
+                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                        placeholder="Ej: tomar después de comer o no mezclar con otro tratamiento"
+                      />
+                    </div>
+
+                    <div className="med-refill-settings">
+                      <div className="med-refill-settings-head">
+                        <div>
+                          <h4>Reposición familiar</h4>
+                          <p>
+                            Sirve para avisar quién debe comprar el medicamento cuando quede poco stock.
+                          </p>
+                        </div>
+                        <label className="med-refill-toggle">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(form.refill_enabled)}
+                            disabled={!familyRefillAvailable}
+                            onChange={(e) =>
+                              setForm((current) => ({
+                                ...current,
+                                refill_enabled: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>Activar</span>
+                        </label>
+                      </div>
+                      {familyRefillAvailable && form.refill_enabled ? (
+                        <>
+                          <div className="form-row">
+                            <div className="input-group">
+                              <label className="input-label">Dosis del envase</label>
+                              <input
+                                className="input-field"
+                                type="number"
+                                min="0"
+                                value={form.stock_total_doses}
+                                onChange={(e) =>
+                                  setForm((current) => ({
+                                    ...current,
+                                    stock_total_doses: e.target.value,
+                                  }))
+                                }
+                                placeholder="Ej: 30"
+                              />
+                            </div>
+                            <div className="input-group">
+                              <label className="input-label">Avisar cuando queden</label>
+                              <input
+                                className="input-field"
+                                type="number"
+                                min="0"
+                                value={form.refill_alert_threshold_doses}
+                                onChange={(e) =>
+                                  setForm((current) => ({
+                                    ...current,
+                                    refill_alert_threshold_doses: e.target.value,
+                                  }))
+                                }
+                                placeholder="Ej: 8"
+                              />
+                            </div>
+                          </div>
+                          <div className="form-row">
+                            <div className="input-group">
+                              <label className="input-label">Dosis por toma</label>
+                              <input
+                                className="input-field"
+                                type="number"
+                                min="0.01"
+                                step="0.5"
+                                value={form.doses_per_intake}
+                                onChange={(e) =>
+                                  setForm((current) => ({ ...current, doses_per_intake: e.target.value }))
+                                }
+                                placeholder="Ej: 1"
+                              />
+                            </div>
+                            <div className="input-group">
+                              <label className="input-label">Tomas por día</label>
+                              <input
+                                className="input-field"
+                                type="number"
+                                min="0.01"
+                                step="0.5"
+                                value={form.frequency_per_day}
+                                onChange={(e) =>
+                                  setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
+                                }
+                                placeholder="Ej: 2"
+                              />
+                            </div>
+                          </div>
+                          <div className="form-row">
+                            <div className="input-group">
+                              <label className="input-label">Modo de asignación</label>
+                              <select
+                                className="select-field"
+                                value={form.refill_mode}
+                                onChange={(e) =>
+                                  setForm((current) => ({ ...current, refill_mode: e.target.value }))
+                                }
+                              >
+                                <option value="rotativo">Rotativo (turno automático)</option>
+                                <option value="fijo">Fijo (siempre la misma persona)</option>
+                              </select>
+                            </div>
+                            {form.refill_mode === "fijo" && (
+                              <div className="input-group">
+                                <label className="input-label">Responsable fijo</label>
+                                <select
+                                  className="select-field"
+                                  value={form.refill_fixed_user_id}
+                                  onChange={(e) =>
+                                    setForm((current) => ({ ...current, refill_fixed_user_id: e.target.value }))
+                                  }
+                                >
+                                  <option value="">Selecciona responsable</option>
+                                  {familyCaregivers.map((c) => (
+                                    <option key={c.user_id} value={String(c.user_id)}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                          <p className="med-refill-helper">
+                            {form.refill_mode === "fijo"
+                              ? `Responsable fijo para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""}.`
+                              : `Rotación automática para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""} entre: ${familyRefillNames.join(", ")}.`}
+                          </p>
+                        </>
+                      ) : !familyRefillAvailable ? (
+                        <p className="med-refill-helper">
+                          Esta automatización aparece cuando el perfil tiene colaboración familiar y al menos un colaborador aceptado.
+                        </p>
+                      ) : null}
+                    </div>
+                  </section>
+                )}
               </div>
 
               <div className="floating-actions">
@@ -1303,7 +1421,7 @@ export default function Medications() {
                 <button
                   type="button"
                   className="secondary-btn"
-                  onClick={() => setShowForm(false)}
+                  onClick={handleCloseForm}
                 >
                   Cancelar
                 </button>
