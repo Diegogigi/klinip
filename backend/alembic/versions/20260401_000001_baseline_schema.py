@@ -7,6 +7,7 @@ Create Date: 2026-04-01 06:40:00
 from __future__ import annotations
 
 from alembic import op
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy import text
 
 from app.database import Base
@@ -25,6 +26,7 @@ def upgrade() -> None:
     Base.metadata.create_all(bind=bind)
 
     backend = bind.dialect.name
+    vector_extension_stmt = None
     statements = [
         "CREATE INDEX IF NOT EXISTS ix_documents_profile_id ON documents (profile_id)",
         "CREATE INDEX IF NOT EXISTS ix_voice_sessions_profile_id ON voice_sessions (profile_id)",
@@ -36,7 +38,13 @@ def upgrade() -> None:
     ]
 
     if backend == "postgresql":
-        statements.insert(0, "CREATE EXTENSION IF NOT EXISTS vector")
+        vector_extension_stmt = "CREATE EXTENSION IF NOT EXISTS vector"
+
+    if vector_extension_stmt:
+        try:
+            bind.execute(text(vector_extension_stmt))
+        except DBAPIError as exc:
+            print(f"WARNING alembic: pgvector no disponible; se omite la extension vector ({exc})")
 
     for stmt in statements:
         bind.execute(text(stmt))
