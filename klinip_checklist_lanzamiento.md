@@ -105,12 +105,11 @@ Estos items deben completarse antes de abrir acceso real a usuarios de la app.
 - [x] Eliminar cualquier valor por defecto inseguro
 - [x] Hacer que el servidor falle al arrancar si `SECRET_KEY` no esta configurada
 - [x] Agregar mensaje de error claro para despliegue
-- [ ] Confirmar que Railway tiene una `SECRET_KEY` segura
-- [ ] Verificar arranque correcto despues del cambio
+- [x] Confirmar que Railway tiene una `SECRET_KEY` segura
+- [x] Verificar arranque correcto despues del cambio
 
 **Estado actual**
-- Parcial: backend endurecido para fallar si `SECRET_KEY` falta o usa un valor inseguro.
-- Pendiente operativo: desplegar y confirmar arranque correcto con la `SECRET_KEY` real de Railway.
+- Completo: backend endurecido, Railway con `SECRET_KEY` valida y arranque/login verificados tras deploy.
 
 **Contexto**
 - Si existe un valor por defecto conocido, los JWT pueden ser forjados.
@@ -126,17 +125,20 @@ Estos items deben completarse antes de abrir acceso real a usuarios de la app.
 Estos items no bloquean una landing o preventa, pero si afectan la apertura seria de la app.
 
 ### 3.1 Smoke tests manuales documentados
-- [ ] Crear archivo `QA_SMOKE_TESTS.md` en la raiz
-- [ ] Documentar flujo de registro
-- [ ] Documentar flujo de login y logout
-- [ ] Documentar recuperacion de contrasena
-- [ ] Documentar seleccion y activacion de plan
-- [ ] Documentar creacion y visualizacion de perfil de salud
-- [ ] Documentar flujo de Klinip Voice
-- [ ] Documentar compartido familiar
-- [ ] Documentar activacion y prueba de notificaciones push
-- [ ] Ejecutar todos los flujos al menos una vez en produccion antes de abrir acceso
-- [ ] Definir responsable del checklist antes de cada deploy
+- [x] Crear archivo `QA_SMOKE_TESTS.md` en la raiz
+- [x] Documentar flujo de registro
+- [x] Documentar flujo de login y logout
+- [x] Documentar recuperacion de contrasena
+- [x] Documentar seleccion y activacion de plan
+- [x] Documentar creacion y visualizacion de perfil de salud
+- [x] Documentar flujo de Klinip Voice
+- [x] Documentar compartido familiar
+- [x] Documentar activacion y prueba de notificaciones push
+- [x] Ejecutar todos los flujos al menos una vez en produccion antes de abrir acceso
+- [x] Definir responsable del checklist antes de cada deploy
+
+**Estado actual**
+- Completo: documentacion creada, ejecucion manual en produccion realizada y responsable definido para cada deploy.
 
 **Objetivo**
 - Tener una red de seguridad operativa, aunque todavia no existan tests automatizados.
@@ -144,12 +146,16 @@ Estos items no bloquean una landing o preventa, pero si afectan la apertura seri
 ---
 
 ### 3.2 Separar migraciones del arranque del servidor
-- [ ] Instalar Alembic
-- [ ] Inicializar Alembic en el proyecto
-- [ ] Generar una migracion inicial a partir del esquema actual
-- [ ] Remover o condicionar la creacion/alteracion automatica de esquema en produccion
-- [ ] Ajustar el deploy en Railway para correr `alembic upgrade head` antes del servidor
+- [x] Instalar Alembic
+- [x] Inicializar Alembic en el proyecto
+- [x] Generar una migracion inicial a partir del esquema actual
+- [x] Remover o condicionar la creacion/alteracion automatica de esquema en produccion
+- [x] Ajustar el deploy en Railway para correr `alembic upgrade head` antes del servidor
 - [ ] Probar el flujo completo: migracion -> arranque -> validacion funcional
+
+**Estado actual**
+- Parcial: Alembic agregado, baseline creada y deploy ajustado para ejecutar migraciones.
+- Pendiente operativo: desplegar y validar en Railway el flujo completo `alembic upgrade head -> arranque -> prueba funcional`.
 
 **Contexto**
 - El servidor no deberia mutar la base de datos silenciosamente al arrancar en produccion.

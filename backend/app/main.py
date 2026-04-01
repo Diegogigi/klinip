@@ -125,8 +125,16 @@ try:
 except Exception:
     convert_from_bytes = None
 
-# Crear las tablas
-Base.metadata.create_all(bind=engine)
+RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
+    (os.getenv("ENABLE_RUNTIME_SCHEMA_MUTATIONS") or "").strip() == "1"
+    or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
+)
+
+# En produccion el esquema debe llegar por migraciones, no por mutaciones implicitas al arrancar.
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    Base.metadata.create_all(bind=engine)
+else:
+    print("INFO schema bootstrap: mutaciones runtime deshabilitadas; se espera alembic upgrade head")
 
 
 def ensure_document_schema():
@@ -217,7 +225,8 @@ def ensure_document_schema():
         print(f"WARNING ensure_document_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_document_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_document_schema()
 
 
 def ensure_user_schema():
@@ -474,7 +483,8 @@ def ensure_user_schema():
         print(f"WARNING ensure_user_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_user_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_user_schema()
 
 
 def ensure_health_profile_schema():
@@ -552,7 +562,8 @@ def ensure_health_profile_schema():
         print(f"WARNING ensure_health_profile_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_health_profile_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_health_profile_schema()
 
 
 def ensure_feed_schema():
@@ -598,7 +609,8 @@ def ensure_feed_schema():
         print(f"WARNING ensure_feed_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_feed_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_feed_schema()
 
 
 def ensure_medication_schema():
@@ -733,10 +745,13 @@ def ensure_medication_schema():
         print(f"WARNING ensure_medication_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_medication_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_medication_schema()
 
 
 def ensure_medication_intake_schema():
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+        return
     try:
         inspector = inspect(engine)
         columns = {col["name"] for col in inspector.get_columns("medication_intakes")}
@@ -792,11 +807,14 @@ def ensure_medication_intake_schema():
         print(f"WARNING ensure_medication_intake_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_medication_intake_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_medication_intake_schema()
 
 
 def ensure_voice_session_schema():
     """Garantiza que la tabla voice_sessions tenga todas las columnas usadas por Klinip Voice."""
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+        return
     try:
         inspector = inspect(engine)
         if not inspector.has_table("voice_sessions"):
@@ -912,7 +930,8 @@ def ensure_voice_session_schema():
         print(f"WARNING ensure_voice_session_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_voice_session_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_voice_session_schema()
 
 
 def ensure_medication_performance_indexes():
@@ -946,7 +965,8 @@ def ensure_medication_performance_indexes():
         print(f"WARNING ensure_medication_performance_indexes: no se pudo completar: {exc}")
 
 
-ensure_medication_performance_indexes()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_medication_performance_indexes()
 
 
 def ensure_ai_conversation_schema():
@@ -995,7 +1015,8 @@ def ensure_ai_conversation_schema():
         print(f"WARNING ensure_ai_conversation_schema: no se pudo ajustar la tabla: {exc}")
 
 
-ensure_ai_conversation_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_ai_conversation_schema()
 
 
 def ensure_ai_memory_schema():
@@ -1085,7 +1106,8 @@ def ensure_ai_memory_schema():
         print(f"WARNING ensure_ai_memory_schema: no se pudo completar: {exc}")
 
 
-ensure_ai_memory_schema()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_ai_memory_schema()
 
 PLAN_DEFINITIONS = {
     "basico": {
@@ -1405,7 +1427,8 @@ def ensure_family_schema_data():
         db.close()
 
 
-ensure_family_schema_data()
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_family_schema_data()
 
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
@@ -1417,6 +1440,8 @@ def _push_configured() -> bool:
 
 
 def ensure_login_security_schema():
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+        return
     """
     Refuerzo puntual para entornos donde el esquema de users quedó desfasado
     respecto del flujo de login.

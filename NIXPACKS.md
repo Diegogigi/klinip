@@ -5,7 +5,7 @@ El proceso web usa `nixpacks.toml`.
 
 Start command:
 ```txt
-cd backend && venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+cd backend && venv/bin/alembic upgrade head && venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
 ## Worker

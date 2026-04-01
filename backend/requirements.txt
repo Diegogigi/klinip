@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+alembic
 sqlalchemy
 pydantic[email]
 python-jose[cryptography]
