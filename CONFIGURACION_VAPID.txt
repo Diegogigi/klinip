@@ -1,110 +1,32 @@
-═══════════════════════════════════════════════════════════════
-  CONFIGURACIÓN DE CLAVES VAPID PARA KLINIP
-═══════════════════════════════════════════════════════════════
+CONFIGURACION SEGURA DE CLAVES VAPID PARA KLINIP
+================================================
 
-¡Claves VAPID generadas correctamente! ✅
+Este archivo ya no almacena claves reales.
 
-📋 INSTRUCCIONES DE CONFIGURACIÓN:
+Las claves VAPID deben generarse fuera del repositorio y cargarse como
+variables de entorno en Railway o en archivos `.env` locales no versionados.
 
-══════════════════════════════════════════════════════════════
-1️⃣ BACKEND - Crear archivo: backend\.env
-══════════════════════════════════════════════════════════════
+Plantilla segura:
 
-Crea un archivo llamado ".env" en la carpeta "backend" con este contenido:
+backend/.env
+------------
+VAPID_PUBLIC_KEY=<nueva_clave_publica>
+VAPID_PRIVATE_KEY=<nueva_clave_privada>
+VAPID_EMAIL=mailto:soporte@klinip.cl
 
-------- COPIAR DESDE AQUÍ -------
+frontend/.env
+-------------
+VITE_VAPID_PUBLIC_KEY=<nueva_clave_publica>
 
-# Claves VAPID para Notificaciones Push
-VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-VAPID_PRIVATE_KEY=SV2tbGuj2tX1NqgADxWQ_OEwd_JluSzmcIVhzh6oHVg
-VAPID_EMAIL=mailto:klinip.informacion@gmail.com
+Pasos:
 
-------- HASTA AQUÍ -------
+1. Genera un juego nuevo de claves VAPID.
+2. Carga las variables en Railway.
+3. Despliega backend y frontend.
+4. Considera comprometidas las claves antiguas.
+5. Prueba una nueva suscripcion push desde un dispositivo real.
 
-══════════════════════════════════════════════════════════════
-2️⃣ FRONTEND - Crear archivo: frontend\.env
-══════════════════════════════════════════════════════════════
+Referencia:
 
-Crea un archivo llamado ".env" en la carpeta "frontend" con este contenido:
-
-------- COPIAR DESDE AQUÍ -------
-
-# Clave Pública VAPID para Notificaciones Push
-VITE_VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-
-------- HASTA AQUÍ -------
-
-══════════════════════════════════════════════════════════════
-📝 FORMA RÁPIDA (PowerShell)
-══════════════════════════════════════════════════════════════
-
-Ejecuta estos comandos en PowerShell desde la raíz del proyecto:
-
-# Backend
-@"
-VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-VAPID_PRIVATE_KEY=SV2tbGuj2tX1NqgADxWQ_OEwd_JluSzmcIVhzh6oHVg
-VAPID_EMAIL=mailto:klinip.informacion@gmail.com
-"@ | Out-File -FilePath "backend\.env" -Encoding utf8
-
-# Frontend
-@"
-VITE_VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-"@ | Out-File -FilePath "frontend\.env" -Encoding utf8
-
-══════════════════════════════════════════════════════════════
-🔐 IMPORTANTE - SEGURIDAD
-══════════════════════════════════════════════════════════════
-
-⚠️  NUNCA subas estos archivos a Git
-⚠️  Los archivos .env ya están en .gitignore
-⚠️  La clave PRIVADA solo debe estar en el servidor backend
-⚠️  La clave PÚBLICA puede estar en el frontend (es seguro)
-
-══════════════════════════════════════════════════════════════
-✅ VERIFICACIÓN
-══════════════════════════════════════════════════════════════
-
-Después de crear los archivos, verifica que funcionan:
-
-1. Reinicia el backend:
-   cd backend
-   python -m uvicorn app.main:app --reload
-
-2. Reinicia el frontend:
-   cd frontend
-   npm run dev
-
-3. Ve a la app y habilita notificaciones desde el panel de configuración
-
-══════════════════════════════════════════════════════════════
-📚 REFERENCIA RÁPIDA
-══════════════════════════════════════════════════════════════
-
-Clave Pública (se puede compartir):
-BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-
-Clave Privada (MANTENER SECRETA):
-SV2tbGuj2tX1NqgADxWQ_OEwd_JluSzmcIVhzh6oHVg
-
-Email de contacto:
-mailto:admin@klinip.app
-
-══════════════════════════════════════════════════════════════
-🚀 PRÓXIMOS PASOS
-══════════════════════════════════════════════════════════════
-
-1. ✅ Crear archivos .env (este paso)
-2. 🔊 Agregar archivos de sonido en frontend/public/sounds/
-3. 🧪 Probar notificaciones en la aplicación
-4. 📱 Probar en móvil instalando como PWA
-5. 🌐 Configurar en producción (Railway, etc.)
-
-══════════════════════════════════════════════════════════════
-
-¿Necesitas ayuda? Revisa:
-- frontend/src/services/NOTIFICATIONS_README.md
-- frontend/public/sounds/README.md
-
-══════════════════════════════════════════════════════════════
-
+- `CONFIGURACION_RAILWAY.md`
+- `frontend/src/services/NOTIFICATIONS_README.md`

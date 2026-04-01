@@ -10,7 +10,7 @@ from fastapi import (
 )
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, func, or_
@@ -1409,7 +1409,11 @@ ensure_family_schema_data()
 
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
-VAPID_EMAIL = os.getenv("VAPID_EMAIL", "mailto:admin@klinip.app")
+VAPID_EMAIL = os.getenv("VAPID_EMAIL")
+
+
+def _push_configured() -> bool:
+    return bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and VAPID_EMAIL)
 
 
 def ensure_login_security_schema():
@@ -1455,8 +1459,8 @@ def ensure_login_security_schema():
 
 
 def send_web_push(subscription: models.PushSubscription, payload: dict):
-    if not (webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY):
-        print("DEBUG push: faltan claves VAPID o pywebpush")
+    if not _push_configured():
+        print("DEBUG push: falta configuracion VAPID o pywebpush")
         return False
     try:
         webpush(
@@ -1539,6 +1543,15 @@ def _hash_token(raw_token: str) -> str:
 
 def _is_production_env() -> bool:
     return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
+
+
+def _parse_allowed_origins(raw_value: str) -> list[str]:
+    origins = []
+    for origin in (raw_value or "").split(","):
+        normalized = origin.strip().rstrip("/")
+        if normalized and normalized not in origins:
+            origins.append(normalized)
+    return origins
 
 
 def _email_provider() -> str:
@@ -3473,7 +3486,7 @@ def _job_send_appointment_reminders(
     deadline_at: float | None = None,
     user_limit: int | None = None,
 ) -> dict:
-    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
+    push_enabled = _push_configured()
     user_batch = max(
         1,
         int(user_limit or _job_batch_limit("send_appointment_reminders", APPOINTMENT_REMINDER_BATCH_SIZE)),
@@ -3617,7 +3630,7 @@ def _job_send_medication_reminders(
     deadline_at: float | None = None,
     user_limit: int | None = None,
 ) -> dict:
-    push_enabled = bool(VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush)
+    push_enabled = _push_configured()
     user_batch = max(
         1,
         int(user_limit or _job_batch_limit("send_medication_reminders", MEDICATION_REMINDER_BATCH_SIZE)),
@@ -5801,12 +5814,17 @@ def _run_document_ocr(document_id: int):
 
 
 # ── CORS ─────────────────────────────────────────────────────────────────
-is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN")
+is_production = _is_production_env()
 if is_production:
-    # En producción se admiten solo los orígenes configurados explícitamente.
+    # En produccion solo se admiten los origenes configurados explicitamente.
     # Configura ALLOWED_ORIGINS en Railway como lista separada por comas.
     _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-    allow_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+    allow_origins = _parse_allowed_origins(_raw_origins)
+    if not allow_origins:
+        raise RuntimeError(
+            "ALLOWED_ORIGINS no esta configurado en produccion. "
+            "Define los dominios permitidos en Railway, separados por comas."
+        )
     allow_origin_regex = None
     allow_credentials = False
 else:
@@ -5851,47 +5869,16 @@ async def security_headers_middleware(request: Request, call_next):
 # Health check
 @app.get("/health")
 def health_check(db: Session = Depends(auth.get_db)):
+    timestamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     try:
-        # Verificar conexión a la base de datos
         db.execute(text("SELECT 1"))
-        db_status = "ok"
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "timestamp": timestamp},
+        )
 
-        # Contar usuarios
-        from . import models
-
-        user_count = db.query(models.User).count()
-    except Exception as e:
-        db_status = f"error: {str(e)}"
-        user_count = 0
-
-    # Verificar SECRET_KEY (sin exponerlo)
-    secret_key_status = (
-        "configurado"
-        if auth.SECRET_KEY != "supersecretkey_change_me_in_production"
-        else "NO CONFIGURADO (usando valor por defecto)"
-    )
-    is_production = os.getenv("RAILWAY_ENVIRONMENT") or os.getenv(
-        "RAILWAY_PUBLIC_DOMAIN"
-    )
-
-    return {
-        "status": "ok",
-        "database": db_status,
-        "user_count": user_count,
-        "database_url": os.getenv("DATABASE_URL", "sqlite (default)")[:30] + "...",
-        "secret_key": secret_key_status,
-        "environment": "production" if is_production else "development",
-        "email_provider": _email_provider(),
-        "resend_configured": bool(os.getenv("RESEND_API_KEY")),
-        "email_from_configured": bool(_mail_from_security() or _mail_from_notifications()),
-        "privacy_target_configured": bool(
-            os.getenv("EMAIL_TO_PRIVACY")
-            or os.getenv("SUPPORT_EMAIL")
-            or os.getenv("EMAIL_TO_SUPPORT")
-            or os.getenv("SMTP_SUPPORT_TO")
-            or os.getenv("SMTP_USER")
-        ),
-    }
+    return {"status": "ok", "timestamp": timestamp}
 
 
 def _read_int_env(name: str, fallback: int) -> int:
@@ -19308,9 +19295,10 @@ async def test_push(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+    if not _push_configured():
         raise HTTPException(
-            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+            status_code=400,
+            detail="Configuracion VAPID incompleta en el servidor",
         )
     subscriptions = (
         db.query(models.PushSubscription)
@@ -19346,9 +19334,10 @@ async def send_reminders(
     """
     Enviar recordatorios push para citas pr??ximas
     """
-    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+    if not _push_configured():
         raise HTTPException(
-            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+            status_code=400,
+            detail="Configuracion VAPID incompleta en el servidor",
         )
 
     # Obtener citas del usuario con fecha
@@ -19450,9 +19439,10 @@ async def send_medication_reminders(
     """
     Enviar recordatorios push para medicaci??n del d??a
     """
-    if not (VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and webpush):
+    if not _push_configured():
         raise HTTPException(
-            status_code=400, detail="Claves VAPID no configuradas en el servidor"
+            status_code=400,
+            detail="Configuracion VAPID incompleta en el servidor",
         )
 
     # Obtener medicamentos activos del usuario

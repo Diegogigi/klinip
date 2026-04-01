@@ -1,192 +1,68 @@
-# 🚂 Configuración de Variables de Entorno en Railway
+# Configuracion de Variables de Entorno en Railway
 
-## 📋 Resumen
+## Objetivo
 
-Si tienes **frontend y backend en el mismo servicio** de Railway, necesitas configurar las variables de entorno para que ambos puedan acceder a las claves VAPID.
+Este archivo documenta la configuracion segura de push en Railway sin publicar
+secretos dentro del repositorio.
 
----
+## Variables requeridas
 
-## ⚙️ Variables Requeridas en Railway
-
-En tu servicio de Railway, ve a **Settings → Variables** y agrega las siguientes:
-
-### **Variables del Backend** (3 variables)
+Configura estas variables en Railway, en `Settings -> Variables`:
 
 ```env
-VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-VAPID_PRIVATE_KEY=SV2tbGuj2tX1NqgADxWQ_OEwd_JluSzmcIVhzh6oHVg
-VAPID_EMAIL=mailto:klinip.informacion@gmail.com
+VAPID_PUBLIC_KEY=<rota_esta_clave_publica>
+VAPID_PRIVATE_KEY=<rota_esta_clave_privada>
+VAPID_EMAIL=mailto:soporte@klinip.cl
+VITE_VAPID_PUBLIC_KEY=<rota_esta_clave_publica>
 ```
 
-### **Variable del Frontend** (1 variable)
+Notas:
 
-```env
-VITE_VAPID_PUBLIC_KEY=BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
-```
+- `VAPID_PUBLIC_KEY` y `VITE_VAPID_PUBLIC_KEY` deben tener el mismo valor.
+- `VAPID_PRIVATE_KEY` solo debe existir en backend.
+- Las claves antiguas publicadas en este repo deben considerarse comprometidas y
+  quedar fuera de uso.
 
----
+## Generar nuevas claves VAPID
 
-## 🔑 Explicación de las Variables
-
-| Variable                | Dónde se usa | Descripción                                                  |
-| ----------------------- | ------------ | ------------------------------------------------------------ |
-| `VAPID_PUBLIC_KEY`      | Backend      | Clave pública para firmar notificaciones push                |
-| `VAPID_PRIVATE_KEY`     | Backend      | Clave privada (SECRETA) para autenticar con el servidor push |
-| `VAPID_EMAIL`           | Backend      | Email de contacto para el servicio push                      |
-| `VITE_VAPID_PUBLIC_KEY` | Frontend     | Misma clave pública para que el navegador se suscriba        |
-
----
-
-## ✅ Verificación
-
-### **1. Verificar que las variables están configuradas**
-
-En Railway, ve a tu servicio → **Settings → Variables** y confirma que las 4 variables están presentes.
-
-### **2. Reiniciar el servicio**
-
-Después de agregar las variables, **reinicia el servicio** para que los cambios surtan efecto:
+Opcion recomendada con Node:
 
 ```bash
-# Railway reiniciará automáticamente al detectar cambios en variables
-# O puedes forzar un redeploy desde la interfaz
+npx web-push generate-vapid-keys
 ```
 
-### **3. Verificar en la consola del navegador**
+Opcion con Python:
 
-Abre tu aplicación en producción y abre la consola del navegador (F12):
-
-```javascript
-// Verifica que la clave VAPID esté disponible
-console.log(import.meta.env.VITE_VAPID_PUBLIC_KEY);
-// Debería mostrar: BDjl4UpuCPrwu_fpTIC-5Hncer74Wf2Eny1JkOII5bAx1y4KjcwrL-j2WdDC5znK4U0R3GlMjPvHHYuOfCLyd6o
+```bash
+python -m pip install pywebpush
+python -c "from py_vapid import Vapid01 as Vapid; k = Vapid(); k.generate_keys(); print('public=' + k.public_key.public_bytes().decode()); print('private=' + k.private_key.private_bytes().decode())"
 ```
 
-Si muestra `undefined`, significa que la variable no está configurada correctamente.
+Si usas la opcion de Python, valida primero el formato antes de cargarlo en
+Railway.
 
----
+## Carga en Railway
 
-## 🚨 Problemas Comunes
+1. Genera un juego nuevo de claves.
+2. Carga `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_EMAIL` en el servicio backend.
+3. Carga `VITE_VAPID_PUBLIC_KEY` en el servicio que construye el frontend.
+4. Fuerza un redeploy.
+5. Rehabilita push en un navegador de prueba para registrar una nueva suscripcion.
 
-### **Problema 1: "Error de configuración: Falta la clave VAPID"**
+## Verificacion
 
-**Causa**: La variable `VITE_VAPID_PUBLIC_KEY` no está configurada en Railway.
+Checklist minimo:
 
-**Solución**:
+- La app construye sin errores.
+- El backend responde sin error al consultar configuracion de notificaciones.
+- El navegador puede suscribirse nuevamente a push.
+- La notificacion de prueba llega al dispositivo.
+- No quedan claves antiguas visibles en documentacion ni archivos de ejemplo.
 
-1. Ve a Railway → Settings → Variables
-2. Agrega `VITE_VAPID_PUBLIC_KEY` con el valor correcto
-3. Reinicia el servicio
+## Rotacion operativa recomendada
 
-### **Problema 2: Las notificaciones se desactivan al cerrar el formulario**
-
-**Causa**: El estado no se está cargando correctamente desde el backend.
-
-**Solución**: Ya está corregido en el código. Asegúrate de tener la última versión desplegada.
-
-### **Problema 3: No llegan notificaciones push**
-
-**Causa**: Puede ser que el backend no tenga las claves VAPID configuradas.
-
-**Solución**:
-
-1. Verifica que `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_EMAIL` estén en Railway
-2. Reinicia el servicio
-3. Usa el botón "🧪 Enviar Notificación de Prueba" en la configuración
-
----
-
-## 🧪 Probar las Notificaciones
-
-### **Paso 1: Habilitar notificaciones**
-
-1. Abre la app en tu móvil o navegador
-2. Ve a **Configuración** → **🔔 Notificaciones y Recordatorios**
-3. Habilita las **Notificaciones Push**
-4. Deberías ver: "✅ Notificaciones push habilitadas correctamente"
-
-### **Paso 2: Verificar persistencia**
-
-1. Cierra el formulario de configuración
-2. Vuelve a abrirlo
-3. El estado debería seguir en: "✅ Activas"
-
-### **Paso 3: Enviar notificación de prueba**
-
-1. Con las notificaciones habilitadas, haz clic en **🧪 Enviar Notificación de Prueba**
-2. Deberías recibir una notificación en unos segundos
-
----
-
-## 📱 Requisitos para Móviles
-
-Para que las notificaciones push funcionen en móviles, **DEBES** tener:
-
-1. ✅ **HTTPS** (obligatorio en móviles)
-2. ✅ Permisos de notificaciones habilitados en el navegador
-3. ✅ Variables de entorno configuradas correctamente
-4. ✅ Service Worker registrado
-
-Railway proporciona HTTPS automáticamente, así que este requisito ya está cubierto.
-
----
-
-## 🔍 Logs de Depuración
-
-Si tienes problemas, abre la consola del navegador y busca estos mensajes:
-
-### **✅ Configuración correcta:**
-
-```
-🔍 Suscripción en navegador: ✅ Activa
-📊 Estado en backend: ✅ Registrada
-🎯 Estado final de push: ✅ ACTIVO
-```
-
-### **❌ Problema de configuración:**
-
-```
-❌ Error en ensurePushSubscription: Error de configuración: Falta la clave VAPID
-```
-
-**Solución**: Agrega `VITE_VAPID_PUBLIC_KEY` en Railway.
-
-### **⚠️ Desincronización:**
-
-```
-⚠️ Desincronización detectada entre navegador y backend
-→ El navegador tiene suscripción pero el backend no
-```
-
-**Solución**: Deshabilita y vuelve a habilitar las notificaciones push.
-
----
-
-## 📞 Soporte
-
-Si después de seguir estos pasos sigues teniendo problemas:
-
-1. Verifica los logs del backend en Railway
-2. Verifica la consola del navegador (F12)
-3. Usa el botón de prueba para diagnosticar
-4. Revisa que todas las 4 variables estén configuradas correctamente
-
----
-
-## 🎯 Checklist Final
-
-Antes de considerar que todo está funcionando:
-
-- [ ] Las 4 variables están en Railway
-- [ ] El servicio se reinició después de agregar las variables
-- [ ] La consola muestra `VITE_VAPID_PUBLIC_KEY` correctamente
-- [ ] Las notificaciones se pueden habilitar sin errores
-- [ ] El estado persiste al cerrar/abrir el formulario
-- [ ] La notificación de prueba llega correctamente
-- [ ] Funciona tanto en escritorio como en móvil
-
----
-
-**¡Listo!** Con esta configuración, las notificaciones push deberían funcionar perfectamente en Railway. 🚀
-
-
+1. Generar nuevas claves.
+2. Cargarlas en Railway.
+3. Desplegar backend y frontend.
+4. Invalidar y dejar de usar las claves antiguas.
+5. Pedir a usuarios de prueba que reactiven push si es necesario.
