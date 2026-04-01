@@ -23,6 +23,18 @@ function buildNetworkUnavailableResponse() {
   });
 }
 
+function ensureResponse(value) {
+  return value instanceof Response ? value : buildNetworkUnavailableResponse();
+}
+
+function respondSafely(event, responseLike) {
+  event.respondWith(
+    Promise.resolve(responseLike)
+      .then((value) => ensureResponse(value))
+      .catch(() => buildNetworkUnavailableResponse())
+  );
+}
+
 function fetchWithNetworkFallback(request, fallback = null) {
   return fetch(request).catch(async () => {
     if (!fallback) return buildNetworkUnavailableResponse();
@@ -108,9 +120,11 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const requestUrl = new URL(event.request.url);
+  if (!["http:", "https:"].includes(requestUrl.protocol)) return;
 
   if (event.request.headers.get("authorization")) {
-    event.respondWith(fetchWithNetworkFallback(event.request));
+    respondSafely(event, fetchWithNetworkFallback(event.request));
     return;
   }
 
@@ -128,18 +142,17 @@ self.addEventListener("fetch", (event) => {
     event.request.url.includes("/documents") ||
     event.request.url.includes("/voice")
   ) {
-    event.respondWith(fetchWithNetworkFallback(event.request));
+    respondSafely(event, fetchWithNetworkFallback(event.request));
     return;
   }
 
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetchWithNetworkFallback(event.request, offlineNavigationFallback)
-    );
+    respondSafely(event, fetchWithNetworkFallback(event.request, offlineNavigationFallback));
     return;
   }
 
-  event.respondWith(
+  respondSafely(
+    event,
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
       return fetchWithNetworkFallback(event.request, () => caches.match(event.request)).then((response) => {
@@ -149,7 +162,7 @@ self.addEventListener("fetch", (event) => {
             cache.put(event.request, responseToCache);
           });
         }
-        return response;
+        return ensureResponse(response);
       });
     })
   );
