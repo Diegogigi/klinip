@@ -7150,15 +7150,16 @@ def _build_context_fingerprint(context: dict) -> str:
     documents = context.get("documents") or []
     medications = context.get("medications") or []
     appointments = context.get("appointments") or []
+    context_totals = context.get("context_totals") or {}
     latest_document = documents[0] if documents else None
     latest_appointment = appointments[0] if appointments else None
     latest_medication = medications[0] if medications else None
     raw = json.dumps(
         {
             "profile_id": profile.get("id"),
-            "docs": len(documents),
-            "meds": len(medications),
-            "appts": len(appointments),
+            "docs": int(context_totals.get("documents", len(documents)) or 0),
+            "meds": int(context_totals.get("medications", len(medications)) or 0),
+            "appts": int(context_totals.get("appointments", len(appointments)) or 0),
             "latest_doc": _safe_iso(getattr(latest_document, "created_at", None)),
             "latest_appt": _safe_iso(getattr(latest_appointment, "date_time", None) or getattr(latest_appointment, "created_at", None)),
             "latest_med": _safe_iso(getattr(latest_medication, "created_at", None)),
@@ -7192,10 +7193,19 @@ def _cached_ai_reply_put(cache_key: str, payload: dict) -> None:
         _AI_RESPONSE_CACHE[cache_key] = {"stored_at": time.time(), **(payload or {})}
 
 
+def _context_total_count(context: dict, key: str, fallback: int = 0) -> int:
+    totals = context.get("context_totals") or {}
+    try:
+        return max(0, int(totals.get(key, fallback) or fallback))
+    except Exception:
+        return max(0, int(fallback or 0))
+
+
 def _structured_medications_reply(context: dict) -> str:
     medications = [item for item in (context.get("medications") or []) if not bool(getattr(item, "completed", False))]
     if not medications:
         return "No veo medicamentos activos registrados en el perfil seleccionado."
+    active_total = _context_total_count(context, "active_medications", len(medications))
     labels = []
     for item in medications[:6]:
         label = getattr(item, "name", "") or "Medicamento"
@@ -7204,8 +7214,8 @@ def _structured_medications_reply(context: dict) -> str:
         if getattr(item, "frequency", ""):
             label += f", {item.frequency}"
         labels.append(label)
-    extra = len(medications) - len(labels)
-    reply = f"En el perfil activo aparecen {len(medications)} medicamento(s) activo(s): " + "; ".join(labels) + "."
+    extra = max(0, active_total - len(labels))
+    reply = f"En el perfil activo aparecen {active_total} medicamento(s) activo(s): " + "; ".join(labels) + "."
     if extra > 0:
         reply += f" Hay {extra} más registrados."
     return reply
@@ -7221,6 +7231,23 @@ def _structured_next_appointment_reply(context: dict) -> str:
     return f"La próxima cita registrada es {specialty} para {when_label} en {center}."
 
 
+def _document_entities_for_context(context: dict, document_id: int | None) -> list[models.DocumentClinicalEntity]:
+    if not document_id:
+        return []
+    entity_map = context.get("document_entities_by_document") or {}
+    return list(entity_map.get(int(document_id), []) or [])
+
+
+def _document_chunks_for_context(context: dict, document_id: int | None) -> list[dict]:
+    if not document_id:
+        return []
+    return [
+        item
+        for item in (context.get("document_chunks") or [])
+        if int(item.get("document_id") or 0) == int(document_id)
+    ]
+
+
 def _document_summary_for_context(context: dict, document_id: int | None):
     if not document_id:
         return None
@@ -7232,6 +7259,69 @@ def _document_summary_for_context(context: dict, document_id: int | None):
         ),
         None,
     )
+
+
+def _structured_last_appointment_reply(context: dict, normalized_message: str) -> str:
+    appointment_insights = context.get("appointment_insights") or {}
+    wants_scheduled = any(token in normalized_message for token in ["agendada", "programada"])
+    pick = appointment_insights.get("last_scheduled_created") if wants_scheduled else appointment_insights.get("last_created")
+    if not pick:
+        return "No encuentro una ultima cita registrada que coincida con ese criterio."
+    status = pick.get("status") or "sin estado"
+    detail = (
+        f"La ultima cita {'agendada ' if wants_scheduled else ''}registrada fue "
+        f"{pick.get('date_time') or 'sin fecha'}"
+    )
+    if pick.get("specialty"):
+        detail += f", especialidad {pick.get('specialty')}"
+    if pick.get("center"):
+        detail += f", en {pick.get('center')}"
+    if pick.get("created_at"):
+        detail += f", creada {pick.get('created_at')}"
+    detail += f". Estado: {status}."
+    return detail
+
+
+def _structured_document_inventory_reply(context: dict) -> str:
+    documents = context.get("documents") or []
+    document_insights = context.get("document_insights") or {}
+    total_documents = _context_total_count(context, "documents", len(documents))
+    if total_documents <= 0:
+        return "No veo documentos clinicos registrados en el perfil activo."
+    counts_type = document_insights.get("counts_by_type") or {}
+    counts_format = document_insights.get("counts_by_format") or {}
+    sample_complete = total_documents <= len(documents)
+    parts = [f"Hoy veo {total_documents} documento(s) registrado(s) en el perfil activo."]
+    if sample_complete:
+        parts.extend([
+            (
+                "Tipos detectados: receta "
+                f"{counts_type.get('receta', 0)}, orden {counts_type.get('orden', 0)}, "
+                f"resultado {counts_type.get('resultado', 0)}, informe {counts_type.get('informe', 0)}, "
+                f"otro {counts_type.get('otro', 0)}."
+            ),
+            (
+                "Formatos: pdf "
+                f"{counts_format.get('pdf', 0)}, imagen {counts_format.get('imagen', 0)}, "
+                f"otro {counts_format.get('otro', 0)}."
+            ),
+        ])
+    else:
+        parts.append("El detalle por tipo puede seguir actualizandose en segundo plano si hay muchos documentos cargados.")
+    last_doc = document_insights.get("last_created") or {}
+    if last_doc:
+        detail = (
+            f"El mas reciente es {last_doc.get('filename') or 'un documento'}"
+            f" ({last_doc.get('detected_doc_type') or last_doc.get('doc_type') or 'otro'})"
+        )
+        if last_doc.get("date"):
+            detail += f", con fecha {last_doc.get('date')}"
+        elif last_doc.get("created_at"):
+            detail += f", cargado {last_doc.get('created_at')}"
+        if last_doc.get("center"):
+            detail += f", centro {last_doc.get('center')}"
+        parts.append(detail + ".")
+    return " ".join(parts)
 
 
 def _structured_document_reply(doc: models.Document | None, context: dict) -> str:
@@ -7263,12 +7353,104 @@ def _structured_document_reply(doc: models.Document | None, context: dict) -> st
     return " ".join(parts)
 
 
+def _structured_document_reply_rich(doc: models.Document | None, context: dict) -> str:
+    if not doc:
+        return "No veo documentos clinicos registrados en el perfil activo."
+    summary = _document_summary_for_context(context, getattr(doc, "id", None))
+    entities = _document_entities_for_context(context, getattr(doc, "id", None))
+    relevant_chunks = _document_chunks_for_context(context, getattr(doc, "id", None))
+    doc_type = _infer_document_type(doc)
+    file_format = _document_file_format(doc)
+    filename = getattr(doc, "filename", "") or f"#{getattr(doc, 'id', '')}"
+    center = getattr(doc, "center", "") or "sin centro registrado"
+    date_label = _safe_iso_local(getattr(doc, "date", None), context.get("timezone_name") or DEFAULT_TZ_NAME) or "sin fecha"
+    parts = [f"Documento {filename}: tipo {doc_type}, formato {file_format}, centro {center}, fecha {date_label}."]
+    if getattr(doc, "notes", ""):
+        parts.append("Notas guardadas: " + _clip_text(getattr(doc, "notes", "") or "", 220) + ".")
+    if summary and (getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", "")):
+        parts.append(
+            "Explicacion: "
+            + _clip_text(
+                getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", ""),
+                540,
+            )
+        )
+        key_points = []
+        for item in (getattr(summary, "key_points_json", None) or [])[:4]:
+            if isinstance(item, dict):
+                label = str(item.get("label") or item.get("title") or item.get("name") or item.get("point") or "").strip()
+                detail = str(item.get("detail") or item.get("description") or item.get("text") or "").strip()
+                rendered = f"{label}: {detail}" if label and detail else (label or detail)
+            else:
+                rendered = str(item or "").strip()
+            if rendered:
+                key_points.append(_clip_text(rendered, 160))
+        if key_points:
+            parts.append("Puntos clave: " + "; ".join(key_points) + ".")
+
+        abnormal_values = []
+        for item in (getattr(summary, "abnormal_values_json", None) or [])[:4]:
+            if isinstance(item, dict):
+                label = str(item.get("label") or item.get("name") or item.get("analyte") or "valor").strip()
+                value = str(item.get("value") or item.get("result") or "").strip()
+                unit = str(item.get("unit") or "").strip()
+                ref = str(item.get("reference_range") or item.get("reference") or "").strip()
+                flag = str(item.get("flag") or "").strip().lower()
+                rendered = label
+                if value:
+                    rendered += f" {value}{(' ' + unit) if unit else ''}"
+                if ref:
+                    rendered += f" (referencia {ref})"
+                if flag and flag not in {"normal", "unknown", "ok"}:
+                    rendered += f", alerta {flag}"
+            else:
+                rendered = str(item or "").strip()
+            if rendered:
+                abnormal_values.append(_clip_text(rendered, 160))
+        if abnormal_values:
+            parts.append("Valores a revisar: " + "; ".join(abnormal_values) + ".")
+    elif getattr(doc, "ocr_text", ""):
+        parts.append("Lectura OCR orientativa: " + _clip_text(getattr(doc, "ocr_text", "") or "", 1400))
+        parts.append("La lectura OCR puede contener errores y conviene validarla con el documento original.")
+    else:
+        parts.append("Todavia no hay texto OCR disponible para ese documento.")
+
+    rendered_entities = []
+    seen_entities: set[str] = set()
+    for entity in entities:
+        entity_name = str(getattr(entity, "entity_name", "") or "").strip()
+        entity_value = str(getattr(entity, "entity_value", "") or getattr(entity, "source_text", "") or "").strip()
+        entity_type = str(getattr(entity, "entity_type", "") or "").strip()
+        if not (entity_name or entity_value):
+            continue
+        rendered = entity_name or entity_value
+        if entity_name and entity_value and entity_value.lower() != entity_name.lower():
+            rendered += f": {_clip_text(entity_value, 120)}"
+        if entity_type:
+            rendered = f"{entity_type}: {rendered}"
+        rendered = _clip_text(rendered, 180)
+        dedupe_key = rendered.lower()
+        if dedupe_key in seen_entities:
+            continue
+        seen_entities.add(dedupe_key)
+        rendered_entities.append(rendered)
+        if len(rendered_entities) >= 4:
+            break
+    if rendered_entities:
+        parts.append("Hallazgos extraidos: " + "; ".join(rendered_entities) + ".")
+    if relevant_chunks:
+        best_chunk = str(relevant_chunks[0].get("chunk_text") or "").strip()
+        if best_chunk:
+            parts.append("Fragmento relevante: " + _clip_text(best_chunk, 420))
+    return " ".join(parts)
+
+
 def _structured_latest_document_reply(context: dict) -> str:
     documents = context.get("documents") or []
     latest = documents[0] if documents else None
     if not latest:
         return "No veo documentos clínicos registrados en el perfil activo."
-    return _structured_document_reply(latest, context)
+    return _structured_document_reply_rich(latest, context)
 
 
 def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str, str, str] | None:
@@ -7277,8 +7459,22 @@ def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str
         return None
     if any(token in normalized for token in ["que medicamentos", "cuales son mis medicamentos", "medicamentos activos", "que tomo"]):
         return _structured_medications_reply(context), "structured-memory", "structured-medications"
-    if any(token in normalized for token in ["proxima cita", "siguiente cita", "proximo control", "siguiente hora"]):
+    appointment_question = any(
+        token in normalized for token in ["cita", "citas", "control", "hora", "agenda", "agendada", "programada"]
+    )
+    if appointment_question and any(
+        token in normalized for token in ["proxima", "mas proxima", "siguiente", "cercana", "mas cercana"]
+    ):
         return _structured_next_appointment_reply(context), "structured-memory", "structured-next-appointment"
+    if appointment_question and any(
+        token in normalized for token in ["ultima", "ultimo", "reciente", "agregue", "agendada", "programada"]
+    ):
+        return _structured_last_appointment_reply(context, normalized), "structured-memory", "structured-last-appointment"
+    if any(
+        token in normalized
+        for token in ["cuantos documentos", "cuantos archivos", "cantidad de documentos", "total de documentos"]
+    ):
+        return _structured_document_inventory_reply(context), "structured-memory", "structured-document-inventory"
     if any(token in normalized for token in ["ultimo documento", "ultimo examen", "ultimo informe", "ultimo resultado"]):
         return _structured_latest_document_reply(context), "structured-memory", "structured-latest-document"
     return None
@@ -11153,6 +11349,12 @@ def _build_chat_context_base(
         "view_medications": _check_permission(db, current_user, int(profile.id), "view_medications"),
         "view_documents": _check_permission(db, current_user, int(profile.id), "view_documents"),
     }
+    context_totals = {
+        "appointments": 0,
+        "documents": 0,
+        "medications": 0,
+        "active_medications": 0,
+    }
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
     medications: list[models.Medication] = []
@@ -11169,14 +11371,29 @@ def _build_chat_context_base(
         else {"available": False, "owner_user_id": None, "owner_name": "", "profiles": []}
     )
     if modules.get("appointments"):
-        appointments = _safe_ai_context_query(
+        context_totals["appointments"] = _safe_ai_context_query(
             db,
-            module_name="appointments",
+            module_name="appointments-count",
+            loader=lambda: int(
+                db.query(func.count(models.Appointment.id))
+                .filter(models.Appointment.user_id == target_user_id)
+                .scalar()
+                or 0
+            ),
+            default_value=0,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        appointment_recent = _safe_ai_context_query(
+            db,
+            module_name="appointments-recent",
             loader=lambda: (
                 db.query(models.Appointment)
                 .filter(models.Appointment.user_id == target_user_id)
-                .order_by(models.Appointment.date_time.desc(), models.Appointment.created_at.desc())
-                .limit(24)
+                .order_by(models.Appointment.created_at.desc(), models.Appointment.id.desc())
+                .limit(48)
                 .all()
             ),
             default_value=[],
@@ -11185,7 +11402,61 @@ def _build_chat_context_base(
             context_deadline_ts=context_deadline_ts,
             observability=query_observability,
         )
+        appointment_upcoming = _safe_ai_context_query(
+            db,
+            module_name="appointments-upcoming",
+            loader=lambda: (
+                db.query(models.Appointment)
+                .filter(
+                    models.Appointment.user_id == target_user_id,
+                    models.Appointment.date_time.isnot(None),
+                    models.Appointment.status != models.AppointmentStatus.realizada,
+                )
+                .order_by(
+                    models.Appointment.date_time.asc(),
+                    models.Appointment.created_at.desc(),
+                    models.Appointment.id.desc(),
+                )
+                .limit(16)
+                .all()
+            ),
+            default_value=[],
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        appointments_by_id: dict[int, models.Appointment] = {}
+        for item in [*(appointment_recent or []), *(appointment_upcoming or [])]:
+            item_id = int(getattr(item, "id", 0) or 0)
+            if item_id <= 0 or item_id in appointments_by_id:
+                continue
+            appointments_by_id[item_id] = item
+        appointments = sorted(
+            appointments_by_id.values(),
+            key=lambda item: (
+                _ai_dt_in_tz(getattr(item, "created_at", None), timezone_name)
+                or datetime.min.replace(tzinfo=_safe_zoneinfo(DEFAULT_TZ_NAME)),
+                int(getattr(item, "id", 0) or 0),
+            ),
+            reverse=True,
+        )
     if modules.get("documents") and permissions_validated.get("view_documents"):
+        context_totals["documents"] = _safe_ai_context_query(
+            db,
+            module_name="documents-count",
+            loader=lambda: int(
+                db.query(func.count(models.Document.id))
+                .filter(*_document_scope_filter(profile, target_user_id))
+                .scalar()
+                or 0
+            ),
+            default_value=0,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
         documents = _safe_ai_context_query(
             db,
             module_name="documents",
@@ -11193,7 +11464,7 @@ def _build_chat_context_base(
                 db.query(models.Document)
                 .filter(*_document_scope_filter(profile, target_user_id))
                 .order_by(models.Document.created_at.desc(), models.Document.id.desc())
-                .limit(6)
+                .limit(18)
                 .all()
             ),
             default_value=[],
@@ -11203,6 +11474,39 @@ def _build_chat_context_base(
             observability=query_observability,
         )
     if modules.get("medications") and permissions_validated.get("view_medications"):
+        context_totals["medications"] = _safe_ai_context_query(
+            db,
+            module_name="medications-count",
+            loader=lambda: int(
+                db.query(func.count(models.Medication.id))
+                .filter(models.Medication.user_id == target_user_id)
+                .scalar()
+                or 0
+            ),
+            default_value=0,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        context_totals["active_medications"] = _safe_ai_context_query(
+            db,
+            module_name="medications-active-count",
+            loader=lambda: int(
+                db.query(func.count(models.Medication.id))
+                .filter(
+                    models.Medication.user_id == target_user_id,
+                    or_(models.Medication.completed.is_(False), models.Medication.completed.is_(None)),
+                )
+                .scalar()
+                or 0
+            ),
+            default_value=0,
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
         medications = _safe_ai_context_query(
             db,
             module_name="medications",
@@ -11214,7 +11518,7 @@ def _build_chat_context_base(
                     models.Medication.created_at.desc(),
                     models.Medication.id.desc(),
                 )
-                .limit(12)
+                .limit(24)
                 .all()
             ),
             default_value=[],
@@ -11308,6 +11612,10 @@ def _build_chat_context_base(
         upcoming = future_upcoming
 
     active_medications = [med for med in medications if not bool(med.completed)]
+    context_totals["appointments"] = max(int(context_totals.get("appointments") or 0), len(appointments))
+    context_totals["documents"] = max(int(context_totals.get("documents") or 0), len(documents))
+    context_totals["medications"] = max(int(context_totals.get("medications") or 0), len(medications))
+    context_totals["active_medications"] = max(int(context_totals.get("active_medications") or 0), len(active_medications))
     latest_document = documents[0] if documents else None
     latest_document_text = (
         _clip_text(getattr(latest_document, "ocr_text", "") or "", 1800)
@@ -11616,14 +11924,14 @@ def _build_chat_context_base(
         {
             "key": "documents",
             "label": "Documentos",
-            "count": len(documents),
+            "count": int(context_totals.get("documents") or 0),
             "enabled": bool(modules.get("documents")) and bool(permissions_validated.get("view_documents")),
         },
         {"key": "document-memory", "label": "Memoria documental", "count": len(relevant_document_chunks), "enabled": bool(relevant_document_chunks)},
         {
             "key": "medications",
             "label": "Medicamentos",
-            "count": len(medications),
+            "count": int(context_totals.get("medications") or 0),
             "enabled": bool(modules.get("medications")) and bool(permissions_validated.get("view_medications")),
         },
         {
@@ -11632,7 +11940,7 @@ def _build_chat_context_base(
             "count": len(voice_sessions),
             "enabled": bool(modules.get("voice_sessions")) and bool(permissions_validated.get("view_profile")),
         },
-        {"key": "appointments", "label": "Citas y actividades", "count": len(appointments), "enabled": bool(modules.get("appointments"))},
+        {"key": "appointments", "label": "Citas y actividades", "count": int(context_totals.get("appointments") or 0), "enabled": bool(modules.get("appointments"))},
         {"key": "conversation-memory", "label": "Memoria conversacional", "count": len(conversation_summaries), "enabled": bool(conversation_summaries)},
         {
             "key": "family",
@@ -11666,6 +11974,7 @@ def _build_chat_context_base(
         "current_question": _clip_text(message or "", 420),
         "enabled_modules": modules,
         "include_document_text": bool(include_document_text),
+        "context_totals": context_totals,
         "degraded_reasons": degraded_reasons,
         "appointments": appointments,
         "documents": documents,
@@ -11849,6 +12158,7 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
         or "",
         "timezone": timezone_name,
         "chat_intent": context.get("chat_intent") or "general",
+        "context_totals": context.get("context_totals") or {},
         "enabled_modules": enabled_modules,
         "permissions_validated": {
             "view_profile": bool((context.get("permissions_validated") or {}).get("view_profile")),
@@ -12415,6 +12725,10 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     family_context = context.get("family_context") or {}
     family_profiles = family_context.get("profiles") or []
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
+    appointments_total = _context_total_count(context, "appointments", len(appointments))
+    documents_total = _context_total_count(context, "documents", len(documents))
+    medications_total = _context_total_count(context, "medications", len(medications))
+    active_medications_total = _context_total_count(context, "active_medications", len(active_medications))
 
     if _message_asks_family_access(message):
         return _build_family_access_reply(context)
@@ -12468,7 +12782,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         overall = adherence_summary.get("overall_adherence_rate")
         low_items = adherence_summary.get("low_adherence_items") or []
         reply_parts = [
-            f"Tratamiento actual del perfil {context['profile']['name']}: {len(active_medications)} medicamento(s) activo(s)."
+            f"Tratamiento actual del perfil {context['profile']['name']}: {active_medications_total} medicamento(s) activo(s)."
         ]
         if overall is not None:
             reply_parts.append(f"Adherencia estimada en 30 dias: {overall}%.")
@@ -12506,8 +12820,8 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         overall = adherence_summary.get("overall_adherence_rate")
         return (
             f"Puedo generar un reporte clínico estructurado del perfil activo {context['profile']['name']}. "
-            f"Hoy veo {len(active_medications)} medicamento(s) activo(s), {len(appointments)} cita(s), "
-            f"{len(documents)} documento(s) y adherencia estimada de {overall if overall is not None else 'sin datos'}%."
+            f"Hoy veo {active_medications_total} medicamento(s) activo(s), {appointments_total} cita(s), "
+            f"{documents_total} documento(s) y adherencia estimada de {overall if overall is not None else 'sin datos'}%."
         )
 
     if any(
@@ -12534,39 +12848,30 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         return "Notas rápidas recientes del perfil activo: " + " | ".join(rendered_notes) + "."
 
     if "ultima" in normalized and "cita" in normalized:
-        pick = appointment_insights.get("last_scheduled_created") if "agendada" in normalized else appointment_insights.get("last_created")
-        if not pick:
-            return "No encuentro una ultima cita registrada que coincida con ese criterio."
-        status = pick.get("status") or "sin estado"
-        detail = (
-            f"La ultima cita {'agendada ' if 'agendada' in normalized else ''}registrada fue "
-            f"{pick.get('date_time') or 'sin fecha'}"
-        )
-        if pick.get("specialty"):
-            detail += f", especialidad {pick.get('specialty')}"
-        if pick.get("center"):
-            detail += f", en {pick.get('center')}"
-        detail += f". Estado: {status}."
-        return detail
+        return _structured_last_appointment_reply(context, normalized)
 
     if any(token in normalized for token in ["documentos", "tipos de documento", "tipo de documento", "archivo pdf", "archivo imagen"]):
         counts_type = (document_insights.get("counts_by_type") or {})
         counts_format = (document_insights.get("counts_by_format") or {})
         last_doc = document_insights.get("last_created") or {}
-        parts = [
-            f"Documentos registrados: {len(documents)}.",
-            (
-                "Tipos: receta "
-                f"{counts_type.get('receta', 0)}, orden {counts_type.get('orden', 0)}, "
-                f"resultado {counts_type.get('resultado', 0)}, informe {counts_type.get('informe', 0)}, "
-                f"otro {counts_type.get('otro', 0)}."
-            ),
-            (
-                "Formato de archivo: pdf "
-                f"{counts_format.get('pdf', 0)}, imagen {counts_format.get('imagen', 0)}, "
-                f"otro {counts_format.get('otro', 0)}."
-            ),
-        ]
+        sample_complete = documents_total <= len(documents)
+        parts = [f"Documentos registrados: {documents_total}."]
+        if sample_complete:
+            parts.extend([
+                (
+                    "Tipos: receta "
+                    f"{counts_type.get('receta', 0)}, orden {counts_type.get('orden', 0)}, "
+                    f"resultado {counts_type.get('resultado', 0)}, informe {counts_type.get('informe', 0)}, "
+                    f"otro {counts_type.get('otro', 0)}."
+                ),
+                (
+                    "Formato de archivo: pdf "
+                    f"{counts_format.get('pdf', 0)}, imagen {counts_format.get('imagen', 0)}, "
+                    f"otro {counts_format.get('otro', 0)}."
+                ),
+            ])
+        else:
+            parts.append("El detalle por tipo aun puede ser parcial si el perfil tiene muchos documentos.")
         if last_doc:
             detail = (
                 f"Último documento: {last_doc.get('detected_doc_type') or last_doc.get('doc_type') or 'otro'} "
@@ -12603,14 +12908,14 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
                 "No encuentro documentos registrados para el perfil activo. "
                 "Si subes un documento, podré ayudarte a resumirlo."
             )
-        return _structured_document_reply(latest_document, context)
+        return _structured_document_reply_rich(latest_document, context)
 
     relevant_documents = context.get("relevant_documents") or []
     if relevant_documents and any(
         token in normalized
         for token in ["documento", "ocr", "informe", "resultado", "receta", "orden", "pdf", "imagen", "archivo"]
     ):
-        return _structured_document_reply(relevant_documents[0], context)
+        return _structured_document_reply_rich(relevant_documents[0], context)
 
     if any(token in normalized for token in ["resumen de medicamentos", "mis medicamentos", "estado de medicamentos"]):
         status_counts = medication_insights.get("counts_by_status") or {}
@@ -12618,7 +12923,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
         frequency_counts = medication_insights.get("counts_by_frequency") or {}
         last_active = medication_insights.get("last_active_created") or {}
         parts = [
-            f"Medicamentos registrados: {len(medications)}.",
+            f"Medicamentos registrados: {medications_total}.",
             f"Estado: activos {status_counts.get('activa', 0)}, realizados {status_counts.get('realizada', 0)}.",
             f"Horario: con horario {schedule_counts.get('con_horario', 0)}, sin horario {schedule_counts.get('sin_horario', 0)}.",
             f"Frecuencia: con frecuencia {frequency_counts.get('con_frecuencia', 0)}, sin frecuencia {frequency_counts.get('sin_frecuencia', 0)}.",
@@ -12646,12 +12951,12 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
                 detail += f", frecuencia {med.frequency}"
             items.append(detail)
         return (
-            f"Actualmente aparecen {len(active_medications)} medicamento(s) activo(s): "
+            f"Actualmente aparecen {active_medications_total} medicamento(s) activo(s): "
             + "; ".join(items)
             + "."
         )
 
-    if any(token in normalized for token in ["proxima cita", "proxima actividad", "cuando es mi proxima cita", "cita proxima"]):
+    if any(token in normalized for token in ["proxima cita", "proxima actividad", "cuando es mi proxima cita", "cita proxima", "cita mas proxima", "cita mas cercana"]):
         next_item = next((item for item in upcoming if item.date_time), None)
         if not next_item:
             return "No encuentro una cita próxima con fecha registrada para el perfil activo."
@@ -12682,7 +12987,7 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
             diagnosis_text = f" Hallazgos documentales recientes: {', '.join(item.get('name') or 'hallazgo' for item in diagnosis_mentions[:3])}."
         return (
             f"Resumen del perfil activo {context['profile']['name']}: "
-            f"{len(appointments)} actividad(es), {len(documents)} documento(s) y {len(medications)} medicamento(s) registrados."
+            f"{appointments_total} actividad(es), {documents_total} documento(s) y {medications_total} medicamento(s) registrados."
             + latest_doc_text
             + next_appt_text
             + diagnosis_text

@@ -21,6 +21,7 @@ import {
   transcribeAiChatAudio,
 } from "../api";
 import { parseDate } from "../utils/dates";
+import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 
 const QUICK_ACTIONS = [
@@ -504,11 +505,20 @@ export default function AiKlinip() {
     };
 
     loadAll();
+    const unsubscribeClinicalRefresh = subscribeClinicalDataChanged(() => {
+      loadResources().catch((error) => {
+        console.error("No se pudieron refrescar recursos IA tras cambio clinico", error);
+      });
+      refreshConversations().catch((error) => {
+        console.error("No se pudieron refrescar conversaciones IA tras cambio clinico", error);
+      });
+    });
     window.addEventListener("focus", handleWindowSync);
     document.addEventListener("visibilitychange", handleWindowSync);
 
     return () => {
       mounted = false;
+      unsubscribeClinicalRefresh();
       window.removeEventListener("focus", handleWindowSync);
       document.removeEventListener("visibilitychange", handleWindowSync);
       if (fileTimerRef.current) clearTimeout(fileTimerRef.current);
