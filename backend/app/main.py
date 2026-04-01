@@ -1711,7 +1711,7 @@ def _password_reset_config_errors() -> list[str]:
     errors = _email_channel_errors(require_support_target=False)
     if _is_production_env() and not os.getenv("FRONTEND_BASE_URL"):
         errors.append("FRONTEND_BASE_URL")
-    if _is_production_env() and os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production") == "supersecretkey_change_me_in_production":
+    if _is_production_env() and not auth.SECRET_KEY:
         errors.append("SECRET_KEY")
     return errors
 
@@ -5932,7 +5932,7 @@ def _require_dev_env():
 def debug_config():
     _require_dev_env()
     return {
-        "secret_key_configured": auth.SECRET_KEY != "supersecretkey_change_me_in_production",
+        "secret_key_configured": bool(auth.SECRET_KEY),
         "algorithm": auth.ALGORITHM,
         "token_expire_minutes": auth.ACCESS_TOKEN_EXPIRE_MINUTES,
         "environment": "development",

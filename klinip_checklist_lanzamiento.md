@@ -86,11 +86,10 @@ Estos items deben completarse antes de abrir acceso real a usuarios de la app.
 - [x] Eliminar del response cualquier dato operativo sensible
 - [x] Dejar una respuesta minima, por ejemplo `status` y `timestamp`
 - [x] Si se necesita telemetria interna, moverla a un endpoint separado protegido
-- [ ] Verificar que Railway pueda seguir usando el endpoint para health checks
+- [x] Verificar que Railway pueda seguir usando el endpoint para health checks
 
 **Estado actual**
-- Parcial: endpoint publico reducido a respuesta minima y sin datos sensibles.
-- Pendiente operativo: validar el health check en Railway tras desplegar este cambio.
+- Completo: endpoint publico reducido a respuesta minima y validado en Railway y en `www.klinip.cl`.
 
 **Contexto**
 - `/health` es publico por diseno.
@@ -102,12 +101,16 @@ Estos items deben completarse antes de abrir acceso real a usuarios de la app.
 ---
 
 ### 2.4 Fail duro si falta `SECRET_KEY`
-- [ ] Identificar la carga de `SECRET_KEY` en `backend/app/auth.py`
-- [ ] Eliminar cualquier valor por defecto inseguro
-- [ ] Hacer que el servidor falle al arrancar si `SECRET_KEY` no esta configurada
-- [ ] Agregar mensaje de error claro para despliegue
+- [x] Identificar la carga de `SECRET_KEY` en `backend/app/auth.py`
+- [x] Eliminar cualquier valor por defecto inseguro
+- [x] Hacer que el servidor falle al arrancar si `SECRET_KEY` no esta configurada
+- [x] Agregar mensaje de error claro para despliegue
 - [ ] Confirmar que Railway tiene una `SECRET_KEY` segura
 - [ ] Verificar arranque correcto despues del cambio
+
+**Estado actual**
+- Parcial: backend endurecido para fallar si `SECRET_KEY` falta o usa un valor inseguro.
+- Pendiente operativo: desplegar y confirmar arranque correcto con la `SECRET_KEY` real de Railway.
 
 **Contexto**
 - Si existe un valor por defecto conocido, los JWT pueden ser forjados.

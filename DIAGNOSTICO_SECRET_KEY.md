@@ -1,114 +1,48 @@
-# Diagnóstico y Solución: Error "Token expirado" inmediatamente después del login
+# Diagnostico y Solucion: `SECRET_KEY` obligatoria
 
-## 🔍 Problema
+## Problema
 
-Después de hacer login, aparece el error "Token inválido o expirado" inmediatamente. Esto indica que el `SECRET_KEY` no está configurado correctamente en Railway.
+Si `SECRET_KEY` falta o usa un valor inseguro, el backend no debe iniciar.
+Esto evita emitir o validar JWT con una clave conocida o vacia.
 
-## ✅ Solución Rápida
+## Solucion rapida
 
-### Paso 1: Verificar el estado actual
-
-Visita estos endpoints en tu aplicación desplegada:
-
-1. **Health Check**: `https://klinip-production.up.railway.app/health`
-
-   - Busca el campo `"secret_key"` en la respuesta
-   - Si dice `"NO CONFIGURADO"`, necesitas configurar `SECRET_KEY`
-
-2. **Debug Config**: `https://klinip-production.up.railway.app/debug/config`
-   - Verifica `"secret_key_configured": false` o `true`
-   - Si es `false`, el problema está confirmado
-
-### Paso 2: Generar una clave secreta
-
-Ejecuta este comando en tu terminal local (o en Railway):
+### Paso 1: Generar una clave segura
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-Esto generará una clave como: `abc123xyz789...` (copia esta clave completa)
+### Paso 2: Configurar `SECRET_KEY` en Railway
 
-### Paso 3: Configurar SECRET_KEY en Railway
+1. Ve a Railway.
+2. Abre el servicio donde corre Klinip.
+3. En `Variables`, agrega o actualiza:
+   - `SECRET_KEY=<tu_clave_segura>`
+4. Guarda los cambios.
 
-1. Ve a [Railway](https://railway.app)
-2. Selecciona tu proyecto
-3. Selecciona el servicio del **Backend**
-4. Ve a la pestaña **Variables**
-5. Haz clic en **+ New Variable**
-6. Agrega:
-   - **Nombre**: `SECRET_KEY`
-   - **Valor**: Pega la clave que generaste en el Paso 2
-7. Guarda los cambios
+### Paso 3: Redeploy
 
-### Paso 4: Reiniciar el servicio
+1. Espera el redeploy automatico o ejecutalo manualmente.
+2. Si `SECRET_KEY` cambio, los usuarios tendran que iniciar sesion de nuevo.
 
-Después de agregar la variable:
+### Paso 4: Verificar
 
-1. Railway debería detectar el cambio y redesplegar automáticamente
-2. O puedes ir a **Deployments** → **Redeploy**
-3. Espera 1-2 minutos a que termine el despliegue
+1. Abre la app.
+2. Verifica login.
+3. Verifica una ruta autenticada como `/me`.
+4. En desarrollo, `/debug/config` debe mostrar `"secret_key_configured": true`.
 
-### Paso 5: Verificar que funciona
+## Checklist
 
-1. **Verifica el health check nuevamente**:
+- [ ] Genere una clave segura
+- [ ] Configure `SECRET_KEY` en Railway
+- [ ] Redeploy realizado
+- [ ] Login verificado
+- [ ] Ruta autenticada verificada
 
-   - `https://klinip-production.up.railway.app/health`
-   - Ahora debe mostrar `"secret_key": "configurado"`
+## Importante
 
-2. **Limpia el localStorage del navegador**:
-
-   - Abre las herramientas de desarrollador (F12)
-   - Ve a la consola
-   - Ejecuta: `localStorage.clear()`
-
-3. **Intenta hacer login nuevamente**:
-   - El token ahora debería funcionar correctamente
-
-## 🔍 Diagnóstico Detallado
-
-### Verificar logs del backend
-
-En Railway, ve a los logs del backend y busca:
-
-- `⚠️ ADVERTENCIA: SECRET_KEY no está configurado` → Confirma que falta la variable
-- `DEBUG create_access_token: SECRET_KEY configurado: Sí/NO` → Muestra el estado al generar tokens
-- `DEBUG get_current_user: SECRET_KEY configurado: Sí/NO` → Muestra el estado al validar tokens
-
-### Problemas comunes
-
-1. **SECRET_KEY no configurado**:
-
-   - Síntoma: Token se genera pero falla al validar
-   - Solución: Configurar `SECRET_KEY` en Railway
-
-2. **SECRET_KEY diferente entre generación y validación**:
-
-   - Síntoma: Tokens generados antes de configurar SECRET_KEY no funcionan
-   - Solución: Los usuarios deben hacer login nuevamente después de configurar SECRET_KEY
-
-3. **SECRET_KEY con caracteres especiales**:
-   - Síntoma: Errores al decodificar tokens
-   - Solución: Usar `secrets.token_urlsafe()` que genera claves seguras sin caracteres problemáticos
-
-## 📋 Checklist
-
-- [ ] Visité `/health` y verifiqué el estado de `secret_key`
-- [ ] Visité `/debug/config` y confirmé que `secret_key_configured` es `false`
-- [ ] Generé una nueva clave con `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-- [ ] Agregué `SECRET_KEY` en Railway con la clave generada
-- [ ] Esperé a que Railway redesplegara
-- [ ] Verifiqué `/health` nuevamente y confirmé que `secret_key` es "configurado"
-- [ ] Limpié el localStorage del navegador
-- [ ] Intenté hacer login nuevamente
-
-## ⚠️ Importante
-
-- **NUNCA** uses la clave por defecto `supersecretkey_change_me_in_production` en producción
-- **NUNCA** subas el `SECRET_KEY` a Git o lo compartas públicamente
-- Si cambias el `SECRET_KEY`, todos los tokens existentes se invalidarán (los usuarios deben hacer login nuevamente)
-
-## 🔗 Referencias
-
-- Ver `SOLUCION_ERROR_401.md` para más detalles sobre el error 401
-- Ver `VARIABLES_ENTORNO.md` para documentación completa de variables
+- Nunca uses `supersecretkey_change_me_in_production`.
+- Nunca subas `SECRET_KEY` a Git.
+- Si cambias `SECRET_KEY`, todos los tokens actuales se invalidan.

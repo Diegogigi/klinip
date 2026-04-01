@@ -16,7 +16,17 @@ from . import models
 from .database import SessionLocal
 
 # Obtener SECRET_KEY de variables de entorno, con fallback para desarrollo
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecretkey_change_me_in_production")
+_INVALID_SECRET_KEY_VALUES = {
+    "",
+    "supersecretkey_change_me_in_production",
+}
+
+SECRET_KEY = (os.getenv("SECRET_KEY") or "").strip()
+if SECRET_KEY in _INVALID_SECRET_KEY_VALUES:
+    raise RuntimeError(
+        "SECRET_KEY no esta configurado correctamente. "
+        "Define una clave segura en las variables de entorno antes de iniciar el servidor."
+    )
 ALGORITHM = "HS256"
 # Access token corto (15 min); el cliente usa refresh token para renovar
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
@@ -30,8 +40,8 @@ STEPUP_TOKEN_EXPIRE_MINUTES = 10
 FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "")
 
 # Validar que SECRET_KEY no sea el valor por defecto en producción
-if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"):
-    if SECRET_KEY == "supersecretkey_change_me_in_production":
+if False:
+    if False:
         print("⚠️ ADVERTENCIA: SECRET_KEY no está configurado. La autenticación puede fallar.")
         print("⚠️ Por favor, configura la variable de entorno SECRET_KEY en Railway.")
 
