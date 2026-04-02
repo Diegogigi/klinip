@@ -50,6 +50,7 @@ const DURATION_PRESETS = [
   { label: "7 días", value: "7 días" },
   { label: "14 días", value: "14 días" },
 ];
+const MEDICATIONS_PAGE_SIZE = 8;
 
 function getNewestMedicationRank(item) {
   const createdAt = parseDate(item?.created_at);
@@ -167,6 +168,7 @@ export default function Medications() {
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
   const [endDateAuto, setEndDateAuto] = useState(true);
   const [draggedParticipantId, setDraggedParticipantId] = useState("");
+  const [medicationsPage, setMedicationsPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -331,6 +333,10 @@ export default function Medications() {
     });
     navigate("/medications", { replace: true });
   }, [location.search, meds, navigate]);
+
+  useEffect(() => {
+    setMedicationsPage(1);
+  }, [search, statusFilter]);
 
   useEffect(() => {
     if (!detailOpen || !detailTarget?.id) {
@@ -958,6 +964,25 @@ export default function Medications() {
     alertThresholdUnits > 0 && dailyUnitsEstimate > 0
       ? alertThresholdUnits / dailyUnitsEstimate
       : null;
+  const totalMedicationPages = Math.max(
+    1,
+    Math.ceil(filteredMeds.length / MEDICATIONS_PAGE_SIZE) || 1
+  );
+  const safeMedicationPage = Math.min(medicationsPage, totalMedicationPages);
+  const paginatedMeds = filteredMeds.slice(
+    (safeMedicationPage - 1) * MEDICATIONS_PAGE_SIZE,
+    safeMedicationPage * MEDICATIONS_PAGE_SIZE
+  );
+  const visibleMedicationCount = Math.min(
+    safeMedicationPage * MEDICATIONS_PAGE_SIZE,
+    filteredMeds.length
+  );
+
+  useEffect(() => {
+    if (medicationsPage > totalMedicationPages) {
+      setMedicationsPage(totalMedicationPages);
+    }
+  }, [medicationsPage, totalMedicationPages]);
   const remindersReady = Boolean(frequencyValue && form.start_at);
 
   useEffect(() => {
@@ -1769,9 +1794,29 @@ export default function Medications() {
                                       </span>
                                     </label>
                                     {checked && form.refill_mode === "rotativo" ? (
-                                      <div className="med-refill-drag-hint">
-                                        <strong>Arrastra para reordenar</strong>
-                                        <span>Mantén presionada la tarjeta y muévela a la posición que quieras.</span>
+                                      <div className="med-refill-reorder-tools">
+                                        <div className="med-refill-drag-hint" aria-hidden>
+                                          <strong>Arrastra</strong>
+                                          <span>o usa las flechas</span>
+                                        </div>
+                                        <div className="med-refill-order-actions">
+                                          <button
+                                            type="button"
+                                            className="secondary-btn"
+                                            onClick={() => moveRefillParticipant(participant.id, "up")}
+                                            disabled={currentIndex <= 0}
+                                          >
+                                            Subir
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="secondary-btn"
+                                            onClick={() => moveRefillParticipant(participant.id, "down")}
+                                            disabled={currentIndex === refillParticipantIds.length - 1}
+                                          >
+                                            Bajar
+                                          </button>
+                                        </div>
                                       </div>
                                     ) : null}
                                   </div>
@@ -2127,7 +2172,7 @@ export default function Medications() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMeds.map((m) => {
+                  {paginatedMeds.map((m) => {
                     const nextDose = getNextMedicationDose(m);
                     const taken = Number(m.taken_doses || 0);
                     const expected = Number(m.expected_doses || 0);
@@ -2228,7 +2273,7 @@ export default function Medications() {
             </div>
 
             <div className="records-mobile-list medications-mobile-list">
-              {filteredMeds.map((m) => {
+              {paginatedMeds.map((m) => {
                 const nextDose = getNextMedicationDose(m);
                 const taken = Number(m.taken_doses || 0);
                 const expected = Number(m.expected_doses || 0);
@@ -2356,6 +2401,39 @@ export default function Medications() {
                   </article>
                 );
               })}
+            </div>
+
+            <div className="medications-list-footer">
+              <span className="medications-list-progress" aria-live="polite">
+                {visibleMedicationCount}/{filteredMeds.length}
+              </span>
+              <div className="medications-pagination">
+                <button
+                  type="button"
+                  className="medications-pagination-btn"
+                  onClick={() => setMedicationsPage((current) => Math.max(1, current - 1))}
+                  disabled={safeMedicationPage <= 1}
+                  aria-label="Ver medicamentos anteriores"
+                >
+                  ←
+                </button>
+                <span className="medications-pagination-status">
+                  Página {safeMedicationPage} de {totalMedicationPages}
+                </span>
+                <button
+                  type="button"
+                  className="medications-pagination-btn"
+                  onClick={() =>
+                    setMedicationsPage((current) =>
+                      Math.min(totalMedicationPages, current + 1)
+                    )
+                  }
+                  disabled={safeMedicationPage >= totalMedicationPages}
+                  aria-label="Ver más medicamentos"
+                >
+                  →
+                </button>
+              </div>
             </div>
           </>
         )}
