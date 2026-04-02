@@ -143,9 +143,9 @@
   color: #ef4444;
 }
 
-.primary-btn,
-.secondary-btn,
-.danger-btn {
+.notification-settings-panel .primary-btn,
+.notification-settings-panel .secondary-btn,
+.notification-settings-panel .danger-btn {
   padding: 0.75rem 1.25rem;
   border: none;
   border-radius: 12px;
@@ -157,34 +157,34 @@
   margin-bottom: 0.5rem;
 }
 
-.primary-btn {
+.notification-settings-panel .primary-btn {
   background: linear-gradient(135deg, #30d7ff 0%, #1f7aff 100%);
   color: #0f172a;
 }
 
-.primary-btn:hover {
+.notification-settings-panel .primary-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(31, 122, 255, 0.3);
 }
 
-.secondary-btn {
+.notification-settings-panel .secondary-btn {
   background: #0b1224;
   color: #e2e8f0;
   border: 1px solid #1e293b;
 }
 
-.secondary-btn:hover {
+.notification-settings-panel .secondary-btn:hover {
   border-color: #38bdf8;
   color: #7dd3fc;
   transform: translateY(-2px);
 }
 
-.danger-btn {
+.notification-settings-panel .danger-btn {
   background: #ef4444;
   color: #fff;
 }
 
-.danger-btn:hover {
+.notification-settings-panel .danger-btn:hover {
   background: #dc2626;
   transform: translateY(-2px);
 }
@@ -294,9 +294,9 @@
     grid-template-columns: 1fr;
   }
 
-  .primary-btn,
-  .secondary-btn,
-  .danger-btn {
+  .notification-settings-panel .primary-btn,
+  .notification-settings-panel .secondary-btn,
+  .notification-settings-panel .danger-btn {
     font-size: 0.875rem;
     padding: 0.625rem 1rem;
   }
@@ -376,13 +376,13 @@ body.theme-dark .actions {
   border-top-color: #1e293b;
 }
 
-body.theme-dark .secondary-btn {
+body.theme-dark .notification-settings-panel .secondary-btn {
   background: #111827;
   border-color: #334155;
   color: #e2e8f0;
 }
 
-body.theme-dark .secondary-btn:hover {
+body.theme-dark .notification-settings-panel .secondary-btn:hover {
   border-color: #38bdf8;
   color: #7dd3fc;
 }

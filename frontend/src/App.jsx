@@ -436,10 +436,10 @@ function Topbar({
           {notificationsOpen && (
             <div className="notifications-dropdown">
               <div className="notifications-header">
-                <span>Notificaciones</span>
+                <span className="notifications-heading">Notificaciones</span>
                 {notifications?.length > 0 && (
                   <button
-                    className="secondary-btn"
+                    className="secondary-btn notifications-clear-btn"
                     type="button"
                     onClick={() => {
                       onClearNotifications?.();

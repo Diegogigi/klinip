@@ -11332,6 +11332,10 @@ body.theme-dark .med-refill-toggle {
   color: #0f172a;
 }
 
+.notifications-heading {
+  min-width: 0;
+}
+
 .notifications-list {
   list-style: none;
   margin: 0;
@@ -11714,12 +11718,21 @@ body.theme-dark .med-refill-toggle {
   }
 
   .notifications-header {
+    flex-wrap: wrap;
     gap: 0.55rem;
-    align-items: center;
+    align-items: flex-start;
   }
 
-  .notifications-header .secondary-btn {
-    flex-shrink: 0;
+  .notifications-heading {
+    flex: 1 1 auto;
+  }
+
+  .notifications-clear-btn {
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    margin-left: auto;
     white-space: nowrap;
     padding: 0.42rem 0.78rem;
   }
