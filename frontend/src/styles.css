@@ -26906,6 +26906,136 @@ body.theme-dark .ai-conversation-item.is-active {
   padding: 0.78rem 0.86rem;
 }
 
+/* ── Radar: banner de estado general ───────────────────────── */
+.home-radar-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  border-radius: 14px;
+  border: 1px solid #dce4f1;
+  background: #f8fbff;
+  padding: 0.88rem 1rem;
+}
+
+.home-radar-status strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.home-radar-status span {
+  display: block;
+  font-size: 0.76rem;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.home-radar-status.home-radar-status-ok {
+  background: #f3fbf7;
+  border-color: #bfe7d1;
+}
+
+.home-radar-status.home-radar-status-ok strong {
+  color: #0a6b3a;
+}
+
+.home-radar-status.home-radar-status-warn {
+  background: #fff8ec;
+  border-color: #ffe0a6;
+}
+
+.home-radar-status.home-radar-status-warn strong {
+  color: #924f06;
+}
+
+.home-radar-status.home-radar-status-alert {
+  background: #fff5f5;
+  border-color: #f6c7cc;
+}
+
+.home-radar-status.home-radar-status-alert strong {
+  color: #9e1c30;
+}
+
+.home-radar-status.home-radar-status-neutral {
+  background: #f8fbff;
+  border-color: #dce4f1;
+}
+
+/* ── Radar: acción recomendada dentro de cada alerta ───────── */
+.home-radar-alert-action {
+  display: block;
+  font-size: 0.73rem;
+  color: #475569;
+  line-height: 1.5;
+  margin-top: 0.32rem;
+  padding-top: 0.32rem;
+  border-top: 1px dashed rgba(100, 116, 139, 0.35);
+  text-align: left;
+}
+
+/* ── Radar: indicador de navegación en cada alerta ─────────── */
+.home-radar-alert-nav {
+  display: block;
+  font-size: 0.7rem;
+  color: #6366f1;
+  font-weight: 600;
+  margin-top: 0.38rem;
+  text-align: left;
+  opacity: 0.85;
+}
+
+/* ── Dark mode ─────────────────────────────────────────────── */
+body.theme-dark .home-radar-status {
+  background: rgba(11, 18, 36, 0.82);
+  border-color: #243244;
+}
+
+body.theme-dark .home-radar-status strong {
+  color: #f1f5f9;
+}
+
+body.theme-dark .home-radar-status span {
+  color: #94a3b8;
+}
+
+body.theme-dark .home-radar-status.home-radar-status-ok {
+  background: rgba(13, 148, 136, 0.09);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+body.theme-dark .home-radar-status.home-radar-status-ok strong {
+  color: #34d399;
+}
+
+body.theme-dark .home-radar-status.home-radar-status-warn {
+  background: rgba(217, 119, 6, 0.11);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+body.theme-dark .home-radar-status.home-radar-status-warn strong {
+  color: #fbbf24;
+}
+
+body.theme-dark .home-radar-status.home-radar-status-alert {
+  background: rgba(220, 75, 95, 0.1);
+  border-color: rgba(244, 114, 182, 0.2);
+}
+
+body.theme-dark .home-radar-status.home-radar-status-alert strong {
+  color: #f87171;
+}
+
+body.theme-dark .home-radar-alert-action {
+  color: #94a3b8;
+  border-top-color: rgba(148, 163, 184, 0.25);
+}
+
+body.theme-dark .home-radar-alert-nav {
+  color: #818cf8;
+}
+
 .ai-resource-item-button {
   width: 100%;
   border: 0;
