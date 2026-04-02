@@ -122,33 +122,27 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
     return {
       level: "alert",
       title: "Necesita tu atención hoy",
-      message:
-        highAlerts.length > 0
-          ? `Tienes ${highAlerts.length} alerta${highAlerts.length > 1 ? "s" : ""} importante${highAlerts.length > 1 ? "s" : ""} sin revisar.`
-          : "Estás tomando pocas dosis de tus medicamentos.",
+      message: "Revisa las alertas a continuación y toca cualquiera para recibir orientación de Klinip IA.",
     };
   }
   if (activeHealthAlerts.length > 0 || (activeMedications.length > 0 && adherence < 80)) {
     return {
       level: "warn",
       title: "Hay cosas para revisar",
-      message:
-        activeHealthAlerts.length > 0
-          ? `Tienes ${activeHealthAlerts.length} cosa${activeHealthAlerts.length > 1 ? "s" : ""} para atender.`
-          : "Tu seguimiento de medicamentos puede mejorar.",
+      message: "Toca cualquier alerta para ver qué hacer. Klinip IA puede ayudarte.",
     };
   }
   if (activeMedications.length === 0) {
     return {
       level: "neutral",
       title: "Sin plan activo",
-      message: "Registra tus medicamentos para comenzar el seguimiento.",
+      message: "Registra tus medicamentos para comenzar el seguimiento de tu salud.",
     };
   }
   return {
     level: "ok",
     title: "¡Tu salud está al día!",
-    message: "No hay alertas activas y tu seguimiento de medicamentos va bien.",
+    message: "No hay alertas activas y estás tomando tus medicamentos correctamente.",
   };
 }
 
@@ -553,6 +547,7 @@ export default function Dashboard({ user }) {
       tone: activeMedications.length ? "ok" : "warn",
       label: "Medicamentos",
       value: activeMedications.length ? `${activeMedications.length} activos` : "sin plan activo",
+      onClick: () => navigate("/medications"),
     },
     {
       key: "appointments",
@@ -562,6 +557,7 @@ export default function Dashboard({ user }) {
       value: nextAppointment
         ? `${toRelativeDayLabel(parseDate(nextAppointment.date_time)).toLowerCase()}`
         : "sin citas próximas",
+      onClick: () => navigate("/appointments"),
     },
     {
       key: "documents",
@@ -569,13 +565,15 @@ export default function Dashboard({ user }) {
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
       value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al día",
+      onClick: () => navigate("/documents"),
     },
     {
       key: "adherence",
       icon: "adherence",
-      tone: getRadarToneFromAdherence(adherence),
+      tone: activeMedications.length > 0 ? getRadarToneFromAdherence(adherence) : "warn",
       label: "¿Tomas a tiempo?",
       value: getAdherenceFriendlyValue(adherence, activeMedications.length > 0),
+      onClick: () => navigate("/medications"),
     },
     {
       key: "family",
@@ -587,6 +585,7 @@ export default function Dashboard({ user }) {
         : linkedProfiles > 0
         ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
         : "sin alertas",
+      onClick: () => navigate("/family"),
     },
   ];
 
@@ -951,11 +950,17 @@ export default function Dashboard({ user }) {
             </div>
             <div className="home-radar-grid">
               {radarItems.map((item) => (
-                <div key={item.key} className={`home-radar-item tone-${getStatusTone(item.tone)}`}>
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`home-radar-item tone-${getStatusTone(item.tone)}`}
+                  onClick={item.onClick}
+                  aria-label={`${item.label}: ${item.value}`}
+                >
                   <div className="home-radar-icon">{renderIcon(item.icon)}</div>
                   <div className="home-radar-label">{item.label}</div>
                   <div className="home-radar-value">{item.value}</div>
-                </div>
+                </button>
               ))}
             </div>
             <div className="home-radar-insights">
@@ -980,7 +985,13 @@ export default function Dashboard({ user }) {
                       key={item.id}
                       type="button"
                       className={`home-radar-alert tone-${getAlertTone(item.severity)}`}
-                      onClick={() => navigate("/ai")}
+                      onClick={() =>
+                        navigate("/ai", {
+                          state: {
+                            autoPrompt: `${cleanUiText(getFriendlyAlertTitle(item))}. ${cleanUiText(item.description)}${item.recommended_action ? ` ¿Qué debo hacer?` : ""}`,
+                          },
+                        })
+                      }
                     >
                       <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
                       <span>{cleanUiText(item.description)}</span>

@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   getActiveHealthProfile,
   generateAiClinicalReport,
@@ -291,6 +292,8 @@ export default function AiKlinip() {
     activeProfileName: "",
     sources: [],
   });
+  const location = useLocation();
+  const autoPromptFiredRef = useRef(false);
   const scrollRef = useRef(null);
   const inputZoneRef = useRef(null);
   const inputFieldRef = useRef(null);
@@ -539,6 +542,18 @@ export default function AiKlinip() {
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     setIsAtLatest(true);
   }, [messages, loading, historyLoading]);
+
+  // Auto-submit prompt when arriving from Dashboard alert cards
+  useEffect(() => {
+    const prompt = location.state?.autoPrompt;
+    if (!prompt || autoPromptFiredRef.current) return;
+    autoPromptFiredRef.current = true;
+    const timer = window.setTimeout(() => {
+      submitPrompt(String(prompt));
+    }, 800);
+    return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const hasConversation = useMemo(() => messages.some((message) => String(message.id) !== "welcome"), [messages]);
 
