@@ -20,6 +20,8 @@ import os
 import sys
 import mimetypes
 import base64
+import subprocess
+import tempfile
 from datetime import timedelta, datetime, timezone
 import hashlib
 import secrets
@@ -21350,6 +21352,99 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
     }
 
 
+def _build_feed_video_mp4_name(filename: str = "") -> str:
+    original = Path(filename or "video").stem.strip() or "video"
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original).strip("-") or "video"
+    return f"{safe_name}.mp4"
+
+
+def _transcode_feed_video_to_mp4(file_data: bytes, filename: str = ""):
+    if not file_data:
+        return None
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+    except ImportError:
+        return None
+
+    ffmpeg_exe = get_ffmpeg_exe()
+    source_suffix = Path(filename or "video.mov").suffix or ".mov"
+    target_name = _build_feed_video_mp4_name(filename)
+    input_path = None
+    output_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=source_suffix) as source_file:
+            source_file.write(file_data)
+            input_path = source_file.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as target_file:
+            output_path = target_file.name
+
+        command = [
+            ffmpeg_exe,
+            "-y",
+            "-i",
+            input_path,
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            output_path,
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            timeout=240,
+        )
+        if completed.returncode != 0 or not os.path.exists(output_path):
+            return None
+        with open(output_path, "rb") as transcoded_file:
+            transcoded_data = transcoded_file.read()
+        if not transcoded_data:
+            return None
+        return transcoded_data, target_name
+    except Exception:
+        return None
+    finally:
+        for path in (input_path, output_path):
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+
+
+def _ensure_feed_video_web_compatible(attachment, db: Session):
+    if not attachment or attachment.attachment_type != "video" or not attachment.file_data:
+        return attachment
+    ext = Path(attachment.filename or "").suffix.lower()
+    if ext == ".mp4":
+        return attachment
+    transcoded = _transcode_feed_video_to_mp4(attachment.file_data, attachment.filename or "")
+    if not transcoded:
+        return attachment
+    transcoded_data, transcoded_name = transcoded
+    attachment.file_data = transcoded_data
+    attachment.filename = transcoded_name
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return attachment
+
+
 _REACTION_EMOJIS = {
     "apoyo": "💙",
     "animo": "💪",
@@ -21613,10 +21708,15 @@ async def add_post_attachment(
         raise HTTPException(status_code=403, detail="No puedes modificar este post")
 
     file_data = await file.read()
+    normalized_filename = file.filename or ""
+    if attachment_type == "video":
+        transcoded = _transcode_feed_video_to_mp4(file_data, normalized_filename)
+        if transcoded:
+            file_data, normalized_filename = transcoded
     attachment = models.PostAttachment(
         post_id=post_id,
         attachment_type=attachment_type,
-        filename=file.filename or "",
+        filename=normalized_filename,
         file_data=file_data,
     )
     db.add(attachment)
@@ -21651,6 +21751,7 @@ def get_attachment_file(
     ).first()
     if not attachment or not attachment.file_data:
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    attachment = _ensure_feed_video_web_compatible(attachment, db)
 
     post = attachment.post
     family_ids = _get_family_user_ids(db, current_user)
