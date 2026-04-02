@@ -19694,6 +19694,103 @@ body.theme-dark .voice-share-option {
   color: #991b1b;
 }
 
+/* ── 3-dot note menu ─────────────────────────────────────────────── */
+.home-note-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.home-note-menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 1.2rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.home-note-menu-trigger:hover {
+  background: rgba(0,0,0,0.07);
+  color: #1e293b;
+}
+
+.home-note-menu-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 200;
+  min-width: 160px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-note-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-size: 0.82rem;
+  color: #334155;
+  cursor: pointer;
+}
+
+.home-note-menu-item:hover {
+  background: #f1f5f9;
+  color: #1d4ed8;
+}
+
+.home-note-menu-item.is-danger {
+  color: #b91c1c;
+}
+
+.home-note-menu-item.is-danger:hover {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+body.theme-dark .home-note-menu-trigger {
+  color: #94a3b8;
+}
+body.theme-dark .home-note-menu-trigger:hover {
+  background: rgba(255,255,255,0.1);
+  color: #e2e8f0;
+}
+body.theme-dark .home-note-menu-popup {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+body.theme-dark .home-note-menu-item {
+  color: #cbd5e1;
+}
+body.theme-dark .home-note-menu-item:hover {
+  background: #334155;
+  color: #93c5fd;
+}
+body.theme-dark .home-note-menu-item.is-danger {
+  color: #fca5a5;
+}
+body.theme-dark .home-note-menu-item.is-danger:hover {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
+/* ── recent row ──────────────────────────────────────────────────── */
 .home-recent-row {
   display: flex;
   align-items: center;
@@ -30818,6 +30915,59 @@ body.theme-dark .kfeed-pdf-viewer { border-color: #334155; background: #1e293b; 
 body.theme-dark .kfeed-pdf-topbar { background: #0f172a; border-color: #334155; }
 body.theme-dark .kfeed-pdf-name { color: #f1f5f9; }
 
+/* Video viewer */
+.kfeed-video-viewer {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1.5px solid var(--border, #e2e8f0);
+  background: var(--card-bg, #fff);
+  margin: 0.5rem 0;
+}
+.kfeed-video-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: var(--hover-bg, #f8fafc);
+}
+.kfeed-video-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--text-primary, #0f172a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kfeed-video-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.kfeed-video-open-btn:hover { background: #1d4ed8; }
+.kfeed-media-video {
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  background: #020617;
+}
+body.theme-dark .kfeed-video-viewer { border-color: #334155; background: #1e293b; }
+body.theme-dark .kfeed-video-topbar { background: #0f172a; border-color: #334155; }
+body.theme-dark .kfeed-video-name { color: #f1f5f9; }
+
 /* ── Layout 2 columnas (desktop) ── */
 .kfeed-layout-wrapper {
   display: flex;
@@ -31274,5 +31424,20 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     font-size: 0.78rem;
   }
   .kfeed-pdf-embed { height: 300px; }
+  .kfeed-video-topbar {
+    padding: 0.5rem 0.7rem;
+    gap: 0.45rem;
+  }
+  .kfeed-video-name {
+    font-size: 0.78rem;
+  }
+  .kfeed-video-open-btn {
+    min-height: 30px;
+    padding: 0.28rem 0.72rem;
+    font-size: 0.76rem;
+  }
+  .kfeed-media-video {
+    max-height: 280px;
+  }
 }
 

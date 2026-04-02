@@ -101,6 +101,46 @@ function AuthPDF({ postId, attachmentId, filename, previewUrl }) {
   );
 }
 
+function getAttachmentExtension(filename = "") {
+  const normalized = String(filename || "").toLowerCase().trim();
+  const dotIndex = normalized.lastIndexOf(".");
+  return dotIndex >= 0 ? normalized.slice(dotIndex) : "";
+}
+
+function getVideoMimeType(filename = "") {
+  const ext = getAttachmentExtension(filename);
+  if (ext === ".mov") return "video/quicktime";
+  if (ext === ".mp4" || ext === ".m4v") return "video/mp4";
+  if (ext === ".webm") return "video/webm";
+  if (ext === ".ogg" || ext === ".ogv") return "video/ogg";
+  return "video/mp4";
+}
+
+function AuthVideo({ postId, attachmentId, filename, previewUrl }) {
+  const { src, loading } = useAuthFile(postId, attachmentId, previewUrl);
+  if (loading) return (
+    <div className="kfeed-pdf-loading">
+      <div className="kfeed-spinner" style={{ width: 20, height: 20 }} />
+      <span>Cargando video...</span>
+    </div>
+  );
+  if (!src) return null;
+  return (
+    <div className="kfeed-video-viewer">
+      <div className="kfeed-video-topbar">
+        <span className="kfeed-video-name">{filename || "Video adjunto"}</span>
+        <button type="button" className="kfeed-video-open-btn" onClick={() => window.open(src, "_blank")}>
+          Abrir
+        </button>
+      </div>
+      <video className="kfeed-media-video" controls playsInline preload="metadata">
+        <source src={src} type={getVideoMimeType(filename)} />
+        Tu navegador no pudo reproducir este video.
+      </video>
+    </div>
+  );
+}
+
 function openAuthFile(postId, attachmentId) {
   const token = localStorage.getItem("token");
   axios
@@ -614,18 +654,39 @@ function CommentsSection({
 // ─── Media card ───────────────────────────────────────────────────────────────
 
 function isPdf(attachment) {
+  return getAttachmentExtension(attachment?.filename) === ".pdf";
+}
+
+function isVideo(attachment) {
+  const extension = getAttachmentExtension(attachment?.filename);
   return (
-    (attachment.filename || "").toLowerCase().endsWith(".pdf") ||
-    attachment.attachment_type === "document"
+    attachment?.attachment_type === "video" ||
+    extension === ".mp4" ||
+    extension === ".mov" ||
+    extension === ".m4v" ||
+    extension === ".webm" ||
+    extension === ".ogg" ||
+    extension === ".ogv"
   );
+}
+
+function inferAttachmentType(file) {
+  const mimeType = String(file?.type || "").toLowerCase();
+  const extension = getAttachmentExtension(file?.name);
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if ([".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"].includes(extension)) return "image";
+  if ([".mp4", ".mov", ".m4v", ".webm", ".ogg", ".ogv"].includes(extension)) return "video";
+  return "document";
 }
 
 function PostMediaCard({ post }) {
   const typeInfo = getPostTypeInfo(post.post_type);
   const images = (post.attachments || []).filter((a) => a.attachment_type === "image");
-  const pdfs   = (post.attachments || []).filter((a) => isPdf(a));
-  const otherDocs = (post.attachments || []).filter((a) => a.attachment_type !== "image" && !isPdf(a));
-  const hasAny = images.length > 0 || pdfs.length > 0 || otherDocs.length > 0;
+  const videos = (post.attachments || []).filter((a) => isVideo(a));
+  const pdfs   = (post.attachments || []).filter((a) => !isVideo(a) && isPdf(a));
+  const otherDocs = (post.attachments || []).filter((a) => a.attachment_type !== "image" && !isVideo(a) && !isPdf(a));
+  const hasAny = images.length > 0 || videos.length > 0 || pdfs.length > 0 || otherDocs.length > 0;
 
   if (!hasAny && post.post_type === "general") return null;
 
@@ -641,6 +702,17 @@ function PostMediaCard({ post }) {
           previewUrl={img.preview_url || null}
           className="kfeed-media-img"
           onClick={() => openAuthFile(post.id, img.id)}
+        />
+      ))}
+
+      {/* Videos inline */}
+      {videos.map((video) => (
+        <AuthVideo
+          key={video.id}
+          postId={post.id}
+          attachmentId={video.id}
+          filename={video.filename}
+          previewUrl={video.preview_url || null}
         />
       ))}
 
@@ -1431,8 +1503,7 @@ export default function KlinipFeed({ user }) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const preview = previews?.[i];
-        const type = file.type.startsWith("image/") ? "image"
-          : file.type.startsWith("video/") ? "video" : "document";
+        const type = inferAttachmentType(file);
         const att = await uploadPostAttachment(post.id, file, type);
         // Adjuntar preview URL local para mostrar inmediatamente sin re-fetch
         att.preview_url = preview?.url || null;

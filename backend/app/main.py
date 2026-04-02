@@ -4645,6 +4645,7 @@ def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
             .filter(
                 models.ProfileNote.reminder_at.isnot(None),
                 models.ProfileNote.reminder_sent.is_(False),
+                models.ProfileNote.visibility != "done",
                 models.ProfileNote.reminder_at >= window_start,
                 models.ProfileNote.reminder_at <= now,
             )
@@ -4655,13 +4656,19 @@ def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
             if deadline_at and time.time() >= deadline_at:
                 break
             try:
+                tag = f"note-reminder-{note.id}"
+                body = note.note[:120] + ("..." if len(note.note) > 120 else "")
                 sent = _send_push_to_user(
                     db,
                     note.created_by_user_id,
                     {
                         "title": "Recordatorio de nota",
-                        "body": note.note[:120] + ("..." if len(note.note) > 120 else ""),
-                        "tag": f"note-reminder-{note.id}",
+                        "body": body,
+                        "url": "/",
+                        "kind": "note",
+                        "noteId": note.id,
+                        "userId": note.created_by_user_id,
+                        "tag": tag,
                     },
                 )
                 note.reminder_sent = True
@@ -21643,11 +21650,21 @@ def get_attachment_file(
     if post.user_id not in family_ids and post.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Sin acceso")
 
-    mime_type, _ = mimetypes.guess_type(attachment.filename or "file.bin")
+    filename = attachment.filename or "file.bin"
+    ext = Path(filename).suffix.lower()
+    inline_mime_by_ext = {
+        ".mov": "video/quicktime",
+        ".mp4": "video/mp4",
+        ".m4v": "video/mp4",
+        ".webm": "video/webm",
+        ".ogg": "video/ogg",
+        ".ogv": "video/ogg",
+    }
+    mime_type = inline_mime_by_ext.get(ext) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
     return Response(
         content=attachment.file_data,
-        media_type=mime_type or "application/octet-stream",
-        headers={"Content-Disposition": f'inline; filename="{attachment.filename}"'},
+        media_type=mime_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
 
 
