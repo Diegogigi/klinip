@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Medicamento programado</title>
+  </head>
+  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
+            <tr>
+              <td style="padding:28px 32px;background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:#ffffff;">
+                <div style="margin-bottom:16px;"><span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#ffffff;font-family:'Poppins','Inter',system-ui,sans-serif;">Klinip</span></div>
+                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Seguimiento familiar</div>
+                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Medicamento programado</h1>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;">
+                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
+                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
+                  {% if is_assignee %}
+                  Quedaste como responsable del primer turno de compra para este medicamento.
+                  {% else %}
+                  Se registró un medicamento con reposición familiar y aquí tienes el detalle.
+                  {% endif %}
+                </p>
+                <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Paciente:</strong> {{ patient_name }}</p>
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Medicamento:</strong> {{ medication_name }}</p>
+                  {% if dose %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Dosis:</strong> {{ dose }}</p>{% endif %}
+                  {% if frequency %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Frecuencia:</strong> {{ frequency }}</p>{% endif %}
+                  {% if duration %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Duración:</strong> {{ duration }}</p>{% endif %}
+                  {% if start_label %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Primera toma:</strong> {{ start_label }}</p>{% endif %}
+                  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Responsable actual:</strong> {{ assignee_name }}</p>
+                </div>
+                {% if participant_names %}
+                <p style="margin:18px 0 0;font-size:14px;line-height:1.8;color:#475569;">
+                  Participan en la reposición: {{ participant_names }}.
+                </p>
+                {% endif %}
+                <p style="margin:14px 0 0;font-size:14px;line-height:1.8;color:#475569;">
+                  En Klinip podrán marcar la compra, subir la boleta y revisar el historial del medicamento.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
+                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
+                  Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
+                </p>
+                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
+                  {{ app_name }} | Planificación de medicamentos | {{ year }}
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

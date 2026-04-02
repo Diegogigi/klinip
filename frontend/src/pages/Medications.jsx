@@ -1,14 +1,16 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  createMedicationPurchase,
   deleteMedication,
   getActiveHealthProfile,
   getMyPlan,
   getMedicationIntakes,
+  getMedicationPurchaseReceipt,
+  getMedicationPurchases,
   getMedications,
   getProfileCaregivers,
   isAuthSessionError,
-  markMedicationRefillPurchased,
   recordMedicationIntake,
   saveMedication,
 } from "../api";
@@ -93,6 +95,20 @@ function formatAlertDay(date) {
   }).format(date);
 }
 
+function formatPurchaseAmount(value, currency = "CLP") {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) return "Monto no informado";
+  try {
+    return new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: currency || "CLP",
+      maximumFractionDigits: 0,
+    }).format(numeric);
+  } catch {
+    return `${currency || "CLP"} ${numeric}`;
+  }
+}
+
 export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -142,8 +158,15 @@ export default function Medications() {
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [purchaseTarget, setPurchaseTarget] = useState(null);
   const [purchaseNewStock, setPurchaseNewStock] = useState("");
+  const [purchaseAmount, setPurchaseAmount] = useState("");
+  const [purchaseNotes, setPurchaseNotes] = useState("");
+  const [purchaseReceiptFile, setPurchaseReceiptFile] = useState(null);
   const [purchaseLoading, setPurchaseLoading] = useState(false);
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
+  const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
+  const [endDateAuto, setEndDateAuto] = useState(true);
+  const [draggedParticipantId, setDraggedParticipantId] = useState("");
   const [loading, setLoading] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -221,9 +244,29 @@ export default function Medications() {
     }
   };
 
+  const loadPurchaseHistory = async (options = {}) => {
+    if (!options.silent) {
+      setPurchaseHistoryLoading(true);
+    }
+    try {
+      const items = await getMedicationPurchases({ limit: 60 });
+      setPurchaseHistory(Array.isArray(items) ? items : []);
+    } catch (error) {
+      console.error("No se pudo cargar el historial de compras de medicamentos", error);
+      if (!options.silent) {
+        setPurchaseHistory([]);
+      }
+    } finally {
+      if (!options.silent) {
+        setPurchaseHistoryLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
     load();
     loadFamilyContext();
+    loadPurchaseHistory();
   }, []);
 
   useEffect(() => {
@@ -352,6 +395,8 @@ export default function Medications() {
 
   const resetForm = () => {
     setShowAdvancedForm(false);
+    setEndDateAuto(true);
+    setDraggedParticipantId("");
     setForm({
       id: null,
       name: "",
@@ -384,6 +429,9 @@ export default function Medications() {
     }
     setLoading(true);
     try {
+      const parsedDosesPerIntake = parseFloat(normalizeDecimalInput(form.doses_per_intake));
+      const parsedFrequencyPerDay =
+        deriveFrequencyPerDay(form.frequency || "", normalizeDecimalInput(form.frequency_per_day)) || 1.0;
       // Preparar datos: convertir strings vacíos a null y document_id a número o null
       const payload = {
         name: form.name,
@@ -393,7 +441,7 @@ export default function Medications() {
         start_at: toIsoOrNull(form.start_at),
         schedule_time: form.schedule_time || "",
         completed: Boolean(form.completed),
-        end_date: toIsoOrNull(form.end_date),
+        end_date: endDateAuto ? null : toIsoOrNull(form.end_date),
         notes: form.notes || "",
         document_id: form.document_id ? parseInt(form.document_id) : null,
         refill_enabled:
@@ -405,11 +453,8 @@ export default function Medications() {
         refill_participant_user_ids: (form.refill_participant_user_ids || [])
           .map((value) => parseInt(value, 10))
           .filter((value) => Number.isInteger(value) && value > 0),
-        doses_per_intake: Math.max(parseFloat(form.doses_per_intake) || 1.0, 0.01),
-        frequency_per_day: Math.max(
-          deriveFrequencyPerDay(form.frequency || "", form.frequency_per_day) || 1.0,
-          0.01
-        ),
+        doses_per_intake: Math.max(parsedDosesPerIntake || 1.0, 0.01),
+        frequency_per_day: Math.max(parsedFrequencyPerDay, 0.01),
         stock_total_doses:
           form.stock_total_doses === "" ? 0 : Math.max(parseInt(form.stock_total_doses, 10) || 0, 0),
         refill_alert_threshold_doses:
@@ -425,6 +470,12 @@ export default function Medications() {
 
       if (payload.refill_enabled && payload.refill_participant_user_ids.length === 0) {
         alert("Selecciona al menos un familiar para participar en la reposición.");
+        setLoading(false);
+        return;
+      }
+
+      if (payload.refill_enabled && (!Number.isFinite(parsedDosesPerIntake) || parsedDosesPerIntake <= 0)) {
+        alert("Ingresa cuántas unidades usas en cada toma. Puedes usar valores como 1 o 0,5.");
         setLoading(false);
         return;
       }
@@ -483,6 +534,8 @@ export default function Medications() {
 
   const handleEdit = (med) => {
     if (!canEditActiveProfile) return;
+    setEndDateAuto(!Boolean(med.end_date));
+    setDraggedParticipantId("");
     setShowAdvancedForm(
       Boolean(
         (med.duration || "").trim() ||
@@ -528,23 +581,61 @@ export default function Medications() {
   const handleMarkPurchased = (med) => {
     setPurchaseTarget(med);
     setPurchaseNewStock(String(med.stock_total_doses || ""));
+    setPurchaseAmount("");
+    setPurchaseNotes("");
+    setPurchaseReceiptFile(null);
     setPurchaseOpen(true);
+  };
+
+  const resetPurchaseModal = () => {
+    setPurchaseOpen(false);
+    setPurchaseTarget(null);
+    setPurchaseNewStock("");
+    setPurchaseAmount("");
+    setPurchaseNotes("");
+    setPurchaseReceiptFile(null);
   };
 
   const handleConfirmPurchase = async () => {
     if (!purchaseTarget) return;
+    const nextStock = parseInt(purchaseNewStock, 10) || 0;
+    if (nextStock <= 0) {
+      alert("Ingresa cuántas dosis tendrá el nuevo stock del medicamento.");
+      return;
+    }
     setPurchaseLoading(true);
     try {
-      await markMedicationRefillPurchased(purchaseTarget.id, parseInt(purchaseNewStock, 10) || 0);
-      await load();
-      notifyClinicalDataChanged({ profileId: activeProfile?.id, sources: ["medications"] });
-      setPurchaseOpen(false);
-      setPurchaseTarget(null);
-      setPurchaseNewStock("");
+      const formData = new FormData();
+      formData.append("new_stock_total_doses", String(nextStock));
+      if (purchaseAmount.trim()) {
+        formData.append("amount_total", normalizeDecimalInput(purchaseAmount));
+      }
+      if (purchaseNotes.trim()) {
+        formData.append("notes", purchaseNotes.trim());
+      }
+      if (purchaseReceiptFile) {
+        formData.append("receipt", purchaseReceiptFile);
+      }
+      await createMedicationPurchase(purchaseTarget.id, formData);
+      await Promise.all([load(), loadPurchaseHistory({ silent: true })]);
+      notifyClinicalDataChanged({ profileId: activeProfile?.id, sources: ["medications", "health-radar", "adherence"] });
+      resetPurchaseModal();
     } catch (err) {
       alert("No se pudo registrar la compra: " + (err.response?.data?.detail || err.message));
     } finally {
       setPurchaseLoading(false);
+    }
+  };
+
+  const handleOpenPurchaseReceipt = async (purchase) => {
+    if (!purchase?.id || !purchase?.has_receipt) return;
+    try {
+      const { blob } = await getMedicationPurchaseReceipt(purchase.id);
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      alert("No se pudo abrir la boleta: " + (error.response?.data?.detail || error.message));
     }
   };
 
@@ -752,7 +843,7 @@ export default function Medications() {
     if (!window.confirm("¿Eliminar este medicamento?")) return;
     try {
       await deleteMedication(med.id);
-      await load();
+      await Promise.all([load(), loadPurchaseHistory({ silent: true })]);
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["medications", "health-radar", "adherence"],
@@ -793,6 +884,19 @@ export default function Medications() {
       (statusFilter === "scheduled" && getMedicationScheduleTimes(med).length > 0);
     return matchesSearch && matchesStatus;
   });
+  const filteredPurchases = (purchaseHistory || []).filter((item) => {
+    const term = search.trim().toLowerCase();
+    return (
+      !term ||
+      (item.medication_name_snapshot || "").toLowerCase().includes(term) ||
+      (item.purchased_by_name_snapshot || "").toLowerCase().includes(term) ||
+      (item.assigned_name_snapshot || "").toLowerCase().includes(term) ||
+      (item.notes || "").toLowerCase().includes(term)
+    );
+  });
+  const detailPurchases = detailTarget?.id
+    ? (purchaseHistory || []).filter((item) => Number(item.medication_id) === Number(detailTarget.id)).slice(0, 6)
+    : [];
   const familyRefillAvailable =
     Boolean(planInfo?.collaboration_enabled) && familyCaregivers.length > 0;
   const familyRefillOptions = familyCaregivers.map((item) => ({
@@ -803,6 +907,11 @@ export default function Medications() {
     .map((item) => item.name || "")
     .filter(Boolean)
     .slice(0, 4);
+  const normalizeDecimalInput = (value) =>
+    String(value ?? "")
+      .replace(",", ".")
+      .replace(/[^0-9.]/g, "")
+      .replace(/(\..*)\./g, "$1");
   const frequencyValue = String(form.frequency || "").trim();
   const durationValue = String(form.duration || "").trim();
   const medicationPreviewName = String(form.name || "").trim() || "Medicamento";
@@ -822,6 +931,7 @@ export default function Medications() {
   const schedulePreviewTimes = getMedicationScheduleTimes(formPreviewMedication);
   const schedulePreviewSummary = getMedicationScheduleSummary(formPreviewMedication);
   const endPreviewDate = getMedicationEffectiveEndAt(formPreviewMedication);
+  const computedEndDateInput = endPreviewDate ? toLocalInputValue(endPreviewDate).slice(0, 10) : "";
   const refillParticipantIds = Array.isArray(form.refill_participant_user_ids)
     ? form.refill_participant_user_ids
     : [];
@@ -849,6 +959,18 @@ export default function Medications() {
       ? alertThresholdUnits / dailyUnitsEstimate
       : null;
   const remindersReady = Boolean(frequencyValue && form.start_at);
+
+  useEffect(() => {
+    if (!endDateAuto) return;
+    setForm((current) => {
+      const nextEndDate = computedEndDateInput || "";
+      if ((current.end_date || "") === nextEndDate) return current;
+      return {
+        ...current,
+        end_date: nextEndDate,
+      };
+    });
+  }, [computedEndDateInput, endDateAuto]);
 
   const toggleRefillParticipant = (participantId) => {
     setForm((current) => {
@@ -891,6 +1013,34 @@ export default function Medications() {
         refill_participant_user_ids: currentIds,
       };
     });
+  };
+
+  const moveRefillParticipantToTarget = (draggedId, targetId) => {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+    setForm((current) => {
+      const currentIds = Array.isArray(current.refill_participant_user_ids)
+        ? [...current.refill_participant_user_ids]
+        : [];
+      const draggedIndex = currentIds.indexOf(draggedId);
+      const targetIndex = currentIds.indexOf(targetId);
+      if (draggedIndex === -1 || targetIndex === -1) return current;
+      currentIds.splice(draggedIndex, 1);
+      currentIds.splice(targetIndex, 0, draggedId);
+      return {
+        ...current,
+        refill_participant_user_ids: currentIds,
+      };
+    });
+  };
+
+  const handleParticipantDragStart = (participantId) => {
+    setDraggedParticipantId(participantId);
+  };
+
+  const handleParticipantDrop = (targetId) => {
+    if (!draggedParticipantId) return;
+    moveRefillParticipantToTarget(draggedParticipantId, targetId);
+    setDraggedParticipantId("");
   };
 
   const formatTimelineStamp = (value) => {
@@ -1291,11 +1441,25 @@ export default function Medications() {
                           className="input-field"
                           type="date"
                           value={form.end_date}
-                          onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                          onChange={(e) => {
+                            setEndDateAuto(false);
+                            setForm({ ...form, end_date: e.target.value });
+                          }}
                         />
                         <small className="muted med-form-helper">
-                          Si la dejas vacía, Klinip usará la duración para estimar la última toma.
+                          {endDateAuto && computedEndDateInput
+                            ? "Klinip la completó automáticamente. Puedes borrarla o cambiarla."
+                            : "Si la dejas vacía, Klinip usará la duración para estimar la última toma."}
                         </small>
+                        {!endDateAuto && computedEndDateInput ? (
+                          <button
+                            type="button"
+                            className="secondary-btn med-inline-helper-btn"
+                            onClick={() => setEndDateAuto(true)}
+                          >
+                            Usar fecha estimada
+                          </button>
+                        ) : null}
                       </div>
                       <div className="input-group">
                         <label className="input-label">Hora inicial</label>
@@ -1434,17 +1598,21 @@ export default function Medications() {
                           <div className="form-row">
                             <div className="input-group">
                               <label className="input-label">Unidades por toma</label>
-                              <input
-                                className="input-field"
-                                type="number"
-                                min="0.01"
-                                step="0.5"
-                                value={form.doses_per_intake}
-                                onChange={(e) =>
-                                  setForm((current) => ({ ...current, doses_per_intake: e.target.value }))
-                                }
-                                placeholder="Ej: 1"
-                              />
+                                <input
+                                  className="input-field"
+                                  type="number"
+                                  min="0.01"
+                                  step="0.1"
+                                  inputMode="decimal"
+                                  value={form.doses_per_intake}
+                                  onChange={(e) =>
+                                    setForm((current) => ({
+                                      ...current,
+                                      doses_per_intake: normalizeDecimalInput(e.target.value),
+                                    }))
+                                  }
+                                  placeholder="Ej: 1"
+                                />
                               <small className="muted med-form-helper">
                                 Ejemplo: 1 pastilla por toma o 0,5 si usas media unidad.
                               </small>
@@ -1462,10 +1630,14 @@ export default function Medications() {
                                     className="input-field"
                                     type="number"
                                     min="0.01"
-                                    step="0.5"
+                                    step="0.1"
+                                    inputMode="decimal"
                                     value={form.frequency_per_day}
                                     onChange={(e) =>
-                                      setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
+                                      setForm((current) => ({
+                                        ...current,
+                                        frequency_per_day: normalizeDecimalInput(e.target.value),
+                                      }))
                                     }
                                     placeholder="Ej: 2"
                                   />
@@ -1569,7 +1741,17 @@ export default function Medications() {
                                 return (
                                   <div
                                     key={participant.id}
-                                    className={`med-refill-participant ${checked ? "is-selected" : ""}`}
+                                    className={`med-refill-participant ${checked ? "is-selected" : ""} ${
+                                      draggedParticipantId === participant.id ? "is-dragging" : ""
+                                    }`}
+                                    draggable={checked && form.refill_mode === "rotativo"}
+                                    onDragStart={() => handleParticipantDragStart(participant.id)}
+                                    onDragEnd={() => setDraggedParticipantId("")}
+                                    onDragOver={(event) => {
+                                      if (!checked || form.refill_mode !== "rotativo") return;
+                                      event.preventDefault();
+                                    }}
+                                    onDrop={() => handleParticipantDrop(participant.id)}
                                   >
                                     <label className="med-refill-participant-main">
                                       <input
@@ -1587,23 +1769,9 @@ export default function Medications() {
                                       </span>
                                     </label>
                                     {checked && form.refill_mode === "rotativo" ? (
-                                      <div className="med-refill-order-actions">
-                                        <button
-                                          type="button"
-                                          className="secondary-btn"
-                                          onClick={() => moveRefillParticipant(participant.id, "up")}
-                                          disabled={currentIndex <= 0}
-                                        >
-                                          Subir
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="secondary-btn"
-                                          onClick={() => moveRefillParticipant(participant.id, "down")}
-                                          disabled={currentIndex === refillParticipantIds.length - 1}
-                                        >
-                                          Bajar
-                                        </button>
+                                      <div className="med-refill-drag-hint">
+                                        <strong>Arrastra para reordenar</strong>
+                                        <span>Mantén presionada la tarjeta y muévela a la posición que quieras.</span>
                                       </div>
                                     ) : null}
                                   </div>
@@ -1611,7 +1779,7 @@ export default function Medications() {
                               })}
                             </div>
                             <small className="muted med-form-helper">
-                              Selecciona solo a quienes realmente participan. El orden es independiente para cada medicamento.
+                              Selecciona solo a quienes realmente participan. Si la compra es rotativa, puedes arrastrar las tarjetas para ordenar el turno.
                             </small>
                           </div>
                           <p className="med-refill-helper">
@@ -1767,6 +1935,40 @@ export default function Medications() {
                       >
                         Marcar como comprado
                       </button>
+                    )}
+                  </div>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-item-icon" aria-hidden>🧾</span>
+                  <div>
+                    <span className="detail-label">Compras recientes</span>
+                    {detailPurchases.length ? (
+                      <div className="med-purchase-inline-list">
+                        {detailPurchases.map((purchase) => (
+                          <div key={purchase.id} className="med-purchase-inline-item">
+                            <strong>{formatMedicationDateTime(purchase.purchased_at || purchase.created_at)}</strong>
+                            <span>
+                              {purchase.purchased_by_name_snapshot || "Sin registro"}
+                              {purchase.amount_total != null
+                                ? ` · ${formatPurchaseAmount(purchase.amount_total, purchase.currency)}`
+                                : ""}
+                            </span>
+                            {purchase.has_receipt ? (
+                              <button
+                                type="button"
+                                className="secondary-btn"
+                                onClick={() => handleOpenPurchaseReceipt(purchase)}
+                              >
+                                Ver boleta
+                              </button>
+                            ) : (
+                              <small>Sin boleta adjunta</small>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>Aún no hay compras registradas para este medicamento.</p>
                     )}
                   </div>
                 </div>
@@ -2159,30 +2361,209 @@ export default function Medications() {
         )}
       </div>
 
+      <div className="card medications-surface-free medications-purchases-card">
+        <div className="med-purchase-head">
+          <div>
+            <h3 className="card-title">Compras y boletas</h3>
+            <p className="med-refill-helper">
+              Aquí queda el historial de quién compró cada medicamento y su comprobante.
+            </p>
+          </div>
+          <span className="med-purchase-count">
+            {filteredPurchases.length} registro{filteredPurchases.length === 1 ? "" : "s"}
+          </span>
+        </div>
+
+        {purchaseHistoryLoading ? (
+          <p className="muted">Cargando historial de compras...</p>
+        ) : filteredPurchases.length === 0 ? (
+          <div className="med-purchase-empty">
+            <strong>Aún no hay compras registradas.</strong>
+            <span>
+              Cuando alguien marque un medicamento como comprado, la boleta y el detalle aparecerán aquí.
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className="appointments-table-shell" style={{ overflowX: "auto" }}>
+              <table className="table med-purchase-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Medicamento</th>
+                    <th>Compró</th>
+                    <th>Turno asignado</th>
+                    <th>Monto</th>
+                    <th>Stock</th>
+                    <th>Boleta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPurchases.map((purchase) => (
+                    <tr key={`purchase-${purchase.id}`}>
+                      <td>{formatMedicationDateTime(purchase.purchased_at || purchase.created_at)}</td>
+                      <td>
+                        <div className="med-purchase-medication-cell">
+                          <strong>{purchase.medication_name_snapshot || "Medicamento"}</strong>
+                          <span>{purchase.dose_snapshot || "Sin dosis"}</span>
+                        </div>
+                      </td>
+                      <td>{purchase.purchased_by_name_snapshot || "Sin registro"}</td>
+                      <td>{purchase.assigned_name_snapshot || "Sin asignar"}</td>
+                      <td>
+                        {purchase.amount_total != null
+                          ? formatPurchaseAmount(purchase.amount_total, purchase.currency)
+                          : "No informado"}
+                      </td>
+                      <td>{purchase.new_stock_total_doses || 0} dosis</td>
+                      <td>
+                        {purchase.has_receipt ? (
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            onClick={() => handleOpenPurchaseReceipt(purchase)}
+                          >
+                            Ver boleta
+                          </button>
+                        ) : (
+                          <span className="med-purchase-muted">Sin boleta</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="records-mobile-list medications-mobile-list">
+              {filteredPurchases.map((purchase) => (
+                <article key={`purchase-mobile-${purchase.id}`} className="records-mobile-card med-purchase-mobile-card">
+                  <div className="records-mobile-head">
+                    <div className="records-mobile-head-main">
+                      <span className="records-mobile-icon-badge is-medication">B</span>
+                      <div className="records-mobile-title-group">
+                        <strong>{purchase.medication_name_snapshot || "Medicamento"}</strong>
+                        <span>{formatMedicationDateTime(purchase.purchased_at || purchase.created_at)}</span>
+                      </div>
+                    </div>
+                    <span className={`chip ${purchase.has_receipt ? "document" : "pending"}`}>
+                      {purchase.has_receipt ? "Con boleta" : "Sin boleta"}
+                    </span>
+                  </div>
+                  <div className="records-mobile-meta-grid">
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Compró</span>
+                      <span>{purchase.purchased_by_name_snapshot || "Sin registro"}</span>
+                    </div>
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Turno</span>
+                      <span>{purchase.assigned_name_snapshot || "Sin asignar"}</span>
+                    </div>
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Monto</span>
+                      <span>
+                        {purchase.amount_total != null
+                          ? formatPurchaseAmount(purchase.amount_total, purchase.currency)
+                          : "No informado"}
+                      </span>
+                    </div>
+                    <div className="records-mobile-meta-item">
+                      <span className="records-mobile-meta-label">Stock cargado</span>
+                      <span>{purchase.new_stock_total_doses || 0} dosis</span>
+                    </div>
+                  </div>
+                  {purchase.notes ? <div className="records-mobile-note">{purchase.notes}</div> : null}
+                  <div className="records-mobile-footer">
+                    {purchase.has_receipt ? (
+                      <button
+                        type="button"
+                        className="records-mobile-link"
+                        onClick={() => handleOpenPurchaseReceipt(purchase)}
+                      >
+                        Abrir boleta
+                      </button>
+                    ) : (
+                      <span className="med-purchase-muted">Sin boleta adjunta</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
       {purchaseOpen && purchaseTarget && (
-        <div className="modal-overlay" onClick={() => setPurchaseOpen(false)}>
+        <div className="modal-overlay" onClick={resetPurchaseModal}>
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Marcar como comprado</h3>
-              <button className="modal-close" onClick={() => setPurchaseOpen(false)}>✕</button>
+              <h3>Registrar compra del medicamento</h3>
+              <button className="modal-close" onClick={resetPurchaseModal}>✕</button>
             </div>
             <div className="modal-body">
-              <p className="muted">
-                Medicamento: <strong>{purchaseTarget.name}</strong>
-              </p>
+              <div className="med-purchase-summary">
+                <strong>{purchaseTarget.name}</strong>
+                <span>{purchaseTarget.dose || "Sin dosis"} · {purchaseTarget.frequency || "Sin frecuencia"}</span>
+                <small>
+                  Responsable actual: {purchaseTarget.refill_current_assignee_name || "Sin asignar"}
+                  {purchaseTarget.refill_next_assignee_name
+                    ? ` · Próximo turno: ${purchaseTarget.refill_next_assignee_name}`
+                    : ""}
+                </small>
+              </div>
+              <div className="med-purchase-grid">
+                <div className="input-group">
+                  <label className="input-label">Nuevo stock total</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    min="0"
+                    value={purchaseNewStock}
+                    onChange={(e) => setPurchaseNewStock(e.target.value)}
+                    placeholder={`Actual: ${purchaseTarget.stock_total_doses || 0}`}
+                    autoFocus
+                  />
+                  <p className="med-refill-helper">Escribe cuántas dosis quedan disponibles después de la compra.</p>
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Monto pagado</label>
+                  <input
+                    className="input-field"
+                    type="text"
+                    inputMode="decimal"
+                    value={purchaseAmount}
+                    onChange={(e) => setPurchaseAmount(e.target.value)}
+                    placeholder="Ej: 5490"
+                  />
+                  <p className="med-refill-helper">Opcional. Escríbelo sin separadores de miles, por ejemplo 5490.</p>
+                </div>
+              </div>
               <div className="input-group">
-                <label className="input-label">Nuevo total de dosis del envase</label>
+                <label className="input-label">Boleta o comprobante</label>
                 <input
                   className="input-field"
-                  type="number"
-                  min="0"
-                  value={purchaseNewStock}
-                  onChange={(e) => setPurchaseNewStock(e.target.value)}
-                  placeholder={`Actual: ${purchaseTarget.stock_total_doses || 0}`}
-                  autoFocus
+                  type="file"
+                  accept=".pdf,image/*"
+                  onChange={(e) => setPurchaseReceiptFile(e.target.files?.[0] || null)}
                 />
                 <p className="med-refill-helper">
-                  Ingresa la cantidad de dosis del nuevo envase. El responsable del próximo ciclo será{" "}
+                  Puedes subir una imagen o PDF. El comprobante quedará visible para los involucrados.
+                </p>
+                {purchaseReceiptFile ? (
+                  <div className="med-purchase-file-chip">{purchaseReceiptFile.name}</div>
+                ) : null}
+              </div>
+              <div className="input-group">
+                <label className="input-label">Observación</label>
+                <textarea
+                  className="input-field"
+                  rows="3"
+                  value={purchaseNotes}
+                  onChange={(e) => setPurchaseNotes(e.target.value)}
+                  placeholder="Ej: Se compró en farmacia de turno."
+                />
+                <p className="med-refill-helper">
+                  El próximo ciclo seguirá con{" "}
                   <strong>{purchaseTarget.refill_next_assignee_name || purchaseTarget.refill_current_assignee_name || "el siguiente en rotación"}</strong>.
                 </p>
               </div>
@@ -2199,7 +2580,7 @@ export default function Medications() {
               <button
                 type="button"
                 className="secondary-btn"
-                onClick={() => setPurchaseOpen(false)}
+                onClick={resetPurchaseModal}
               >
                 Cancelar
               </button>

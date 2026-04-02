@@ -764,6 +764,40 @@ export async function getMedicationIntakes(id, limit = 40) {
   return res.data;
 }
 
+export async function getMedicationPurchases(options = {}) {
+  const params = {};
+  if (options.medicationId) params.medication_id = options.medicationId;
+  if (options.limit) params.limit = options.limit;
+  const res = await api.get("/medications/purchases", { params });
+  return res.data;
+}
+
+export async function createMedicationPurchase(id, payload) {
+  const formData = payload instanceof FormData ? payload : new FormData();
+  if (!(payload instanceof FormData)) {
+    Object.entries(payload || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === "") return;
+      formData.append(key, value);
+    });
+  }
+  const res = await api.post(`/medications/${id}/purchases`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return res.data;
+}
+
+export async function getMedicationPurchaseReceipt(purchaseId) {
+  const res = await api.get(`/medications/purchases/${purchaseId}/receipt`, {
+    responseType: "blob",
+  });
+  const contentDisposition = res.headers?.["content-disposition"] || "";
+  const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+  return {
+    blob: res.data,
+    filename: match?.[1] || `boleta-medicamento-${purchaseId}`,
+  };
+}
+
 export async function markMedicationRefillPurchased(id, newStockTotalDoses) {
   const res = await api.post(`/medications/${id}/mark-purchased`, {
     new_stock_total_doses: newStockTotalDoses || 0,

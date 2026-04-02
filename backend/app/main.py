@@ -19676,7 +19676,6 @@ async def list_medications(
 @app.post("/medications", response_model=schemas.MedicationOut)
 async def create_medication(
     med_in: schemas.MedicationCreate,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -19771,6 +19770,7 @@ async def update_medication(
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
 
+    previous_refill_enabled = bool(getattr(med, "refill_enabled", False))
     previous_stock_total = int(getattr(med, "stock_total_doses", 0) or 0)
     previous_last_notified_at = getattr(med, "refill_last_notified_at", None)
     updated_fields = med_in.dict(exclude_unset=True)
@@ -19826,6 +19826,15 @@ async def update_medication(
     db.commit()
     db.refresh(med)
     _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
+    if med.refill_enabled and not previous_refill_enabled:
+        try:
+            _send_medication_programmed_notifications(
+                db,
+                med,
+                profile=profile,
+            )
+        except Exception as notify_exc:
+            print(f"WARNING medication programmed notifications {med.id}: {notify_exc}")
     return med
 
 
@@ -20048,6 +20057,145 @@ async def list_medication_intakes(
     return {"medication_id": medication_id, "items": items}
 
 
+@app.get("/medications/purchases", response_model=List[schemas.MedicationPurchaseOut])
+async def list_medication_purchases(
+    medication_id: int | None = None,
+    limit: int = 40,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_medication_schema(force=True)
+    ensure_medication_purchase_schema(force=True)
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    query = db.query(models.MedicationPurchase).filter(
+        models.MedicationPurchase.user_id == target_user_id,
+    )
+    if medication_id:
+        query = query.filter(models.MedicationPurchase.medication_id == int(medication_id))
+    items = (
+        query.order_by(
+            models.MedicationPurchase.purchased_at.desc(),
+            models.MedicationPurchase.id.desc(),
+        )
+        .limit(max(1, min(int(limit or 40), 120)))
+        .all()
+    )
+    return [_decorate_medication_purchase(item) for item in items]
+
+
+@app.post("/medications/{medication_id}/purchases", response_model=schemas.MedicationPurchaseOut)
+async def create_medication_purchase(
+    medication_id: int,
+    new_stock_total_doses: int = Form(...),
+    amount_total: str | None = Form(None),
+    currency: str | None = Form("CLP"),
+    notes: str | None = Form(""),
+    purchased_at: str | None = Form(None),
+    receipt: UploadFile | None = File(None),
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_medication_schema(force=True)
+    ensure_medication_purchase_schema(force=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    med = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.id == medication_id,
+            models.Medication.user_id == target_user_id,
+        )
+        .first()
+    )
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+
+    normalized_amount = None
+    if amount_total not in (None, ""):
+        try:
+            normalized_amount = max(float(str(amount_total).replace(",", ".").strip()), 0.0)
+        except Exception:
+            raise HTTPException(status_code=400, detail="El monto ingresado no es válido")
+
+    parsed_purchased_at = None
+    if purchased_at:
+        try:
+            parsed_purchased_at = datetime.fromisoformat(str(purchased_at).strip().replace("Z", "+00:00"))
+            if getattr(parsed_purchased_at, "tzinfo", None) is not None:
+                parsed_purchased_at = parsed_purchased_at.replace(tzinfo=None)
+        except Exception:
+            raise HTTPException(status_code=400, detail="La fecha de compra no es válida")
+
+    receipt_filename = None
+    receipt_mime_type = None
+    receipt_bytes = None
+    if receipt is not None:
+        receipt_bytes = await receipt.read()
+        if receipt_bytes:
+            receipt_mime_type, receipt_filename = _validate_upload(
+                receipt_bytes,
+                receipt.filename or "boleta",
+            )
+        else:
+            receipt_bytes = None
+
+    purchase = _record_medication_purchase(
+        db,
+        med,
+        profile,
+        current_user,
+        new_stock_total_doses=new_stock_total_doses,
+        amount_total=normalized_amount,
+        currency=currency,
+        notes=notes,
+        purchased_at=parsed_purchased_at,
+        receipt_filename=receipt_filename,
+        receipt_mime_type=receipt_mime_type,
+        receipt_bytes=receipt_bytes,
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(med)
+    db.refresh(purchase)
+    _decorate_medication_purchase(purchase)
+    try:
+        _send_medication_purchase_notifications(
+            db,
+            med,
+            purchase,
+            profile=profile,
+        )
+    except Exception as notify_exc:
+        print(f"WARNING medication purchase notifications {purchase.id}: {notify_exc}")
+    return purchase
+
+
+@app.get("/medications/purchases/{purchase_id}/receipt")
+async def get_medication_purchase_receipt(
+    purchase_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_medication_purchase_schema(force=True)
+    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    purchase = (
+        db.query(models.MedicationPurchase)
+        .filter(
+            models.MedicationPurchase.id == purchase_id,
+            models.MedicationPurchase.user_id == target_user_id,
+        )
+        .first()
+    )
+    if not purchase or not getattr(purchase, "receipt_file_data", None):
+        raise HTTPException(status_code=404, detail="Boleta no encontrada")
+    filename = getattr(purchase, "receipt_filename", None) or f"boleta-medicamento-{purchase.id}"
+    mime_type = getattr(purchase, "receipt_mime_type", None) or "application/octet-stream"
+    return Response(
+        content=purchase.receipt_file_data,
+        media_type=mime_type,
+        headers={"Content-Disposition": f'inline; filename=\"{filename}\"'},
+    )
+
+
 @app.post("/medications/{medication_id}/mark-purchased", response_model=schemas.MedicationOut)
 async def mark_medication_refill_purchased(
     medication_id: int,
@@ -20061,6 +20209,7 @@ async def mark_medication_refill_purchased(
     y limpia el estado de notificación para permitir nuevo ciclo.
     """
     ensure_medication_schema(force=True)
+    ensure_medication_purchase_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -20073,16 +20222,37 @@ async def mark_medication_refill_purchased(
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
     new_stock = int((payload or {}).get("new_stock_total_doses", 0) or 0)
-    if new_stock > 0:
-        med.stock_total_doses = new_stock
-    # Avanzar rotación y limpiar ciclo de notificación
-    med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
-    med.refill_last_notified_at = None
-    med.refill_last_notified_remaining = None
+    amount_total = (payload or {}).get("amount_total", None)
+    normalized_amount = None
+    if amount_total not in (None, ""):
+        try:
+            normalized_amount = max(float(str(amount_total).replace(",", ".").strip()), 0.0)
+        except Exception:
+            raise HTTPException(status_code=400, detail="El monto ingresado no es válido")
+    purchase = _record_medication_purchase(
+        db,
+        med,
+        profile,
+        current_user,
+        new_stock_total_doses=new_stock,
+        amount_total=normalized_amount,
+        currency=(payload or {}).get("currency", "CLP"),
+        notes=(payload or {}).get("notes", ""),
+    )
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.add(med)
     db.commit()
     db.refresh(med)
+    db.refresh(purchase)
+    try:
+        _send_medication_purchase_notifications(
+            db,
+            med,
+            purchase,
+            profile=profile,
+        )
+    except Exception as notify_exc:
+        print(f"WARNING medication purchase notifications {purchase.id}: {notify_exc}")
     _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
     return med
 
@@ -20095,6 +20265,7 @@ async def delete_medication(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     ensure_medication_schema(force=True)
+    ensure_medication_purchase_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -20109,6 +20280,10 @@ async def delete_medication(
     db.query(models.MedicationIntake).filter(
         models.MedicationIntake.medication_id == medication_id,
         models.MedicationIntake.user_id == target_user_id,
+    ).delete()
+    db.query(models.MedicationPurchase).filter(
+        models.MedicationPurchase.medication_id == medication_id,
+        models.MedicationPurchase.user_id == target_user_id,
     ).delete()
     db.delete(med)
     _mark_profile_ai_dirty(db, profile, include_family=True)

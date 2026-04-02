@@ -4393,6 +4393,18 @@ body.theme-dark .primary-btn {
   border-color: #c4b5fd;
 }
 
+.chip.document {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #15803d;
+  border-color: #86efac;
+}
+
+.chip.pending {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
 .chip-status-pendiente {
   background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
   color: #b91c1c;
@@ -8035,6 +8047,159 @@ body.theme-dark .primary-btn {
   border-color: #93c5fd;
 }
 
+.medications-purchases-card {
+  margin-top: 0.8rem;
+}
+
+.med-purchase-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  margin-bottom: 0.75rem;
+}
+
+.med-purchase-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0.3rem 0.72rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.med-purchase-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.95rem 1rem;
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.med-purchase-empty strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.med-purchase-empty span,
+.med-purchase-muted {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.med-purchase-table td {
+  vertical-align: middle;
+}
+
+.med-purchase-medication-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+}
+
+.med-purchase-medication-cell strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+}
+
+.med-purchase-medication-cell span {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.med-purchase-mobile-card {
+  border: 1px solid #dbe3f1;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.med-purchase-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid #dbe3f1;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.med-purchase-summary strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.med-purchase-summary span,
+.med-purchase-summary small {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.med-purchase-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.med-purchase-file-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #dbe3f1;
+  color: #334155;
+  font-size: 0.76rem;
+  font-weight: 600;
+  max-width: 100%;
+  word-break: break-all;
+}
+
+.med-purchase-inline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+.med-purchase-inline-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid #dbe3f1;
+  background: #f8fafc;
+}
+
+.med-purchase-inline-item strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.med-purchase-inline-item span,
+.med-purchase-inline-item small {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.med-purchase-inline-item .secondary-btn {
+  min-height: 32px;
+  padding: 0.32rem 0.65rem;
+  font-size: 0.75rem;
+}
+
 .ml-1 { margin-left: 0.25rem; }
 
 .timeline-stat-card {
@@ -8468,6 +8633,43 @@ body.theme-dark .med-mark-purchased-btn {
 
 body.theme-dark .med-mark-purchased-btn:hover {
   background: #1e40af;
+}
+
+body.theme-dark .med-purchase-count {
+  background: rgba(30, 58, 95, 0.86);
+  border-color: #1d4ed8;
+  color: #93c5fd;
+}
+
+body.theme-dark .med-purchase-empty,
+body.theme-dark .med-purchase-summary,
+body.theme-dark .med-purchase-mobile-card {
+  background: linear-gradient(180deg, rgba(11, 18, 36, 0.96) 0%, rgba(15, 23, 42, 0.92) 100%);
+  border-color: #243244;
+}
+
+body.theme-dark .med-purchase-empty strong,
+body.theme-dark .med-purchase-medication-cell strong,
+body.theme-dark .med-purchase-summary strong,
+body.theme-dark .med-purchase-inline-item strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .med-purchase-empty span,
+body.theme-dark .med-purchase-muted,
+body.theme-dark .med-purchase-medication-cell span,
+body.theme-dark .med-purchase-summary span,
+body.theme-dark .med-purchase-summary small,
+body.theme-dark .med-purchase-inline-item span,
+body.theme-dark .med-purchase-inline-item small {
+  color: #94a3b8;
+}
+
+body.theme-dark .med-purchase-file-chip,
+body.theme-dark .med-purchase-inline-item {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: #334155;
+  color: #cbd5e1;
 }
 
 body.theme-dark .med-refill-toggle {
@@ -24015,6 +24217,53 @@ body.theme-dark .records-mobile-link {
   .med-refill-drag-hint span {
     max-width: none;
     font-size: 0.7rem;
+  }
+
+  .medications-purchases-card {
+    margin-top: 0.55rem;
+  }
+
+  .med-purchase-head {
+    flex-direction: column;
+    gap: 0.45rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .med-purchase-count {
+    min-height: 28px;
+    padding: 0.24rem 0.58rem;
+    font-size: 0.73rem;
+  }
+
+  .med-purchase-grid {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .med-purchase-summary {
+    padding: 0.72rem 0.78rem;
+    border-radius: 12px;
+  }
+
+  .med-purchase-summary strong {
+    font-size: 0.88rem;
+  }
+
+  .med-purchase-summary span,
+  .med-purchase-summary small,
+  .med-purchase-empty span,
+  .med-purchase-muted {
+    font-size: 0.75rem;
+  }
+
+  .med-purchase-inline-item {
+    padding: 0.58rem 0.65rem;
+    gap: 0.36rem 0.5rem;
+  }
+
+  .med-purchase-inline-item .secondary-btn {
+    width: 100%;
+    justify-content: center;
   }
 
   .timeline-overview-card,
