@@ -26990,13 +26990,6 @@ body.theme-dark .ai-conversation-item.is-active {
   opacity: 0.82;
 }
 
-/* ── Radar: wrap de alerta (contiene card + acordeón) ──────── */
-.home-radar-alert-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
 /* ── Radar: indicador de navegación en cada alerta ─────────── */
 .home-radar-alert-nav {
   display: block;
@@ -27025,6 +27018,8 @@ body.theme-dark .ai-conversation-item.is-active {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+  /* Cancela el gap del grid para pegarse al botón de arriba */
+  margin-top: calc(-0.55rem - 1px);
   animation: radarDetailIn 0.18s ease;
 }
 
@@ -27126,18 +27121,18 @@ body.theme-dark .home-radar-alert-detail p {
   color: #94a3b8;
 }
 
-/* Acordeón hereda el color del borde de la alerta padre */
-.home-radar-alert-wrap .home-radar-alert.tone-warn.is-expanded + .home-radar-alert-detail {
+/* Acordeón hereda el color del borde de la alerta que lo precede */
+.home-radar-alert.tone-warn.is-expanded + .home-radar-alert-detail {
   border-color: #ffe0a6;
   background: #fffdf7;
 }
 
-.home-radar-alert-wrap .home-radar-alert.tone-alert.is-expanded + .home-radar-alert-detail {
+.home-radar-alert.tone-alert.is-expanded + .home-radar-alert-detail {
   border-color: #f5c2ca;
   background: #fff9f9;
 }
 
-.home-radar-alert-wrap .home-radar-alert.tone-ok.is-expanded + .home-radar-alert-detail {
+.home-radar-alert.tone-ok.is-expanded + .home-radar-alert-detail {
   border-color: #bfe7d1;
   background: #f6fdf9;
 }

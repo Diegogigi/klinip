@@ -1009,7 +1009,7 @@ export default function Dashboard({ user }) {
               <div className="home-radar-alert-list">
                 {activeHealthAlerts.length ? (
                   (showAllAlerts ? activeHealthAlerts : topHealthAlerts).map((item) => (
-                    <div key={item.id} className="home-radar-alert-wrap">
+                    <React.Fragment key={item.id}>
                       <button
                         type="button"
                         className={`home-radar-alert tone-${getAlertTone(item.severity)}${expandedAlertId === item.id ? " is-expanded" : ""}`}
@@ -1028,19 +1028,20 @@ export default function Dashboard({ user }) {
                           <button
                             type="button"
                             className="home-radar-alert-ai-btn"
-                            onClick={() =>
+                            onClick={(e) => {
+                              e.stopPropagation();
                               navigate("/ai", {
                                 state: {
                                   autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(getFriendlyAlertTitle(item))}". ${cleanUiText(item.description)} ¿Qué debo hacer paso a paso?`,
                                 },
-                              })
-                            }
+                              });
+                            }}
                           >
                             Consultar con Klinip IA
                           </button>
                         </div>
                       ) : null}
-                    </div>
+                    </React.Fragment>
                   ))
                 ) : (
                   <div className="home-empty-state">No hay alertas activas. ¡Tu salud está al día!</div>
