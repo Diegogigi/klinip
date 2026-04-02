@@ -344,6 +344,7 @@ export default function Dashboard({ user }) {
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteMenuOpenId, setNoteMenuOpenId] = useState(null);
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -481,7 +482,7 @@ export default function Dashboard({ user }) {
       setNotesLoading(true);
       try {
         const response = await getProfileNotes(activeProfile.id).catch(() => []);
-        let nextNotes = Array.isArray(response) ? response.slice(0, 6) : [];
+        let nextNotes = Array.isArray(response) ? response.filter((n) => n.visibility !== "done").slice(0, 6) : [];
         if (canEditActiveProfile && !nextNotes.length && notesStorageKey) {
           try {
             const raw = localStorage.getItem(notesStorageKey);
@@ -739,6 +740,29 @@ export default function Dashboard({ user }) {
   const visibleQuickActions = canEditActiveProfile
     ? quickActions
     : quickActions.filter((item) => item.id === "ai");
+
+  useEffect(() => {
+    if (!noteMenuOpenId) return;
+    const handleClickOutside = () => setNoteMenuOpenId(null);
+    const timer = window.setTimeout(() => {
+      document.addEventListener("click", handleClickOutside);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, [noteMenuOpenId]);
+
+  const handleMarkNoteDone = async (noteId) => {
+    if (!canEditActiveProfile || !activeProfile?.id) return;
+    try {
+      await updateProfileNote(activeProfile.id, noteId, { visibility: "done" });
+      setQuickNotes((prev) => prev.filter((n) => n.id !== noteId));
+      setNoteMenuOpenId(null);
+    } catch {
+      window.alert("No pudimos marcar la nota. Intenta nuevamente.");
+    }
+  };
 
   const handleCancelNote = () => {
     setComposerOpen(false);
@@ -1219,7 +1243,7 @@ export default function Dashboard({ user }) {
                     <button
                       key={c}
                       type="button"
-                      className={`home-note-color-swatch note-color-swatch-${c}${noteColor === c ? " is-selected" : ""}`}
+                      className={`home-note-color-swatch home-note-color-swatch-${c}${noteColor === c ? " is-selected" : ""}`}
                       onClick={() => setNoteColor(c)}
                       aria-label={c}
                       aria-pressed={noteColor === c}
@@ -1300,26 +1324,46 @@ export default function Dashboard({ user }) {
                         ) : null}
                       </span>
                     </div>
-                    <div className="home-note-row-actions">
-                      {canEditActiveProfile ? (
-                        <>
-                          <button
-                            type="button"
-                            className="home-note-action-btn"
-                            onClick={() => handleStartEditNote(item)}
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            className="home-note-action-btn is-danger"
-                            onClick={() => handleDeleteNote(item.id)}
-                          >
-                            Eliminar
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
+                    {canEditActiveProfile ? (
+                      <div className="home-note-menu-wrap">
+                        <button
+                          type="button"
+                          className="home-note-menu-trigger"
+                          aria-label="Opciones de nota"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNoteMenuOpenId((prev) => (prev === item.id ? null : item.id));
+                          }}
+                        >
+                          &#8942;
+                        </button>
+                        {noteMenuOpenId === item.id && (
+                          <div className="home-note-menu-popup" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="home-note-menu-item"
+                              onClick={() => { handleStartEditNote(item); setNoteMenuOpenId(null); }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="home-note-menu-item"
+                              onClick={() => handleMarkNoteDone(item.id)}
+                            >
+                              Marcar como listo
+                            </button>
+                            <button
+                              type="button"
+                              className="home-note-menu-item is-danger"
+                              onClick={() => { handleDeleteNote(item.id); setNoteMenuOpenId(null); }}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </article>
                 ))
               ) : (

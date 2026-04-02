@@ -482,6 +482,8 @@ self.addEventListener("push", (event) => {
         tag,
         actions: data.kind === "feed"
           ? [{ action: "open", title: "Ver en el feed", icon: "/icons/android-chrome-192x192.png" }]
+          : data.kind === "note"
+          ? [{ action: "open", title: "Ver nota", icon: "/icons/android-chrome-192x192.png" }]
           : [
             {
               action: "done",
@@ -550,11 +552,13 @@ self.addEventListener("notificationclick", (event) => {
   const isDefaultClick = !event.action;
   let targetUrl = notificationData.url || "/";
 
-  if (isDefaultClick) {
+  if (isDefaultClick || event.action === "open") {
     if (notificationData.appointmentId) {
       targetUrl = `/appointments?notify=1&appointmentId=${notificationData.appointmentId}`;
     } else if (notificationData.medicationId) {
       targetUrl = `/medications?notify=1&medicationId=${notificationData.medicationId}`;
+    } else if (notificationData.kind === "note") {
+      targetUrl = "/";
     }
   }
   targetUrl = normalizeUrl(targetUrl);
