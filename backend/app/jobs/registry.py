@@ -35,6 +35,7 @@ def job_specs() -> list[dict]:
         {"name": "send_appointment_reminders", "handler": main_module._job_send_appointment_reminders},
         {"name": "send_medication_reminders", "handler": main_module._job_send_medication_reminders},
         {"name": "send_refill_alerts", "handler": main_module._job_send_refill_alerts},
+        {"name": "send_note_reminders", "handler": main_module._job_send_note_reminders},
         {"name": "refresh_profile_ai", "handler": main_module._job_refresh_profile_ai},
         {"name": "refresh_family_ai", "handler": main_module._job_refresh_family_ai},
     ]

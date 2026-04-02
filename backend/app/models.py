@@ -172,6 +172,38 @@ class Medication(Base):
     document = relationship("Document")
 
 
+class MedicationPurchase(Base):
+    __tablename__ = "medication_purchases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    medication_id = Column(Integer, ForeignKey("medications.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    purchased_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    medication_name_snapshot = Column(String, default="")
+    dose_snapshot = Column(String, default="")
+    assigned_name_snapshot = Column(String, default="")
+    purchased_by_name_snapshot = Column(String, default="")
+    quantity_added_doses = Column(Integer, default=0)
+    previous_remaining_doses = Column(Integer, nullable=True)
+    new_stock_total_doses = Column(Integer, default=0)
+    amount_total = Column(Float, nullable=True)
+    currency = Column(String, default="CLP")
+    notes = Column(Text, nullable=True)
+    receipt_filename = Column(String, nullable=True)
+    receipt_mime_type = Column(String, nullable=True)
+    receipt_file_data = Column(LargeBinary, nullable=True)
+    purchased_at = Column(DateTime, default=datetime.now)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+    medication = relationship("Medication")
+    profile = relationship("HealthProfile")
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])
+    purchased_by_user = relationship("User", foreign_keys=[purchased_by_user_id])
+
+
 class MedicationIntake(Base):
     __tablename__ = "medication_intakes"
 
@@ -360,6 +392,9 @@ class ProfileNote(Base):
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     note = Column(Text, nullable=False)
     visibility = Column(String, default="shared")
+    color = Column(String, default="yellow")
+    reminder_at = Column(DateTime, nullable=True)
+    reminder_sent = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

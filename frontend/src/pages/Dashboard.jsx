@@ -336,8 +336,9 @@ export default function Dashboard({ user }) {
   const [healthRadar, setHealthRadar] = useState([]);
   const [adherenceSummary, setAdherenceSummary] = useState(null);
   const [expandedAlertId, setExpandedAlertId] = useState(null);
-  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  const [noteColor, setNoteColor] = useState("yellow");
+  const [noteReminder, setNoteReminder] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
@@ -551,7 +552,6 @@ export default function Dashboard({ user }) {
     ? adherenceSummary.low_adherence_items
     : [];
   const activeHealthAlerts = Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : [];
-  const topHealthAlerts = activeHealthAlerts.slice(0, 3);
   const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
   const pendingDocuments = documents.filter((item) => {
     const status = String(item.ocr_status || "").toLowerCase();
@@ -743,6 +743,8 @@ export default function Dashboard({ user }) {
   const handleCancelNote = () => {
     setComposerOpen(false);
     setNoteDraft("");
+    setNoteColor("yellow");
+    setNoteReminder("");
     setEditingNoteId(null);
   };
 
@@ -751,6 +753,8 @@ export default function Dashboard({ user }) {
     setComposerOpen(true);
     setEditingNoteId(item.id);
     setNoteDraft(item.note || item.text || "");
+    setNoteColor(item.color || "yellow");
+    setNoteReminder(item.reminder_at ? String(item.reminder_at).slice(0, 16) : "");
   };
 
   const handleDeleteNote = async (noteId) => {
@@ -778,6 +782,8 @@ export default function Dashboard({ user }) {
         const updated = await updateProfileNote(activeProfile.id, editingNoteId, {
           note: value,
           visibility: "shared",
+          color: noteColor,
+          reminder_at: noteReminder || null,
         });
         setQuickNotes((prev) =>
           prev.map((item) => (item.id === editingNoteId ? updated : item)).slice(0, 6)
@@ -786,6 +792,8 @@ export default function Dashboard({ user }) {
         const created = await createProfileNote(activeProfile.id, {
           note: value,
           visibility: "shared",
+          color: noteColor,
+          reminder_at: noteReminder || null,
         });
         setQuickNotes((prev) => [created, ...prev].slice(0, 6));
       }
@@ -992,23 +1000,18 @@ export default function Dashboard({ user }) {
                   <span>Cumplimiento general</span>
                   <strong>{activeMedications.length ? `${adherence}%` : "Sin datos"}</strong>
                 </div>
-                <button
-                  type="button"
-                  className={`home-radar-summary-chip home-radar-summary-chip-btn tone-${activeHealthAlerts.length ? "alert" : "ok"}`}
-                  onClick={() => activeHealthAlerts.length > 3 && setShowAllAlerts((v) => !v)}
-                  aria-expanded={showAllAlerts}
-                >
+                <div className={`home-radar-summary-chip tone-${activeHealthAlerts.length ? "alert" : "ok"}`}>
                   <span>Por atender</span>
                   <strong>
                     {activeHealthAlerts.length
-                      ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}${activeHealthAlerts.length > 3 ? (showAllAlerts ? " — ocultar" : " — ver todas") : ""}`
+                      ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
                       : "Todo bien"}
                   </strong>
-                </button>
+                </div>
               </div>
               <div className="home-radar-alert-list">
                 {activeHealthAlerts.length ? (
-                  (showAllAlerts ? activeHealthAlerts : topHealthAlerts).map((item) => (
+                  activeHealthAlerts.map((item) => (
                     <React.Fragment key={item.id}>
                       <button
                         type="button"
@@ -1210,7 +1213,19 @@ export default function Dashboard({ user }) {
               </button>
             </div>
             {composerOpen && canEditActiveProfile && (
-              <div className="home-note-composer">
+              <div className={`home-note-composer note-color-${noteColor}`}>
+                <div className="home-note-color-picker" role="group" aria-label="Color de nota">
+                  {["yellow", "pink", "mint", "lavender", "peach"].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`home-note-color-swatch note-color-swatch-${c}${noteColor === c ? " is-selected" : ""}`}
+                      onClick={() => setNoteColor(c)}
+                      aria-label={c}
+                      aria-pressed={noteColor === c}
+                    />
+                  ))}
+                </div>
                 <textarea
                   className="home-note-textarea"
                   value={noteDraft}
@@ -1218,6 +1233,27 @@ export default function Dashboard({ user }) {
                   placeholder="Guardar pendiente o idea clave."
                   rows={3}
                 />
+                <div className="home-note-reminder-row">
+                  <label className="home-note-reminder-label">
+                    Recordarme el:
+                    <input
+                      type="datetime-local"
+                      className="home-note-reminder-input"
+                      value={noteReminder}
+                      onChange={(e) => setNoteReminder(e.target.value)}
+                      min={new Date().toISOString().slice(0, 16)}
+                    />
+                  </label>
+                  {noteReminder && (
+                    <button
+                      type="button"
+                      className="home-note-reminder-clear"
+                      onClick={() => setNoteReminder("")}
+                    >
+                      Quitar recordatorio
+                    </button>
+                  )}
+                </div>
                 <div className="home-note-actions">
                   <button
                     type="button"
@@ -1241,10 +1277,10 @@ export default function Dashboard({ user }) {
               {notesLoading ? (
                 <div className="home-loading">{"Cargando notas r\u00E1pidas..."}</div>
               ) : quickNotes.length ? (
-                quickNotes.map((item, index) => (
-                  <article key={item.id} className="home-note-row">
+                quickNotes.map((item) => (
+                  <article key={item.id} className={`home-note-row note-color-${item.color || "yellow"}`}>
                     <div className="home-note-row-main">
-                      <span className={`home-note-dot tone-${["blue", "violet", "green", "amber"][index % 4]}`} />
+                      <span className={`home-note-dot note-color-dot-${item.color || "yellow"}`} />
                       <span className="home-note-copy">
                         <strong>{cleanUiText(item.note || item.text)}</strong>
                         <small>
@@ -1255,6 +1291,13 @@ export default function Dashboard({ user }) {
                             minute: "2-digit",
                           }) || "Reciente"}
                         </small>
+                        {item.reminder_at ? (
+                          <small className={`home-note-reminder-badge${item.reminder_sent ? " is-sent" : ""}`}>
+                            {item.reminder_sent
+                              ? "Recordatorio enviado"
+                              : `Recordatorio: ${parseDate(item.reminder_at)?.toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) || item.reminder_at}`}
+                          </small>
+                        ) : null}
                       </span>
                     </div>
                     <div className="home-note-row-actions">

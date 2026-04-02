@@ -764,6 +764,162 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_medication_schema()
 
 
+def ensure_medication_purchase_schema(force: bool = False):
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("medication_purchases"):
+            Base.metadata.create_all(bind=engine)
+            inspector = inspect(engine)
+        columns = {col["name"] for col in inspector.get_columns("medication_purchases")}
+        backend = engine.url.get_backend_name()
+        statements = []
+        added_columns = []
+
+        def add_purchase_column(name: str, pg_stmt: str, sqlite_stmt: str):
+            if name in columns:
+                return
+            statements.append(pg_stmt if backend == "postgresql" else sqlite_stmt)
+            added_columns.append(name)
+
+        add_purchase_column(
+            "profile_id",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS profile_id INTEGER NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN profile_id INTEGER",
+        )
+        add_purchase_column(
+            "assigned_user_id",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS assigned_user_id INTEGER NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN assigned_user_id INTEGER",
+        )
+        add_purchase_column(
+            "purchased_by_user_id",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS purchased_by_user_id INTEGER NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN purchased_by_user_id INTEGER",
+        )
+        add_purchase_column(
+            "medication_name_snapshot",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS medication_name_snapshot VARCHAR DEFAULT ''",
+            "ALTER TABLE medication_purchases ADD COLUMN medication_name_snapshot VARCHAR DEFAULT ''",
+        )
+        add_purchase_column(
+            "dose_snapshot",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS dose_snapshot VARCHAR DEFAULT ''",
+            "ALTER TABLE medication_purchases ADD COLUMN dose_snapshot VARCHAR DEFAULT ''",
+        )
+        add_purchase_column(
+            "assigned_name_snapshot",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS assigned_name_snapshot VARCHAR DEFAULT ''",
+            "ALTER TABLE medication_purchases ADD COLUMN assigned_name_snapshot VARCHAR DEFAULT ''",
+        )
+        add_purchase_column(
+            "purchased_by_name_snapshot",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS purchased_by_name_snapshot VARCHAR DEFAULT ''",
+            "ALTER TABLE medication_purchases ADD COLUMN purchased_by_name_snapshot VARCHAR DEFAULT ''",
+        )
+        add_purchase_column(
+            "quantity_added_doses",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS quantity_added_doses INTEGER DEFAULT 0",
+            "ALTER TABLE medication_purchases ADD COLUMN quantity_added_doses INTEGER DEFAULT 0",
+        )
+        add_purchase_column(
+            "previous_remaining_doses",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS previous_remaining_doses INTEGER NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN previous_remaining_doses INTEGER",
+        )
+        add_purchase_column(
+            "new_stock_total_doses",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS new_stock_total_doses INTEGER DEFAULT 0",
+            "ALTER TABLE medication_purchases ADD COLUMN new_stock_total_doses INTEGER DEFAULT 0",
+        )
+        add_purchase_column(
+            "amount_total",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS amount_total DOUBLE PRECISION NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN amount_total REAL",
+        )
+        add_purchase_column(
+            "currency",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS currency VARCHAR DEFAULT 'CLP'",
+            "ALTER TABLE medication_purchases ADD COLUMN currency VARCHAR DEFAULT 'CLP'",
+        )
+        add_purchase_column(
+            "notes",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS notes TEXT NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN notes TEXT",
+        )
+        add_purchase_column(
+            "receipt_filename",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS receipt_filename VARCHAR NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN receipt_filename VARCHAR",
+        )
+        add_purchase_column(
+            "receipt_mime_type",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS receipt_mime_type VARCHAR NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN receipt_mime_type VARCHAR",
+        )
+        add_purchase_column(
+            "receipt_file_data",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS receipt_file_data BYTEA NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN receipt_file_data BLOB",
+        )
+        add_purchase_column(
+            "purchased_at",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS purchased_at TIMESTAMP NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN purchased_at DATETIME",
+        )
+        add_purchase_column(
+            "created_at",
+            "ALTER TABLE medication_purchases ADD COLUMN IF NOT EXISTS created_at TIMESTAMP NULL",
+            "ALTER TABLE medication_purchases ADD COLUMN created_at DATETIME",
+        )
+
+        if statements:
+            with engine.begin() as conn:
+                for stmt in statements:
+                    conn.execute(text(stmt))
+                if any(
+                    name in added_columns
+                    for name in [
+                        "medication_name_snapshot",
+                        "dose_snapshot",
+                        "assigned_name_snapshot",
+                        "purchased_by_name_snapshot",
+                        "quantity_added_doses",
+                        "new_stock_total_doses",
+                        "currency",
+                        "purchased_at",
+                        "created_at",
+                    ]
+                ):
+                    conn.execute(
+                        text(
+                            "UPDATE medication_purchases SET "
+                            "medication_name_snapshot = COALESCE(medication_name_snapshot, ''), "
+                            "dose_snapshot = COALESCE(dose_snapshot, ''), "
+                            "assigned_name_snapshot = COALESCE(assigned_name_snapshot, ''), "
+                            "purchased_by_name_snapshot = COALESCE(purchased_by_name_snapshot, ''), "
+                            "quantity_added_doses = COALESCE(quantity_added_doses, 0), "
+                            "new_stock_total_doses = COALESCE(new_stock_total_doses, 0), "
+                            "currency = COALESCE(currency, 'CLP'), "
+                            "purchased_at = COALESCE(purchased_at, created_at), "
+                            "created_at = COALESCE(created_at, purchased_at, CURRENT_TIMESTAMP)"
+                        )
+                    )
+            print(
+                "DEBUG ensure_medication_purchase_schema: columnas agregadas a medication_purchases: "
+                + ", ".join(added_columns)
+            )
+        else:
+            print("DEBUG ensure_medication_purchase_schema: tabla medication_purchases ya esta al dia")
+    except Exception as exc:
+        print(f"WARNING ensure_medication_purchase_schema: no se pudo ajustar la tabla: {exc}")
+
+
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_medication_purchase_schema()
+
+
 def ensure_medication_intake_schema():
     if not RUNTIME_SCHEMA_MUTATIONS_ENABLED:
         return
@@ -2438,6 +2594,96 @@ def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: d
         print(f"ERROR sending medication refill email async: {exc}")
 
 
+def _send_medication_programmed_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        is_assignee = bool(payload.get("is_assignee"))
+        subject = (
+            f"Se programó {payload.get('medication_name') or 'un medicamento'}"
+            if not is_assignee
+            else f"Quedaste a cargo de {payload.get('medication_name') or 'un medicamento'}"
+        )
+        _send_templated_email(
+            to_email=to_email,
+            subject=subject,
+            template_name="medication_refill_programmed.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu familiar",
+                "medication_name": payload.get("medication_name") or "Medicamento",
+                "dose": payload.get("dose") or "",
+                "frequency": payload.get("frequency") or "",
+                "duration": payload.get("duration") or "",
+                "start_label": payload.get("start_label") or "",
+                "assignee_name": payload.get("assignee_name") or user_name or "Usuario",
+                "participant_names": payload.get("participant_names") or "",
+                "is_assignee": is_assignee,
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending medication programmed email async: {exc}")
+
+
+def _send_medication_purchase_email_safe(
+    to_email: str,
+    user_name: str,
+    payload: dict,
+    receipt_filename: str | None = None,
+    receipt_bytes: bytes | None = None,
+    receipt_mime_type: str | None = None,
+):
+    try:
+        if not to_email:
+            return
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_pass = os.getenv("SMTP_PASS")
+        sender = _smtp_from_notifications(smtp_user)
+        if not sender:
+            raise RuntimeError("Remitente de correo no configurado")
+
+        template_context = {
+            "app_name": _app_display_name(),
+            "logo_url": _email_logo_url(),
+            "user_name": user_name or "Usuario",
+            "patient_name": payload.get("patient_name") or "Paciente",
+            "medication_name": payload.get("medication_name") or "Medicamento",
+            "dose": payload.get("dose") or "",
+            "assigned_name": payload.get("assigned_name") or "",
+            "purchased_by_name": payload.get("purchased_by_name") or "",
+            "purchased_at_label": payload.get("purchased_at_label") or "",
+            "amount_label": payload.get("amount_label") or "",
+            "stock_label": payload.get("stock_label") or "",
+            "notes": payload.get("notes") or "",
+            "receipt_filename": receipt_filename or "",
+            "year": datetime.utcnow().year,
+        }
+        html_body = _render_email_template("medication_purchase_receipt.html", template_context)
+        text_body = _html_to_text(html_body)
+
+        msg = EmailMessage()
+        msg["Subject"] = f"Compra registrada: {payload.get('medication_name') or 'Medicamento'}"
+        msg["From"] = sender
+        msg["To"] = to_email
+        msg.set_content(text_body or "Se registró una compra de medicamento en Klinip.")
+        msg.add_alternative(html_body, subtype="html")
+        if receipt_filename and receipt_bytes:
+            mime_type = receipt_mime_type
+            if not mime_type:
+                mime_type, _ = mimetypes.guess_type(receipt_filename)
+            maintype, subtype = ("application", "octet-stream")
+            if mime_type and "/" in mime_type:
+                maintype, subtype = mime_type.split("/", 1)
+            msg.add_attachment(
+                receipt_bytes,
+                maintype=maintype,
+                subtype=subtype,
+                filename=receipt_filename,
+            )
+        _deliver_message(msg, smtp_user, smtp_pass)
+    except Exception as exc:
+        print(f"ERROR sending medication purchase email async: {exc}")
+
+
 def _send_health_alert_email_safe(to_email: str, user_name: str, payload: dict):
     try:
         _send_templated_email(
@@ -3166,6 +3412,83 @@ def _medication_refill_contacts(
     return contacts
 
 
+def _medication_selected_refill_contacts(
+    med: models.Medication,
+    contacts: list[dict] | None = None,
+) -> list[dict]:
+    all_contacts = list(contacts or [])
+    if not all_contacts:
+        return []
+    participant_ids = _parse_refill_participant_ids(getattr(med, "refill_participants_json", None))
+    available_by_id = {int(item["user_id"]): item for item in all_contacts}
+    if participant_ids:
+        return [available_by_id[user_id] for user_id in participant_ids if user_id in available_by_id]
+    return all_contacts
+
+
+def _medication_patient_name(
+    profile: models.HealthProfile | None = None,
+    owner_user: models.User | None = None,
+) -> str:
+    return (
+        getattr(profile, "full_name", None)
+        or getattr(profile, "name", None)
+        or getattr(owner_user, "name", None)
+        or "Paciente"
+    )
+
+
+def _format_medication_datetime_label(value: datetime | None) -> str:
+    if not value:
+        return ""
+    try:
+        return value.strftime("%d-%m-%Y %H:%M")
+    except Exception:
+        return str(value)
+
+
+def _medication_participant_names(contacts: list[dict] | None) -> str:
+    names = [str((item or {}).get("name") or "").strip() for item in (contacts or [])]
+    names = [name for name in names if name]
+    return ", ".join(names)
+
+
+def _medication_notification_recipients(
+    db: Session,
+    med: models.Medication,
+    owner_user: models.User | None = None,
+    profile: models.HealthProfile | None = None,
+) -> tuple[list[dict], list[dict], models.User | None, str]:
+    owner = owner_user
+    if not owner:
+        owner = db.query(models.User).filter(models.User.id == getattr(med, "user_id", None)).first()
+    selected_contacts = _medication_selected_refill_contacts(
+        med,
+        contacts=_medication_refill_contacts(db, getattr(med, "user_id", None)),
+    )
+    patient_name = _medication_patient_name(profile, owner)
+    recipients: list[dict] = []
+    seen_user_ids: set[int] = set()
+    if owner:
+        recipients.append(
+            {
+                "user_id": int(owner.id),
+                "name": (owner.name or owner.email or f"Usuario #{owner.id}").strip(),
+                "email": (owner.email or "").strip(),
+                "user": owner,
+                "is_owner": True,
+            }
+        )
+        seen_user_ids.add(int(owner.id))
+    for contact in selected_contacts:
+        user_id = int(contact.get("user_id") or 0)
+        if user_id <= 0 or user_id in seen_user_ids:
+            continue
+        recipients.append({**contact, "is_owner": False})
+        seen_user_ids.add(user_id)
+    return recipients, selected_contacts, owner, patient_name
+
+
 def _medication_refill_current_assignee(
     db: Session,
     med: models.Medication,
@@ -3484,6 +3807,283 @@ def _handle_medication_refill_notifications(
     db.commit()
     db.refresh(med)
     return sent_any
+
+
+def _decorate_medication_purchase(item: models.MedicationPurchase | None):
+    if not item:
+        return None
+    setattr(item, "has_receipt", bool(getattr(item, "receipt_file_data", None)))
+    return item
+
+
+def _send_medication_programmed_notifications(
+    db: Session,
+    med: models.Medication,
+    profile: models.HealthProfile | None = None,
+    owner_user: models.User | None = None,
+) -> bool:
+    if not med or not bool(getattr(med, "refill_enabled", False)):
+        return False
+    recipients, selected_contacts, owner, patient_name = _medication_notification_recipients(
+        db,
+        med,
+        owner_user=owner_user,
+        profile=profile,
+    )
+    if not selected_contacts:
+        return False
+    assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts)
+    if not assignee:
+        return False
+    participant_names = _medication_participant_names(selected_contacts)
+    start_label = _format_medication_datetime_label(
+        getattr(med, "start_at", None) or getattr(med, "created_at", None)
+    )
+    sent_any = False
+    for recipient in recipients:
+        user_id = int(recipient.get("user_id") or 0)
+        if user_id <= 0:
+            continue
+        is_assignee = int(assignee.get("user_id") or 0) == user_id
+        push_tag = f"medication-programmed-{med.id}-{user_id}"
+        if not _notification_already_sent(db, push_tag):
+            if recipient.get("is_owner"):
+                body = (
+                    f"Se programó {med.name} para {patient_name}. "
+                    f"Responsable actual de compra: {assignee.get('name') or 'sin asignar'}."
+                )
+            elif is_assignee:
+                body = (
+                    f"Se programó {med.name} para {patient_name}. "
+                    "Te tocará la primera compra cuando llegue la reposición."
+                )
+            else:
+                body = (
+                    f"Se programó {med.name} para {patient_name}. "
+                    f"La primera compra quedó asignada a {assignee.get('name') or 'sin asignar'}."
+                )
+            sent = _send_push_to_user(
+                db,
+                user_id,
+                {
+                    "title": "Medicamento programado",
+                    "body": body,
+                    "url": "/medications",
+                    "priority": "high",
+                    "sound": "medication",
+                    "medicationId": med.id,
+                    "userId": user_id,
+                    "tag": push_tag,
+                },
+            )
+            if sent:
+                _record_sent(
+                    db,
+                    user_id,
+                    push_tag,
+                    "medication_programmed",
+                    datetime.now(),
+                    datetime.now(),
+                )
+                sent_any = True
+
+        recipient_user = recipient.get("user")
+        email_tag = f"medication-programmed-email-{med.id}-{user_id}"
+        if (
+            recipient_user
+            and getattr(recipient_user, "email", "")
+            and not _notification_already_sent(db, email_tag)
+        ):
+            _send_medication_programmed_email_safe(
+                recipient_user.email,
+                recipient.get("name") or "",
+                {
+                    "patient_name": patient_name,
+                    "medication_name": med.name or "Medicamento",
+                    "dose": med.dose or "",
+                    "frequency": med.frequency or "",
+                    "duration": med.duration or "",
+                    "start_label": start_label,
+                    "assignee_name": assignee.get("name") or "",
+                    "participant_names": participant_names,
+                    "is_assignee": is_assignee,
+                },
+            )
+            _record_sent(
+                db,
+                user_id,
+                email_tag,
+                "medication_programmed_email",
+                datetime.now(),
+                datetime.now(),
+            )
+            sent_any = True
+    return sent_any
+
+
+def _send_medication_purchase_notifications(
+    db: Session,
+    med: models.Medication,
+    purchase: models.MedicationPurchase,
+    profile: models.HealthProfile | None = None,
+    owner_user: models.User | None = None,
+) -> bool:
+    if not med or not purchase:
+        return False
+    recipients, _, owner, patient_name = _medication_notification_recipients(
+        db,
+        med,
+        owner_user=owner_user,
+        profile=profile,
+    )
+    if not recipients and owner:
+        recipients = [
+            {
+                "user_id": int(owner.id),
+                "name": (owner.name or owner.email or f"Usuario #{owner.id}").strip(),
+                "email": (owner.email or "").strip(),
+                "user": owner,
+                "is_owner": True,
+            }
+        ]
+    if not recipients:
+        return False
+    amount_value = getattr(purchase, "amount_total", None)
+    currency = getattr(purchase, "currency", None) or "CLP"
+    amount_label = ""
+    if amount_value is not None:
+        try:
+            amount_label = f"{currency} {float(amount_value):,.0f}".replace(",", ".")
+        except Exception:
+            amount_label = f"{currency} {amount_value}"
+    purchased_at_label = _format_medication_datetime_label(getattr(purchase, "purchased_at", None))
+    stock_label = f"{int(getattr(purchase, 'new_stock_total_doses', 0) or 0)} dosis cargadas"
+    assigned_name = getattr(purchase, "assigned_name_snapshot", "") or "Sin responsable"
+    purchased_by_name = getattr(purchase, "purchased_by_name_snapshot", "") or "Sin registrar"
+    sent_any = False
+    for recipient in recipients:
+        user_id = int(recipient.get("user_id") or 0)
+        if user_id <= 0:
+            continue
+        push_tag = f"medication-purchase-{purchase.id}-{user_id}"
+        if not _notification_already_sent(db, push_tag):
+            body = (
+                f"{purchased_by_name} marcó como comprado {med.name} para {patient_name}. "
+                f"Nuevo stock: {int(getattr(purchase, 'new_stock_total_doses', 0) or 0)} dosis."
+            )
+            sent = _send_push_to_user(
+                db,
+                user_id,
+                {
+                    "title": "Compra de medicamento registrada",
+                    "body": body,
+                    "url": "/medications",
+                    "priority": "high",
+                    "sound": "medication",
+                    "medicationId": med.id,
+                    "userId": user_id,
+                    "tag": push_tag,
+                },
+            )
+            if sent:
+                _record_sent(
+                    db,
+                    user_id,
+                    push_tag,
+                    "medication_purchase",
+                    datetime.now(),
+                    datetime.now(),
+                )
+                sent_any = True
+
+        recipient_user = recipient.get("user")
+        email_tag = f"medication-purchase-email-{purchase.id}-{user_id}"
+        if (
+            recipient_user
+            and getattr(recipient_user, "email", "")
+            and not _notification_already_sent(db, email_tag)
+        ):
+            _send_medication_purchase_email_safe(
+                recipient_user.email,
+                recipient.get("name") or "",
+                {
+                    "patient_name": patient_name,
+                    "medication_name": getattr(purchase, "medication_name_snapshot", None) or med.name or "Medicamento",
+                    "dose": getattr(purchase, "dose_snapshot", None) or med.dose or "",
+                    "assigned_name": assigned_name,
+                    "purchased_by_name": purchased_by_name,
+                    "purchased_at_label": purchased_at_label,
+                    "amount_label": amount_label,
+                    "stock_label": stock_label,
+                    "notes": getattr(purchase, "notes", None) or "",
+                },
+                receipt_filename=getattr(purchase, "receipt_filename", None),
+                receipt_bytes=getattr(purchase, "receipt_file_data", None),
+                receipt_mime_type=getattr(purchase, "receipt_mime_type", None),
+            )
+            _record_sent(
+                db,
+                user_id,
+                email_tag,
+                "medication_purchase_email",
+                datetime.now(),
+                datetime.now(),
+            )
+            sent_any = True
+    return sent_any
+
+
+def _record_medication_purchase(
+    db: Session,
+    med: models.Medication,
+    profile: models.HealthProfile | None,
+    current_user: models.User,
+    *,
+    new_stock_total_doses: int,
+    amount_total: float | None = None,
+    currency: str | None = None,
+    notes: str | None = None,
+    purchased_at: datetime | None = None,
+    receipt_filename: str | None = None,
+    receipt_mime_type: str | None = None,
+    receipt_bytes: bytes | None = None,
+) -> models.MedicationPurchase:
+    previous_remaining = _medication_remaining_doses(med)
+    selected_contacts = _medication_selected_refill_contacts(
+        med,
+        contacts=_medication_refill_contacts(db, getattr(med, "user_id", None)),
+    )
+    assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts)
+    normalized_stock = max(int(new_stock_total_doses or 0), 0)
+    purchase = models.MedicationPurchase(
+        user_id=int(getattr(med, "user_id", 0) or 0),
+        medication_id=int(getattr(med, "id", 0) or 0),
+        profile_id=int(getattr(profile, "id", 0) or 0) or None,
+        assigned_user_id=int(assignee.get("user_id") or 0) if assignee else None,
+        purchased_by_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+        medication_name_snapshot=(getattr(med, "name", None) or "").strip(),
+        dose_snapshot=(getattr(med, "dose", None) or "").strip(),
+        assigned_name_snapshot=(assignee.get("name") if assignee else "") or "",
+        purchased_by_name_snapshot=(getattr(current_user, "name", None) or getattr(current_user, "email", None) or "").strip(),
+        quantity_added_doses=normalized_stock,
+        previous_remaining_doses=previous_remaining,
+        new_stock_total_doses=normalized_stock,
+        amount_total=amount_total,
+        currency=((currency or "CLP").strip().upper() or "CLP")[:8],
+        notes=_clip_text(notes or "", 500),
+        receipt_filename=receipt_filename,
+        receipt_mime_type=receipt_mime_type,
+        receipt_file_data=receipt_bytes,
+        purchased_at=purchased_at or datetime.now(),
+    )
+    if normalized_stock > 0:
+        med.stock_total_doses = normalized_stock
+    med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+    med.refill_last_notified_at = None
+    med.refill_last_notified_remaining = None
+    db.add(purchase)
+    db.add(med)
+    return _decorate_medication_purchase(purchase)
 
 
 def _attach_medication_adherence(
@@ -4032,6 +4632,50 @@ def _job_send_medication_reminders(
         raise
     finally:
         db.close()
+
+
+def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
+    db = SessionLocal()
+    metrics = {"job": "send_note_reminders", "sent": 0, "errors": 0}
+    try:
+        now = datetime.now()
+        window_start = now - timedelta(seconds=SCHEDULE_WINDOW_SECONDS)
+        due_notes = (
+            db.query(models.ProfileNote)
+            .filter(
+                models.ProfileNote.reminder_at.isnot(None),
+                models.ProfileNote.reminder_sent.is_(False),
+                models.ProfileNote.reminder_at >= window_start,
+                models.ProfileNote.reminder_at <= now,
+            )
+            .limit(50)
+            .all()
+        )
+        for note in due_notes:
+            if deadline_at and time.time() >= deadline_at:
+                break
+            try:
+                sent = _send_push_to_user(
+                    db,
+                    note.created_by_user_id,
+                    {
+                        "title": "Recordatorio de nota",
+                        "body": note.note[:120] + ("..." if len(note.note) > 120 else ""),
+                        "tag": f"note-reminder-{note.id}",
+                    },
+                )
+                note.reminder_sent = True
+                db.add(note)
+                db.commit()
+                if sent:
+                    metrics["sent"] += 1
+            except Exception as exc:
+                db.rollback()
+                metrics["errors"] += 1
+                print(f"WARNING note reminder note_id={note.id}: {exc}")
+    finally:
+        db.close()
+    return metrics
 
 
 def _job_send_refill_alerts(
@@ -6617,6 +7261,9 @@ def _profile_note_out(item: models.ProfileNote):
         created_by_name=(author.name if author else ""),
         note=item.note,
         visibility=item.visibility or "shared",
+        color=item.color or "yellow",
+        reminder_at=item.reminder_at,
+        reminder_sent=bool(item.reminder_sent),
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
@@ -15795,11 +16442,16 @@ async def create_profile_note(
     if not note_text:
         raise HTTPException(status_code=400, detail="La nota no puede estar vacía")
 
+    raw_color = (payload.color or "yellow").strip().lower()
+    safe_color = raw_color if raw_color in schemas.NOTE_COLORS else "yellow"
     item = models.ProfileNote(
         profile_id=profile_id,
         created_by_user_id=current_user.id,
         note=note_text,
         visibility=(payload.visibility or "shared").strip() or "shared",
+        color=safe_color,
+        reminder_at=payload.reminder_at,
+        reminder_sent=False,
     )
     db.add(item)
     _log_profile_activity(
@@ -15846,6 +16498,12 @@ async def update_profile_note(
     item.note = updated_note
     if payload.visibility is not None:
         item.visibility = (payload.visibility or "shared").strip() or "shared"
+    if payload.color is not None:
+        raw_color = payload.color.strip().lower()
+        item.color = raw_color if raw_color in schemas.NOTE_COLORS else "yellow"
+    if "reminder_at" in (payload.model_fields_set or set()):
+        item.reminder_at = payload.reminder_at
+        item.reminder_sent = False
     item.updated_at = datetime.now()
     _log_profile_activity(
         db,
@@ -19018,6 +19676,7 @@ async def list_medications(
 @app.post("/medications", response_model=schemas.MedicationOut)
 async def create_medication(
     med_in: schemas.MedicationCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -19073,6 +19732,16 @@ async def create_medication(
         db.commit()
         db.refresh(med)
         _attach_medication_adherence(db, [med], current_user, owner_user_id=target_user_id)
+        if med.refill_enabled:
+            try:
+                _send_medication_programmed_notifications(
+                    db,
+                    med,
+                    profile=profile,
+                    owner_user=current_user if int(current_user.id) == int(target_user_id) else None,
+                )
+            except Exception as notify_exc:
+                print(f"WARNING medication programmed notifications {med.id}: {notify_exc}")
         return med
     except Exception as e:
         db.rollback()

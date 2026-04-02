@@ -299,14 +299,21 @@ class FamilyReportOut(BaseModel):
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
 
+NOTE_COLORS = {"yellow", "pink", "mint", "lavender", "peach"}
+
+
 class ProfileNoteCreate(BaseModel):
     note: str
     visibility: Optional[str] = "shared"
+    color: Optional[str] = "yellow"
+    reminder_at: Optional[datetime] = None
 
 
 class ProfileNoteUpdate(BaseModel):
     note: Optional[str] = None
     visibility: Optional[str] = None
+    color: Optional[str] = None
+    reminder_at: Optional[datetime] = None
 
 
 class ProfileNoteOut(BaseModel):
@@ -316,10 +323,13 @@ class ProfileNoteOut(BaseModel):
     created_by_name: Optional[str] = ""
     note: str
     visibility: str
+    color: str = "yellow"
+    reminder_at: Optional[datetime] = None
+    reminder_sent: bool = False
     created_at: datetime
     updated_at: datetime
 
-    @field_serializer('created_at', 'updated_at')
+    @field_serializer('created_at', 'updated_at', 'reminder_at')
     def serialize_note_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
@@ -546,6 +556,38 @@ class MedicationOut(MedicationBase):
         if dt is None:
             return None
         # Serializar en formato ISO sin conversión a UTC
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class MedicationPurchaseOut(BaseModel):
+    id: int
+    user_id: int
+    medication_id: int
+    profile_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
+    purchased_by_user_id: Optional[int] = None
+    medication_name_snapshot: str = ""
+    dose_snapshot: str = ""
+    assigned_name_snapshot: str = ""
+    purchased_by_name_snapshot: str = ""
+    quantity_added_doses: int = 0
+    previous_remaining_doses: Optional[int] = None
+    new_stock_total_doses: int = 0
+    amount_total: Optional[float] = None
+    currency: str = "CLP"
+    notes: Optional[str] = ""
+    receipt_filename: Optional[str] = None
+    has_receipt: bool = False
+    purchased_at: Optional[datetime] = None
+    created_at: datetime
+
+    @field_serializer('purchased_at', 'created_at')
+    def serialize_purchase_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
     class Config:

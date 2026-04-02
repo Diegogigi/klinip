@@ -7831,6 +7831,11 @@ body.theme-dark .primary-btn {
   box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
 }
 
+.med-refill-participant.is-dragging {
+  opacity: 0.72;
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.16);
+}
+
 .med-refill-participant-main {
   display: flex;
   align-items: flex-start;
@@ -7859,6 +7864,37 @@ body.theme-dark .primary-btn {
   color: #64748b;
   font-size: 0.75rem;
   line-height: 1.35;
+}
+
+.med-refill-drag-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 0.14rem;
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 0.48rem 0.7rem;
+  border-radius: 10px;
+  border: 1px dashed #bfdbfe;
+  background: rgba(239, 246, 255, 0.78);
+  text-align: left;
+}
+
+.med-refill-drag-hint strong {
+  color: #1d4ed8;
+  font-size: 0.73rem;
+  line-height: 1.2;
+}
+
+.med-refill-drag-hint span {
+  color: #64748b;
+  font-size: 0.71rem;
+  line-height: 1.3;
+  max-width: 172px;
+}
+
+.med-inline-helper-btn {
+  margin-top: 0.45rem;
+  align-self: flex-start;
 }
 
 .med-refill-order-actions {
@@ -8447,6 +8483,24 @@ body.theme-dark .med-refill-participant.is-selected {
   background: linear-gradient(180deg, rgba(14, 116, 144, 0.16) 0%, rgba(15, 23, 42, 0.96) 100%);
   border-color: rgba(56, 189, 248, 0.32);
   box-shadow: none;
+}
+
+body.theme-dark .med-refill-participant.is-dragging {
+  opacity: 0.78;
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.36);
+}
+
+body.theme-dark .med-refill-drag-hint {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: #334155;
+}
+
+body.theme-dark .med-refill-drag-hint strong {
+  color: #7dd3fc;
+}
+
+body.theme-dark .med-refill-drag-hint span {
+  color: #94a3b8;
 }
 
 body.theme-dark .med-refill-order-actions .secondary-btn {
@@ -15315,6 +15369,93 @@ body.theme-dark .home-ops-action-icon {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
+/* ── Post-it: compositor con color de fondo ─────────────────── */
+.home-note-composer.note-color-yellow { background: #fffde7; border-radius: 16px; padding: 0.9rem; }
+.home-note-composer.note-color-pink   { background: #fce4ec; border-radius: 16px; padding: 0.9rem; }
+.home-note-composer.note-color-mint   { background: #e8f5e9; border-radius: 16px; padding: 0.9rem; }
+.home-note-composer.note-color-lavender { background: #ede7f6; border-radius: 16px; padding: 0.9rem; }
+.home-note-composer.note-color-peach  { background: #fff3e0; border-radius: 16px; padding: 0.9rem; }
+
+/* ── Post-it: selector de color ─────────────────────────────── */
+.home-note-color-picker {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.home-note-color-swatch-yellow,
+.home-note-color-swatch-pink,
+.home-note-color-swatch-mint,
+.home-note-color-swatch-lavender,
+.home-note-color-swatch-peach {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.home-note-color-swatch-yellow   { background: #fdd835; }
+.home-note-color-swatch-pink     { background: #f48fb1; }
+.home-note-color-swatch-mint     { background: #66bb6a; }
+.home-note-color-swatch-lavender { background: #b39ddb; }
+.home-note-color-swatch-peach    { background: #ffb74d; }
+
+.home-note-color-swatch-yellow.is-selected,
+.home-note-color-swatch-pink.is-selected,
+.home-note-color-swatch-mint.is-selected,
+.home-note-color-swatch-lavender.is-selected,
+.home-note-color-swatch-peach.is-selected {
+  border-color: #0f172a;
+  transform: scale(1.18);
+}
+
+/* ── Post-it: fila de recordatorio ─────────────────────────── */
+.home-note-reminder-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.home-note-reminder-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.home-note-reminder-input {
+  font: inherit;
+  font-size: 0.78rem;
+  border: 1px solid #cfdbec;
+  border-radius: 10px;
+  padding: 0.42rem 0.7rem;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  width: 100%;
+}
+
+.home-note-reminder-input:focus {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+}
+
+.home-note-reminder-clear {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.72rem;
+  color: #dc4b5f;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .home-note-actions {
   display: flex;
   justify-content: flex-end;
@@ -19244,6 +19385,50 @@ body.theme-dark .voice-share-option {
 
 .home-note-dot.tone-amber {
   background: #d97706;
+}
+
+/* ── Post-it: tarjeta de nota con color ─────────────────────── */
+.home-note-row.note-color-yellow  { background: #fffde7; border-radius: 14px; padding: 0.85rem 0.9rem; border-bottom: none; margin-bottom: 0.5rem; }
+.home-note-row.note-color-pink    { background: #fce4ec; border-radius: 14px; padding: 0.85rem 0.9rem; border-bottom: none; margin-bottom: 0.5rem; }
+.home-note-row.note-color-mint    { background: #e8f5e9; border-radius: 14px; padding: 0.85rem 0.9rem; border-bottom: none; margin-bottom: 0.5rem; }
+.home-note-row.note-color-lavender{ background: #ede7f6; border-radius: 14px; padding: 0.85rem 0.9rem; border-bottom: none; margin-bottom: 0.5rem; }
+.home-note-row.note-color-peach   { background: #fff3e0; border-radius: 14px; padding: 0.85rem 0.9rem; border-bottom: none; margin-bottom: 0.5rem; }
+
+.home-note-row.note-color-yellow:last-child,
+.home-note-row.note-color-pink:last-child,
+.home-note-row.note-color-mint:last-child,
+.home-note-row.note-color-lavender:last-child,
+.home-note-row.note-color-peach:last-child { margin-bottom: 0; }
+
+/* ── Post-it: punto de color en la nota ─────────────────────── */
+.home-note-dot.note-color-dot-yellow   { background: #fdd835; }
+.home-note-dot.note-color-dot-pink     { background: #f48fb1; }
+.home-note-dot.note-color-dot-mint     { background: #66bb6a; }
+.home-note-dot.note-color-dot-lavender { background: #b39ddb; }
+.home-note-dot.note-color-dot-peach    { background: #ffb74d; }
+
+/* ── Post-it: badge de recordatorio ─────────────────────────── */
+.home-note-reminder-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  font-size: 0.7rem;
+  color: #6366f1;
+  font-weight: 600;
+  margin-top: 0.18rem;
+}
+
+.home-note-reminder-badge::before {
+  content: "⏰";
+  font-size: 0.68rem;
+}
+
+.home-note-reminder-badge.is-sent {
+  color: #16a34a;
+}
+
+.home-note-reminder-badge.is-sent::before {
+  content: "✓";
 }
 
 .home-note-copy,
@@ -23821,14 +24006,15 @@ body.theme-dark .records-mobile-link {
     align-items: stretch;
   }
 
-  .med-refill-order-actions {
+  .med-refill-drag-hint {
     width: 100%;
-    flex-direction: row;
+    max-width: none;
+    padding: 0.45rem 0.62rem;
   }
 
-  .med-refill-order-actions .secondary-btn {
-    flex: 1 1 0;
-    min-width: 0;
+  .med-refill-drag-hint span {
+    max-width: none;
+    font-size: 0.7rem;
   }
 
   .timeline-overview-card,
