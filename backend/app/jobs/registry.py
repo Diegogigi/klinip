@@ -41,10 +41,29 @@ def job_specs() -> list[dict]:
 
 
 def run_scheduled_jobs_once() -> list[dict]:
+    # Notification jobs MUST run within the schedule window or reminders are
+    # permanently missed.  Enforce a cycle budget so that slow AI jobs cannot
+    # starve appointment/medication reminder jobs.
+    cycle_budget = float(os.getenv("WORKER_CYCLE_BUDGET_SECONDS") or "50")
+    job_timeout = float(os.getenv("WORKER_JOB_TIMEOUT_SECONDS") or "25")
+    cycle_start = time.time()
     summaries = []
     for spec in job_specs():
+        elapsed = time.time() - cycle_start
+        remaining = cycle_budget - elapsed
+        if remaining <= 0:
+            print(
+                f"WARNING scheduler: cycle budget exhausted, skipping {spec['name']} "
+                f"elapsed_s={elapsed:.1f} budget_s={cycle_budget}"
+            )
+            break
+        deadline_at = time.time() + min(remaining, job_timeout)
         started = time.time()
-        metrics = spec["handler"]()
+        try:
+            metrics = spec["handler"](deadline_at=deadline_at)
+        except Exception as exc:
+            metrics = {"job": spec["name"], "errors": 1}
+            print(f"WARNING scheduler job {spec['name']}: {exc}")
         metrics["elapsed_ms"] = int((time.time() - started) * 1000)
         summaries.append(metrics)
     return summaries

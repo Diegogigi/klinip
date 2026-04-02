@@ -423,7 +423,15 @@ function shouldShowNotification(tag) {
 }
 
 self.addEventListener("push", (event) => {
-  const data = event.data ? event.data.json() : {};
+  let data = {};
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (_e) {
+      // Malformed payload — still show a generic notification rather than silently failing
+      data = { title: "Klinip - Recordatorio", body: event.data.text() || "" };
+    }
+  }
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";

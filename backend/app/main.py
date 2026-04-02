@@ -2519,7 +2519,7 @@ def _send_profile_access_removed_email_safe(
 
 
 
-SCHEDULE_WINDOW_SECONDS = 60
+SCHEDULE_WINDOW_SECONDS = 90   # wider than interval to absorb scheduler drift
 SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
 AI_REFRESH_INTERVAL_SECONDS = 600
@@ -2768,6 +2768,15 @@ def _build_med_trigger(day: datetime, hour: int, minute: int = 0) -> datetime:
     return day_start + timedelta(hours=hour, minutes=minute)
 
 
+def _coerce_dt_aware(dt: datetime, reference: datetime) -> datetime:
+    """Make dt timezone-aware using the reference's tzinfo if dt is naive."""
+    if dt.tzinfo is None and reference is not None and reference.tzinfo is not None:
+        return dt.replace(tzinfo=reference.tzinfo)
+    if dt.tzinfo is not None and reference is not None and reference.tzinfo is None:
+        return dt.replace(tzinfo=None)
+    return dt
+
+
 def _medication_schedule_events_between(
     med: models.Medication,
     window_start: datetime,
@@ -2776,9 +2785,15 @@ def _medication_schedule_events_between(
     if window_end < window_start:
         return []
     anchor = _medication_start_at(med, window_start)
+    # Normalize: DB datetimes are naive; window datetimes may be tz-aware.
+    # Mismatch causes TypeError on comparison — coerce anchor to match window.
+    if window_start is not None:
+        anchor = _coerce_dt_aware(anchor, window_start)
     effective_start = max(anchor, window_start)
     effective_end = window_end
     medication_end_at = _medication_end_at(med)
+    if medication_end_at:
+        medication_end_at = _coerce_dt_aware(medication_end_at, window_end)
     if medication_end_at and medication_end_at < effective_end:
         effective_end = medication_end_at
     if effective_end < effective_start:
@@ -3552,12 +3567,18 @@ def _job_send_appointment_reminders(
             metrics["users"] += 1
             user_tz = _resolve_user_tz(user)
             now = datetime.now(user_tz)
+            now_naive = now.replace(tzinfo=None)
+            # Only fetch appointments within the reminder horizon.
+            # The max reminder offset is 7 days before, so appointments older
+            # than 8 days ago are irrelevant and skipped to avoid wasted work.
+            oldest_relevant = now_naive - timedelta(days=8)
             appointments_started_at = time.perf_counter()
             appointments = (
                 db.query(models.Appointment)
                 .filter(
                     models.Appointment.user_id == user_id,
                     models.Appointment.date_time.isnot(None),
+                    models.Appointment.date_time >= oldest_relevant,
                     models.Appointment.status != models.AppointmentStatus.realizada,
                 )
                 .all()
@@ -3694,6 +3715,9 @@ def _job_send_medication_reminders(
             metrics["users"] += 1
             user_tz = _resolve_user_tz(user)
             now = datetime.now(user_tz)
+            # DB stores naive datetimes; strip tzinfo for SQL comparison to avoid
+            # ProgrammingError on PostgreSQL (TIMESTAMP vs TIMESTAMPTZ mismatch).
+            now_naive = now.replace(tzinfo=None)
             medications_started_at = time.perf_counter()
             medications = (
                 db.query(models.Medication)
@@ -3701,7 +3725,7 @@ def _job_send_medication_reminders(
                     models.Medication.user_id == user_id,
                     or_(
                         models.Medication.end_date.is_(None),
-                        models.Medication.end_date >= now,
+                        models.Medication.end_date >= now_naive,
                     ),
                     models.Medication.completed.is_(False),
                 )
@@ -19183,7 +19207,7 @@ async def subscribe_push(
     p256dh = keys.get("p256dh")
     auth_key = keys.get("auth")
     if not (sub_in.endpoint and p256dh and auth_key):
-        raise HTTPException(status_code=400, detail="Suscripci??n incompleta")
+        raise HTTPException(status_code=400, detail="Suscripción incompleta")
 
     existing = (
         db.query(models.PushSubscription)
@@ -19199,12 +19223,12 @@ async def subscribe_push(
         try:
             db.commit()
             db.refresh(existing)
-            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
+            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
             return existing
         except Exception as exc:
             db.rollback()
             print(f"WARNING push subscribe: no se pudo actualizar endpoint existente: {exc}")
-            raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
+            raise HTTPException(status_code=503, detail="No se pudo registrar la suscripción push")
 
     sub = models.PushSubscription(
         user_id=current_user.id,
@@ -19216,7 +19240,7 @@ async def subscribe_push(
     try:
         db.commit()
         db.refresh(sub)
-        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
+        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
         return sub
     except IntegrityError:
         db.rollback()
@@ -19233,16 +19257,16 @@ async def subscribe_push(
             try:
                 db.commit()
                 db.refresh(recovered)
-                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=3)
+                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
                 return recovered
             except Exception as exc:
                 db.rollback()
                 print(f"WARNING push subscribe: no se pudo recuperar suscripcion duplicada: {exc}")
-        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
+        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripción push")
     except Exception as exc:
         db.rollback()
         print(f"WARNING push subscribe: error inesperado registrando suscripcion: {exc}")
-        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripcion push")
+        raise HTTPException(status_code=503, detail="No se pudo registrar la suscripción push")
 
 
 @app.post("/push/cleanup-duplicates")
@@ -19323,7 +19347,7 @@ async def test_push(
     if not _push_configured():
         raise HTTPException(
             status_code=400,
-            detail="Configuracion VAPID incompleta en el servidor",
+            detail="Configuración VAPID incompleta en el servidor",
         )
     subscriptions = (
         db.query(models.PushSubscription)
@@ -19333,7 +19357,7 @@ async def test_push(
     )
     if not subscriptions:
         raise HTTPException(
-            status_code=404, detail="No hay suscripci??n push para el usuario"
+            status_code=404, detail="No hay suscripción push para el usuario"
         )
     ok = False
     for sub in subscriptions:
@@ -19341,7 +19365,7 @@ async def test_push(
             sub,
             {
                 "title": "Prueba de notificaciones",
-                "body": "Notificaci??n push de prueba",
+                "body": "Notificación push de prueba",
                 "url": "/",
                 "priority": "normal",
                 "sound": "default",
@@ -19362,7 +19386,7 @@ async def send_reminders(
     if not _push_configured():
         raise HTTPException(
             status_code=400,
-            detail="Configuracion VAPID incompleta en el servidor",
+            detail="Configuración VAPID incompleta en el servidor",
         )
 
     # Obtener citas del usuario con fecha
@@ -19416,7 +19440,7 @@ async def send_reminders(
             priority = "urgent"
         elif 0 < days_until <= 1:
             should_send = True
-            message = "Tu cita es manana"
+            message = "Tu cita es mañana"
             priority = "high"
         elif days_until == 3:
             should_send = True
@@ -19430,7 +19454,7 @@ async def send_reminders(
         if should_send:
             title = f"Recordatorio: {appt.specialty or appt.type}"
             when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
-            center = appt.center or "Centro medico"
+            center = appt.center or "Centro médico"
             body = "\n".join([message, when_text, center])
 
             for subscription in subscriptions:
@@ -19467,7 +19491,7 @@ async def send_medication_reminders(
     if not _push_configured():
         raise HTTPException(
             status_code=400,
-            detail="Configuracion VAPID incompleta en el servidor",
+            detail="Configuración VAPID incompleta en el servidor",
         )
 
     # Obtener medicamentos activos del usuario

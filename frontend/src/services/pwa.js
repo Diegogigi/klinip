@@ -237,10 +237,16 @@ async function syncSubscriptionWithServer(subscription) {
     throw new Error("La suscripci\u00f3n push del navegador es inv\u00e1lida.");
   }
 
-  await subscribePush({
-    endpoint: subscription.endpoint,
-    keys,
-  });
+  try {
+    await subscribePush({
+      endpoint: subscription.endpoint,
+      keys,
+    });
+  } catch (err) {
+    // The browser subscription exists — a transient network error should not
+    // block the user.  The next visit will retry via ensurePushSubscription.
+    console.warn("Push: no se pudo sincronizar la suscripci\u00f3n con el servidor:", err?.message || err);
+  }
 }
 
 export async function ensurePushSubscription() {
