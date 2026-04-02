@@ -613,10 +613,18 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_feed_schema()
 
 
-def ensure_medication_schema():
+_medication_schema_ready = False
+
+
+def ensure_medication_schema(force: bool = False):
     """
     Garantiza que la tabla medications tenga columnas nuevas usadas por la app.
     """
+    global _medication_schema_ready
+    if _medication_schema_ready:
+        return
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
     try:
         inspector = inspect(engine)
         columns = {col["name"] for col in inspector.get_columns("medications")}
@@ -746,7 +754,9 @@ def ensure_medication_schema():
             )
         else:
             print("DEBUG ensure_medication_schema: tabla medications ya esta al dia")
+        _medication_schema_ready = True
     except Exception as exc:
+        _medication_schema_ready = False
         print(f"WARNING ensure_medication_schema: no se pudo ajustar la tabla: {exc}")
 
 
@@ -6143,6 +6153,7 @@ def _resolve_stat(env_key: str, db_value: int, fallback: int) -> int:
 def public_stats(db: Session = Depends(auth.get_db)):
     from . import models
 
+    ensure_medication_schema(force=True)
     user_count = db.query(models.User).count()
     appointment_count = db.query(models.Appointment).count()
     medication_count = db.query(models.Medication).count()
@@ -18709,6 +18720,7 @@ async def get_ai_adherence_summary(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
     medications = (
         db.query(models.Medication)
@@ -18986,6 +18998,7 @@ async def list_medications(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
     medications = (
         db.query(models.Medication)
@@ -19009,6 +19022,7 @@ async def create_medication(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     try:
+        ensure_medication_schema(force=True)
         profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
         available_refill_contacts = _medication_refill_contacts(db, target_user_id)
         refill_enabled = bool(getattr(med_in, "refill_enabled", False))
@@ -19075,6 +19089,7 @@ async def update_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -19152,6 +19167,7 @@ async def record_medication_intake(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -19338,6 +19354,7 @@ async def list_medication_intakes(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
     med = (
         db.query(models.Medication)
@@ -19374,6 +19391,7 @@ async def mark_medication_refill_purchased(
     avanza el índice de rotación (siguiente responsable en turno)
     y limpia el estado de notificación para permitir nuevo ciclo.
     """
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -19407,6 +19425,7 @@ async def delete_medication(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_medication_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)

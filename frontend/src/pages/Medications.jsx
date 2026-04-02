@@ -235,7 +235,8 @@ export default function Medications() {
   }, []);
 
   useEffect(() => {
-    if (!familyRefillAvailable) return;
+    const collaborationEnabled = Boolean(planInfo?.collaboration_enabled);
+    if (!collaborationEnabled || familyCaregivers.length === 0) return;
     if (!form.refill_enabled) return;
     if ((form.refill_participant_user_ids || []).length > 0) return;
     setForm((current) => ({
@@ -247,8 +248,8 @@ export default function Medications() {
           : current.refill_fixed_user_id,
     }));
   }, [
+    planInfo?.collaboration_enabled,
     familyCaregivers,
-    familyRefillAvailable,
     form.refill_enabled,
     form.refill_fixed_user_id,
     form.refill_mode,
