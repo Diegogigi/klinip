@@ -31070,92 +31070,15 @@ body.theme-dark .kfeed-pdf-name { color: #f1f5f9; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.kfeed-video-open-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 32px;
-  background: #2563eb;
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  padding: 0.3rem 0.8rem;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  font-family: inherit;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-.kfeed-video-open-btn:hover { background: #1d4ed8; }
 .kfeed-media-video {
   display: block;
   width: 100%;
   max-height: 460px;
   background: #020617;
 }
-.kfeed-video-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  background: rgba(2, 6, 23, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.kfeed-video-modal {
-  width: min(920px, 100%);
-  border-radius: 18px;
-  overflow: hidden;
-  background: #ffffff;
-  box-shadow: 0 28px 70px rgba(2, 6, 23, 0.32);
-}
-.kfeed-video-modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.8rem 0.95rem;
-  border-bottom: 1px solid var(--border, #e2e8f0);
-}
-.kfeed-video-modal-head strong {
-  min-width: 0;
-  color: var(--text-primary, #0f172a);
-  font-size: 0.92rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.kfeed-video-modal-close {
-  width: 34px;
-  height: 34px;
-  border: 1px solid #dbeafe;
-  border-radius: 999px;
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 1.2rem;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.kfeed-video-modal-player {
-  display: block;
-  width: 100%;
-  max-height: min(78vh, 760px);
-  background: #020617;
-}
 body.theme-dark .kfeed-video-viewer { border-color: #334155; background: #1e293b; }
 body.theme-dark .kfeed-video-topbar { background: #0f172a; border-color: #334155; }
 body.theme-dark .kfeed-video-name { color: #f1f5f9; }
-body.theme-dark .kfeed-video-modal { background: #0f172a; }
-body.theme-dark .kfeed-video-modal-head { border-color: #334155; }
-body.theme-dark .kfeed-video-modal-head strong { color: #f8fafc; }
-body.theme-dark .kfeed-video-modal-close {
-  background: rgba(30, 41, 59, 0.94);
-  border-color: #334155;
-  color: #7dd3fc;
-}
 
 /* ── Layout 2 columnas (desktop) ── */
 .kfeed-layout-wrapper {
@@ -31620,28 +31543,8 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
   .kfeed-video-name {
     font-size: 0.78rem;
   }
-  .kfeed-video-open-btn {
-    min-height: 30px;
-    padding: 0.28rem 0.72rem;
-    font-size: 0.76rem;
-  }
   .kfeed-media-video {
     max-height: 280px;
-  }
-  .kfeed-video-modal-backdrop {
-    padding: 0.7rem;
-  }
-  .kfeed-video-modal {
-    border-radius: 14px;
-  }
-  .kfeed-video-modal-head {
-    padding: 0.68rem 0.78rem;
-  }
-  .kfeed-video-modal-head strong {
-    font-size: 0.82rem;
-  }
-  .kfeed-video-modal-player {
-    max-height: 70vh;
   }
 }
 

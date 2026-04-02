@@ -118,45 +118,18 @@ function getVideoMimeType(filename = "") {
 }
 
 function AuthVideo({ postId, attachmentId, filename, previewUrl }) {
-  const [expanded, setExpanded] = useState(false);
   const src = previewUrl || getPostAttachmentUrl(postId, attachmentId);
   if (!src) return null;
   return (
-    <>
-      <div className="kfeed-video-viewer">
-        <div className="kfeed-video-topbar">
-          <span className="kfeed-video-name">{filename || "Video adjunto"}</span>
-          <button type="button" className="kfeed-video-open-btn" onClick={() => setExpanded(true)}>
-            Ver grande
-          </button>
-        </div>
-        <video className="kfeed-media-video" controls playsInline preload="metadata">
-          <source src={src} type={getVideoMimeType(filename)} />
-          Tu navegador no pudo reproducir este video.
-        </video>
+    <div className="kfeed-video-viewer">
+      <div className="kfeed-video-topbar">
+        <span className="kfeed-video-name">{filename || "Video adjunto"}</span>
       </div>
-      {expanded ? (
-        <div className="kfeed-video-modal-backdrop" onClick={() => setExpanded(false)}>
-          <div className="kfeed-video-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="kfeed-video-modal-head">
-              <strong>{filename || "Video adjunto"}</strong>
-              <button
-                type="button"
-                className="kfeed-video-modal-close"
-                onClick={() => setExpanded(false)}
-                aria-label="Cerrar visor de video"
-              >
-                &times;
-              </button>
-            </div>
-            <video className="kfeed-video-modal-player" controls playsInline autoPlay preload="metadata">
-              <source src={src} type={getVideoMimeType(filename)} />
-              Tu navegador no pudo reproducir este video.
-            </video>
-          </div>
-        </div>
-      ) : null}
-    </>
+      <video className="kfeed-media-video" controls playsInline preload="metadata">
+        <source src={src} type={getVideoMimeType(filename)} />
+        Tu navegador no pudo reproducir este video.
+      </video>
+    </div>
   );
 }
 

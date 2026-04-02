@@ -21658,6 +21658,8 @@ def get_attachment_file(
         raise HTTPException(status_code=403, detail="Sin acceso")
 
     filename = attachment.filename or "file.bin"
+    file_bytes = attachment.file_data
+    file_size = len(file_bytes)
     ext = Path(filename).suffix.lower()
     inline_mime_by_ext = {
         ".mov": "video/quicktime",
@@ -21668,10 +21670,50 @@ def get_attachment_file(
         ".ogv": "video/ogg",
     }
     mime_type = inline_mime_by_ext.get(ext) or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    base_headers = {
+        "Content-Disposition": f'inline; filename="{filename}"',
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "private, max-age=3600",
+    }
+    range_header = request.headers.get("range", "").strip()
+    if range_header:
+        match = re.match(r"bytes=(\d*)-(\d*)", range_header)
+        if not match:
+            raise HTTPException(status_code=416, detail="Rango inválido")
+        start_raw, end_raw = match.groups()
+        if not start_raw and not end_raw:
+            raise HTTPException(status_code=416, detail="Rango inválido")
+        if start_raw:
+            start = int(start_raw)
+            end = int(end_raw) if end_raw else file_size - 1
+        else:
+            suffix_length = int(end_raw)
+            if suffix_length <= 0:
+                raise HTTPException(status_code=416, detail="Rango inválido")
+            start = max(file_size - suffix_length, 0)
+            end = file_size - 1
+        end = min(end, file_size - 1)
+        if start < 0 or start >= file_size or end < start:
+            raise HTTPException(status_code=416, detail="Rango fuera de límites")
+        chunk = file_bytes[start : end + 1]
+        headers = {
+            **base_headers,
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Content-Length": str(len(chunk)),
+        }
+        return Response(
+            content=chunk,
+            status_code=206,
+            media_type=mime_type,
+            headers=headers,
+        )
     return Response(
-        content=attachment.file_data,
+        content=file_bytes,
         media_type=mime_type,
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            **base_headers,
+            "Content-Length": str(file_size),
+        },
     )
 
 
