@@ -307,7 +307,7 @@ export default function Medications() {
       const dueMeds = [];
       (meds || []).forEach((med) => {
         if (!isMedicationActiveAt(med, now)) return;
-        buildMedicationPromptEventsBetween(
+        buildMedicationScheduleEventsBetween(
           med,
           new Date(lastCheckedAt + 1),
           now
