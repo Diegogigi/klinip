@@ -19,6 +19,18 @@ import {
   toLocaleDateOrEmpty,
   toLocaleDateTimeOrEmpty,
 } from "../utils/dates";
+import {
+  buildMedicationScheduleEventsBetween,
+  deriveFrequencyIntervalHours,
+  deriveFrequencyPerDay,
+  getMedicationEffectiveEndAt,
+  getMedicationScheduleSummary,
+  getMedicationScheduleTimes,
+  getMedicationStartAt,
+  getNextMedicationDose,
+  isMedicationActiveAt,
+  parseDurationDays,
+} from "../utils/medicationSchedule";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
@@ -47,102 +59,6 @@ function getNewestMedicationRank(item) {
   return Number(item?.id || 0);
 }
 
-function parseScheduleTimeValue(value) {
-  if (!value || typeof value !== "string") return null;
-  const parts = value.split(":");
-  if (parts.length < 2) return null;
-  const hour = Number(parts[0]);
-  const minute = Number(parts[1]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-  return { hour, minute };
-}
-
-function deriveFrequencyIntervalHours(frequencyText = "") {
-  const text = String(frequencyText || "").toLowerCase();
-  const match = text.match(/cada\s+(\d{1,2})\s+hora/);
-  if (match) {
-    const hours = Number(match[1]);
-    if ([4, 6, 8, 12, 24].includes(hours)) return hours;
-  }
-  if (text.includes("24") && text.includes("hora")) return 24;
-  if ((text.includes("12") && text.includes("hora")) || text.includes("2 veces")) return 12;
-  if ((text.includes("8") && text.includes("hora")) || text.includes("3 veces")) return 8;
-  if ((text.includes("6") && text.includes("hora")) || text.includes("4 veces")) return 6;
-  return null;
-}
-
-function parseDurationDays(value = "") {
-  const text = String(value || "").toLowerCase().trim();
-  const daysMatch = text.match(/(\d+)\s*d[ií]a/);
-  if (daysMatch) return Number(daysMatch[1]);
-  const weeksMatch = text.match(/(\d+)\s*semana/);
-  if (weeksMatch) return Number(weeksMatch[1]) * 7;
-  return null;
-}
-
-function getMedicationStartAt(med) {
-  return parseDate(med?.start_at || med?.created_at || null);
-}
-
-function getMedicationEndAt(med) {
-  const explicitEnd = parseDate(med?.end_date);
-  if (explicitEnd) {
-    explicitEnd.setHours(23, 59, 59, 999);
-    return explicitEnd;
-  }
-  const startAt = getMedicationStartAt(med);
-  const durationDays = parseDurationDays(med?.duration || "");
-  if (!startAt || !durationDays) return null;
-  return new Date(startAt.getTime() + durationDays * 24 * 60 * 60 * 1000);
-}
-
-function buildMedicationPromptEventsBetween(med, windowStart, windowEnd) {
-  const startAt = getMedicationStartAt(med) || new Date(windowStart);
-  const effectiveStart = new Date(Math.max(startAt.getTime(), windowStart.getTime()));
-  const effectiveEnd = new Date(windowEnd);
-  const endAt = getMedicationEndAt(med);
-  if (endAt && endAt.getTime() < effectiveEnd.getTime()) {
-    effectiveEnd.setTime(endAt.getTime());
-  }
-  if (effectiveEnd.getTime() < effectiveStart.getTime()) return [];
-
-  const intervalHours = deriveFrequencyIntervalHours(med?.frequency || "");
-  if (intervalHours) {
-    const intervalMs = intervalHours * 60 * 60 * 1000;
-    const events = [];
-    let current = new Date(startAt);
-    if (current.getTime() < effectiveStart.getTime()) {
-      const jumpSteps = Math.floor((effectiveStart.getTime() - current.getTime()) / intervalMs);
-      current = new Date(current.getTime() + jumpSteps * intervalMs);
-      while (current.getTime() < effectiveStart.getTime()) {
-        current = new Date(current.getTime() + intervalMs);
-      }
-    }
-    while (current.getTime() <= effectiveEnd.getTime()) {
-      events.push(new Date(current));
-      current = new Date(current.getTime() + intervalMs);
-    }
-    return events;
-  }
-
-  const fixedSlot = parseScheduleTimeValue(med?.schedule_time || "") || {
-    hour: startAt.getHours(),
-    minute: startAt.getMinutes(),
-  };
-  const current = new Date(effectiveStart);
-  current.setHours(fixedSlot.hour, fixedSlot.minute, 0, 0);
-  if (current.getTime() < effectiveStart.getTime()) {
-    current.setDate(current.getDate() + 1);
-  }
-  const events = [];
-  while (current.getTime() <= effectiveEnd.getTime()) {
-    events.push(new Date(current));
-    current.setDate(current.getDate() + 1);
-  }
-  return events;
-}
-
 function buildDosePromptKey(med, date) {
   const trigger = parseDate(date);
   const stamp = trigger ? toLocalInputValue(trigger).replace("T", "_").replace(":", "-") : "manual";
@@ -158,16 +74,6 @@ function formatDoseClock(value) {
   }).format(parsed);
 }
 
-function getNextMedicationDose(med, now = new Date()) {
-  if (!med || med.completed) return null;
-  const events = buildMedicationPromptEventsBetween(
-    med,
-    now,
-    new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
-  );
-  return events.find((item) => item.getTime() >= now.getTime()) || null;
-}
-
 function formatMedicationDateTime(value) {
   const parsed = parseDate(value);
   if (!parsed) return "Sin dato";
@@ -177,15 +83,6 @@ function formatMedicationDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(parsed);
-}
-
-function isMedicationActiveToday(med, now) {
-  if (med?.completed) return false;
-  const startAt = getMedicationStartAt(med);
-  if (startAt && now.getTime() < startAt.getTime()) return false;
-  const endAt = getMedicationEndAt(med);
-  if (!endAt) return true;
-  return now.getTime() <= endAt.getTime();
 }
 
 function formatAlertDay(date) {
@@ -236,6 +133,7 @@ export default function Medications() {
     refill_enabled: false,
     refill_mode: "rotativo",
     refill_fixed_user_id: "",
+    refill_participant_user_ids: [],
     doses_per_intake: "1",
     frequency_per_day: "1",
     stock_total_doses: "",
@@ -337,6 +235,27 @@ export default function Medications() {
   }, []);
 
   useEffect(() => {
+    if (!familyRefillAvailable) return;
+    if (!form.refill_enabled) return;
+    if ((form.refill_participant_user_ids || []).length > 0) return;
+    setForm((current) => ({
+      ...current,
+      refill_participant_user_ids: familyCaregivers.map((item) => String(item.user_id)),
+      refill_fixed_user_id:
+        current.refill_mode === "fijo" && !current.refill_fixed_user_id && familyCaregivers[0]
+          ? String(familyCaregivers[0].user_id)
+          : current.refill_fixed_user_id,
+    }));
+  }, [
+    familyCaregivers,
+    familyRefillAvailable,
+    form.refill_enabled,
+    form.refill_fixed_user_id,
+    form.refill_mode,
+    form.refill_participant_user_ids,
+  ]);
+
+  useEffect(() => {
     if (!location.search) return;
     const params = new URLSearchParams(location.search);
     const intakeId = params.get("intake") || params.get("complete");
@@ -386,7 +305,7 @@ export default function Medications() {
 
       const dueMeds = [];
       (meds || []).forEach((med) => {
-        if (!isMedicationActiveToday(med, now)) return;
+        if (!isMedicationActiveAt(med, now)) return;
         buildMedicationPromptEventsBetween(
           med,
           new Date(lastCheckedAt + 1),
@@ -448,6 +367,7 @@ export default function Medications() {
       refill_enabled: false,
       refill_mode: "rotativo",
       refill_fixed_user_id: "",
+      refill_participant_user_ids: [],
       doses_per_intake: "1",
       frequency_per_day: "1",
       stock_total_doses: "",
@@ -481,8 +401,14 @@ export default function Medications() {
           familyCaregivers.length > 0,
         refill_mode: form.refill_mode || "rotativo",
         refill_fixed_user_id: form.refill_fixed_user_id ? parseInt(form.refill_fixed_user_id, 10) : null,
+        refill_participant_user_ids: (form.refill_participant_user_ids || [])
+          .map((value) => parseInt(value, 10))
+          .filter((value) => Number.isInteger(value) && value > 0),
         doses_per_intake: Math.max(parseFloat(form.doses_per_intake) || 1.0, 0.01),
-        frequency_per_day: Math.max(parseFloat(form.frequency_per_day) || 1.0, 0.01),
+        frequency_per_day: Math.max(
+          deriveFrequencyPerDay(form.frequency || "", form.frequency_per_day) || 1.0,
+          0.01
+        ),
         stock_total_doses:
           form.stock_total_doses === "" ? 0 : Math.max(parseInt(form.stock_total_doses, 10) || 0, 0),
         refill_alert_threshold_doses:
@@ -494,6 +420,22 @@ export default function Medications() {
       // Si es edición, incluir el id
       if (form.id) {
         payload.id = form.id;
+      }
+
+      if (payload.refill_enabled && payload.refill_participant_user_ids.length === 0) {
+        alert("Selecciona al menos un familiar para participar en la reposición.");
+        setLoading(false);
+        return;
+      }
+
+      if (
+        payload.refill_enabled &&
+        payload.refill_mode === "fijo" &&
+        !payload.refill_fixed_user_id
+      ) {
+        alert("Selecciona a la persona responsable fija de la compra.");
+        setLoading(false);
+        return;
       }
 
       await saveMedication(payload);
@@ -566,6 +508,9 @@ export default function Medications() {
       refill_enabled: Boolean(med.refill_enabled),
       refill_mode: med.refill_mode || "rotativo",
       refill_fixed_user_id: med.refill_fixed_user_id ? String(med.refill_fixed_user_id) : "",
+      refill_participant_user_ids: Array.isArray(med.refill_participant_user_ids)
+        ? med.refill_participant_user_ids.map((value) => String(value))
+        : familyCaregivers.map((item) => String(item.user_id)),
       doses_per_intake: med.doses_per_intake != null ? String(med.doses_per_intake) : "1",
       frequency_per_day: med.frequency_per_day != null ? String(med.frequency_per_day) : "1",
       stock_total_doses:
@@ -844,13 +789,17 @@ export default function Medications() {
       statusFilter === "all" ||
       (statusFilter === "active" && !med.completed) ||
       (statusFilter === "completed" && Boolean(med.completed)) ||
-      (statusFilter === "scheduled" && Boolean(med.schedule_time));
+      (statusFilter === "scheduled" && getMedicationScheduleTimes(med).length > 0);
     return matchesSearch && matchesStatus;
   });
   const familyRefillAvailable =
     Boolean(planInfo?.collaboration_enabled) && familyCaregivers.length > 0;
-  const familyRefillNames = familyCaregivers
-    .map((item) => item?.user_name || item?.user_email || "")
+  const familyRefillOptions = familyCaregivers.map((item) => ({
+    id: String(item?.user_id || ""),
+    name: item?.user_name || item?.user_email || `Familiar ${item?.user_id || ""}`,
+  }));
+  const familyRefillNames = familyRefillOptions
+    .map((item) => item.name || "")
     .filter(Boolean)
     .slice(0, 4);
   const frequencyValue = String(form.frequency || "").trim();
@@ -858,7 +807,90 @@ export default function Medications() {
   const medicationPreviewName = String(form.name || "").trim() || "Medicamento";
   const medicationPreviewDose = String(form.dose || "").trim();
   const medicationStartPreview = toLocaleDateTimeOrEmpty(form.start_at) || "";
+  const derivedFrequencyPerDay = deriveFrequencyPerDay(
+    frequencyValue,
+    form.frequency_per_day
+  );
+  const frequencyIntervalHours = deriveFrequencyIntervalHours(frequencyValue);
+  const formPreviewMedication = {
+    ...form,
+    computed_schedule_times: [],
+    computed_schedule_summary: "",
+    effective_end_date: null,
+  };
+  const schedulePreviewTimes = getMedicationScheduleTimes(formPreviewMedication);
+  const schedulePreviewSummary = getMedicationScheduleSummary(formPreviewMedication);
+  const endPreviewDate = getMedicationEffectiveEndAt(formPreviewMedication);
+  const refillParticipantIds = Array.isArray(form.refill_participant_user_ids)
+    ? form.refill_participant_user_ids
+    : [];
+  const refillParticipantItems = refillParticipantIds
+    .map((participantId) =>
+      familyRefillOptions.find((option) => option.id === String(participantId))
+    )
+    .filter(Boolean);
+  const stockTotalUnits = Math.max(parseInt(form.stock_total_doses, 10) || 0, 0);
+  const alertThresholdUnits = Math.max(
+    parseInt(form.refill_alert_threshold_doses, 10) || 0,
+    0
+  );
+  const dosesPerIntakeValue = Math.max(parseFloat(form.doses_per_intake) || 0, 0);
+  const dailyUnitsEstimate =
+    dosesPerIntakeValue > 0 && derivedFrequencyPerDay
+      ? dosesPerIntakeValue * derivedFrequencyPerDay
+      : 0;
+  const stockCoverageDays =
+    stockTotalUnits > 0 && dailyUnitsEstimate > 0
+      ? stockTotalUnits / dailyUnitsEstimate
+      : null;
+  const thresholdCoverageDays =
+    alertThresholdUnits > 0 && dailyUnitsEstimate > 0
+      ? alertThresholdUnits / dailyUnitsEstimate
+      : null;
   const remindersReady = Boolean(frequencyValue && form.start_at);
+
+  const toggleRefillParticipant = (participantId) => {
+    setForm((current) => {
+      const currentIds = Array.isArray(current.refill_participant_user_ids)
+        ? current.refill_participant_user_ids
+        : [];
+      const exists = currentIds.includes(participantId);
+      const nextIds = exists
+        ? currentIds.filter((item) => item !== participantId)
+        : [...currentIds, participantId];
+      const nextFixedUserId =
+        current.refill_mode === "fijo" &&
+        current.refill_fixed_user_id &&
+        !nextIds.includes(current.refill_fixed_user_id)
+          ? ""
+          : current.refill_fixed_user_id;
+      return {
+        ...current,
+        refill_participant_user_ids: nextIds,
+        refill_fixed_user_id: nextFixedUserId,
+      };
+    });
+  };
+
+  const moveRefillParticipant = (participantId, direction) => {
+    setForm((current) => {
+      const currentIds = Array.isArray(current.refill_participant_user_ids)
+        ? [...current.refill_participant_user_ids]
+        : [];
+      const currentIndex = currentIds.indexOf(participantId);
+      if (currentIndex === -1) return current;
+      const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (nextIndex < 0 || nextIndex >= currentIds.length) return current;
+      [currentIds[currentIndex], currentIds[nextIndex]] = [
+        currentIds[nextIndex],
+        currentIds[currentIndex],
+      ];
+      return {
+        ...current,
+        refill_participant_user_ids: currentIds,
+      };
+    });
+  };
 
   const formatTimelineStamp = (value) => {
     if (!value) return "Sin fecha";
@@ -1218,6 +1250,16 @@ export default function Medications() {
                     <strong>{medicationPreviewName}{medicationPreviewDose ? ` · ${medicationPreviewDose}` : ""}</strong>
                     <span>{frequencyValue ? `Frecuencia: ${frequencyValue}` : "Aún no indicas la frecuencia."}</span>
                     <span>{medicationStartPreview ? `Primera toma: ${medicationStartPreview}` : "Falta indicar la primera toma."}</span>
+                    <span>
+                      {schedulePreviewSummary
+                        ? `Horarios estimados: ${schedulePreviewSummary}`
+                        : "Los horarios se calcularán desde la primera toma."}
+                    </span>
+                    <span>
+                      {endPreviewDate
+                        ? `Última toma estimada: ${formatMedicationDateTime(endPreviewDate)}`
+                        : "La fecha de término se estima cuando indicas una duración."}
+                    </span>
                   </div>
                 </section>
 
@@ -1250,9 +1292,12 @@ export default function Medications() {
                           value={form.end_date}
                           onChange={(e) => setForm({ ...form, end_date: e.target.value })}
                         />
+                        <small className="muted med-form-helper">
+                          Si la dejas vacía, Klinip usará la duración para estimar la última toma.
+                        </small>
                       </div>
                       <div className="input-group">
-                        <label className="input-label">Hora base</label>
+                        <label className="input-label">Hora inicial</label>
                         <input
                           className="input-field"
                           type="time"
@@ -1260,7 +1305,41 @@ export default function Medications() {
                           onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
                         />
                         <small className="muted med-form-helper">
-                          Si no la cambias, se usa la hora de la primera toma.
+                          Si no la cambias, Klinip usa la hora de la primera toma para repartir el resto del día.
+                        </small>
+                      </div>
+                    </div>
+
+                    <div className="med-derived-grid">
+                      <div className="med-derived-card">
+                        <span className="med-derived-label">Tomas por día</span>
+                        <strong>
+                          {derivedFrequencyPerDay
+                            ? `${Number(derivedFrequencyPerDay).toLocaleString("es-CL")} al día`
+                            : "Se calculará cuando la frecuencia sea reconocible"}
+                        </strong>
+                        <small>
+                          {frequencyIntervalHours
+                            ? `Detectado desde “${frequencyValue}”.`
+                            : "Si la frecuencia no es clara, podrás afinar la reposición manualmente."}
+                        </small>
+                      </div>
+                      <div className="med-derived-card">
+                        <span className="med-derived-label">Horarios</span>
+                        <strong>{schedulePreviewSummary || "Pendiente"}</strong>
+                        <small>
+                          {schedulePreviewTimes.length > 1
+                            ? `Se repetirán ${schedulePreviewTimes.length} veces al día.`
+                            : "Se usará un horario base diario."}
+                        </small>
+                      </div>
+                      <div className="med-derived-card">
+                        <span className="med-derived-label">Término estimado</span>
+                        <strong>{endPreviewDate ? formatMedicationDateTime(endPreviewDate) : "Pendiente"}</strong>
+                        <small>
+                          {durationValue
+                            ? "Klinip lo recalcula si cambias duración, frecuencia o primera toma."
+                            : "Agrega duración si quieres que Klinip lo calcule automáticamente."}
                         </small>
                       </div>
                     </div>
@@ -1280,7 +1359,7 @@ export default function Medications() {
                         <div>
                           <h4>Reposición familiar</h4>
                           <p>
-                            Sirve para avisar quién debe comprar el medicamento cuando quede poco stock.
+                            Klinip puede avisar quién debe comprar este medicamento cuando esté por acabarse.
                           </p>
                         </div>
                         <label className="med-refill-toggle">
@@ -1292,6 +1371,17 @@ export default function Medications() {
                               setForm((current) => ({
                                 ...current,
                                 refill_enabled: e.target.checked,
+                                refill_participant_user_ids:
+                                  e.target.checked && (!current.refill_participant_user_ids || !current.refill_participant_user_ids.length)
+                                    ? familyRefillOptions.map((item) => item.id)
+                                    : current.refill_participant_user_ids,
+                                refill_fixed_user_id:
+                                  e.target.checked &&
+                                  current.refill_mode === "fijo" &&
+                                  !current.refill_fixed_user_id &&
+                                  familyRefillOptions[0]
+                                    ? familyRefillOptions[0].id
+                                    : current.refill_fixed_user_id,
                               }))
                             }
                           />
@@ -1302,7 +1392,7 @@ export default function Medications() {
                         <>
                           <div className="form-row">
                             <div className="input-group">
-                              <label className="input-label">Dosis del envase</label>
+                              <label className="input-label">Unidades del envase</label>
                               <input
                                 className="input-field"
                                 type="number"
@@ -1316,6 +1406,9 @@ export default function Medications() {
                                 }
                                 placeholder="Ej: 30"
                               />
+                              <small className="muted med-form-helper">
+                                Cuántas pastillas, cápsulas o unidades trae la caja o envase nuevo.
+                              </small>
                             </div>
                             <div className="input-group">
                               <label className="input-label">Avisar cuando queden</label>
@@ -1332,11 +1425,14 @@ export default function Medications() {
                                 }
                                 placeholder="Ej: 8"
                               />
+                              <small className="muted med-form-helper">
+                                Puedes pensar este valor como “cuántas unidades mínimas quiero tener antes de comprar”.
+                              </small>
                             </div>
                           </div>
                           <div className="form-row">
                             <div className="input-group">
-                              <label className="input-label">Dosis por toma</label>
+                              <label className="input-label">Unidades por toma</label>
                               <input
                                 className="input-field"
                                 type="number"
@@ -1348,34 +1444,99 @@ export default function Medications() {
                                 }
                                 placeholder="Ej: 1"
                               />
+                              <small className="muted med-form-helper">
+                                Ejemplo: 1 pastilla por toma o 0,5 si usas media unidad.
+                              </small>
                             </div>
                             <div className="input-group">
                               <label className="input-label">Tomas por día</label>
-                              <input
-                                className="input-field"
-                                type="number"
-                                min="0.01"
-                                step="0.5"
-                                value={form.frequency_per_day}
-                                onChange={(e) =>
-                                  setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
-                                }
-                                placeholder="Ej: 2"
-                              />
+                              {frequencyIntervalHours ? (
+                                <div className="med-derived-inline">
+                                  <strong>{derivedFrequencyPerDay || 1}</strong>
+                                  <span>Calculado automáticamente desde la frecuencia</span>
+                                </div>
+                              ) : (
+                                <>
+                                  <input
+                                    className="input-field"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.5"
+                                    value={form.frequency_per_day}
+                                    onChange={(e) =>
+                                      setForm((current) => ({ ...current, frequency_per_day: e.target.value }))
+                                    }
+                                    placeholder="Ej: 2"
+                                  />
+                                  <small className="muted med-form-helper">
+                                    Úsalo solo si la frecuencia escrita no permite calcularlo sola.
+                                  </small>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="med-derived-grid is-refill">
+                            <div className="med-derived-card">
+                              <span className="med-derived-label">Consumo estimado</span>
+                              <strong>
+                                {dailyUnitsEstimate > 0
+                                  ? `${Number(dailyUnitsEstimate).toLocaleString("es-CL")} unidades al día`
+                                  : "Completa frecuencia y unidades por toma"}
+                              </strong>
+                              <small>
+                                {dailyUnitsEstimate > 0
+                                  ? "Se usa para calcular cuántos días dura el envase."
+                                  : "Klinip necesita saber cada cuánto lo tomas y cuántas unidades usas por toma."}
+                              </small>
+                            </div>
+                            <div className="med-derived-card">
+                              <span className="med-derived-label">Duración del envase</span>
+                              <strong>
+                                {stockCoverageDays != null
+                                  ? `~${stockCoverageDays.toFixed(1)} días`
+                                  : "Pendiente"}
+                              </strong>
+                              <small>
+                                {stockCoverageDays != null
+                                  ? `${stockTotalUnits} unidades en total.`
+                                  : "Ingresa cuántas unidades trae el envase."}
+                              </small>
+                            </div>
+                            <div className="med-derived-card">
+                              <span className="med-derived-label">Aviso aproximado</span>
+                              <strong>
+                                {thresholdCoverageDays != null
+                                  ? `~${thresholdCoverageDays.toFixed(1)} días antes de agotarse`
+                                  : "Pendiente"}
+                              </strong>
+                              <small>
+                                {alertThresholdUnits > 0
+                                  ? `Se activará cuando queden ${alertThresholdUnits} unidades.`
+                                  : "Define un umbral si quieres aviso automático."}
+                              </small>
                             </div>
                           </div>
                           <div className="form-row">
                             <div className="input-group">
-                              <label className="input-label">Modo de asignación</label>
+                              <label className="input-label">Cómo se asigna la compra</label>
                               <select
                                 className="select-field"
                                 value={form.refill_mode}
                                 onChange={(e) =>
-                                  setForm((current) => ({ ...current, refill_mode: e.target.value }))
+                                  setForm((current) => ({
+                                    ...current,
+                                    refill_mode: e.target.value,
+                                    refill_fixed_user_id:
+                                      e.target.value === "fijo"
+                                        ? current.refill_fixed_user_id ||
+                                          current.refill_participant_user_ids?.[0] ||
+                                          ""
+                                        : current.refill_fixed_user_id,
+                                  }))
                                 }
                               >
-                                <option value="rotativo">Rotativo (turno automático)</option>
-                                <option value="fijo">Fijo (siempre la misma persona)</option>
+                                <option value="rotativo">Turno automático</option>
+                                <option value="fijo">Responsable fijo</option>
                               </select>
                             </div>
                             {form.refill_mode === "fijo" && (
@@ -1389,19 +1550,75 @@ export default function Medications() {
                                   }
                                 >
                                   <option value="">Selecciona responsable</option>
-                                  {familyCaregivers.map((c) => (
-                                    <option key={c.user_id} value={String(c.user_id)}>
-                                      {c.name}
+                                  {refillParticipantItems.map((participant) => (
+                                    <option key={participant.id} value={participant.id}>
+                                      {participant.name}
                                     </option>
                                   ))}
                                 </select>
                               </div>
                             )}
                           </div>
+                          <div className="input-group">
+                            <label className="input-label">Quiénes participan en la compra</label>
+                            <div className="med-refill-participants">
+                              {familyRefillOptions.map((participant) => {
+                                const checked = refillParticipantIds.includes(participant.id);
+                                const currentIndex = refillParticipantIds.indexOf(participant.id);
+                                return (
+                                  <div
+                                    key={participant.id}
+                                    className={`med-refill-participant ${checked ? "is-selected" : ""}`}
+                                  >
+                                    <label className="med-refill-participant-main">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => toggleRefillParticipant(participant.id)}
+                                      />
+                                      <span className="med-refill-participant-copy">
+                                        <strong>{participant.name}</strong>
+                                        <small>
+                                          {checked
+                                            ? `Orden ${currentIndex + 1} en este medicamento`
+                                            : "No participa en esta compra"}
+                                        </small>
+                                      </span>
+                                    </label>
+                                    {checked && form.refill_mode === "rotativo" ? (
+                                      <div className="med-refill-order-actions">
+                                        <button
+                                          type="button"
+                                          className="secondary-btn"
+                                          onClick={() => moveRefillParticipant(participant.id, "up")}
+                                          disabled={currentIndex <= 0}
+                                        >
+                                          Subir
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="secondary-btn"
+                                          onClick={() => moveRefillParticipant(participant.id, "down")}
+                                          disabled={currentIndex === refillParticipantIds.length - 1}
+                                        >
+                                          Bajar
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <small className="muted med-form-helper">
+                              Selecciona solo a quienes realmente participan. El orden es independiente para cada medicamento.
+                            </small>
+                          </div>
                           <p className="med-refill-helper">
                             {form.refill_mode === "fijo"
-                              ? `Responsable fijo para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""}.`
-                              : `Rotación automática para el perfil activo${activeProfile?.name ? ` (${activeProfile.name})` : ""} entre: ${familyRefillNames.join(", ")}.`}
+                              ? `La compra quedará siempre asignada a ${refillParticipantItems.find((item) => item.id === form.refill_fixed_user_id)?.name || "la persona seleccionada"}${activeProfile?.name ? ` para ${activeProfile.name}` : ""}.`
+                              : refillParticipantItems.length
+                                ? `El próximo turno seguirá este orden${activeProfile?.name ? ` para ${activeProfile.name}` : ""}: ${refillParticipantItems.map((item) => item.name).join(", ")}.`
+                                : `Selecciona al menos una persona para activar la rotación${activeProfile?.name ? ` de ${activeProfile.name}` : ""}.`}
                           </p>
                         </>
                       ) : !familyRefillAvailable ? (
@@ -1474,8 +1691,8 @@ export default function Medications() {
                 <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>🕒</span>
                   <div>
-                    <span className="detail-label">Horario base</span>
-                    <p>{detailTarget.schedule_time || "Sin horario"}</p>
+                    <span className="detail-label">Horarios estimados</span>
+                    <p>{getMedicationScheduleSummary(detailTarget) || "Sin horario"}</p>
                   </div>
                 </div>
                 <div className="detail-field">
@@ -1498,8 +1715,13 @@ export default function Medications() {
                 <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>🏁</span>
                   <div>
-                    <span className="detail-label">Fecha término</span>
-                    <p>{detailTarget.end_date ? toLocaleDateOrEmpty(detailTarget.end_date) : "Sin término"}</p>
+                    <span className="detail-label">Última toma estimada</span>
+                    <p>
+                      {(() => {
+                        const effectiveEnd = getMedicationEffectiveEndAt(detailTarget);
+                        return effectiveEnd ? formatMedicationDateTime(effectiveEnd) : "Sin término";
+                      })()}
+                    </p>
                   </div>
                 </div>
                 <div className="detail-field">
@@ -1733,7 +1955,12 @@ export default function Medications() {
                         <td>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</td>
                         <td>{m.duration}</td>
                         <td>{m.completed ? "Realizado" : "Activo"}</td>
-                        <td>{m.end_date ? toLocaleDateOrEmpty(m.end_date) : "—"}</td>
+                        <td>
+                          {(() => {
+                            const effectiveEnd = getMedicationEffectiveEndAt(m);
+                            return effectiveEnd ? formatMedicationDateTime(effectiveEnd) : "—";
+                          })()}
+                        </td>
                         <td>
                           {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
                         </td>

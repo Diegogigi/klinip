@@ -483,6 +483,7 @@ class MedicationBase(BaseModel):
     refill_enabled: Optional[bool] = False
     refill_mode: Optional[str] = "rotativo"
     refill_fixed_user_id: Optional[int] = None
+    refill_participant_user_ids: Optional[List[int]] = None
     doses_per_intake: Optional[float] = 1.0
     frequency_per_day: Optional[float] = 1.0
     stock_total_doses: Optional[int] = 0
@@ -507,6 +508,7 @@ class MedicationUpdate(BaseModel):
     refill_enabled: Optional[bool] = None
     refill_mode: Optional[str] = None
     refill_fixed_user_id: Optional[int] = None
+    refill_participant_user_ids: Optional[List[int]] = None
     doses_per_intake: Optional[float] = None
     frequency_per_day: Optional[float] = None
     stock_total_doses: Optional[int] = None
@@ -525,16 +527,21 @@ class MedicationOut(MedicationBase):
     taken_doses: int = 0
     missed_doses: int = 0
     adherence_rate: Optional[float] = None
+    effective_end_date: Optional[datetime] = None
+    computed_schedule_times: List[str] = []
+    computed_schedule_summary: str = ""
+    effective_frequency_per_day: Optional[float] = None
     remaining_doses: Optional[int] = None
     days_remaining: Optional[float] = None
     refill_status: Optional[str] = "normal"  # normal | alert | critical
     refill_current_assignee_user_id: Optional[int] = None
     refill_current_assignee_name: Optional[str] = ""
     refill_next_assignee_name: Optional[str] = ""
+    refill_participant_names: List[str] = []
     refill_contacts_count: int = 0
     refill_alert_active: bool = False
 
-    @field_serializer('start_at', 'end_date', 'created_at')
+    @field_serializer('start_at', 'end_date', 'created_at', 'effective_end_date')
     def serialize_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None

@@ -698,6 +698,11 @@ def ensure_medication_schema():
             "ALTER TABLE medications ADD COLUMN refill_fixed_user_id INTEGER",
         )
         add_med_column(
+            "refill_participants_json",
+            "ALTER TABLE medications ADD COLUMN IF NOT EXISTS refill_participants_json TEXT NULL",
+            "ALTER TABLE medications ADD COLUMN refill_participants_json TEXT",
+        )
+        add_med_column(
             "doses_per_intake",
             "ALTER TABLE medications ADD COLUMN IF NOT EXISTS doses_per_intake REAL DEFAULT 1.0",
             "ALTER TABLE medications ADD COLUMN doses_per_intake REAL DEFAULT 1.0",
@@ -2725,6 +2730,39 @@ def _frequency_interval_hours(frequency_text: str = "") -> int | None:
     return None
 
 
+def _parse_medication_duration_days(value: str = "") -> int | None:
+    normalized = _normalize_text(value or "")
+    if not normalized:
+        return None
+    days_match = re.search(r"(\d+)\s*d[ií]a", normalized)
+    if days_match:
+        try:
+            return max(int(days_match.group(1)), 0)
+        except ValueError:
+            return None
+    weeks_match = re.search(r"(\d+)\s*semana", normalized)
+    if weeks_match:
+        try:
+            return max(int(weeks_match.group(1)), 0) * 7
+        except ValueError:
+            return None
+    return None
+
+
+def _effective_frequency_per_day_from_values(
+    frequency_text: str = "",
+    fallback_value: float | None = None,
+) -> float:
+    interval_hours = _frequency_interval_hours(frequency_text or "")
+    if interval_hours and interval_hours > 0:
+        return round(24 / interval_hours, 2)
+    try:
+        fallback = float(fallback_value or 0)
+    except (TypeError, ValueError):
+        fallback = 0.0
+    return round(max(fallback, 1.0), 2)
+
+
 def _medication_start_at(med: models.Medication, fallback: datetime | None = None) -> datetime:
     if getattr(med, "start_at", None):
         return med.start_at
@@ -2736,7 +2774,16 @@ def _medication_start_at(med: models.Medication, fallback: datetime | None = Non
 def _medication_end_at(med: models.Medication) -> datetime | None:
     end_at = getattr(med, "end_date", None)
     if not end_at:
-        return None
+        duration_days = _parse_medication_duration_days(getattr(med, "duration", "") or "")
+        start_at = _medication_start_at(med, None)
+        if not duration_days or not start_at:
+            return None
+        interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
+        if interval_hours and interval_hours > 0:
+            total_hours = max(duration_days * 24, interval_hours)
+            steps = max(math.ceil(total_hours / interval_hours) - 1, 0)
+            return start_at + timedelta(hours=steps * interval_hours)
+        return start_at + timedelta(days=max(duration_days - 1, 0))
     if (
         end_at.hour == 0
         and end_at.minute == 0
@@ -2843,15 +2890,100 @@ def _medication_time_slots(med: models.Medication):
     interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
     if schedule_slot and interval_hours and interval_hours < 24:
         base_minutes = schedule_slot[0] * 60 + schedule_slot[1]
+        slot_count = max(int(math.ceil(24 / interval_hours)), 1)
         slots = []
-        current_minutes = base_minutes
-        while current_minutes < base_minutes + (24 * 60):
-            slots.append((current_minutes // 60, current_minutes % 60))
-            current_minutes += interval_hours * 60
-        return slots
+        seen = set()
+        for idx in range(slot_count):
+            total_minutes = (base_minutes + (idx * interval_hours * 60)) % (24 * 60)
+            hour = total_minutes // 60
+            minute = total_minutes % 60
+            key = (hour, minute)
+            if key in seen:
+                continue
+            seen.add(key)
+            slots.append(key)
+        return sorted(slots, key=lambda item: (item[0], item[1]))
     if schedule_slot:
         return [schedule_slot]
     return [(hour, 0) for hour in _derive_dose_hours(med.frequency)]
+
+
+def _medication_schedule_slot_strings(med: models.Medication) -> list[str]:
+    slots = []
+    for hour, minute in _medication_time_slots(med):
+        slots.append(f"{int(hour) % 24:02d}:{int(minute) % 60:02d}")
+    deduped = []
+    seen = set()
+    for slot in slots:
+        if slot in seen:
+            continue
+        seen.add(slot)
+        deduped.append(slot)
+    return deduped
+
+
+def _medication_schedule_summary(med: models.Medication) -> str:
+    slots = _medication_schedule_slot_strings(med)
+    if not slots:
+        return ""
+    if len(slots) == 1:
+        return slots[0]
+    if len(slots) == 2:
+        return f"{slots[0]} y {slots[1]}"
+    return ", ".join(slots[:-1]) + f" y {slots[-1]}"
+
+
+def _parse_refill_participant_ids(raw_value) -> list[int]:
+    if raw_value in (None, "", []):
+        return []
+    payload = raw_value
+    if isinstance(raw_value, str):
+        try:
+            payload = json.loads(raw_value)
+        except Exception:
+            return []
+    if not isinstance(payload, list):
+        return []
+    result = []
+    seen = set()
+    for item in payload:
+        try:
+            user_id = int(item)
+        except (TypeError, ValueError):
+            continue
+        if user_id <= 0 or user_id in seen:
+            continue
+        seen.add(user_id)
+        result.append(user_id)
+    return result
+
+
+def _serialize_refill_participant_ids(user_ids: list[int] | None) -> str | None:
+    normalized = _parse_refill_participant_ids(user_ids or [])
+    if not normalized:
+        return None
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def _sanitize_refill_participant_ids(
+    raw_ids,
+    available_contacts: list[dict],
+    fixed_user_id: int | None = None,
+    default_all: bool = False,
+) -> list[int]:
+    available_by_id = {int(item["user_id"]): item for item in available_contacts}
+    requested_ids = _parse_refill_participant_ids(raw_ids)
+    if not requested_ids and default_all:
+        requested_ids = list(available_by_id.keys())
+    sanitized = [user_id for user_id in requested_ids if user_id in available_by_id]
+    if fixed_user_id:
+        try:
+            fixed_id = int(fixed_user_id)
+        except (TypeError, ValueError):
+            fixed_id = 0
+        if fixed_id and fixed_id in available_by_id and fixed_id not in sanitized:
+            sanitized.append(fixed_id)
+    return sanitized
 
 
 def _calculate_expected_doses_between(
@@ -3029,7 +3161,16 @@ def _medication_refill_current_assignee(
     med: models.Medication,
     contacts: list[dict] | None = None,
 ) -> dict | None:
-    available_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    all_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    if not all_contacts:
+        return None
+    participant_ids = _parse_refill_participant_ids(getattr(med, "refill_participants_json", None))
+    available_by_id = {int(item["user_id"]): item for item in all_contacts}
+    available_contacts = (
+        [available_by_id[user_id] for user_id in participant_ids if user_id in available_by_id]
+        if participant_ids
+        else list(all_contacts)
+    )
     if not available_contacts:
         return None
     mode = str(getattr(med, "refill_mode", None) or "rotativo")
@@ -3049,7 +3190,16 @@ def _medication_refill_next_assignee(
     med: models.Medication,
     contacts: list[dict] | None = None,
 ) -> dict | None:
-    available_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    all_contacts = contacts if contacts is not None else _medication_refill_contacts(db, med.user_id)
+    if not all_contacts:
+        return None
+    participant_ids = _parse_refill_participant_ids(getattr(med, "refill_participants_json", None))
+    available_by_id = {int(item["user_id"]): item for item in all_contacts}
+    available_contacts = (
+        [available_by_id[user_id] for user_id in participant_ids if user_id in available_by_id]
+        if participant_ids
+        else list(all_contacts)
+    )
     if not available_contacts:
         return None
     mode = str(getattr(med, "refill_mode", None) or "rotativo")
@@ -3063,7 +3213,10 @@ def _medication_days_remaining(med: models.Medication, remaining: int | None) ->
     if remaining is None:
         return None
     dpi = float(getattr(med, "doses_per_intake", None) or 1.0)
-    fpd = float(getattr(med, "frequency_per_day", None) or 1.0)
+    fpd = _effective_frequency_per_day_from_values(
+        getattr(med, "frequency", "") or "",
+        getattr(med, "frequency_per_day", None),
+    )
     daily = max(dpi * fpd, 0.01)
     return round(remaining / daily, 1)
 
@@ -3093,8 +3246,15 @@ def _populate_medication_refill_state(
 ):
     remaining = _medication_remaining_doses(med, taken_doses=taken_doses)
     contacts = _medication_refill_contacts(db, getattr(med, "user_id", None))
-    assignee = _medication_refill_current_assignee(db, med, contacts=contacts) if contacts else None
-    next_assignee = _medication_refill_next_assignee(db, med, contacts=contacts) if contacts else None
+    available_by_id = {int(item["user_id"]): item for item in contacts}
+    participant_ids = _parse_refill_participant_ids(getattr(med, "refill_participants_json", None))
+    selected_contacts = (
+        [available_by_id[user_id] for user_id in participant_ids if user_id in available_by_id]
+        if participant_ids
+        else list(contacts)
+    )
+    assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts) if selected_contacts else None
+    next_assignee = _medication_refill_next_assignee(db, med, contacts=selected_contacts) if selected_contacts else None
     threshold = int(getattr(med, "refill_alert_threshold_doses", 0) or 0)
     total = int(getattr(med, "stock_total_doses", 0) or 0)
     pct_20 = (total * 0.20) if total > 0 else 0
@@ -3108,14 +3268,37 @@ def _populate_medication_refill_state(
     )
     refill_status = _medication_refill_status(med, remaining, threshold)
     days_remaining = _medication_days_remaining(med, remaining)
+    effective_end_date = _medication_end_at(med)
+    schedule_times = _medication_schedule_slot_strings(med)
     setattr(med, "remaining_doses", remaining)
     setattr(med, "days_remaining", days_remaining)
     setattr(med, "refill_status", refill_status)
-    setattr(med, "refill_contacts_count", len(contacts))
+    setattr(med, "refill_contacts_count", len(selected_contacts))
     setattr(med, "refill_current_assignee_user_id", assignee.get("user_id") if assignee else None)
     setattr(med, "refill_current_assignee_name", assignee.get("name") if assignee else "")
     setattr(med, "refill_next_assignee_name", next_assignee.get("name") if next_assignee else "")
     setattr(med, "refill_alert_active", alert_active)
+    setattr(med, "effective_end_date", effective_end_date)
+    setattr(med, "computed_schedule_times", schedule_times)
+    setattr(med, "computed_schedule_summary", _medication_schedule_summary(med))
+    setattr(
+        med,
+        "effective_frequency_per_day",
+        _effective_frequency_per_day_from_values(
+            getattr(med, "frequency", "") or "",
+            getattr(med, "frequency_per_day", None),
+        ),
+    )
+    setattr(
+        med,
+        "refill_participant_user_ids",
+        [int(item["user_id"]) for item in selected_contacts],
+    )
+    setattr(
+        med,
+        "refill_participant_names",
+        [str(item.get("name") or "").strip() for item in selected_contacts if item.get("name")],
+    )
     return med
 
 
@@ -3137,7 +3320,14 @@ def _handle_medication_refill_notifications(
     if not owner or not _plan_allows_collaboration_for_user(owner):
         return False
     contacts = _medication_refill_contacts(db, getattr(med, "user_id", None))
-    if not contacts:
+    participant_ids = _parse_refill_participant_ids(getattr(med, "refill_participants_json", None))
+    available_by_id = {int(item["user_id"]): item for item in contacts}
+    selected_contacts = (
+        [available_by_id[user_id] for user_id in participant_ids if user_id in available_by_id]
+        if participant_ids
+        else list(contacts)
+    )
+    if not selected_contacts:
         return False
     _populate_medication_refill_state(db, med, taken_doses=taken_doses)
     remaining = getattr(med, "remaining_doses", None)
@@ -3159,7 +3349,7 @@ def _handle_medication_refill_notifications(
     if last_notified_at is not None:
         return False
 
-    assignee = _medication_refill_current_assignee(db, med, contacts=contacts)
+    assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts)
     if not assignee:
         return False
 
@@ -3175,7 +3365,7 @@ def _handle_medication_refill_notifications(
     )
     sent_any = False
 
-    for contact in contacts:
+    for contact in selected_contacts:
         is_assignee = int(contact["user_id"]) == int(assignee["user_id"])
         push_tag = (
             f"medication-refill-{med.id}-"
@@ -18820,6 +19010,22 @@ async def create_medication(
 ):
     try:
         profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+        available_refill_contacts = _medication_refill_contacts(db, target_user_id)
+        refill_enabled = bool(getattr(med_in, "refill_enabled", False))
+        refill_mode = str(getattr(med_in, "refill_mode", None) or "rotativo")
+        refill_fixed_user_id = getattr(med_in, "refill_fixed_user_id", None)
+        refill_participant_user_ids = _sanitize_refill_participant_ids(
+            getattr(med_in, "refill_participant_user_ids", None),
+            available_refill_contacts,
+            fixed_user_id=refill_fixed_user_id,
+            default_all=refill_enabled,
+        )
+        effective_frequency_per_day = _effective_frequency_per_day_from_values(
+            med_in.frequency or "",
+            getattr(med_in, "frequency_per_day", None),
+        )
+        if refill_mode == "fijo" and not refill_fixed_user_id and refill_participant_user_ids:
+            refill_fixed_user_id = int(refill_participant_user_ids[0])
         med = models.Medication(
             user_id=target_user_id,
             name=med_in.name,
@@ -18828,11 +19034,12 @@ async def create_medication(
             duration=med_in.duration or "",
             schedule_time=(med_in.schedule_time or (med_in.start_at.strftime("%H:%M") if med_in.start_at else "")),
             start_at=med_in.start_at,
-            refill_enabled=bool(getattr(med_in, "refill_enabled", False)),
-            refill_mode=str(getattr(med_in, "refill_mode", None) or "rotativo"),
-            refill_fixed_user_id=getattr(med_in, "refill_fixed_user_id", None),
+            refill_enabled=refill_enabled,
+            refill_mode=refill_mode,
+            refill_fixed_user_id=refill_fixed_user_id,
+            refill_participants_json=_serialize_refill_participant_ids(refill_participant_user_ids),
             doses_per_intake=max(float(getattr(med_in, "doses_per_intake", None) or 1.0), 0.01),
-            frequency_per_day=max(float(getattr(med_in, "frequency_per_day", None) or 1.0), 0.01),
+            frequency_per_day=effective_frequency_per_day,
             stock_total_doses=max(int(getattr(med_in, "stock_total_doses", 0) or 0), 0),
             refill_alert_threshold_doses=max(
                 int(getattr(med_in, "refill_alert_threshold_doses", 0) or 0),
@@ -18883,10 +19090,35 @@ async def update_medication(
     previous_stock_total = int(getattr(med, "stock_total_doses", 0) or 0)
     previous_last_notified_at = getattr(med, "refill_last_notified_at", None)
     updated_fields = med_in.dict(exclude_unset=True)
+    refill_participant_user_ids = updated_fields.pop("refill_participant_user_ids", None)
     for field, value in updated_fields.items():
         setattr(med, field, value)
     if "start_at" in updated_fields and "schedule_time" not in updated_fields:
         med.schedule_time = med.schedule_time or (med.start_at.strftime("%H:%M") if med.start_at else "")
+    med.frequency_per_day = _effective_frequency_per_day_from_values(
+        getattr(med, "frequency", "") or "",
+        getattr(med, "frequency_per_day", None),
+    )
+    available_refill_contacts = _medication_refill_contacts(db, target_user_id)
+    if bool(getattr(med, "refill_enabled", False)):
+        refill_ids = _sanitize_refill_participant_ids(
+            refill_participant_user_ids if refill_participant_user_ids is not None else getattr(med, "refill_participants_json", None),
+            available_refill_contacts,
+            fixed_user_id=getattr(med, "refill_fixed_user_id", None),
+            default_all=True,
+        )
+        med.refill_participants_json = _serialize_refill_participant_ids(refill_ids)
+        if str(getattr(med, "refill_mode", None) or "rotativo") == "fijo" and not getattr(med, "refill_fixed_user_id", None):
+            med.refill_fixed_user_id = int(refill_ids[0]) if refill_ids else None
+    elif refill_participant_user_ids is not None:
+        med.refill_participants_json = _serialize_refill_participant_ids(
+            _sanitize_refill_participant_ids(
+                refill_participant_user_ids,
+                available_refill_contacts,
+                fixed_user_id=getattr(med, "refill_fixed_user_id", None),
+                default_all=False,
+            )
+        )
     med.stock_total_doses = max(int(getattr(med, "stock_total_doses", 0) or 0), 0)
     med.refill_alert_threshold_doses = max(
         int(getattr(med, "refill_alert_threshold_doses", 0) or 0),

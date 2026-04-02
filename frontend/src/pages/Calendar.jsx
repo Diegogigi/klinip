@@ -12,6 +12,11 @@ import {
   toLocaleDateTimeOrEmpty,
 } from "../utils/dates";
 import { cleanUiText } from "../utils/textEncoding";
+import {
+  buildMedicationScheduleEventsBetween,
+  getMedicationEffectiveEndAt,
+  getMedicationScheduleSummary,
+} from "../utils/medicationSchedule";
 
 const typeColors = {
   cita: "event-green",
@@ -42,14 +47,6 @@ function getMonthDays(viewDate) {
   const extra = (7 - (cells.length % 7)) % 7;
   for (let i = 0; i < extra; i += 1) cells.push(null);
   return cells;
-}
-
-function parseDurationDays(value) {
-  if (!value) return null;
-  const match = String(value).match(/(\d+)/);
-  if (!match) return null;
-  const days = parseInt(match[1], 10);
-  return Number.isNaN(days) || days <= 0 ? null : days;
 }
 
 function toDayKey(date) {
@@ -100,7 +97,7 @@ function calendarEventTitle(eventItem) {
 function calendarEventMeta(eventItem) {
   if (!eventItem) return "";
   if (eventItem.type === "medication") {
-    const schedule = cleanUiText(eventItem.schedule_time || "", "");
+    const schedule = cleanUiText(getMedicationScheduleSummary(eventItem), "");
     const dose = cleanUiText(eventItem.dose || "", "");
     if (schedule && dose) return `${schedule} - ${dose}`;
     if (schedule) return schedule;
@@ -127,41 +124,33 @@ function buildMedicationEventsForProfile(profile, medications) {
 
   (medications || []).forEach((medication) => {
     if (medication?.completed) return;
-    let end = medication?.end_date ? parseDate(medication.end_date) : null;
-    if (!end) {
-      const durationDays = parseDurationDays(medication?.duration);
-      if (durationDays) {
-        end = new Date(today.getTime());
-        end.setDate(end.getDate() + durationDays);
-      } else {
-        end = new Date(today.getTime());
-        end.setDate(end.getDate() + 7);
-      }
-    }
-
+    const end =
+      getMedicationEffectiveEndAt(medication) ||
+      new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
     const lastDay = end < horizon ? end : horizon;
-    const loopDay = new Date(today);
-    while (loopDay <= lastDay) {
-      const eventDate = new Date(loopDay);
+    const scheduleEvents = buildMedicationScheduleEventsBetween(medication, today, lastDay);
+    scheduleEvents.forEach((eventDate) => {
       events.push({
-        event_id: `med-${profile.id}-${medication.id || medication.name || "item"}-${toDayKey(eventDate)}`,
+        event_id: `med-${profile.id}-${medication.id || medication.name || "item"}-${eventDate.getTime()}`,
         type: "medication",
         name: medication.name,
         dose: medication.dose,
         frequency: medication.frequency,
         schedule_time: medication.schedule_time,
+        computed_schedule_summary: medication.computed_schedule_summary,
+        computed_schedule_times: medication.computed_schedule_times,
         notes: medication.notes,
         end_date: medication.end_date,
+        effective_end_date: medication.effective_end_date,
         profileId: profile.id,
         profileName: profileShortName(profile),
         profileTone: profile.tone,
         accessRole: profile.access_role || "",
         canWrite: roleCanWrite(profile.access_role),
         date: eventDate,
-        sortAt: new Date(eventDate.getFullYear(), eventDate.getMonth(), eventDate.getDate(), 9, 0, 0, 0).getTime(),
+        sortAt: eventDate.getTime(),
       });
-      loopDay.setDate(loopDay.getDate() + 1);
-    }
+    });
   });
 
   return events;
@@ -575,8 +564,10 @@ export default function Calendar() {
                         : "Por agendar"}
                     </p>
                     {eventItem.notes ? <p className="timeline-notes">Notas: {cleanUiText(eventItem.notes)}</p> : null}
-                    {eventItem.type === "medication" && eventItem.end_date ? (
-                      <p className="timeline-meta">Hasta {toLocaleDateOrEmpty(eventItem.end_date)}</p>
+                    {eventItem.type === "medication" && eventItem.effective_end_date ? (
+                      <p className="timeline-meta">
+                        Última toma estimada: {toLocaleDateOrEmpty(eventItem.effective_end_date)}
+                      </p>
                     ) : null}
                   </li>
                 ))}

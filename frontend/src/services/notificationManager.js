@@ -1,4 +1,5 @@
 import { parseDate, toLocaleDateTimeOrEmpty } from "../utils/dates";
+import { buildMedicationScheduleEventsBetween as sharedBuildMedicationScheduleEventsBetween } from "../utils/medicationSchedule";
 
 // Constantes
 const dayMs = 24 * 60 * 60 * 1000;
@@ -311,9 +312,9 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
 
   // Offsets personalizables
   const offsets = customOffsets || [
-    { days: 7, label: "7 dias antes", icon: "", priority: "low", sound: "appointment" },
-    { days: 3, label: "3 dias antes", icon: "", priority: "normal", sound: "appointment" },
-    { days: 1, label: "1 dia antes", icon: "", priority: "high", sound: "appointment" },
+    { days: 7, label: "7 días antes", icon: "", priority: "low", sound: "appointment" },
+    { days: 3, label: "3 días antes", icon: "", priority: "normal", sound: "appointment" },
+    { days: 1, label: "1 día antes", icon: "", priority: "high", sound: "appointment" },
     { hours: 2, label: "2 horas antes", icon: "", priority: "urgent", sound: "urgent" },
     { minutes: 30, label: "30 minutos antes", icon: "", priority: "urgent", sound: "urgent" },
     { minutes: 5, label: "5 minutos antes", icon: "", priority: "urgent", sound: "urgent" }
@@ -351,7 +352,7 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
       };
 
       const title = `${appointmentLabel} - Recordatorio: ${label}`;
-      const body = `${rem.specialty || rem.type || "Cita"} en ${rem.center || "Centro medico"}
+      const body = `${rem.specialty || rem.type || "Cita"} en ${rem.center || "Centro médico"}
 ${toLocaleDateTimeOrEmpty(rem.date_time)}${rem.notes ? `
 ${rem.notes}` : ""}`;
 
@@ -538,7 +539,7 @@ export function scheduleMedicationNotifications(medications) {
   medications.forEach((med) => {
     if (med?.completed) return;
 
-    buildMedicationScheduleEventsBetween(med, now, horizon).forEach((trigger) => {
+    sharedBuildMedicationScheduleEventsBetween(med, now, horizon).forEach((trigger) => {
       const triggerExact = trigger.getTime();
 
       leadOffsets.forEach((offsetMinutes) => {
@@ -679,3 +680,4 @@ Mensaje generado desde Klinip.`
 }
 
 export { notificationManager };
+

@@ -18,6 +18,11 @@ import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { cleanUiText } from "../utils/textEncoding";
+import {
+  getMedicationScheduleSummary,
+  getMedicationScheduleTimes,
+  getNextMedicationDose,
+} from "../utils/medicationSchedule";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
@@ -71,25 +76,7 @@ function profileInitials(name) {
 }
 
 function getMedicationReminderDate(medication) {
-  if (!medication?.schedule_time) return null;
-  const [hourText, minuteText] = String(medication.schedule_time).split(":");
-  const hour = Number(hourText);
-  const minute = Number(minuteText || 0);
-  if (Number.isNaN(hour) || Number.isNaN(minute)) return null;
-  const now = new Date();
-  const candidate = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    hour,
-    minute,
-    0,
-    0
-  );
-  if (candidate.getTime() < now.getTime() - 10 * 60 * 1000) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
-  return candidate;
+  return getNextMedicationDose(medication, new Date());
 }
 
 function getStatusTone(level) {
@@ -108,6 +95,61 @@ function getAlertTone(severity) {
   if (severity === "high") return "alert";
   if (severity === "medium") return "warn";
   return "ok";
+}
+
+function getAdherenceFriendlyValue(adherence, hasMedications) {
+  if (!hasMedications) return "sin datos";
+  if (adherence >= 80) return `Muy bien · ${adherence}%`;
+  if (adherence >= 45) return `Regular · ${adherence}%`;
+  return `Bajo · ${adherence}%`;
+}
+
+const friendlyAlertTitleMap = {
+  medication_running_out: "Medicamento por terminarse",
+  low_adherence: "Tienes dosis sin tomar",
+  missed_appointment_followup: "Tienes una cita sin confirmar",
+  missing_lab_result: "Faltan resultados de exámenes",
+  incomplete_treatment: "Tratamiento sin cerrar",
+};
+
+function getFriendlyAlertTitle(alert) {
+  return friendlyAlertTitleMap[alert.alert_type] || alert.title;
+}
+
+function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications) {
+  const highAlerts = activeHealthAlerts.filter((a) => a.severity === "high");
+  if (highAlerts.length > 0 || (activeMedications.length > 0 && adherence < 45)) {
+    return {
+      level: "alert",
+      title: "Necesita tu atención hoy",
+      message:
+        highAlerts.length > 0
+          ? `Tienes ${highAlerts.length} alerta${highAlerts.length > 1 ? "s" : ""} importante${highAlerts.length > 1 ? "s" : ""} sin revisar.`
+          : "Estás tomando pocas dosis de tus medicamentos.",
+    };
+  }
+  if (activeHealthAlerts.length > 0 || (activeMedications.length > 0 && adherence < 80)) {
+    return {
+      level: "warn",
+      title: "Hay cosas para revisar",
+      message:
+        activeHealthAlerts.length > 0
+          ? `Tienes ${activeHealthAlerts.length} cosa${activeHealthAlerts.length > 1 ? "s" : ""} para atender.`
+          : "Tu seguimiento de medicamentos puede mejorar.",
+    };
+  }
+  if (activeMedications.length === 0) {
+    return {
+      level: "neutral",
+      title: "Sin plan activo",
+      message: "Registra tus medicamentos para comenzar el seguimiento.",
+    };
+  }
+  return {
+    level: "ok",
+    title: "¡Tu salud está al día!",
+    message: "No hay alertas activas y tu seguimiento de medicamentos va bien.",
+  };
 }
 
 function renderIcon(name) {
@@ -226,11 +268,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (activeMedications.length > 0 && adherence > 0) {
     if (adherence >= 80) {
-      msgs.push(`Adherencia al ${adherence}% — excelente seguimiento de tu plan de medicación.`);
+      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos a tiempo — ¡excelente seguimiento!`);
     } else if (adherence >= 50) {
-      msgs.push(`Tu adherencia es del ${adherence}%. Puedes mejorar el seguimiento de tus medicamentos.`);
+      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos. Puedes mejorar un poco más.`);
     } else {
-      msgs.push(`Adherencia al ${adherence}%. Tus medicamentos necesitan atención hoy.`);
+      msgs.push(`Solo estás tomando el ${adherence}% de tus medicamentos. ¡No olvides tus dosis de hoy!`);
     }
   }
 
@@ -245,12 +287,12 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (activeHealthAlerts.length > 0) {
     const n = activeHealthAlerts.length;
-    msgs.push(`El radar detectó ${n} alerta${n > 1 ? "s" : ""} activa${n > 1 ? "s" : ""}. Revisa tu resumen.`);
+    msgs.push(`Hay ${n} cosa${n > 1 ? "s" : ""} importante${n > 1 ? "s" : ""} para revisar en tu salud. Toca para ver el detalle.`);
   }
 
   if (lowAdherenceItems.length > 0) {
     const med = cleanUiText(lowAdherenceItems[0]?.name || "");
-    if (med) msgs.push(`${med} tiene baja adherencia. ¿Necesitas ajustar el recordatorio?`);
+    if (med) msgs.push(`${med} tiene dosis sin tomar. ¿Necesitas ajustar el recordatorio?`);
   }
 
   if (pendingDocuments > 0) {
@@ -497,6 +539,7 @@ export default function Dashboard({ user }) {
     : [];
   const activeHealthAlerts = Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : [];
   const topHealthAlerts = activeHealthAlerts.slice(0, 3);
+  const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
   const pendingDocuments = documents.filter((item) => {
     const status = String(item.ocr_status || "").toLowerCase();
     return !status || status === "pending" || status === "processing" || status === "error";
@@ -525,14 +568,14 @@ export default function Dashboard({ user }) {
       icon: "document",
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
-      value: pendingDocuments > 0 ? `${pendingDocuments} pendientes` : "al día",
+      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al día",
     },
     {
       key: "adherence",
       icon: "adherence",
       tone: getRadarToneFromAdherence(adherence),
-      label: "Adherencia",
-      value: activeMedications.length ? `${adherence}%` : "sin datos",
+      label: "¿Tomas a tiempo?",
+      value: getAdherenceFriendlyValue(adherence, activeMedications.length > 0),
     },
     {
       key: "family",
@@ -540,9 +583,9 @@ export default function Dashboard({ user }) {
       tone: activeHealthAlerts.length ? "warn" : linkedProfiles > 0 ? "warn" : "ok",
       label: "Familia",
       value: activeHealthAlerts.length
-        ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
+        ? `${activeHealthAlerts.length} por atender`
         : linkedProfiles > 0
-        ? `${linkedProfiles} vinculados`
+        ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
         : "sin alertas",
     },
   ];
@@ -569,7 +612,9 @@ export default function Dashboard({ user }) {
           kind: "medication",
           tag: "Med.",
           title: `${item.name || "Medicamento"}${item.dose ? ` - ${item.dose}` : ""}`,
-          meta: item.schedule_time ? `${item.schedule_time} - Recordatorio` : "Sin horario definido",
+          meta: getMedicationScheduleSummary(item)
+            ? `${getMedicationScheduleSummary(item)} - Recordatorio`
+            : "Sin horario definido",
           urgent: date.toDateString() === new Date().toDateString(),
         };
       })
@@ -623,7 +668,7 @@ export default function Dashboard({ user }) {
       text: `Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisar.`,
     });
   }
-  if (activeMedications.some((item) => !item.schedule_time)) {
+  if (activeMedications.some((item) => getMedicationScheduleTimes(item).length === 0)) {
     suggestionItems.push({
       id: "suggestion-meds",
       text: "Hay medicamentos sin horario definido. Completa su recordatorio para no olvidarlos.",
@@ -914,14 +959,18 @@ export default function Dashboard({ user }) {
               ))}
             </div>
             <div className="home-radar-insights">
+              <div className={`home-radar-status home-radar-status-${overallStatus.level}`}>
+                <strong>{overallStatus.title}</strong>
+                <span>{overallStatus.message}</span>
+              </div>
               <div className="home-radar-summary">
                 <div className="home-radar-summary-chip tone-teal">
-                  <span>Adherencia</span>
+                  <span>Cumplimiento general</span>
                   <strong>{activeMedications.length ? `${adherence}%` : "Sin datos"}</strong>
                 </div>
                 <div className={`home-radar-summary-chip tone-${activeHealthAlerts.length ? "alert" : "ok"}`}>
-                  <span>Alertas activas</span>
-                  <strong>{activeHealthAlerts.length}</strong>
+                  <span>Por atender</span>
+                  <strong>{activeHealthAlerts.length ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}` : "Todo bien"}</strong>
                 </div>
               </div>
               <div className="home-radar-alert-list">
@@ -933,25 +982,29 @@ export default function Dashboard({ user }) {
                       className={`home-radar-alert tone-${getAlertTone(item.severity)}`}
                       onClick={() => navigate("/ai")}
                     >
-                      <strong>{cleanUiText(item.title)}</strong>
+                      <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
                       <span>{cleanUiText(item.description)}</span>
+                      {item.recommended_action ? (
+                        <span className="home-radar-alert-action">{cleanUiText(item.recommended_action)}</span>
+                      ) : null}
+                      <span className="home-radar-alert-nav">Toca aquí para ver qué hacer</span>
                     </button>
                   ))
                 ) : (
-                  <div className="home-empty-state">No hay alertas activas detectadas por el radar inteligente.</div>
+                  <div className="home-empty-state">No hay alertas activas. ¡Tu salud está al día!</div>
                 )}
               </div>
               {lowAdherenceItems.length ? (
                 <div className="home-radar-pattern">
-                  <strong>Medicamentos a revisar</strong>
-                    <span>
-                      {cleanUiText(
-                        lowAdherenceItems
-                          .slice(0, 2)
-                          .map((item) => `${item.name}: ${item.adherence_rate}%`)
-                          .join(" \u00B7 ")
-                      )}
-                    </span>
+                  <strong>Estos medicamentos necesitan atención</strong>
+                  <span>
+                    {cleanUiText(
+                      lowAdherenceItems
+                        .slice(0, 2)
+                        .map((item) => `${item.name}: ${item.adherence_rate}% de dosis tomadas`)
+                        .join(" \u00B7 ")
+                    )}
+                  </span>
                 </div>
               ) : null}
             </div>

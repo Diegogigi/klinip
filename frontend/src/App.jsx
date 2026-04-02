@@ -36,6 +36,11 @@ import {
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 import { clearScheduledNotifications } from "./services/notificationManager";
+import {
+  getMedicationScheduleTimes,
+  isMedicationActiveAt,
+  parseScheduleTimeValue,
+} from "./utils/medicationSchedule";
 
 const icons = {
   home: (
@@ -621,30 +626,10 @@ const ONBOARDING_TIMEZONE_OPTIONS = [
 ];
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
-const parseMedicationScheduleTime = (value = "") => {
-  if (!value || typeof value !== "string") return null;
-  const parts = value.split(":");
-  if (parts.length < 2) return null;
-  const hour = Number(parts[0]);
-  const minute = Number(parts[1]);
-  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
-  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-  return { hour, minute };
-};
-
-const buildMedicationPromptKey = (med, date) => {
+const buildMedicationPromptKey = (med, date, slotKey = "") => {
   const day = date.toISOString().slice(0, 10);
-  const slot = med.schedule_time || "manual";
+  const slot = slotKey || med.schedule_time || "manual";
   return `klinip_med_prompt_${med.id}_${day}_${slot}`;
-};
-
-const isMedicationActive = (med, now) => {
-  if (med?.completed) return false;
-  if (!med?.end_date) return true;
-  const end = new Date(med.end_date);
-  if (Number.isNaN(end.getTime())) return true;
-  end.setHours(23, 59, 59, 999);
-  return now.getTime() <= end.getTime();
 };
 
 const getPathFromNotification = (item) => {
@@ -852,29 +837,27 @@ export default function App() {
         if (!active) return;
 
         const due = meds
-          .filter((med) => {
-            if (!med?.schedule_time) return false;
-            if (!isMedicationActive(med, now)) return false;
-            const slot = parseMedicationScheduleTime(med.schedule_time);
-            if (!slot) return false;
-            const trigger = new Date(now);
-            trigger.setHours(slot.hour, slot.minute, 0, 0);
-            const triggerTs = trigger.getTime();
-            if (triggerTs <= lastChecked || triggerTs > nowTs) return false;
-            const key = buildMedicationPromptKey(med, now);
-            return !localStorage.getItem(key);
-          })
-          .map((med) => {
-            const slot = parseMedicationScheduleTime(med.schedule_time);
-            const trigger = new Date(now);
-            trigger.setHours(slot.hour, slot.minute, 0, 0);
-            return { med, triggerTs: trigger.getTime() };
+          .flatMap((med) => {
+            if (!isMedicationActiveAt(med, now)) return [];
+            return getMedicationScheduleTimes(med)
+              .map((slotKey) => {
+                const slot = parseScheduleTimeValue(slotKey);
+                if (!slot) return null;
+                const trigger = new Date(now);
+                trigger.setHours(slot.hour, slot.minute, 0, 0);
+                const triggerTs = trigger.getTime();
+                if (triggerTs <= lastChecked || triggerTs > nowTs) return null;
+                const key = buildMedicationPromptKey(med, now, slotKey);
+                if (localStorage.getItem(key)) return null;
+                return { med, triggerTs, slotKey };
+              })
+              .filter(Boolean);
           })
           .sort((a, b) => a.triggerTs - b.triggerTs);
 
         if (due.length > 0) {
           const first = due[0].med;
-          const key = buildMedicationPromptKey(first, now);
+          const key = buildMedicationPromptKey(first, now, due[0].slotKey);
           localStorage.setItem(key, "prompted");
           const target = `/medications?notify=1&medicationId=${first.id}`;
           const currentSearch = locationRef.current?.search || "";

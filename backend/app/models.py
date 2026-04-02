@@ -154,6 +154,7 @@ class Medication(Base):
     refill_enabled = Column(Boolean, default=False)
     refill_mode = Column(String, default="rotativo")  # rotativo | fijo | manual
     refill_fixed_user_id = Column(Integer, nullable=True)
+    refill_participants_json = Column(Text, nullable=True)
     doses_per_intake = Column(Float, default=1.0)
     frequency_per_day = Column(Float, default=1.0)
     stock_total_doses = Column(Integer, default=0)
