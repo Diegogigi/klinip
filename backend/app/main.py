@@ -21635,9 +21635,16 @@ async def add_post_attachment(
 def get_attachment_file(
     post_id: int,
     attachment_id: int,
+    request: Request,
+    token: str = "",
     db: Session = Depends(auth.get_db),
-    current_user=Depends(auth.get_current_user),
 ):
+    auth_header = request.headers.get("authorization", "")
+    bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    resolved_token = (token or bearer_token or "").strip()
+    if not resolved_token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    current_user = auth.get_current_user_from_token(resolved_token, db)
     attachment = db.query(models.PostAttachment).filter(
         models.PostAttachment.id == attachment_id,
         models.PostAttachment.post_id == post_id,

@@ -332,11 +332,8 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[models
     return user
 
 
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> models.User:
-    """Obtiene el usuario actual a partir del access token JWT."""
+def get_current_user_from_token(token: str, db: Session) -> models.User:
+    """Obtiene el usuario actual a partir de un access token JWT."""
     from fastapi import HTTPException, status
 
     credentials_exception = HTTPException(
@@ -393,3 +390,11 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> models.User:
+    """Obtiene el usuario actual a partir del access token JWT."""
+    return get_current_user_from_token(token, db)
