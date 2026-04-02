@@ -116,6 +116,23 @@ function getFriendlyAlertTitle(alert) {
   return friendlyAlertTitleMap[alert.alert_type] || alert.title;
 }
 
+const alertDetailMap = {
+  medication_running_out:
+    "Tu medicamento está próximo a terminarse. Revisa si tienes stock suficiente para los próximos días. Si necesitas renovar la receta, agenda una consulta con tu médico antes de que se acabe.",
+  low_adherence:
+    "Estás tomando menos dosis de las que corresponden. Revisa tus recordatorios y asegúrate de que estén activos. Si tienes dificultades para seguir el tratamiento, coméntalo con tu médico.",
+  missed_appointment_followup:
+    "Tienes una cita registrada que no fue marcada como realizada. Si ya la realizaste, actualiza su estado en tu agenda. Si no fue así, considera reagendarla.",
+  missing_lab_result:
+    "Hay órdenes médicas sin resultados asociados. Sube los documentos de tus exámenes para que queden registrados en tu historial clínico.",
+  incomplete_treatment:
+    "Un tratamiento pasó su fecha estimada de término y sigue marcado como activo. Revisa si aún lo estás tomando o si ya finalizó para actualizar tu historial.",
+};
+
+function getAlertDetail(alert) {
+  return alertDetailMap[alert.alert_type] || alert.recommended_action || "";
+}
+
 function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications) {
   const highAlerts = activeHealthAlerts.filter((a) => a.severity === "high");
   if (highAlerts.length > 0 || (activeMedications.length > 0 && adherence < 45)) {
@@ -318,6 +335,8 @@ export default function Dashboard({ user }) {
   const [activeProfile, setActiveProfile] = useState(null);
   const [healthRadar, setHealthRadar] = useState([]);
   const [adherenceSummary, setAdherenceSummary] = useState(null);
+  const [expandedAlertId, setExpandedAlertId] = useState(null);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
@@ -969,37 +988,59 @@ export default function Dashboard({ user }) {
                 <span>{overallStatus.message}</span>
               </div>
               <div className="home-radar-summary">
-                <div className="home-radar-summary-chip tone-teal">
+                <div className={`home-radar-summary-chip tone-${activeMedications.length > 0 ? getRadarToneFromAdherence(adherence) : "teal"}`}>
                   <span>Cumplimiento general</span>
                   <strong>{activeMedications.length ? `${adherence}%` : "Sin datos"}</strong>
                 </div>
-                <div className={`home-radar-summary-chip tone-${activeHealthAlerts.length ? "alert" : "ok"}`}>
+                <button
+                  type="button"
+                  className={`home-radar-summary-chip home-radar-summary-chip-btn tone-${activeHealthAlerts.length ? "alert" : "ok"}`}
+                  onClick={() => activeHealthAlerts.length > 3 && setShowAllAlerts((v) => !v)}
+                  aria-expanded={showAllAlerts}
+                >
                   <span>Por atender</span>
-                  <strong>{activeHealthAlerts.length ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}` : "Todo bien"}</strong>
-                </div>
+                  <strong>
+                    {activeHealthAlerts.length
+                      ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}${activeHealthAlerts.length > 3 ? (showAllAlerts ? " — ocultar" : " — ver todas") : ""}`
+                      : "Todo bien"}
+                  </strong>
+                </button>
               </div>
               <div className="home-radar-alert-list">
-                {topHealthAlerts.length ? (
-                  topHealthAlerts.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`home-radar-alert tone-${getAlertTone(item.severity)}`}
-                      onClick={() =>
-                        navigate("/ai", {
-                          state: {
-                            autoPrompt: `${cleanUiText(getFriendlyAlertTitle(item))}. ${cleanUiText(item.description)}${item.recommended_action ? ` ¿Qué debo hacer?` : ""}`,
-                          },
-                        })
-                      }
-                    >
-                      <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
-                      <span>{cleanUiText(item.description)}</span>
-                      {item.recommended_action ? (
-                        <span className="home-radar-alert-action">{cleanUiText(item.recommended_action)}</span>
+                {activeHealthAlerts.length ? (
+                  (showAllAlerts ? activeHealthAlerts : topHealthAlerts).map((item) => (
+                    <div key={item.id} className="home-radar-alert-wrap">
+                      <button
+                        type="button"
+                        className={`home-radar-alert tone-${getAlertTone(item.severity)}${expandedAlertId === item.id ? " is-expanded" : ""}`}
+                        onClick={() => setExpandedAlertId(expandedAlertId === item.id ? null : item.id)}
+                      >
+                        <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
+                        <span>{cleanUiText(item.description)}</span>
+                        <span className="home-radar-alert-nav">
+                          {expandedAlertId === item.id ? "Presiona para cerrar" : "Presiona aquí para ver qué hacer"}
+                        </span>
+                      </button>
+                      {expandedAlertId === item.id ? (
+                        <div className="home-radar-alert-detail">
+                          <strong>¿Qué puedo hacer?</strong>
+                          <p>{cleanUiText(getAlertDetail(item))}</p>
+                          <button
+                            type="button"
+                            className="home-radar-alert-ai-btn"
+                            onClick={() =>
+                              navigate("/ai", {
+                                state: {
+                                  autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(getFriendlyAlertTitle(item))}". ${cleanUiText(item.description)} ¿Qué debo hacer paso a paso?`,
+                                },
+                              })
+                            }
+                          >
+                            Consultar con Klinip IA
+                          </button>
+                        </div>
                       ) : null}
-                      <span className="home-radar-alert-nav">Toca aquí para ver qué hacer</span>
-                    </button>
+                    </div>
                   ))
                 ) : (
                   <div className="home-empty-state">No hay alertas activas. ¡Tu salud está al día!</div>

@@ -26863,9 +26863,22 @@ body.theme-dark .ai-conversation-item.is-active {
   background: #fff5f5;
 }
 
+.home-radar-summary-chip.tone-alert strong {
+  color: #9e1c30;
+}
+
 .home-radar-summary-chip.tone-ok {
   border-color: #bfe7d1;
   background: #f3fbf7;
+}
+
+.home-radar-summary-chip.tone-warn {
+  border-color: #ffe0a6;
+  background: #fff8ec;
+}
+
+.home-radar-summary-chip.tone-warn strong {
+  color: #924f06;
 }
 
 .home-radar-alert-list {
@@ -26963,16 +26976,25 @@ body.theme-dark .ai-conversation-item.is-active {
   border-color: #dce4f1;
 }
 
-/* ── Radar: acción recomendada dentro de cada alerta ───────── */
-.home-radar-alert-action {
-  display: block;
-  font-size: 0.73rem;
-  color: #475569;
-  line-height: 1.5;
-  margin-top: 0.32rem;
-  padding-top: 0.32rem;
-  border-top: 1px dashed rgba(100, 116, 139, 0.35);
+/* ── Radar: chip clickable "Por atender" ───────────────────── */
+.home-radar-summary-chip-btn {
+  cursor: pointer;
+  border: 1px solid;
+  border-radius: 12px;
   text-align: left;
+  font: inherit;
+  transition: opacity 0.15s ease;
+}
+
+.home-radar-summary-chip-btn:hover {
+  opacity: 0.82;
+}
+
+/* ── Radar: wrap de alerta (contiene card + acordeón) ──────── */
+.home-radar-alert-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* ── Radar: indicador de navegación en cada alerta ─────────── */
@@ -26984,6 +27006,66 @@ body.theme-dark .ai-conversation-item.is-active {
   margin-top: 0.38rem;
   text-align: left;
   opacity: 0.85;
+}
+
+.home-radar-alert.is-expanded {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-color: transparent;
+}
+
+/* ── Radar: acordeón de detalle ────────────────────────────── */
+.home-radar-alert-detail {
+  border: 1px solid #dce4f1;
+  border-top: none;
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
+  background: #ffffff;
+  padding: 0.88rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  animation: radarDetailIn 0.18s ease;
+}
+
+@keyframes radarDetailIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.home-radar-alert-detail strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.home-radar-alert-detail p {
+  font-size: 0.78rem;
+  color: #475569;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* ── Radar: botón "Consultar con Klinip IA" ────────────────── */
+.home-radar-alert-ai-btn {
+  align-self: flex-start;
+  margin-top: 0.25rem;
+  border: none;
+  border-radius: 999px;
+  background: #6366f1;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.48rem 1rem;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.home-radar-alert-ai-btn:hover {
+  background: #4f46e5;
+  transform: translateY(-1px);
 }
 
 /* ── Dark mode ─────────────────────────────────────────────── */
@@ -27027,13 +27109,37 @@ body.theme-dark .home-radar-status.home-radar-status-alert strong {
   color: #f87171;
 }
 
-body.theme-dark .home-radar-alert-action {
-  color: #94a3b8;
-  border-top-color: rgba(148, 163, 184, 0.25);
-}
-
 body.theme-dark .home-radar-alert-nav {
   color: #818cf8;
+}
+
+body.theme-dark .home-radar-alert-detail {
+  background: rgba(11, 18, 36, 0.9);
+  border-color: #243244;
+}
+
+body.theme-dark .home-radar-alert-detail strong {
+  color: #f1f5f9;
+}
+
+body.theme-dark .home-radar-alert-detail p {
+  color: #94a3b8;
+}
+
+/* Acordeón hereda el color del borde de la alerta padre */
+.home-radar-alert-wrap .home-radar-alert.tone-warn.is-expanded + .home-radar-alert-detail {
+  border-color: #ffe0a6;
+  background: #fffdf7;
+}
+
+.home-radar-alert-wrap .home-radar-alert.tone-alert.is-expanded + .home-radar-alert-detail {
+  border-color: #f5c2ca;
+  background: #fff9f9;
+}
+
+.home-radar-alert-wrap .home-radar-alert.tone-ok.is-expanded + .home-radar-alert-detail {
+  border-color: #bfe7d1;
+  background: #f6fdf9;
 }
 
 .ai-resource-item-button {
