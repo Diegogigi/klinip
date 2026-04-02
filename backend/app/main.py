@@ -3516,7 +3516,7 @@ def _active_refill_candidates(
                 models.Medication.end_date >= current_dt,
             ),
         )
-        .order_by(models.Medication.updated_at.desc().nullslast(), models.Medication.id.asc())
+        .order_by(models.Medication.created_at.desc().nullslast(), models.Medication.id.asc())
         .limit(max(1, int(limit)))
         .all()
     )
