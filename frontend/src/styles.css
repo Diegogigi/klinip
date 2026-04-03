@@ -7910,26 +7910,10 @@ body.theme-dark .primary-btn {
 .med-refill-reorder-tools {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: stretch;
   gap: 0.6rem;
+  width: 100%;
   min-width: 0;
-}
-
-.med-refill-drag-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  min-height: 30px;
-  padding: 0.35rem 0.62rem;
-  border-radius: 999px;
-  border: 1px dashed #bfdbfe;
-  background: rgba(239, 246, 255, 0.78);
-  color: #1d4ed8;
-  font-size: 0.73rem;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-  flex: 0 1 auto;
 }
 
 .med-inline-helper-btn {
@@ -7941,12 +7925,14 @@ body.theme-dark .primary-btn {
   display: inline-flex;
   flex-direction: row;
   gap: 0.35rem;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: 100%;
 }
 
 .med-refill-order-actions .secondary-btn {
   min-height: 32px;
-  min-width: 84px;
+  min-width: 0;
+  flex: 1 1 0;
   padding: 0.32rem 0.7rem;
   font-size: 0.75rem;
   border-radius: 10px;
@@ -8784,12 +8770,6 @@ body.theme-dark .med-refill-participant.is-dragging {
 
 body.theme-dark .med-refill-order-badge {
   background: rgba(14, 165, 233, 0.14);
-  color: #7dd3fc;
-}
-
-body.theme-dark .med-refill-drag-pill {
-  background: rgba(15, 23, 42, 0.82);
-  border-color: #334155;
   color: #7dd3fc;
 }
 
@@ -24434,18 +24414,7 @@ body.theme-dark .records-mobile-link {
 
   .med-refill-reorder-tools {
     width: 100%;
-    flex-direction: column;
-    align-items: stretch;
     gap: 0.42rem;
-  }
-
-  .med-refill-drag-pill {
-    justify-content: center;
-    width: 100%;
-    white-space: normal;
-    text-align: center;
-    padding: 0.4rem 0.55rem;
-    font-size: 0.71rem;
   }
 
   .med-refill-order-actions {

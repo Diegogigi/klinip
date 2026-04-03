@@ -1802,9 +1802,6 @@ export default function Medications() {
                                     </div>
                                     {checked && form.refill_mode === "rotativo" ? (
                                       <div className="med-refill-reorder-tools">
-                                        <span className="med-refill-drag-pill" aria-hidden>
-                                          ↕ Arrastra para ordenar
-                                        </span>
                                         <div className="med-refill-order-actions">
                                           <button
                                             type="button"
@@ -1830,7 +1827,7 @@ export default function Medications() {
                               })}
                             </div>
                           <small className="muted med-form-helper">
-                              Marca solo a quienes participan. Si el turno es rotativo, puedes arrastrar la tarjeta o usar las flechas para cambiar el orden.
+                              Marca solo a quienes participan. Si el turno es rotativo, usa Subir y Bajar para cambiar el orden.
                           </small>
                           </div>
                           <p className="med-refill-helper">
