@@ -166,6 +166,11 @@ export default function Medications() {
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
   const [endDateAuto, setEndDateAuto] = useState(true);
   const [draggedParticipantId, setDraggedParticipantId] = useState("");
+  const [registerPurchaseNow, setRegisterPurchaseNow] = useState(false);
+  const [formPurchaseNewStock, setFormPurchaseNewStock] = useState("");
+  const [formPurchaseAmount, setFormPurchaseAmount] = useState("");
+  const [formPurchaseNotes, setFormPurchaseNotes] = useState("");
+  const [formPurchaseReceiptFile, setFormPurchaseReceiptFile] = useState(null);
   const [medicationsPage, setMedicationsPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -398,6 +403,11 @@ export default function Medications() {
     setShowAdvancedForm(false);
     setEndDateAuto(true);
     setDraggedParticipantId("");
+    setRegisterPurchaseNow(false);
+    setFormPurchaseNewStock("");
+    setFormPurchaseAmount("");
+    setFormPurchaseNotes("");
+    setFormPurchaseReceiptFile(null);
     setForm({
       id: null,
       name: "",
@@ -490,7 +500,36 @@ export default function Medications() {
         return;
       }
 
-      await saveMedication(payload);
+      const normalizedPurchaseStock = parseInt(formPurchaseNewStock, 10) || 0;
+      if (registerPurchaseNow && normalizedPurchaseStock <= 0) {
+        alert("Si vas a registrar la compra ahora, indica el stock total disponible después de la compra.");
+        setLoading(false);
+        return;
+      }
+
+      const savedMedication = await saveMedication(payload);
+      const savedMedicationId = savedMedication?.id || payload.id;
+
+      let purchaseError = null;
+      if (registerPurchaseNow && savedMedicationId) {
+        try {
+          const purchaseFormData = new FormData();
+          purchaseFormData.append("new_stock_total_doses", String(normalizedPurchaseStock));
+          if (formPurchaseAmount.trim()) {
+            purchaseFormData.append("amount_total", normalizeDecimalInput(formPurchaseAmount));
+          }
+          if (formPurchaseNotes.trim()) {
+            purchaseFormData.append("notes", formPurchaseNotes.trim());
+          }
+          if (formPurchaseReceiptFile) {
+            purchaseFormData.append("receipt", formPurchaseReceiptFile);
+          }
+          await createMedicationPurchase(savedMedicationId, purchaseFormData);
+        } catch (err) {
+          purchaseError = err;
+        }
+      }
+
       if (payload.id && payload.frequency) {
         localStorage.removeItem(
           `klinip_missing_freq_dismissed_${payload.id}`
@@ -505,11 +544,20 @@ export default function Medications() {
           setIntakeFeedback("");
         }, 2600);
       }
-      await load();
+      await Promise.all([load(), loadPurchaseHistory({ silent: true })]);
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["medications", "health-radar", "adherence"],
       });
+      if (purchaseError) {
+        resetForm();
+        setShowForm(false);
+        alert(
+          "El medicamento se guardó, pero no se pudo registrar la compra: " +
+            (purchaseError?.response?.data?.detail || purchaseError?.message || "Error desconocido")
+        );
+        return;
+      }
       resetForm();
       setShowForm(false);
     } catch (err) {
@@ -576,6 +624,11 @@ export default function Medications() {
           ? String(med.refill_alert_threshold_doses)
           : "",
     });
+    setRegisterPurchaseNow(false);
+    setFormPurchaseNewStock(String(med.stock_total_doses || ""));
+    setFormPurchaseAmount("");
+    setFormPurchaseNotes("");
+    setFormPurchaseReceiptFile(null);
   };
 
   const handleMarkPurchased = (med) => {
@@ -1303,7 +1356,7 @@ export default function Medications() {
                   {form.id ? "Actualiza lo importante" : "Guardar medicamento"}
                 </h3>
                 <p className="muted med-form-header-copy">
-                  Primero completa nombre, dosis, frecuencia y primera toma. El resto queda como opcional.
+                  Primero completa nombre, dosis, frecuencia y primera toma. En este mismo formulario también puedes registrar la compra y adjuntar la boleta.
                 </p>
               </div>
               <button className="secondary-btn" type="button" onClick={handleCloseForm}>
@@ -1442,7 +1495,7 @@ export default function Medications() {
                   onClick={() => setShowAdvancedForm((current) => !current)}
                   aria-expanded={showAdvancedForm}
                 >
-                  {showAdvancedForm ? "Ocultar opciones opcionales" : "Ver opciones opcionales"}
+                  {showAdvancedForm ? "Ocultar compra, boleta y opciones opcionales" : "Ver compra, boleta y opciones opcionales"}
                 </button>
 
                 {showAdvancedForm && (
@@ -1539,6 +1592,94 @@ export default function Medications() {
                         onChange={(e) => setForm({ ...form, notes: e.target.value })}
                         placeholder="Ej: tomar después de comer o no mezclar con otro tratamiento"
                       />
+                    </div>
+
+                    <div className="med-refill-settings">
+                      <div className="med-refill-settings-head">
+                        <div>
+                          <h4>Compra actual y boleta</h4>
+                          <p>
+                            Si estás creando o actualizando el medicamento y además lo compraste, puedes dejar la compra
+                            registrada de inmediato con su boleta.
+                          </p>
+                        </div>
+                        <label className="med-refill-toggle">
+                          <input
+                            type="checkbox"
+                            checked={registerPurchaseNow}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setRegisterPurchaseNow(checked);
+                              if (checked && !formPurchaseNewStock.trim()) {
+                                setFormPurchaseNewStock(String(form.stock_total_doses || ""));
+                              }
+                            }}
+                          />
+                          <span>Registrar ahora</span>
+                        </label>
+                      </div>
+                      {registerPurchaseNow ? (
+                        <>
+                          <div className="form-row">
+                            <div className="input-group">
+                              <label className="input-label">Stock total después de la compra</label>
+                              <input
+                                className="input-field"
+                                type="number"
+                                min="0"
+                                value={formPurchaseNewStock}
+                                onChange={(e) => setFormPurchaseNewStock(e.target.value)}
+                                placeholder="Ej: 30"
+                              />
+                              <small className="muted med-form-helper">
+                                Escribe cuántas unidades quedaron disponibles después de esta compra.
+                              </small>
+                            </div>
+                            <div className="input-group">
+                              <label className="input-label">Monto pagado</label>
+                              <input
+                                className="input-field"
+                                type="text"
+                                inputMode="decimal"
+                                value={formPurchaseAmount}
+                                onChange={(e) => setFormPurchaseAmount(e.target.value)}
+                                placeholder="Ej: 5490"
+                              />
+                              <small className="muted med-form-helper">
+                                Opcional. Escríbelo sin separadores de miles.
+                              </small>
+                            </div>
+                          </div>
+                          <div className="input-group">
+                            <label className="input-label">Boleta o comprobante</label>
+                            <input
+                              className="input-field"
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={(e) => setFormPurchaseReceiptFile(e.target.files?.[0] || null)}
+                            />
+                            <small className="muted med-form-helper">
+                              Puedes subir una foto o un PDF y quedará guardado junto con la compra.
+                            </small>
+                            {formPurchaseReceiptFile ? (
+                              <div className="med-purchase-file-chip">{formPurchaseReceiptFile.name}</div>
+                            ) : null}
+                          </div>
+                          <div className="input-group">
+                            <label className="input-label">Observación de la compra</label>
+                            <textarea
+                              className="textarea-field"
+                              rows="3"
+                              value={formPurchaseNotes}
+                              onChange={(e) => setFormPurchaseNotes(e.target.value)}
+                              placeholder="Ej: Se compró en farmacia de turno."
+                            />
+                            <small className="muted med-form-helper">
+                              Este registro es independiente de “Marcar como comprado” para la reposición familiar.
+                            </small>
+                          </div>
+                        </>
+                      ) : null}
                     </div>
 
                     <div className="med-refill-settings">
@@ -2458,7 +2599,7 @@ export default function Medications() {
           <div className="med-purchase-empty">
             <strong>Aún no hay compras registradas.</strong>
             <span>
-              Cuando alguien marque un medicamento como comprado, la boleta y el detalle aparecerán aquí.
+              Cuando registres una compra en el formulario o alguien marque un medicamento como comprado, la boleta y el detalle aparecerán aquí.
             </span>
           </div>
         ) : (
