@@ -4042,6 +4042,7 @@ def _record_medication_purchase(
     current_user: models.User,
     *,
     new_stock_total_doses: int,
+    purchased_by_user_id: int | None = None,
     amount_total: float | None = None,
     currency: str | None = None,
     notes: str | None = None,
@@ -4057,16 +4058,40 @@ def _record_medication_purchase(
     )
     assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts)
     normalized_stock = max(int(new_stock_total_doses or 0), 0)
+    normalized_purchased_by_user_id = int(purchased_by_user_id or getattr(current_user, "id", 0) or 0)
+    if not normalized_purchased_by_user_id:
+        raise HTTPException(status_code=400, detail="Debes indicar quién compró el medicamento")
+    if profile is not None:
+        purchaser_link = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == int(profile.id),
+                models.ProfileRelationship.user_id == normalized_purchased_by_user_id,
+                models.ProfileRelationship.status == "accepted",
+            )
+            .first()
+        )
+        if not purchaser_link:
+            raise HTTPException(status_code=400, detail="La persona seleccionada no pertenece al grupo familiar de este perfil")
+    purchased_by_user = (
+        db.query(models.User)
+        .filter(models.User.id == normalized_purchased_by_user_id)
+        .first()
+    )
+    purchased_by_name = (
+        (getattr(purchased_by_user, "name", None) or getattr(purchased_by_user, "email", None) or "").strip()
+        or (getattr(current_user, "name", None) or getattr(current_user, "email", None) or "").strip()
+    )
     purchase = models.MedicationPurchase(
         user_id=int(getattr(med, "user_id", 0) or 0),
         medication_id=int(getattr(med, "id", 0) or 0),
         profile_id=int(getattr(profile, "id", 0) or 0) or None,
         assigned_user_id=int(assignee.get("user_id") or 0) if assignee else None,
-        purchased_by_user_id=int(getattr(current_user, "id", 0) or 0) or None,
+        purchased_by_user_id=normalized_purchased_by_user_id or None,
         medication_name_snapshot=(getattr(med, "name", None) or "").strip(),
         dose_snapshot=(getattr(med, "dose", None) or "").strip(),
         assigned_name_snapshot=(assignee.get("name") if assignee else "") or "",
-        purchased_by_name_snapshot=(getattr(current_user, "name", None) or getattr(current_user, "email", None) or "").strip(),
+        purchased_by_name_snapshot=purchased_by_name,
         quantity_added_doses=normalized_stock,
         previous_remaining_doses=previous_remaining,
         new_stock_total_doses=normalized_stock,
@@ -20098,6 +20123,7 @@ async def list_medication_purchases(
 async def create_medication_purchase(
     medication_id: int,
     new_stock_total_doses: int = Form(...),
+    purchased_by_user_id: int | None = Form(None),
     amount_total: str | None = Form(None),
     currency: str | None = Form("CLP"),
     notes: str | None = Form(""),
@@ -20155,6 +20181,7 @@ async def create_medication_purchase(
         profile,
         current_user,
         new_stock_total_doses=new_stock_total_doses,
+        purchased_by_user_id=purchased_by_user_id,
         amount_total=normalized_amount,
         currency=currency,
         notes=notes,
@@ -20246,6 +20273,7 @@ async def mark_medication_refill_purchased(
         profile,
         current_user,
         new_stock_total_doses=new_stock,
+        purchased_by_user_id=(payload or {}).get("purchased_by_user_id"),
         amount_total=normalized_amount,
         currency=(payload or {}).get("currency", "CLP"),
         notes=(payload or {}).get("notes", ""),

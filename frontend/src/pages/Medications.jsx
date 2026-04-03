@@ -160,6 +160,7 @@ export default function Medications() {
   const [purchaseAmount, setPurchaseAmount] = useState("");
   const [purchaseNotes, setPurchaseNotes] = useState("");
   const [purchaseReceiptFile, setPurchaseReceiptFile] = useState(null);
+  const [purchaseBuyerUserId, setPurchaseBuyerUserId] = useState("");
   const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [purchaseHistory, setPurchaseHistory] = useState([]);
   const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
@@ -171,6 +172,7 @@ export default function Medications() {
   const [formPurchaseAmount, setFormPurchaseAmount] = useState("");
   const [formPurchaseNotes, setFormPurchaseNotes] = useState("");
   const [formPurchaseReceiptFile, setFormPurchaseReceiptFile] = useState(null);
+  const [formPurchaseBuyerUserId, setFormPurchaseBuyerUserId] = useState("");
   const [medicationsPage, setMedicationsPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
@@ -408,6 +410,8 @@ export default function Medications() {
     setFormPurchaseAmount("");
     setFormPurchaseNotes("");
     setFormPurchaseReceiptFile(null);
+    setFormPurchaseBuyerUserId("");
+    setPurchaseBuyerUserId("");
     setForm({
       id: null,
       name: "",
@@ -440,9 +444,9 @@ export default function Medications() {
     }
     setLoading(true);
     try {
-      const parsedDosesPerIntake = parseFloat(normalizeDecimalInput(form.doses_per_intake));
+      const parsedDosesPerIntake = parseLocalizedDecimalInput(form.doses_per_intake);
       const parsedFrequencyPerDay =
-        deriveFrequencyPerDay(form.frequency || "", normalizeDecimalInput(form.frequency_per_day)) || 1.0;
+        deriveFrequencyPerDay(form.frequency || "", serializeLocalizedDecimalInput(form.frequency_per_day)) || 1.0;
       // Preparar datos: convertir strings vacíos a null y document_id a número o null
       const payload = {
         name: form.name,
@@ -506,6 +510,11 @@ export default function Medications() {
         setLoading(false);
         return;
       }
+      if (registerPurchaseNow && !String(formPurchaseBuyerUserId || "").trim()) {
+        alert("Selecciona quién compró el medicamento para registrar la boleta correctamente.");
+        setLoading(false);
+        return;
+      }
 
       const savedMedication = await saveMedication(payload);
       const savedMedicationId = savedMedication?.id || payload.id;
@@ -515,8 +524,9 @@ export default function Medications() {
         try {
           const purchaseFormData = new FormData();
           purchaseFormData.append("new_stock_total_doses", String(normalizedPurchaseStock));
+          purchaseFormData.append("purchased_by_user_id", String(formPurchaseBuyerUserId));
           if (formPurchaseAmount.trim()) {
-            purchaseFormData.append("amount_total", normalizeDecimalInput(formPurchaseAmount));
+            purchaseFormData.append("amount_total", serializeLocalizedDecimalInput(formPurchaseAmount));
           }
           if (formPurchaseNotes.trim()) {
             purchaseFormData.append("notes", formPurchaseNotes.trim());
@@ -613,8 +623,8 @@ export default function Medications() {
       refill_participant_user_ids: Array.isArray(med.refill_participant_user_ids)
         ? med.refill_participant_user_ids.map((value) => String(value))
         : familyCaregivers.map((item) => String(item.user_id)),
-      doses_per_intake: med.doses_per_intake != null ? String(med.doses_per_intake) : "1",
-      frequency_per_day: med.frequency_per_day != null ? String(med.frequency_per_day) : "1",
+      doses_per_intake: med.doses_per_intake != null ? formatLocalizedDecimalInput(med.doses_per_intake) : "1",
+      frequency_per_day: med.frequency_per_day != null ? formatLocalizedDecimalInput(med.frequency_per_day) : "1",
       stock_total_doses:
         med.stock_total_doses || med.stock_total_doses === 0
           ? String(med.stock_total_doses)
@@ -629,6 +639,7 @@ export default function Medications() {
     setFormPurchaseAmount("");
     setFormPurchaseNotes("");
     setFormPurchaseReceiptFile(null);
+    setFormPurchaseBuyerUserId(defaultPurchaseActorId);
   };
 
   const handleMarkPurchased = (med) => {
@@ -637,6 +648,7 @@ export default function Medications() {
     setPurchaseAmount("");
     setPurchaseNotes("");
     setPurchaseReceiptFile(null);
+    setPurchaseBuyerUserId(defaultPurchaseActorId);
     setPurchaseOpen(true);
   };
 
@@ -647,6 +659,7 @@ export default function Medications() {
     setPurchaseAmount("");
     setPurchaseNotes("");
     setPurchaseReceiptFile(null);
+    setPurchaseBuyerUserId("");
   };
 
   const handleConfirmPurchase = async () => {
@@ -656,12 +669,17 @@ export default function Medications() {
       alert("Ingresa cuántas dosis tendrá el nuevo stock del medicamento.");
       return;
     }
+    if (!String(purchaseBuyerUserId || "").trim()) {
+      alert("Selecciona quién compró el medicamento.");
+      return;
+    }
     setPurchaseLoading(true);
     try {
       const formData = new FormData();
       formData.append("new_stock_total_doses", String(nextStock));
+      formData.append("purchased_by_user_id", String(purchaseBuyerUserId));
       if (purchaseAmount.trim()) {
-        formData.append("amount_total", normalizeDecimalInput(purchaseAmount));
+        formData.append("amount_total", serializeLocalizedDecimalInput(purchaseAmount));
       }
       if (purchaseNotes.trim()) {
         formData.append("notes", purchaseNotes.trim());
@@ -959,15 +977,32 @@ export default function Medications() {
     id: String(item?.user_id || ""),
     name: item?.user_name || item?.user_email || `Familiar ${item?.user_id || ""}`,
   }));
+  const purchaseActorOptions = familyCaregivers.map((item) => ({
+    id: String(item?.user_id || ""),
+    name: item?.user_name || item?.user_email || `Usuario ${item?.user_id || ""}`,
+  }));
+  const defaultPurchaseActorId = purchaseActorOptions.length === 1 ? purchaseActorOptions[0].id : "";
   const familyRefillNames = familyRefillOptions
     .map((item) => item.name || "")
     .filter(Boolean)
     .slice(0, 4);
-  const normalizeDecimalInput = (value) =>
-    String(value ?? "")
-      .replace(",", ".")
-      .replace(/[^0-9.]/g, "")
-      .replace(/(\..*)\./g, "$1");
+  const sanitizeLocalizedDecimalInput = (value) => {
+    const normalized = String(value ?? "")
+      .replace(/\./g, ",")
+      .replace(/[^0-9,]/g, "");
+    const [integerPart = "", ...decimalParts] = normalized.split(",");
+    return decimalParts.length ? `${integerPart},${decimalParts.join("")}` : integerPart;
+  };
+  const serializeLocalizedDecimalInput = (value) =>
+    sanitizeLocalizedDecimalInput(value).replace(",", ".");
+  const parseLocalizedDecimalInput = (value) => {
+    const parsed = Number.parseFloat(serializeLocalizedDecimalInput(value));
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  };
+  const formatLocalizedDecimalInput = (value) => {
+    if (value == null || value === "") return "";
+    return sanitizeLocalizedDecimalInput(String(value));
+  };
   const frequencyValue = String(form.frequency || "").trim();
   const durationValue = String(form.duration || "").trim();
   const medicationPreviewName = String(form.name || "").trim() || "Medicamento";
@@ -975,7 +1010,7 @@ export default function Medications() {
   const medicationStartPreview = toLocaleDateTimeOrEmpty(form.start_at) || "";
   const derivedFrequencyPerDay = deriveFrequencyPerDay(
     frequencyValue,
-    form.frequency_per_day
+    serializeLocalizedDecimalInput(form.frequency_per_day)
   );
   const frequencyIntervalHours = deriveFrequencyIntervalHours(frequencyValue);
   const formPreviewMedication = {
@@ -1001,7 +1036,7 @@ export default function Medications() {
     parseInt(form.refill_alert_threshold_doses, 10) || 0,
     0
   );
-  const dosesPerIntakeValue = Math.max(parseFloat(form.doses_per_intake) || 0, 0);
+  const dosesPerIntakeValue = Math.max(parseLocalizedDecimalInput(form.doses_per_intake) || 0, 0);
   const dailyUnitsEstimate =
     dosesPerIntakeValue > 0 && derivedFrequencyPerDay
       ? dosesPerIntakeValue * derivedFrequencyPerDay
@@ -1014,6 +1049,13 @@ export default function Medications() {
     alertThresholdUnits > 0 && dailyUnitsEstimate > 0
       ? alertThresholdUnits / dailyUnitsEstimate
       : null;
+
+  useEffect(() => {
+    if (defaultPurchaseActorId) {
+      setFormPurchaseBuyerUserId((current) => current || defaultPurchaseActorId);
+      setPurchaseBuyerUserId((current) => current || defaultPurchaseActorId);
+    }
+  }, [defaultPurchaseActorId]);
   const totalMedicationPages = Math.max(
     1,
     Math.ceil(filteredMeds.length / MEDICATIONS_PAGE_SIZE) || 1
@@ -1613,6 +1655,9 @@ export default function Medications() {
                               if (checked && !formPurchaseNewStock.trim()) {
                                 setFormPurchaseNewStock(String(form.stock_total_doses || ""));
                               }
+                              if (checked && !formPurchaseBuyerUserId && defaultPurchaseActorId) {
+                                setFormPurchaseBuyerUserId(defaultPurchaseActorId);
+                              }
                             }}
                           />
                           <span>Registrar ahora</span>
@@ -1620,6 +1665,24 @@ export default function Medications() {
                       </div>
                       {registerPurchaseNow ? (
                         <>
+                          <div className="input-group">
+                            <label className="input-label">Quién compró</label>
+                            <select
+                              className="select-field"
+                              value={formPurchaseBuyerUserId}
+                              onChange={(e) => setFormPurchaseBuyerUserId(e.target.value)}
+                            >
+                              <option value="">Selecciona persona</option>
+                              {purchaseActorOptions.map((person) => (
+                                <option key={`purchase-form-${person.id}`} value={person.id}>
+                                  {person.name}
+                                </option>
+                              ))}
+                            </select>
+                            <small className="muted med-form-helper">
+                              Elige a la persona que hizo la compra, aunque otra persona esté subiendo la boleta.
+                            </small>
+                          </div>
                           <div className="form-row">
                             <div className="input-group">
                               <label className="input-label">Stock total después de la compra</label>
@@ -1763,21 +1826,20 @@ export default function Medications() {
                               <label className="input-label">Unidades por toma</label>
                                 <input
                                   className="input-field"
-                                  type="number"
-                                  min="0.01"
-                                  step="0.1"
+                                  type="text"
                                   inputMode="decimal"
+                                  enterKeyHint="done"
                                   value={form.doses_per_intake}
                                   onChange={(e) =>
                                     setForm((current) => ({
                                       ...current,
-                                      doses_per_intake: normalizeDecimalInput(e.target.value),
+                                      doses_per_intake: sanitizeLocalizedDecimalInput(e.target.value),
                                     }))
                                   }
                                   placeholder="Ej: 1"
                                 />
                               <small className="muted med-form-helper">
-                                Ejemplo: 1 pastilla por toma o 0,5 si usas media unidad.
+                                Acepta valores como 1 o 0,5 si usas media unidad.
                               </small>
                             </div>
                             <div className="input-group">
@@ -1791,15 +1853,14 @@ export default function Medications() {
                                 <>
                                   <input
                                     className="input-field"
-                                    type="number"
-                                    min="0.01"
-                                    step="0.1"
+                                    type="text"
                                     inputMode="decimal"
+                                    enterKeyHint="done"
                                     value={form.frequency_per_day}
                                     onChange={(e) =>
                                       setForm((current) => ({
                                         ...current,
-                                        frequency_per_day: normalizeDecimalInput(e.target.value),
+                                        frequency_per_day: sanitizeLocalizedDecimalInput(e.target.value),
                                       }))
                                     }
                                     placeholder="Ej: 2"
@@ -2731,6 +2792,24 @@ export default function Medications() {
                 </small>
               </div>
               <div className="med-purchase-grid">
+                <div className="input-group">
+                  <label className="input-label">Quién compró</label>
+                  <select
+                    className="select-field"
+                    value={purchaseBuyerUserId}
+                    onChange={(e) => setPurchaseBuyerUserId(e.target.value)}
+                  >
+                    <option value="">Selecciona persona</option>
+                    {purchaseActorOptions.map((person) => (
+                      <option key={`purchase-modal-${person.id}`} value={person.id}>
+                        {person.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="med-refill-helper">
+                    Este nombre quedará guardado como la persona que realmente hizo la compra.
+                  </p>
+                </div>
                 <div className="input-group">
                   <label className="input-label">Nuevo stock total</label>
                   <input
