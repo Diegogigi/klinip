@@ -20296,6 +20296,9 @@ async def delete_medication(
         models.MedicationPurchase.medication_id == medication_id,
         models.MedicationPurchase.user_id == target_user_id,
     ).delete()
+    db.query(models.AdherenceSummary).filter(
+        models.AdherenceSummary.medication_id == medication_id,
+    ).delete()
     db.delete(med)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()

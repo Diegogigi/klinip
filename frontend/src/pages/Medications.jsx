@@ -4,7 +4,6 @@ import {
   createMedicationPurchase,
   deleteMedication,
   getActiveHealthProfile,
-  getMyPlan,
   getMedicationIntakes,
   getMedicationPurchaseReceipt,
   getMedicationPurchases,
@@ -114,7 +113,6 @@ export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
   const [meds, setMeds] = useState([]);
-  const [planInfo, setPlanInfo] = useState(null);
   const [activeProfile, setActiveProfile] = useState(null);
   const [familyCaregivers, setFamilyCaregivers] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -173,6 +171,9 @@ export default function Medications() {
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
+  const hasAcceptedFamilyCollaborators = familyCaregivers.some(
+    (item) => Number(item?.user_id) !== Number(activeProfile?.owner_user_id)
+  );
 
   const load = async () => {
     try {
@@ -202,13 +203,9 @@ export default function Medications() {
 
   const loadFamilyContext = async () => {
     try {
-      const [plan, profile] = await Promise.all([
-        getMyPlan(),
-        getActiveHealthProfile(),
-      ]);
-      setPlanInfo(plan || null);
+      const profile = await getActiveHealthProfile();
       setActiveProfile(profile || null);
-      if (plan?.collaboration_enabled && profile?.id) {
+      if (profile?.id) {
         const caregivers = await getProfileCaregivers(profile.id);
         setFamilyCaregivers(
           Array.isArray(caregivers)
@@ -222,7 +219,6 @@ export default function Medications() {
       if (!isAuthSessionError(error)) {
         console.error("No se pudo cargar el contexto familiar de medicamentos", error);
       }
-      setPlanInfo(null);
       setActiveProfile(null);
       setFamilyCaregivers([]);
     }
@@ -280,8 +276,7 @@ export default function Medications() {
   }, []);
 
   useEffect(() => {
-    const collaborationEnabled = Boolean(planInfo?.collaboration_enabled);
-    if (!collaborationEnabled || familyCaregivers.length === 0) return;
+    if (!hasAcceptedFamilyCollaborators || familyCaregivers.length === 0) return;
     if (!form.refill_enabled) return;
     if ((form.refill_participant_user_ids || []).length > 0) return;
     setForm((current) => ({
@@ -293,7 +288,7 @@ export default function Medications() {
           : current.refill_fixed_user_id,
     }));
   }, [
-    planInfo?.collaboration_enabled,
+    hasAcceptedFamilyCollaborators,
     familyCaregivers,
     form.refill_enabled,
     form.refill_fixed_user_id,
@@ -452,8 +447,7 @@ export default function Medications() {
         document_id: form.document_id ? parseInt(form.document_id) : null,
         refill_enabled:
           Boolean(form.refill_enabled) &&
-          Boolean(planInfo?.collaboration_enabled) &&
-          familyCaregivers.length > 0,
+          hasAcceptedFamilyCollaborators,
         refill_mode: form.refill_mode || "rotativo",
         refill_fixed_user_id: form.refill_fixed_user_id ? parseInt(form.refill_fixed_user_id, 10) : null,
         refill_participant_user_ids: (form.refill_participant_user_ids || [])
@@ -856,7 +850,10 @@ export default function Medications() {
       });
     } catch (err) {
       console.error(err);
-      alert("No se pudo eliminar");
+      alert(
+        "No se pudo eliminar el medicamento: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
     }
   };
 
@@ -904,7 +901,7 @@ export default function Medications() {
     ? (purchaseHistory || []).filter((item) => Number(item.medication_id) === Number(detailTarget.id)).slice(0, 6)
     : [];
   const familyRefillAvailable =
-    Boolean(planInfo?.collaboration_enabled) && familyCaregivers.length > 0;
+    hasAcceptedFamilyCollaborators;
   const familyRefillOptions = familyCaregivers.map((item) => ({
     id: String(item?.user_id || ""),
     name: item?.user_name || item?.user_email || `Familiar ${item?.user_id || ""}`,
