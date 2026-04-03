@@ -1778,27 +1778,33 @@ export default function Medications() {
                                     }}
                                     onDrop={() => handleParticipantDrop(participant.id)}
                                   >
-                                    <label className="med-refill-participant-main">
-                                      <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => toggleRefillParticipant(participant.id)}
-                                      />
-                                      <span className="med-refill-participant-copy">
-                                        <strong>{participant.name}</strong>
-                                        <small>
-                                          {checked
-                                            ? `Orden ${currentIndex + 1} en este medicamento`
-                                            : "No participa en esta compra"}
-                                        </small>
-                                      </span>
-                                    </label>
+                                    <div className="med-refill-participant-head">
+                                      <label className="med-refill-participant-main">
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => toggleRefillParticipant(participant.id)}
+                                        />
+                                        <span className="med-refill-participant-copy">
+                                          <strong>{participant.name}</strong>
+                                          <small>
+                                            {checked
+                                              ? "Participa en esta compra"
+                                              : "No participa en esta compra"}
+                                          </small>
+                                        </span>
+                                      </label>
+                                      {checked ? (
+                                        <span className="med-refill-order-badge">
+                                          #{currentIndex + 1}
+                                        </span>
+                                      ) : null}
+                                    </div>
                                     {checked && form.refill_mode === "rotativo" ? (
                                       <div className="med-refill-reorder-tools">
-                                        <div className="med-refill-drag-hint" aria-hidden>
-                                          <strong>Arrastra</strong>
-                                          <span>o usa las flechas</span>
-                                        </div>
+                                        <span className="med-refill-drag-pill" aria-hidden>
+                                          ↕ Arrastra para ordenar
+                                        </span>
                                         <div className="med-refill-order-actions">
                                           <button
                                             type="button"
@@ -1823,9 +1829,9 @@ export default function Medications() {
                                 );
                               })}
                             </div>
-                            <small className="muted med-form-helper">
-                              Selecciona solo a quienes realmente participan. Si la compra es rotativa, puedes arrastrar las tarjetas para ordenar el turno.
-                            </small>
+                          <small className="muted med-form-helper">
+                              Marca solo a quienes participan. Si el turno es rotativo, puedes arrastrar la tarjeta o usar las flechas para cambiar el orden.
+                          </small>
                           </div>
                           <p className="med-refill-helper">
                             {form.refill_mode === "fijo"
