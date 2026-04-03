@@ -14,7 +14,7 @@ import {
   getProfileNotes,
   updateProfileNote,
 } from "../api";
-import { parseDate } from "../utils/dates";
+import { parseDate, toLocalInputValue } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { cleanUiText } from "../utils/textEncoding";
@@ -778,7 +778,7 @@ export default function Dashboard({ user }) {
     setEditingNoteId(item.id);
     setNoteDraft(item.note || item.text || "");
     setNoteColor(item.color || "yellow");
-    setNoteReminder(item.reminder_at ? String(item.reminder_at).slice(0, 16) : "");
+    setNoteReminder(item.reminder_at ? toLocalInputValue(item.reminder_at) : "");
   };
 
   const handleDeleteNote = async (noteId) => {
@@ -801,13 +801,18 @@ export default function Dashboard({ user }) {
     const value = noteDraft.trim();
     if (!value || !activeProfile?.id || noteSubmitting) return;
     setNoteSubmitting(true);
+    // Convert datetime-local (local time) to UTC ISO string so the scheduler
+    // can compare against datetime.utcnow() correctly.
+    const reminderUtc = noteReminder
+      ? new Date(noteReminder).toISOString()
+      : null;
     try {
       if (editingNoteId) {
         const updated = await updateProfileNote(activeProfile.id, editingNoteId, {
           note: value,
           visibility: "shared",
           color: noteColor,
-          reminder_at: noteReminder || null,
+          reminder_at: reminderUtc,
         });
         setQuickNotes((prev) =>
           prev.map((item) => (item.id === editingNoteId ? updated : item)).slice(0, 6)
@@ -817,7 +822,7 @@ export default function Dashboard({ user }) {
           note: value,
           visibility: "shared",
           color: noteColor,
-          reminder_at: noteReminder || null,
+          reminder_at: reminderUtc,
         });
         setQuickNotes((prev) => [created, ...prev].slice(0, 6));
       }
@@ -1265,7 +1270,7 @@ export default function Dashboard({ user }) {
                       className="home-note-reminder-input"
                       value={noteReminder}
                       onChange={(e) => setNoteReminder(e.target.value)}
-                      min={new Date().toISOString().slice(0, 16)}
+                      min={toLocalInputValue(new Date())}
                     />
                   </label>
                   {noteReminder && (

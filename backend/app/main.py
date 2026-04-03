@@ -4640,7 +4640,9 @@ def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
     db = SessionLocal()
     metrics = {"job": "send_note_reminders", "sent": 0, "errors": 0}
     try:
-        now = datetime.now()
+        # reminder_at is stored as UTC naive (frontend sends UTC ISO with Z).
+        # Compare against utcnow() to match regardless of server TZ.
+        now = datetime.utcnow()
         window_start = now - timedelta(seconds=SCHEDULE_WINDOW_SECONDS)
         due_notes = (
             db.query(models.ProfileNote)

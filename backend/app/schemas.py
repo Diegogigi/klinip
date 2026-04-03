@@ -329,11 +329,19 @@ class ProfileNoteOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    @field_serializer('created_at', 'updated_at', 'reminder_at')
+    @field_serializer('created_at', 'updated_at')
     def serialize_note_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    @field_serializer('reminder_at')
+    def serialize_reminder_at(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        # reminder_at is stored as UTC naive; append Z so the browser
+        # parses it as UTC and toLocalInputValue() converts it to local time.
+        return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 class Token(BaseModel):
     access_token: str
