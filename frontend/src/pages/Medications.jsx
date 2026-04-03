@@ -442,6 +442,14 @@ export default function Medications() {
       alert("Este perfil está en modo solo lectura. No puedes modificar medicamentos.");
       return;
     }
+    if (!String(form.name || "").trim()) {
+      alert("Ingresa el nombre del medicamento.");
+      return;
+    }
+    if (String(form.frequency || "").trim() && !String(form.start_at || "").trim()) {
+      alert("Ingresa la primera toma para poder guardar la frecuencia.");
+      return;
+    }
     setLoading(true);
     try {
       const parsedDosesPerIntake = parseLocalizedDecimalInput(form.doses_per_intake);
@@ -488,7 +496,7 @@ export default function Medications() {
         return;
       }
 
-      if (payload.refill_enabled && (!Number.isFinite(parsedDosesPerIntake) || parsedDosesPerIntake <= 0)) {
+      if (payload.refill_enabled && !isPositiveLocalizedDecimalInput(form.doses_per_intake)) {
         alert("Ingresa cuántas unidades usas en cada toma. Puedes usar valores como 1 o 0,5.");
         setLoading(false);
         return;
@@ -999,6 +1007,10 @@ export default function Medications() {
     const parsed = Number.parseFloat(serializeLocalizedDecimalInput(value));
     return Number.isFinite(parsed) ? parsed : Number.NaN;
   };
+  const isPositiveLocalizedDecimalInput = (value) => {
+    const parsed = parseLocalizedDecimalInput(value);
+    return Number.isFinite(parsed) && parsed > 0;
+  };
   const formatLocalizedDecimalInput = (value) => {
     if (value == null || value === "") return "";
     return sanitizeLocalizedDecimalInput(String(value));
@@ -1405,7 +1417,7 @@ export default function Medications() {
                 Cerrar
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} noValidate>
               <div className="med-form-shell">
                 <section className="med-form-section is-primary">
                   <div className="med-form-section-head">
