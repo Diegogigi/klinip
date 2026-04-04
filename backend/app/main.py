@@ -4083,7 +4083,8 @@ def _record_medication_purchase(
         (getattr(purchased_by_user, "name", None) or getattr(purchased_by_user, "email", None) or "").strip()
         or (getattr(current_user, "name", None) or getattr(current_user, "email", None) or "").strip()
     )
-    next_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+    current_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0)
+    next_rotation_index = current_rotation_index + 1
     if str(getattr(med, "refill_mode", None) or "rotativo") != "fijo" and selected_contacts:
         purchaser_position = next(
             (
@@ -4096,6 +4097,12 @@ def _record_medication_purchase(
         if purchaser_position is not None:
             assignee_snapshot = selected_contacts[purchaser_position]
             next_rotation_index = purchaser_position + 1
+        else:
+            assignee_snapshot = {
+                "user_id": normalized_purchased_by_user_id,
+                "name": purchased_by_name,
+            }
+            next_rotation_index = current_rotation_index
     purchase = models.MedicationPurchase(
         user_id=int(getattr(med, "user_id", 0) or 0),
         medication_id=int(getattr(med, "id", 0) or 0),
