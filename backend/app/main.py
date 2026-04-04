@@ -4057,6 +4057,7 @@ def _record_medication_purchase(
         contacts=_medication_refill_contacts(db, getattr(med, "user_id", None)),
     )
     assignee = _medication_refill_current_assignee(db, med, contacts=selected_contacts)
+    assignee_snapshot = assignee
     normalized_stock = max(int(new_stock_total_doses or 0), 0)
     normalized_purchased_by_user_id = int(purchased_by_user_id or getattr(current_user, "id", 0) or 0)
     if not normalized_purchased_by_user_id:
@@ -4082,15 +4083,28 @@ def _record_medication_purchase(
         (getattr(purchased_by_user, "name", None) or getattr(purchased_by_user, "email", None) or "").strip()
         or (getattr(current_user, "name", None) or getattr(current_user, "email", None) or "").strip()
     )
+    next_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+    if str(getattr(med, "refill_mode", None) or "rotativo") != "fijo" and selected_contacts:
+        purchaser_position = next(
+            (
+                index
+                for index, item in enumerate(selected_contacts)
+                if int((item or {}).get("user_id") or 0) == normalized_purchased_by_user_id
+            ),
+            None,
+        )
+        if purchaser_position is not None:
+            assignee_snapshot = selected_contacts[purchaser_position]
+            next_rotation_index = purchaser_position + 1
     purchase = models.MedicationPurchase(
         user_id=int(getattr(med, "user_id", 0) or 0),
         medication_id=int(getattr(med, "id", 0) or 0),
         profile_id=int(getattr(profile, "id", 0) or 0) or None,
-        assigned_user_id=int(assignee.get("user_id") or 0) if assignee else None,
+        assigned_user_id=int(assignee_snapshot.get("user_id") or 0) if assignee_snapshot else None,
         purchased_by_user_id=normalized_purchased_by_user_id or None,
         medication_name_snapshot=(getattr(med, "name", None) or "").strip(),
         dose_snapshot=(getattr(med, "dose", None) or "").strip(),
-        assigned_name_snapshot=(assignee.get("name") if assignee else "") or "",
+        assigned_name_snapshot=(assignee_snapshot.get("name") if assignee_snapshot else "") or "",
         purchased_by_name_snapshot=purchased_by_name,
         quantity_added_doses=normalized_stock,
         previous_remaining_doses=previous_remaining,
@@ -4105,7 +4119,7 @@ def _record_medication_purchase(
     )
     if normalized_stock > 0:
         med.stock_total_doses = normalized_stock
-    med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
+    med.refill_rotation_index = next_rotation_index
     med.refill_last_notified_at = None
     med.refill_last_notified_remaining = None
     db.add(purchase)
