@@ -1,0 +1,560 @@
+
+/* ═══════════════════════════════════════════════════════════════════
+   BURJEEL HEALTH DESIGN SYSTEM - Klinip Mobile Redesign
+   Tabs, Cards, Botones, Fondos, Formularios, Modales
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── DESKTOP: Ocultar elementos exclusivos de mobile ── */
+@media (min-width: 769px) {
+  .appt-tabs-bar,
+  .appt-search-bar {
+    display: none !important;
+  }
+
+  .appt-burjeel-card {
+    display: none !important;
+  }
+
+  .appt-desktop-filters {
+    display: block !important;
+  }
+}
+
+/* ── 1. FONDO GENERAL EN MOBILE ── */
+@media (max-width: 768px) {
+  .main-area {
+    background: #f1f5f9 !important;
+  }
+
+  .main-content {
+    background: #f1f5f9 !important;
+    padding: 0 !important;
+  }
+
+  /* Ocultar filtros desktop en mobile */
+  .appt-desktop-filters {
+    display: none !important;
+  }
+
+  /* La tabla es solo desktop */
+  .appointments-table-shell {
+    display: none !important;
+  }
+
+  /* La lista mobile siempre visible */
+  .records-mobile-list,
+  .appointments-mobile-list,
+  .medications-mobile-list,
+  .documents-mobile-list {
+    display: flex !important;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  /* ── TOPBAR MOBILE: header limpio estilo Burjeel ── */
+  .topbar.topbar-mobile-compact {
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
+    padding: 0.9rem 1.1rem !important;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-title {
+    font-size: 1.12rem !important;
+    font-weight: 700 !important;
+    color: #0f172a !important;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-profile-switcher {
+    display: none !important;
+  }
+
+  /* ── 2. TABS ESTILO BURJEEL ── */
+  .appt-tabs-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.85rem 1rem 0;
+    background: #f1f5f9;
+  }
+
+  .appt-tab-btn {
+    flex: 1;
+    padding: 0.6rem 0.5rem;
+    border-radius: 999px;
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s ease;
+    text-align: center;
+  }
+
+  .appt-tab-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+
+  /* ── 3. BARRA DE BUSQUEDA MOBILE ── */
+  .appt-search-bar {
+    padding: 0.65rem 1rem;
+    background: #f1f5f9;
+  }
+
+  .appt-search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 0.72rem 1rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  }
+
+  .appt-search-wrap svg {
+    width: 16px;
+    height: 16px;
+    color: #94a3b8;
+    flex-shrink: 0;
+  }
+
+  .appt-search-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.9rem;
+    color: #0f172a;
+    font-family: inherit;
+    width: 100%;
+  }
+
+  .appt-search-input::placeholder {
+    color: #94a3b8;
+  }
+
+  /* ── 4. CARD DE CITA ESTILO BURJEEL ── */
+  .appt-burjeel-card {
+    background: #ffffff;
+    border-radius: 20px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
+    border: 1.5px solid #f1f5f9;
+    cursor: pointer;
+    position: relative;
+    transition: box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .appt-burjeel-card:active {
+    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.12);
+  }
+
+  .appt-burjeel-badge {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.74rem;
+    font-weight: 700;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+  }
+
+  .appt-badge-agendada {
+    background: #22c55e;
+    color: #ffffff;
+  }
+
+  .appt-badge-realizada {
+    background: #2563eb;
+    color: #ffffff;
+  }
+
+  .appt-badge-pendiente {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+  }
+
+  .appt-burjeel-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    position: relative;
+  }
+
+  .appt-burjeel-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: #eff6ff;
+    color: #2563eb;
+  }
+
+  .appt-burjeel-icon.is-cita { background: #f0fdfa; color: #0d9488; }
+  .appt-burjeel-icon.is-examen { background: #f0f9ff; color: #0284c7; }
+  .appt-burjeel-icon.is-tramite { background: #fffbeb; color: #d97706; }
+
+  .appt-burjeel-icon svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  .appt-burjeel-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+
+  .appt-burjeel-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.25;
+  }
+
+  .appt-burjeel-specialty {
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .appt-burjeel-center {
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+
+  .appt-burjeel-menu {
+    flex-shrink: 0;
+  }
+
+  .appt-burjeel-datetime {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: #475569;
+    font-weight: 500;
+    background: #f8fafc;
+    border-radius: 10px;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .appt-burjeel-datetime svg {
+    color: #2563eb;
+    flex-shrink: 0;
+  }
+
+  .appt-burjeel-actions {
+    display: flex;
+    gap: 0.65rem;
+  }
+
+  .appt-burjeel-btn-cancel {
+    flex: 1;
+    padding: 0.62rem 0.5rem;
+    border-radius: 999px;
+    border: 1.5px solid #e2e8f0;
+    background: #ffffff;
+    color: #475569;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+
+  .appt-burjeel-btn-cancel:active {
+    border-color: #ef4444;
+    color: #ef4444;
+    background: #fef2f2;
+  }
+
+  .appt-burjeel-btn-edit {
+    flex: 1;
+    padding: 0.62rem 0.5rem;
+    border-radius: 999px;
+    border: none;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 0.83rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    transition: all 0.2s;
+  }
+
+  .appt-burjeel-btn-edit:active {
+    background: #1d4ed8;
+  }
+
+  /* ── 5. CARDS MOBILE GENERICAS ── */
+  .records-mobile-card {
+    border-radius: 20px !important;
+    border: 1.5px solid #f1f5f9 !important;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07) !important;
+    padding: 1.1rem 1rem !important;
+    background: #ffffff !important;
+  }
+
+  .records-mobile-icon-badge {
+    width: 48px !important;
+    height: 48px !important;
+    border-radius: 14px !important;
+  }
+
+  .records-mobile-title-group strong {
+    font-size: 0.95rem !important;
+    font-weight: 700 !important;
+  }
+
+  .records-mobile-footer {
+    margin-top: 0.85rem !important;
+    padding-top: 0.75rem !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+
+  .records-mobile-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0.5rem 1.25rem !important;
+    border-radius: 999px !important;
+    background: #2563eb !important;
+    color: #ffffff !important;
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    border: none !important;
+    cursor: pointer !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28) !important;
+    text-decoration: none !important;
+  }
+
+  /* ── 6. MODALES: encabezado azul ── */
+  .detail-modal-card {
+    border-radius: 24px 24px 0 0 !important;
+    overflow: hidden !important;
+    max-height: 90vh !important;
+  }
+
+  .detail-modal-header {
+    background: #2563eb !important;
+    padding: 1.1rem 1.2rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .detail-modal-header h3 {
+    color: #ffffff !important;
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+  }
+
+  .detail-close-btn {
+    color: #ffffff !important;
+    background: rgba(255,255,255,0.18) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 32px !important;
+    height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+  }
+
+  /* ── 7. FORMULARIOS FLOTANTES ── */
+  .floating-form-card {
+    border-radius: 24px 24px 0 0 !important;
+    overflow: hidden !important;
+    max-height: 92vh !important;
+    overflow-y: auto !important;
+  }
+
+  .floating-form-card .card-header {
+    background: #2563eb !important;
+    margin: -1.2rem -1.2rem 1.2rem -1.2rem !important;
+    padding: 1rem 1.2rem !important;
+    border-radius: 0 !important;
+  }
+
+  .floating-form-card .card-title {
+    color: #ffffff !important;
+    background: none !important;
+    -webkit-text-fill-color: #ffffff !important;
+    font-size: 1.05rem !important;
+    font-weight: 700 !important;
+  }
+
+  .floating-form-backdrop {
+    align-items: flex-end !important;
+    padding: 0 !important;
+  }
+
+  /* ── 8. SURFACE FREE Y LISTAS ── */
+  .appointments-surface-free,
+  .medications-surface-free,
+  .documents-surface-free {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  /* Ocultar filtros de escritorio en mobile */
+  .medications-filters-card,
+  .documents-filters-card {
+    display: none !important;
+  }
+
+  /* La lista mobile visible en mobile */
+  .medications-list-card,
+  .documents-list-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+  }
+
+  .appointments-intro,
+  .medications-intro,
+  .documents-intro {
+    display: none !important;
+  }
+
+  .appointments-create .primary-btn,
+  .medications-create .primary-btn,
+  .documents-create .primary-btn {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0.85rem 1.5rem !important;
+    border-radius: 999px !important;
+    font-size: 0.95rem !important;
+    justify-content: center !important;
+  }
+
+  .appointments-create,
+  .medications-create,
+  .documents-create {
+    padding: 0.75rem 0.85rem 0 !important;
+  }
+
+  /* Compras de medicamentos */
+  .medications-purchases-card {
+    background: #ffffff !important;
+    border-radius: 20px !important;
+    border: 1.5px solid #f1f5f9 !important;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07) !important;
+    margin: 0 0.85rem !important;
+    padding: 1rem !important;
+  }
+
+  /* ── 9. BOTONES DE ACCION MODAL ── */
+  .modal-actions .primary-btn {
+    border-radius: 999px !important;
+    padding: 0.75rem 1.5rem !important;
+  }
+
+  .modal-actions .secondary-btn {
+    border-radius: 999px !important;
+  }
+
+  /* ── 10. DARK MODE ── */
+  body.theme-dark .appt-burjeel-card,
+  body.theme-dark .records-mobile-card {
+    background: #0f172a !important;
+    border-color: #1e293b !important;
+  }
+
+  body.theme-dark .appt-burjeel-name,
+  body.theme-dark .records-mobile-title-group strong {
+    color: #e2e8f0 !important;
+  }
+
+  body.theme-dark .appt-burjeel-datetime {
+    background: #1e293b;
+    color: #94a3b8;
+  }
+
+  body.theme-dark .appt-burjeel-btn-cancel {
+    border-color: #334155;
+    background: #1e293b;
+    color: #94a3b8;
+  }
+
+  body.theme-dark .appt-tabs-bar {
+    background: #0b1120;
+  }
+
+  body.theme-dark .appt-tab-btn {
+    background: #0f172a;
+    border-color: #1e293b;
+    color: #64748b;
+  }
+
+  body.theme-dark .appt-tab-btn.active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+  }
+
+  body.theme-dark .appt-search-bar {
+    background: #0b1120;
+  }
+
+  body.theme-dark .appt-search-wrap {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+
+  body.theme-dark .appt-search-input {
+    color: #e2e8f0;
+  }
+
+  body.theme-dark .main-area,
+  body.theme-dark .main-content {
+    background: #0b1120 !important;
+  }
+
+  body.theme-dark .records-mobile-footer {
+    border-top-color: #1e293b !important;
+  }
+
+  body.theme-dark .detail-modal-card,
+  body.theme-dark .floating-form-card {
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+  }
+}
+
+/* ── MOBILE: Ocultar tabla, mostrar lista cards siempre ── */
+@media (max-width: 768px) {
+  .appointments-table-shell {
+    display: none !important;
+  }
+
+  .appointments-mobile-list {
+    display: flex !important;
+  }
+
+  .records-mobile-list {
+    display: flex !important;
+  }
+}
