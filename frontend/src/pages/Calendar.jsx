@@ -336,6 +336,41 @@ export default function Calendar() {
     return null;
   }, [calendarScope, primaryOwnProfile, selectedSharedProfile]);
 
+  const visibleEvents = useMemo(
+    () =>
+      Object.values(eventsByDay)
+        .flat()
+        .filter(Boolean),
+    [eventsByDay]
+  );
+
+  const currentMonthEventCount = useMemo(
+    () =>
+      visibleEvents.filter((eventItem) => {
+        const eventDate = eventItem?.date instanceof Date ? eventItem.date : parseDate(eventItem?.date_time);
+        if (!eventDate || Number.isNaN(eventDate.getTime())) return false;
+        return (
+          eventDate.getMonth() === normalizedViewDate.getMonth() &&
+          eventDate.getFullYear() === normalizedViewDate.getFullYear()
+        );
+      }).length,
+    [visibleEvents, normalizedViewDate]
+  );
+
+  const medicationMonthCount = useMemo(
+    () =>
+      visibleEvents.filter((eventItem) => {
+        const eventDate = eventItem?.date instanceof Date ? eventItem.date : parseDate(eventItem?.date_time);
+        if (!eventDate || Number.isNaN(eventDate.getTime())) return false;
+        return (
+          eventItem.type === "medication" &&
+          eventDate.getMonth() === normalizedViewDate.getMonth() &&
+          eventDate.getFullYear() === normalizedViewDate.getFullYear()
+        );
+      }).length,
+    [visibleEvents, normalizedViewDate]
+  );
+
   const canCreateOnCurrentProfile = Boolean(
     currentActionProfile && roleCanWrite(currentActionProfile.access_role)
   );
@@ -358,12 +393,21 @@ export default function Calendar() {
     <>
       <div className="card calendar-card">
         <div className="card-header calendar-header">
-          <div>
+          <div className="calendar-hero-copy">
+            <p className="calendar-hero-eyebrow">Planificación mensual</p>
             <h2 className="card-title">Calendario de salud</h2>
             <p className="muted calendar-intro-copy">
               Vista mensual para citas, exámenes, trámites y medicación. Pulsa un día para ver el
               detalle.
             </p>
+            <div className="calendar-hero-summary">
+              <span className="calendar-summary-pill">
+                {currentMonthEventCount} actividad{currentMonthEventCount === 1 ? "" : "es"} este mes
+              </span>
+              <span className="calendar-summary-pill is-green">
+                {visibleProfiles.length} perfil{visibleProfiles.length === 1 ? "" : "es"} visible{visibleProfiles.length === 1 ? "" : "s"}
+              </span>
+            </div>
           </div>
           <div className="calendar-controls">
             <button
@@ -382,6 +426,24 @@ export default function Calendar() {
               Mes siguiente
             </button>
           </div>
+        </div>
+
+        <div className="calendar-overview-grid">
+          <article className="calendar-overview-card tone-blue">
+            <span className="calendar-overview-label">Mes actual</span>
+            <strong className="calendar-overview-value">{monthLabel}</strong>
+            <span className="calendar-overview-meta">Seguimiento clínico mensual</span>
+          </article>
+          <article className="calendar-overview-card tone-white">
+            <span className="calendar-overview-label">Agenda visible</span>
+            <strong className="calendar-overview-value">{currentMonthEventCount}</strong>
+            <span className="calendar-overview-meta">Eventos del mes en vista</span>
+          </article>
+          <article className="calendar-overview-card tone-green">
+            <span className="calendar-overview-label">Medicación</span>
+            <strong className="calendar-overview-value">{medicationMonthCount}</strong>
+            <span className="calendar-overview-meta">Tomas estimadas en el periodo</span>
+          </article>
         </div>
 
         {sharedProfiles.length ? (
@@ -518,16 +580,23 @@ export default function Calendar() {
       {selected && (
         <div className="floating-form-backdrop" onClick={() => setSelected(null)}>
           <div className="floating-form-card" onClick={(event) => event.stopPropagation()}>
-            <div className="card-header" style={{ marginBottom: "0.5rem" }}>
-              <h3 className="card-title" style={{ margin: 0 }}>
-                {selected.toLocaleDateString("es-CL")}
-              </h3>
+            <div className="card-header calendar-selected-header" style={{ marginBottom: "0.5rem" }}>
+              <div>
+                <h3 className="card-title" style={{ margin: 0 }}>
+                  {selected.toLocaleDateString("es-CL")}
+                </h3>
+                <p className="calendar-selected-subtitle">
+                  {selectedEvents.length
+                    ? `${selectedEvents.length} actividad${selectedEvents.length === 1 ? "" : "es"} registrada${selectedEvents.length === 1 ? "" : "s"}`
+                    : "Sin actividades programadas"}
+                </p>
+              </div>
               <button className="secondary-btn" type="button" onClick={() => setSelected(null)}>
                 Cerrar
               </button>
             </div>
             {selectedEvents.length === 0 ? (
-              <p className="muted">Sin actividades en esta fecha.</p>
+              <p className="muted calendar-selected-empty">Sin actividades en esta fecha.</p>
             ) : (
               <ul className="timeline">
                 {selectedEvents.map((eventItem) => (
@@ -557,7 +626,7 @@ export default function Calendar() {
                       {eventItem.type === "medication"
                         ? `${cleanUiText(eventItem.dose)} ${cleanUiText(
                             eventItem.frequency,
-                            "Segun indicacion"
+                            "Según indicación"
                           )}`.trim()
                         : eventItem.date_time
                         ? toLocaleDateTimeOrEmpty(eventItem.date_time) || "Por agendar"
