@@ -285,6 +285,8 @@ export default function Documents() {
   };
 
   const handleOpenViewer = async (doc, stepUpToken) => {
+    setDetailOpen(false);
+    setDetailTarget(null);
     setViewerLoading(true);
     try {
       const blob = stepUpToken

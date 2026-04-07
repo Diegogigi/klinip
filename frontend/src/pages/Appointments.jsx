@@ -853,6 +853,21 @@ export default function Appointments() {
         </div>
       </div>
 
+      {canEditActiveProfile ? (
+        <div className="card appointments-surface-free appointments-create appointments-create-mobile">
+          <button
+            className="primary-btn"
+            type="button"
+            onClick={() => {
+              resetForm();
+              setShowForm(true);
+            }}
+          >
+            Agregar actividad
+          </button>
+        </div>
+      ) : null}
+
       <div className="card appointments-surface-free appointments-filters-card appt-desktop-filters">
         <h3 className="card-title">Listado de actividades</h3>
         <div className="form-row appointments-filters-row" style={{ marginBottom: "0.75rem" }}>
