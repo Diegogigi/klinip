@@ -6302,6 +6302,71 @@ body.theme-dark .primary-btn {
   background: rgba(255, 255, 255, 0.15);
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  display: grid;
+  place-items: end center;
+  z-index: 1200;
+  padding: 0;
+}
+
+.modal-header {
+  background: #2563eb;
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  border: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.modal-body {
+  padding: 1rem;
+  max-height: min(68vh, 700px);
+  overflow-y: auto;
+}
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+.modal-footer .primary-btn,
+.modal-footer .secondary-btn {
+  flex: 1 1 0;
+}
+
+@media (min-width: 769px) {
+  .modal-overlay {
+    place-items: center;
+    padding: 1.2rem;
+  }
+}
+
 /* Modo escritorio: modal centrado */
 @media (min-width: 769px) {
   .modal-card-body {
@@ -33800,6 +33865,83 @@ body.theme-dark .calendar-summary-pill.is-green {
   50% {
     box-shadow: 0 24px 50px rgba(40, 193, 143, 0.24);
   }
+}
+
+@keyframes mobileBottomSheetRise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar.topbar-mobile-compact {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+  }
+
+  .floating-form-backdrop,
+  .modal-backdrop,
+  .modal-overlay {
+    display: flex !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+
+  .floating-form-card,
+  .modal-card:not(.appointments-success-card),
+  .detail-modal-card,
+  .document-viewer-modal {
+    width: min(100vw, 100%);
+    max-width: none !important;
+    max-height: min(92dvh, 92vh) !important;
+    margin: 0 !important;
+    border-radius: 28px 28px 0 0 !important;
+    animation: mobileBottomSheetRise 0.28s cubic-bezier(.22, 1, .36, 1) !important;
+  }
+
+  .floating-form-card,
+  .modal-card:not(.appointments-success-card):not(.document-viewer-modal),
+  .detail-modal-card {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .modal-body,
+  .detail-modal-content,
+  .document-viewer-stage {
+    max-height: calc(92dvh - 11rem);
+    overflow-y: auto;
+  }
+
+  .modal-footer,
+  .modal-actions,
+  .floating-actions {
+    flex-direction: column;
+  }
+
+  .modal-footer .primary-btn,
+  .modal-footer .secondary-btn,
+  .modal-actions .primary-btn,
+  .modal-actions .secondary-btn,
+  .floating-actions .primary-btn,
+  .floating-actions .secondary-btn {
+    width: 100%;
+  }
+}
+
+body.theme-dark .modal-header {
+  background: linear-gradient(145deg, #0b46c2 0%, #1d4ed8 58%, #2563eb 100%);
+}
+
+body.theme-dark .modal-body,
+body.theme-dark .modal-footer {
+  background: #0f1727;
 }
 
 .appointments-success-backdrop,

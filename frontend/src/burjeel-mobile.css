@@ -31,8 +31,9 @@
     padding: 0 !important;
   }
 
-  /* Ocultar filtros desktop en mobile */
-  .appt-desktop-filters {
+  /* Mantener visible la lista; ocultar solo los filtros de escritorio */
+  .appt-desktop-filters > .card-title,
+  .appt-desktop-filters .appointments-filters-row {
     display: none !important;
   }
 
@@ -419,7 +420,7 @@
 
   /* Ocultar filtros de escritorio en mobile */
   .medications-filters-card,
-  .documents-filters-card {
+  .documents-filters-card:not(.documents-list-card) {
     display: none !important;
   }
 
