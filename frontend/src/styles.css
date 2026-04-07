@@ -12490,6 +12490,7 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
     width: auto;
     min-width: 0;
     max-width: none;
+    z-index: 4600;
   }
 
   .notifications-dropdown {
@@ -32785,9 +32786,8 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     position: relative;
-    z-index: 120;
+    z-index: 4300;
     overflow: visible;
-    isolation: isolate;
   }
 
   .topbar.topbar-mobile-compact .topbar-actions,
@@ -34320,7 +34320,7 @@ body.theme-dark .calendar-summary-pill.is-green {
     display: flex !important;
     align-items: flex-end !important;
     justify-content: center !important;
-    padding: 0 !important;
+    padding: max(0.75rem, env(safe-area-inset-top)) 0 0 !important;
     z-index: 5000 !important;
   }
 
@@ -34339,13 +34339,18 @@ body.theme-dark .calendar-summary-pill.is-green {
   .floating-form-card,
   .modal-card:not(.appointments-success-card):not(.document-viewer-modal),
   .detail-modal-card {
+    min-height: min(76dvh, 760px) !important;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .document-viewer-modal {
+    min-height: min(82dvh, 820px) !important;
   }
 
   .modal-body,
   .detail-modal-content,
   .document-viewer-stage {
-    max-height: calc(92dvh - 11rem);
+    max-height: calc(92dvh - 9.5rem);
     overflow-y: auto;
   }
 
