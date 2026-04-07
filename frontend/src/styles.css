@@ -12490,7 +12490,7 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
     width: auto;
     min-width: 0;
     max-width: none;
-    z-index: 4600;
+    z-index: 5600;
   }
 
   .notifications-dropdown {
@@ -34307,9 +34307,10 @@ body.theme-dark .calendar-summary-pill.is-green {
   }
 
   .topbar.topbar-mobile-compact {
-    position: static !important;
+    position: relative !important;
     top: auto !important;
-    z-index: auto !important;
+    z-index: 4300 !important;
+    overflow: visible !important;
   }
 
   .floating-form-backdrop,
@@ -34322,6 +34323,9 @@ body.theme-dark .calendar-summary-pill.is-green {
     justify-content: center !important;
     padding: max(0.75rem, env(safe-area-inset-top)) 0 0 !important;
     z-index: 5000 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    touch-action: none;
   }
 
   .floating-form-card,
@@ -34334,17 +34338,19 @@ body.theme-dark .calendar-summary-pill.is-green {
     margin: 0 !important;
     border-radius: 28px 28px 0 0 !important;
     animation: mobileBottomSheetRise 0.28s cubic-bezier(.22, 1, .36, 1) !important;
+    touch-action: pan-y;
   }
 
   .floating-form-card,
-  .modal-card:not(.appointments-success-card):not(.document-viewer-modal),
   .detail-modal-card {
-    min-height: min(76dvh, 760px) !important;
+    min-height: min(84dvh, 820px) !important;
+    max-height: min(84dvh, 820px) !important;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
   .document-viewer-modal {
-    min-height: min(82dvh, 820px) !important;
+    min-height: min(88dvh, 880px) !important;
+    max-height: min(88dvh, 880px) !important;
   }
 
   .modal-body,
