@@ -35,6 +35,7 @@ import {
 import RowActionsMenu from "../components/RowActionsMenu";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const MED_ALERT_POLL_MS = 15000;
 const FREQUENCY_PRESETS = [
@@ -178,6 +179,10 @@ export default function Medications() {
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
+  const hasOverlayOpen =
+    showForm || notifyOpen || detailOpen || purchaseOpen || !!missingFrequency;
+
+  useMobileOverlayLock(hasOverlayOpen);
   const hasAcceptedFamilyCollaborators = familyCaregivers.some(
     (item) => Number(item?.user_id) !== Number(activeProfile?.owner_user_id)
   );

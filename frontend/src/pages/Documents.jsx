@@ -8,6 +8,7 @@ import RowActionsMenu from "../components/RowActionsMenu";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import StepUpModal from "../components/StepUpModal";
 import { cleanUiText } from "../utils/textEncoding";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const docLabels = {
   receta: "Receta",
@@ -110,6 +111,9 @@ export default function Documents() {
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
+  const hasOverlayOpen = showForm || detailOpen || viewerOpen || stepUpOpen;
+
+  useMobileOverlayLock(hasOverlayOpen);
 
   const resetForm = () => {
     setForm(initialForm);

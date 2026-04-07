@@ -17,6 +17,7 @@ import {
   getMedicationEffectiveEndAt,
   getMedicationScheduleSummary,
 } from "../utils/medicationSchedule";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const typeColors = {
   cita: "event-green",
@@ -165,6 +166,7 @@ export default function Calendar() {
   const [switchingProfile, setSwitchingProfile] = useState(false);
   const [viewDate, setViewDate] = useState(new Date());
   const [selected, setSelected] = useState(null);
+  useMobileOverlayLock(!!selected);
   const [calendarScope, setCalendarScope] = useState("mine");
   const [sharedProfileId, setSharedProfileId] = useState("");
 

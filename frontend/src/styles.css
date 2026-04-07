@@ -34301,6 +34301,30 @@ body.theme-dark .calendar-summary-pill.is-green {
 }
 
 @media (max-width: 768px) {
+  html.klinip-overlay-open,
+  body.klinip-overlay-open {
+    overflow: hidden !important;
+    height: 100dvh !important;
+    overscroll-behavior: none !important;
+  }
+
+  body.klinip-overlay-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    width: 100%;
+  }
+
+  body.klinip-overlay-open .sidebar {
+    transform: translateY(calc(100% + env(safe-area-inset-bottom))) !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  body.klinip-overlay-open .main-area {
+    margin-bottom: 0 !important;
+  }
+
   .appointments-create-mobile {
     display: block !important;
   }
@@ -34328,7 +34352,7 @@ body.theme-dark .calendar-summary-pill.is-green {
     justify-content: center !important;
     padding: max(0.75rem, env(safe-area-inset-top)) 0 0 !important;
     z-index: 6200 !important;
-    overflow-y: auto !important;
+    overflow: hidden !important;
     overscroll-behavior: contain;
     touch-action: none;
   }
@@ -34360,6 +34384,7 @@ body.theme-dark .calendar-summary-pill.is-green {
     display: flex !important;
     flex-direction: column !important;
     background: var(--mobile-surface) !important;
+    overscroll-behavior: contain;
   }
 
   .document-viewer-modal {
@@ -34371,6 +34396,7 @@ body.theme-dark .calendar-summary-pill.is-green {
     display: grid !important;
     grid-template-rows: auto minmax(0, 1fr) auto auto auto !important;
     background: var(--mobile-surface) !important;
+    overscroll-behavior: contain;
   }
 
   .modal-body,

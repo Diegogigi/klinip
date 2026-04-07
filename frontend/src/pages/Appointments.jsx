@@ -18,6 +18,7 @@ import RowActionsMenu from "../components/RowActionsMenu";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { cleanUiText } from "../utils/textEncoding";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const typeLabels = {
   cita: "Cita médica",
@@ -76,6 +77,9 @@ export default function Appointments() {
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
+  const hasOverlayOpen = showForm || notifyOpen || detailOpen || successOpen;
+
+  useMobileOverlayLock(hasOverlayOpen);
 
   async function load() {
     try {
@@ -196,6 +200,10 @@ export default function Appointments() {
 
   const handleEdit = (appt) => {
     if (!canEditActiveProfile) return;
+    setDetailOpen(false);
+    setDetailTarget(null);
+    setNotifyOpen(false);
+    setNotifyTarget(null);
     setShowForm(true);
     setForm({
       id: appt.id,
