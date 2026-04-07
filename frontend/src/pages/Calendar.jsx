@@ -284,6 +284,12 @@ export default function Calendar() {
     month: "long",
     year: "numeric",
   });
+  const selectedDateLabel = selected
+    ? selected.toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric" })
+    : "";
+  const selectedWeekdayLabel = selected
+    ? selected.toLocaleDateString("es-CL", { weekday: "long" })
+    : "";
 
   const days = useMemo(() => getMonthDays(normalizedViewDate), [normalizedViewDate]);
 
@@ -329,6 +335,9 @@ export default function Calendar() {
     if (!selected) return [];
     return eventsByDay[toDayKey(selected)] || [];
   }, [eventsByDay, selected]);
+  const selectedCountLabel = selectedEvents.length
+    ? `${selectedEvents.length} actividad${selectedEvents.length === 1 ? "" : "es"}`
+    : "Sin actividades";
 
   const currentActionProfile = useMemo(() => {
     if (calendarScope === "mine") return primaryOwnProfile;
@@ -410,20 +419,24 @@ export default function Calendar() {
             </div>
           </div>
           <div className="calendar-controls">
+            <div className="month-display" aria-live="polite">{monthLabel}</div>
             <button
-              className="pill-button"
+              className="calendar-nav-btn"
               type="button"
+              aria-label="Ir al mes anterior"
               onClick={() => setViewDate(addMonths(normalizedViewDate, -1))}
             >
-              Mes anterior
+              <span aria-hidden="true">‹</span>
+              <span>Anterior</span>
             </button>
-            <div className="month-display">{monthLabel}</div>
             <button
-              className="pill-button"
+              className="calendar-nav-btn"
               type="button"
+              aria-label="Ir al mes siguiente"
               onClick={() => setViewDate(addMonths(normalizedViewDate, 1))}
             >
-              Mes siguiente
+              <span>Siguiente</span>
+              <span aria-hidden="true">›</span>
             </button>
           </div>
         </div>
@@ -578,29 +591,40 @@ export default function Calendar() {
       </div>
 
       {selected && (
-        <div className="floating-form-backdrop" onClick={() => setSelected(null)}>
-          <div className="floating-form-card" onClick={(event) => event.stopPropagation()}>
-            <div className="card-header calendar-selected-header" style={{ marginBottom: "0.5rem" }}>
-              <div>
-                <h3 className="card-title" style={{ margin: 0 }}>
-                  {selected.toLocaleDateString("es-CL")}
-                </h3>
-                <p className="calendar-selected-subtitle">
-                  {selectedEvents.length
-                    ? `${selectedEvents.length} actividad${selectedEvents.length === 1 ? "" : "es"} registrada${selectedEvents.length === 1 ? "" : "s"}`
-                    : "Sin actividades programadas"}
-                </p>
+        <div className="floating-form-backdrop calendar-selected-backdrop" onClick={() => setSelected(null)}>
+          <div className="floating-form-card calendar-selected-sheet" onClick={(event) => event.stopPropagation()}>
+            <span className="calendar-sheet-grabber" aria-hidden="true" />
+            <div className="calendar-selected-header">
+              <div className="calendar-selected-topline">
+                <span className="calendar-selected-kicker">Agenda del día</span>
+                <span className="calendar-selected-count">{selectedCountLabel}</span>
               </div>
-              <button className="secondary-btn" type="button" onClick={() => setSelected(null)}>
-                Cerrar
-              </button>
+              <div className="calendar-selected-heading">
+                <div className="calendar-selected-heading-copy">
+                  <p className="calendar-selected-weekday">{selectedWeekdayLabel}</p>
+                  <h3 className="card-title calendar-selected-date">{selectedDateLabel}</h3>
+                  <p className="calendar-selected-subtitle">
+                    {selectedEvents.length
+                      ? "Revisa el detalle del día y agrega nuevas actividades si hace falta."
+                      : "No hay registros en esta fecha todavía."}
+                  </p>
+                </div>
+                <button
+                  className="calendar-selected-close"
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  aria-label="Cerrar detalle del día"
+                >
+                  <span aria-hidden="true">×</span>
+                </button>
+              </div>
             </div>
             {selectedEvents.length === 0 ? (
               <p className="muted calendar-selected-empty">Sin actividades en esta fecha.</p>
             ) : (
-              <ul className="timeline">
+              <ul className="timeline calendar-selected-timeline">
                 {selectedEvents.map((eventItem) => (
-                  <li key={eventItem.event_id} className="timeline-item">
+                  <li key={eventItem.event_id} className={`timeline-item calendar-timeline-item type-${eventItem.type}`}>
                     <div className="timeline-main calendar-timeline-main">
                       <span className={`chip ${eventItem.type}`}>
                         {eventItem.type === "medication"
@@ -644,22 +668,23 @@ export default function Calendar() {
             )}
             <div className="floating-actions calendar-floating-actions">
               {calendarScope === "both" ? (
-                <>
                 <p className="muted calendar-helper-note calendar-helper-note-clean">
                   Elige "Mío" o "Compartido" para crear una actividad en un perfil específico.
                 </p>
-                </>
               ) : currentActionProfile && canCreateOnCurrentProfile ? (
-                <button
-                  className="primary-btn"
-                  type="button"
-                  disabled={switchingProfile}
-                  onClick={handleCreateFromCalendar}
-                >
-                  {switchingProfile
-                    ? "Abriendo..."
-                    : `Agregar actividad en ${currentActionProfile.display_name}`}
-                </button>
+                <>
+                  <button
+                    className="primary-btn calendar-selected-primary"
+                    type="button"
+                    disabled={switchingProfile}
+                    onClick={handleCreateFromCalendar}
+                  >
+                    {switchingProfile ? "Abriendo..." : "Agregar actividad"}
+                  </button>
+                  <p className="calendar-selected-action-context">
+                    Se registrará en {currentActionProfile.display_name}.
+                  </p>
+                </>
               ) : currentActionProfile ? (
                 <p className="muted calendar-helper-note">
                   Tienes vista de solo lectura para el calendario de {currentActionProfile.display_name}.

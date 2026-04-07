@@ -55,10 +55,10 @@
 
   /* ── TOPBAR MOBILE: header limpio estilo Burjeel ── */
   .topbar.topbar-mobile-compact {
-    background: #ffffff !important;
-    border-bottom: 1px solid #f1f5f9 !important;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
-    padding: 0.9rem 1.1rem !important;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0.95rem 0.1rem 0.72rem !important;
   }
 
   .topbar.topbar-mobile-compact .topbar-title {
