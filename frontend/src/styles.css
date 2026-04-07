@@ -34332,7 +34332,11 @@ body.theme-dark .calendar-summary-pill.is-green {
   .modal-card:not(.appointments-success-card),
   .detail-modal-card,
   .document-viewer-modal {
-    width: min(100vw, 100%);
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
     max-width: none !important;
     max-height: min(92dvh, 92vh) !important;
     margin: 0 !important;
@@ -34343,20 +34347,22 @@ body.theme-dark .calendar-summary-pill.is-green {
 
   .floating-form-card,
   .detail-modal-card {
-    min-height: min(84dvh, 820px) !important;
-    max-height: min(84dvh, 820px) !important;
+    top: max(0.9rem, env(safe-area-inset-top)) !important;
+    min-height: auto !important;
+    max-height: calc(100dvh - max(0.9rem, env(safe-area-inset-top))) !important;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
   .document-viewer-modal {
-    min-height: min(88dvh, 880px) !important;
-    max-height: min(88dvh, 880px) !important;
+    top: max(0.45rem, env(safe-area-inset-top)) !important;
+    min-height: auto !important;
+    max-height: calc(100dvh - max(0.45rem, env(safe-area-inset-top))) !important;
   }
 
   .modal-body,
   .detail-modal-content,
   .document-viewer-stage {
-    max-height: calc(92dvh - 9.5rem);
+    max-height: calc(100dvh - 10.5rem);
     overflow-y: auto;
   }
 
