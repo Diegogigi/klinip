@@ -54,6 +54,14 @@ function _getRequestPath(config) {
   return rawUrl.split("?")[0].toLowerCase();
 }
 
+function _requireResourceId(value, label) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    throw new Error(`Missing ${label}`);
+  }
+  return normalized;
+}
+
 function _isAuthExemptRequest(config) {
   const path = _getRequestPath(config);
   return AUTH_EXEMPT_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
@@ -501,22 +509,28 @@ export async function updateProfileAutomation(profileId, payload) {
 }
 
 export async function getProfileNotes(profileId) {
-  const res = await api.get(`/health-profiles/${profileId}/notes`);
+  const safeProfileId = _requireResourceId(profileId, "profileId");
+  const res = await api.get(`/health-profiles/${safeProfileId}/notes`);
   return res.data;
 }
 
 export async function createProfileNote(profileId, payload) {
-  const res = await api.post(`/health-profiles/${profileId}/notes`, payload);
+  const safeProfileId = _requireResourceId(profileId, "profileId");
+  const res = await api.post(`/health-profiles/${safeProfileId}/notes`, payload);
   return res.data;
 }
 
 export async function updateProfileNote(profileId, noteId, payload) {
-  const res = await api.put(`/health-profiles/${profileId}/notes/${noteId}`, payload);
+  const safeProfileId = _requireResourceId(profileId, "profileId");
+  const safeNoteId = _requireResourceId(noteId, "noteId");
+  const res = await api.put(`/health-profiles/${safeProfileId}/notes/${safeNoteId}`, payload);
   return res.data;
 }
 
 export async function deleteProfileNote(profileId, noteId) {
-  const res = await api.delete(`/health-profiles/${profileId}/notes/${noteId}`);
+  const safeProfileId = _requireResourceId(profileId, "profileId");
+  const safeNoteId = _requireResourceId(noteId, "noteId");
+  const res = await api.delete(`/health-profiles/${safeProfileId}/notes/${safeNoteId}`);
   return res.data;
 }
 
