@@ -1,28 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Dashboard from "./pages/Dashboard";
-import Appointments from "./pages/Appointments";
-import Calendar from "./pages/Calendar";
-import Medications from "./pages/Medications";
-import Documents from "./pages/Documents";
-import Settings from "./pages/Settings";
-import Timeline from "./pages/Timeline";
-import Stats from "./pages/Stats";
-import AiKlinip from "./pages/AiKlinip";
-import ClinicalReports from "./pages/ClinicalReports";
-import Landing from "./pages/Landing";
-import Plans from "./pages/Plans";
-import KlinipFeed from "./pages/KlinipFeed";
-import KlinipVoicePage from "./pages/KlinipVoicePage";
-import SharedVoicePage from "./pages/SharedVoicePage";
-import LegalPrivacy from "./pages/LegalPrivacy";
-import LegalTerms from "./pages/LegalTerms";
-import LegalConsent from "./pages/LegalConsent";
-import LegalNotifications from "./pages/LegalNotifications";
 import {
   getMe,
   getMedications,
@@ -41,6 +18,30 @@ import {
   isMedicationActiveAt,
   parseScheduleTimeValue,
 } from "./utils/medicationSchedule";
+
+const Login = React.lazy(() => import("./pages/Login"));
+const Register = React.lazy(() => import("./pages/Register"));
+const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
+const Dashboard = React.lazy(() => import("./pages/Dashboard"));
+const Appointments = React.lazy(() => import("./pages/Appointments"));
+const Calendar = React.lazy(() => import("./pages/Calendar"));
+const Medications = React.lazy(() => import("./pages/Medications"));
+const Documents = React.lazy(() => import("./pages/Documents"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+const Timeline = React.lazy(() => import("./pages/Timeline"));
+const Stats = React.lazy(() => import("./pages/Stats"));
+const AiKlinip = React.lazy(() => import("./pages/AiKlinip"));
+const ClinicalReports = React.lazy(() => import("./pages/ClinicalReports"));
+const Landing = React.lazy(() => import("./pages/Landing"));
+const Plans = React.lazy(() => import("./pages/Plans"));
+const KlinipFeed = React.lazy(() => import("./pages/KlinipFeed"));
+const KlinipVoicePage = React.lazy(() => import("./pages/KlinipVoicePage"));
+const SharedVoicePage = React.lazy(() => import("./pages/SharedVoicePage"));
+const LegalPrivacy = React.lazy(() => import("./pages/LegalPrivacy"));
+const LegalTerms = React.lazy(() => import("./pages/LegalTerms"));
+const LegalConsent = React.lazy(() => import("./pages/LegalConsent"));
+const LegalNotifications = React.lazy(() => import("./pages/LegalNotifications"));
 
 const icons = {
   home: (
@@ -138,6 +139,34 @@ const icons = {
   ),
 };
 
+const ROUTE_TRANSITION_ORDER = [
+  "/",
+  "/appointments",
+  "/calendar",
+  "/medications",
+  "/documents",
+  "/feed",
+  "/ai",
+  "/voice",
+  "/timeline",
+  "/stats",
+  "/family",
+  "/clinical-reports",
+  "/settings",
+];
+
+function getRouteTransitionDirection(fromPath, toPath) {
+  if (!fromPath || !toPath || fromPath === toPath) return "forward";
+  const fromIndex = ROUTE_TRANSITION_ORDER.indexOf(fromPath);
+  const toIndex = ROUTE_TRANSITION_ORDER.indexOf(toPath);
+  if (fromIndex === -1 || toIndex === -1) {
+    if (toPath.startsWith(fromPath)) return "forward";
+    if (fromPath.startsWith(toPath)) return "backward";
+    return "forward";
+  }
+  return toIndex >= fromIndex ? "forward" : "backward";
+}
+
 function getHealthProfileAccessLabel(item, userId) {
   if (!item) return "";
   const isOwnProfile = Number(item.owner_user_id) === Number(userId);
@@ -203,11 +232,11 @@ function Sidebar({
     { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
     { to: "/family", label: "Mi familia", icon: icons.family },
   ];
-  const mobilePrimaryLinks = ["/", "/feed", "/ai", "/voice"]
+  const mobilePrimaryLinks = ["/", "/appointments", "/ai", "/medications"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
   const mobileOverflowLinks = links.filter((item) =>
-    ["/appointments", "/calendar", "/stats", "/timeline", "/medications", "/documents", "/family"].includes(item.to)
+    ["/feed", "/voice", "/calendar", "/stats", "/timeline", "/documents", "/family"].includes(item.to)
   );
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
@@ -329,6 +358,7 @@ function Topbar({
   activeProfileId,
   onSwitchProfile,
   switchingProfile,
+  isDashboard,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -348,7 +378,7 @@ function Topbar({
     "/documents": "Documentos",
     "/medications": "Medicamentos",
     "/calendar": "Calendario",
-    "/stats": "Estadisticas",
+    "/stats": "Estadísticas",
     "/ai": "IA Klinip",
     "/timeline": "Historia",
     "/family": "Mi familia",
@@ -365,12 +395,19 @@ function Topbar({
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [isMobileTopbar, setIsMobileTopbar] = useState(window.innerWidth <= 768);
   const profileMenuRef = useRef(null);
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileTopbar(window.innerWidth <= 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => {
     setNotificationsOpen(false);
@@ -413,8 +450,14 @@ function Topbar({
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute || (!user && location.pathname === "/")) return null;
 
+  const topbarClass = [
+    "topbar",
+    isMobileTopbar && isDashboard ? "topbar-hidden-mobile" : "",
+    isMobileTopbar && !isDashboard ? "topbar-mobile-compact" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <header className="topbar">
+    <header className={topbarClass}>
       <div>
         <p className="topbar-label">{subtitle}</p>
         <div className="topbar-row">
@@ -668,6 +711,20 @@ function ProtectedRoute({ user, children }) {
   return children;
 }
 
+function RouteLoadingFallback() {
+  return (
+    <div className="route-loading-shell" role="status" aria-live="polite" aria-label="Cargando sección">
+      <div className="route-loading-card">
+        <span className="route-loading-dot" aria-hidden="true" />
+        <div>
+          <strong>Cargando sección</strong>
+          <p>Preparando la siguiente vista.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -699,6 +756,9 @@ export default function App() {
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
   const [switchingProfile, setSwitchingProfile] = useState(false);
+  const [isMobileShell, setIsMobileShell] = useState(window.innerWidth <= 768);
+  const [routeTransitionKey, setRouteTransitionKey] = useState(0);
+  const [routeTransitionDirection, setRouteTransitionDirection] = useState("forward");
   const [onboardingData, setOnboardingData] = useState({
     notificationsConsent: "",
     timezone: "America/Santiago",
@@ -710,6 +770,7 @@ export default function App() {
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const medAlertPollingRef = useRef(false);
   const locationRef = useRef(location);
+  const previousPathRef = useRef(location.pathname);
   const seenUpdateKeysRef = useRef(new Set());
   const dismissedUpdateKeyRef = useRef("");
   const pushNotifiedUpdateKeyRef = useRef("");
@@ -720,8 +781,23 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    const handleResize = () => setIsMobileShell(window.innerWidth <= 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
     locationRef.current = location;
   }, [location]);
+
+  useEffect(() => {
+    const previousPath = previousPathRef.current;
+    if (previousPath !== location.pathname) {
+      setRouteTransitionDirection(getRouteTransitionDirection(previousPath, location.pathname));
+      setRouteTransitionKey((current) => current + 1);
+      previousPathRef.current = location.pathname;
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     async function bootstrap() {
@@ -1577,6 +1653,15 @@ export default function App() {
         <div className="main-content">
           <div className="splash splash-brand" role="status" aria-live="polite" aria-label="Cargando Klinip">
             <div className="splash-brand-shell">
+              <div className="splash-native-top" aria-hidden="true">
+                <span className="splash-native-top-time">9:41</span>
+                <div className="splash-native-top-dynamic" />
+                <div className="splash-native-top-icons">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
               <div className="splash-brand-orbit" aria-hidden="true">
                 <span className="splash-brand-orbit-ring splash-brand-orbit-ring-outer" />
                 <span className="splash-brand-orbit-ring splash-brand-orbit-ring-inner" />
@@ -1591,6 +1676,10 @@ export default function App() {
               <p className="splash-brand-text">Preparando tu entorno de salud y sincronizando datos clave.</p>
               <div className="splash-brand-progress" aria-hidden="true">
                 <span />
+              </div>
+              <p className="splash-brand-footnote">Cargando módulos clínicos y recordatorios personalizados</p>
+              <div className="splash-native-bottom" aria-hidden="true">
+                <span className="splash-native-home-indicator" />
               </div>
             </div>
           </div>
@@ -1608,6 +1697,7 @@ export default function App() {
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname === "/settings";
+  const isDashboardRoute = location.pathname === "/" && !!user;
 
   return (
     <div className="app-shell">
@@ -2011,13 +2101,14 @@ export default function App() {
             activeProfileId={activeHealthProfileId}
             onSwitchProfile={handleSwitchActiveProfile}
             switchingProfile={switchingProfile}
+            isDashboard={isDashboardRoute}
           />
           {updateAvailable && !isPublicStandaloneRoute && (
             <div className="update-banner" role="status" aria-live="polite">
               <div>
-                <p className="update-title">Actualizacion disponible</p>
+                <p className="update-title">Actualización disponible</p>
                 <p className="update-text">
-                  Hay una nueva version de Klinip. Actualiza para aplicar los cambios.
+                  Hay una nueva versión de Klinip. Actualiza para aplicar los cambios.
                 </p>
               </div>
               <div className="update-actions">
@@ -2029,7 +2120,7 @@ export default function App() {
                   type="button"
                   onClick={handleDismissUpdate}
                 >
-                  Despues
+                  Después
                 </button>
               </div>
             </div>
@@ -2039,8 +2130,15 @@ export default function App() {
               isAiRoute ? "main-content-ai" : ""
             } ${isFamilyRoute ? "main-content-family" : ""} ${
               isSettingsRoute ? "main-content-settings" : ""
-            }`}
+            } ${isDashboardRoute ? "main-content-dashboard" : ""}`}
           >
+            <div
+              key={`${location.pathname}-${routeTransitionKey}`}
+              className={`route-scene route-scene-${routeTransitionDirection} ${
+                isMobileShell ? "route-scene-mobile" : "route-scene-desktop"
+              }`}
+            >
+            <React.Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               <Route
                 path="/login"
@@ -2212,6 +2310,8 @@ export default function App() {
               />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
+            </React.Suspense>
+            </div>
           </main>
         </div>
       </div>

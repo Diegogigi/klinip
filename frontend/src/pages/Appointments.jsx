@@ -56,6 +56,9 @@ export default function Appointments() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successTarget, setSuccessTarget] = useState(null);
+  const [successMode, setSuccessMode] = useState("created");
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -144,6 +147,12 @@ export default function Appointments() {
     });
   };
 
+  const handleCloseSuccess = () => {
+    setSuccessOpen(false);
+    setSuccessTarget(null);
+    setSuccessMode("created");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!canEditActiveProfile) {
@@ -160,10 +169,13 @@ export default function Appointments() {
         status: form.status,
         notes: form.notes,
       };
+      let savedActivity = null;
       if (form.id) {
-        await updateAppointment(form.id, payload);
+        savedActivity = await updateAppointment(form.id, payload);
+        setSuccessMode("updated");
       } else {
-        await createAppointment(payload);
+        savedActivity = await createAppointment(payload);
+        setSuccessMode("created");
       }
       await load();
       notifyClinicalDataChanged({
@@ -172,6 +184,8 @@ export default function Appointments() {
       });
       resetForm();
       setShowForm(false);
+      setSuccessTarget(savedActivity || payload);
+      setSuccessOpen(true);
     } catch (err) {
       console.error(err);
       alert("No se pudo guardar la cita");
@@ -267,6 +281,16 @@ export default function Appointments() {
   });
   const undatedAppointments = filteredAppointments.filter((a) => !a.date_time);
   const hasUndatedAppointments = undatedAppointments.length > 0;
+  const upcomingAppointments = appointments.filter((a) => a.status !== "realizada");
+  const completedAppointments = appointments.filter((a) => a.status === "realizada");
+  const confirmedAppointments = appointments.filter((a) => a.status === "agendada");
+  const nextScheduledAppointment = [...appointments]
+    .filter((a) => a.date_time && a.status !== "realizada")
+    .sort((a, b) => {
+      const left = parseDate(a.date_time)?.getTime() || 0;
+      const right = parseDate(b.date_time)?.getTime() || 0;
+      return left - right;
+    })[0];
 
   useEffect(() => {
     if (!undatedAppointments.length) {
@@ -283,11 +307,64 @@ export default function Appointments() {
 
   return (
     <>
-      <div className="card appointments-surface-free appointments-intro">
-        <h2 className="card-title">Citas, exámenes y trámites</h2>
-        <p className="muted">
-          Organiza tus citas, exámenes y trámites. Todo queda guardado.
-        </p>
+      <div className="card appointments-surface-free appointments-intro appointments-hero-card">
+        <div className="appointments-hero-main">
+          <div>
+            <p className="appointments-hero-eyebrow">Agenda clínica</p>
+            <h2 className="card-title">Citas, exámenes y trámites</h2>
+            <p className="muted appointments-hero-copy">
+              Organiza tus actividades médicas en un solo flujo, con seguimiento claro y acceso rápido
+              al siguiente paso.
+            </p>
+          </div>
+          {canEditActiveProfile ? (
+            <button
+              className="primary-btn appointments-hero-cta"
+              type="button"
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+            >
+              Nueva actividad
+            </button>
+          ) : null}
+        </div>
+
+        <div className="appointments-hero-stats">
+          <article className="appointments-stat-card tone-blue">
+            <span className="appointments-stat-label">Próximas</span>
+            <strong className="appointments-stat-value">{upcomingAppointments.length}</strong>
+            <span className="appointments-stat-meta">
+              {confirmedAppointments.length} confirmada{confirmedAppointments.length === 1 ? "" : "s"}
+            </span>
+          </article>
+          <article className="appointments-stat-card tone-green">
+            <span className="appointments-stat-label">Realizadas</span>
+            <strong className="appointments-stat-value">{completedAppointments.length}</strong>
+            <span className="appointments-stat-meta">Historial actualizado</span>
+          </article>
+          <article className="appointments-stat-card tone-white">
+            <span className="appointments-stat-label">Sin fecha</span>
+            <strong className="appointments-stat-value">{undatedAppointments.length}</strong>
+            <span className="appointments-stat-meta">
+              {undatedAppointments.length ? "Requieren revisión" : "Todo calendarizado"}
+            </span>
+          </article>
+        </div>
+
+        {nextScheduledAppointment ? (
+          <div className="appointments-next-strip">
+            <span className="appointments-next-strip-label">Siguiente actividad</span>
+            <strong>{cleanUiText(nextScheduledAppointment.specialty, "Actividad programada")}</strong>
+            <span>
+              {nextScheduledAppointment.center
+                ? `${cleanUiText(nextScheduledAppointment.center)} · `
+                : ""}
+              {formatAppointmentDateLabel(nextScheduledAppointment)}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {isReadOnlyProfile ? (
@@ -359,19 +436,6 @@ export default function Appointments() {
         </div>
       )}
 
-      {canEditActiveProfile ? (
-        <div className="card appointments-surface-free appointments-create">
-          <button
-            className="primary-btn"
-            type="button"
-            style={{ width: "100%" }}
-            onClick={() => setShowForm(true)}
-          >
-            {form.id ? "Editar actividad" : "Nueva actividad"}
-          </button>
-        </div>
-      ) : null}
-
       {notifyOpen && notifyTarget && (
         <div className="modal-backdrop" onClick={() => {
           setNotifyOpen(false);
@@ -428,31 +492,57 @@ export default function Appointments() {
               </button>
             </div>
             <div className="detail-modal-content">
-              <div className="detail-highlight">
-                <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
-                  {cleanUiText(typeLabels[detailTarget.type] || detailTarget.type)}
-                </span>
+              <div className="appointment-detail-hero">
+                <div className="appointment-detail-hero-copy">
+                  <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
+                    {cleanUiText(typeLabels[detailTarget.type] || detailTarget.type)}
+                  </span>
+                  <h4>{cleanUiText(detailTarget.specialty, "Actividad médica")}</h4>
+                  <p>{cleanUiText(detailTarget.center, "Centro por confirmar")}</p>
+                </div>
                 <span className={`detail-chip detail-chip-status ${detailTarget.status}`}>
                   {cleanUiText(statusLabels[detailTarget.status] || detailTarget.status)}
                 </span>
               </div>
+              <div className="detail-highlight">
+                <span className="detail-chip detail-chip-muted">
+                  {detailTarget.date_time ? "Programada" : "Pendiente de fecha"}
+                </span>
+              </div>
               <div className="detail-grid">
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>ES</span>
+                  <span className="detail-item-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M4 7h16M7 4v6M17 4v6M6 20h12a2 2 0 0 0 2-2V8H4v10a2 2 0 0 0 2 2Z"/>
+                    </svg>
+                  </span>
                   <div>
                     <span className="detail-label">Especialidad</span>
                     <p>{cleanUiText(detailTarget.specialty, "Sin especialidad")}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>CE</span>
+                  <span className="detail-item-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M3 21h18"/>
+                      <path d="M5 21V7l7-4 7 4v14"/>
+                      <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
+                    </svg>
+                  </span>
                   <div>
                     <span className="detail-label">Centro</span>
                     <p>{cleanUiText(detailTarget.center, "Sin centro")}</p>
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>FH</span>
+                  <span className="detail-item-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2"/>
+                      <line x1="8" y1="2" x2="8" y2="6"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/>
+                      <line x1="3" y1="10" x2="21" y2="10"/>
+                    </svg>
+                  </span>
                   <div>
                     <span className="detail-label">Fecha y hora</span>
                     <p>
@@ -463,7 +553,14 @@ export default function Appointments() {
                   </div>
                 </div>
                 <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>NT</span>
+                  <span className="detail-item-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="8" y1="13" x2="16" y2="13"/>
+                      <line x1="8" y1="17" x2="13" y2="17"/>
+                    </svg>
+                  </span>
                   <div>
                     <span className="detail-label">Notas</span>
                     <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
@@ -500,16 +597,128 @@ export default function Appointments() {
         </div>
       )}
 
+      {successOpen && successTarget && (
+        <div className="modal-backdrop appointments-success-backdrop" onClick={handleCloseSuccess}>
+          <div
+            className="modal-card appointments-success-card"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="appointments-success-hero">
+              <div className="appointments-success-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="appointments-success-kicker">
+                {successMode === "updated" ? "Actividad actualizada" : "Actividad guardada"}
+              </p>
+              <h3>
+                {successMode === "updated" ? "Cambios aplicados" : "Todo listo"}
+              </h3>
+              <p className="appointments-success-copy">
+                {successMode === "updated"
+                  ? "La información quedó actualizada y ya forma parte de tu seguimiento clínico."
+                  : "La actividad quedó registrada correctamente y ya aparece en tu agenda clínica."}
+              </p>
+              {successTarget?.id ? (
+                <p className="appointments-success-reference">
+                  Referencia <strong>#{successTarget.id}</strong>
+                </p>
+              ) : null}
+            </div>
+
+            <div className="appointments-success-details">
+              <div className="appointments-success-detail-row">
+                <span className="appointments-success-detail-icon" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                    <circle cx="12" cy="8" r="3.5" />
+                    <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+                  </svg>
+                </span>
+                <div>
+                  <span className="appointments-success-detail-label">Perfil activo</span>
+                  <strong>{cleanUiText(activeProfile?.display_name || activeProfile?.full_name || "Mi perfil")}</strong>
+                </div>
+              </div>
+              <div className="appointments-success-detail-row">
+                <span className="appointments-success-detail-icon" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </span>
+                <div>
+                  <span className="appointments-success-detail-label">Actividad</span>
+                  <strong>{cleanUiText(successTarget.specialty, typeLabels[successTarget.type] || "Actividad")}</strong>
+                </div>
+              </div>
+              <div className="appointments-success-detail-row">
+                <span className="appointments-success-detail-icon" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                    <path d="M3 21h18" />
+                    <path d="M5 21V7l7-4 7 4v14" />
+                    <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01" />
+                  </svg>
+                </span>
+                <div>
+                  <span className="appointments-success-detail-label">Centro</span>
+                  <strong>{cleanUiText(successTarget.center, "Centro por confirmar")}</strong>
+                </div>
+              </div>
+              <div className="appointments-success-detail-row">
+                <span className="appointments-success-detail-icon" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                    <path d="M12 6v6l4 2" />
+                    <circle cx="12" cy="12" r="9" />
+                  </svg>
+                </span>
+                <div>
+                  <span className="appointments-success-detail-label">Fecha</span>
+                  <strong>{formatAppointmentDateLabel(successTarget)}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-actions appointments-success-actions">
+              <button
+                className="secondary-btn"
+                type="button"
+                onClick={handleCloseSuccess}
+              >
+                Volver a citas
+              </button>
+              <button
+                className="primary-btn"
+                type="button"
+                onClick={() => {
+                  handleCloseSuccess();
+                  handleOpenDetail(successTarget);
+                }}
+              >
+                Ver detalle
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showForm && canEditActiveProfile && (
         <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
           <div
             className="floating-form-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="card-header" style={{ marginBottom: "0.75rem" }}>
-              <h3 className="card-title" style={{ marginBottom: 0 }}>
-                {form.id ? "Editar actividad" : "Nueva actividad"}
-              </h3>
+            <div className="card-header appointments-form-header" style={{ marginBottom: "0.75rem" }}>
+              <div>
+                <h3 className="card-title" style={{ marginBottom: 0 }}>
+                  {form.id ? "Editar actividad" : "Nueva actividad"}
+                </h3>
+                <p className="appointments-form-subtitle">
+                  Completa los datos principales y deja el resto listo para seguimiento.
+                </p>
+              </div>
               <button
                 className="secondary-btn"
                 type="button"
@@ -567,30 +776,30 @@ export default function Appointments() {
                 </div>
               </div>
 
-          <div className="form-row">
-            <div className="input-group">
-              <label className="input-label">Estado</label>
-              <select
-                className="select-field"
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-              >
-                <option value="pendiente">Pendiente</option>
-                <option value="agendada">Agendada</option>
-                <option value="realizada">Realizada</option>
-              </select>
-            </div>
-          </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Estado</label>
+                  <select
+                    className="select-field"
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  >
+                    <option value="pendiente">Pendiente</option>
+                    <option value="agendada">Agendada</option>
+                    <option value="realizada">Realizada</option>
+                  </select>
+                </div>
+              </div>
 
-          <div className="input-group">
-            <label className="input-label">Notas</label>
-            <textarea
-              className="textarea-field"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
-            />
-          </div>
+              <div className="input-group">
+                <label className="input-label">Notas</label>
+                <textarea
+                  className="textarea-field"
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
+                />
+              </div>
               <div className="floating-actions">
                 <button className="primary-btn" type="submit" disabled={loading}>
                   {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
@@ -611,7 +820,40 @@ export default function Appointments() {
         </div>
       )}
 
-      <div className="card appointments-surface-free appointments-filters-card">
+      {/* Tabs estilo Burjeel - visibles solo en mobile */}
+      <div className="appt-tabs-bar">
+        <button
+          type="button"
+          className={`appt-tab-btn ${statusFilter === "all" || statusFilter === "pendiente" || statusFilter === "agendada" ? "active" : ""}`}
+          onClick={() => setStatusFilter("all")}
+        >
+          Próximas
+        </button>
+        <button
+          type="button"
+          className={`appt-tab-btn ${statusFilter === "realizada" ? "active" : ""}`}
+          onClick={() => setStatusFilter("realizada")}
+        >
+          Realizadas
+        </button>
+      </div>
+
+      {/* Barra de búsqueda mobile */}
+      <div className="appt-search-bar">
+        <div className="appt-search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input
+            className="appt-search-input"
+            placeholder="Especialidad, centro..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="card appointments-surface-free appointments-filters-card appt-desktop-filters">
         <h3 className="card-title">Listado de actividades</h3>
         <div className="form-row appointments-filters-row" style={{ marginBottom: "0.75rem" }}>
           <div className="input-group">
@@ -732,7 +974,7 @@ export default function Appointments() {
               {filteredAppointments.map((a) => (
                 <article
                   key={`mobile-${a.id}`}
-                  className="records-mobile-card appointments-mobile-card"
+                  className="appt-burjeel-card"
                   onClick={() => handleOpenDetail(a)}
                   role="button"
                   tabIndex={0}
@@ -743,72 +985,84 @@ export default function Appointments() {
                     }
                   }}
                 >
-                  <div className="records-mobile-head">
-                    <div className="records-mobile-head-main">
-                      <span className={`records-mobile-icon-badge is-${a.type}`}>
-                        {cleanUiText(typeLabels[a.type] || a.type).slice(0, 1)}
+                  {/* Badge de estado arriba a la derecha */}
+                  <span className={`appt-burjeel-badge appt-badge-${a.status}`}>
+                    {a.status === "agendada" ? "Cita confirmada" : a.status === "realizada" ? "Realizada" : "Pendiente de agendar"}
+                  </span>
+
+                  {/* Header: ícono + datos del doctor/especialidad */}
+                  <div className="appt-burjeel-head">
+                    <span className={`appt-burjeel-icon is-${a.type}`}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                        <rect x="9" y="3" width="6" height="4" rx="1"/>
+                        <path d="M9 12h6M9 16h4"/>
+                      </svg>
+                    </span>
+                    <div className="appt-burjeel-info">
+                      <strong className="appt-burjeel-name">
+                        {cleanUiText(a.specialty || typeLabels[a.type] || "Actividad")}
+                      </strong>
+                      <span className="appt-burjeel-specialty">
+                        {cleanUiText(typeLabels[a.type] || a.type)}
                       </span>
-                      <div className="records-mobile-title-group">
-                        <strong>{cleanUiText(a.specialty || typeLabels[a.type] || "Actividad")}</strong>
-                        <span>{cleanUiText(a.center || "Centro por confirmar")}</span>
+                      <span className="appt-burjeel-center">
+                        {cleanUiText(a.center || "Centro por confirmar")}
+                      </span>
+                    </div>
+                    {canEditActiveProfile && (
+                      <div className="appt-burjeel-menu" onClick={(e) => e.stopPropagation()}>
+                        <RowActionsMenu
+                          items={[
+                            a.status !== "realizada" ? { key: "complete", label: "Marcar realizada", onClick: () => handleMarkCompleted(a) } : null,
+                            { key: "edit", label: "Editar", onClick: () => handleEdit(a) },
+                            { key: "delete", label: "Eliminar", danger: true, onClick: () => handleDelete(a) },
+                          ]}
+                        />
                       </div>
-                    </div>
-                    <div className="records-mobile-head-side">
-                      <span className={`chip-status-${a.status}`}>
-                        {cleanUiText(statusLabels[a.status] || a.status)}
-                      </span>
-                      {canEditActiveProfile ? (
-                        <div onClick={(event) => event.stopPropagation()}>
-                          <RowActionsMenu
-                            items={[
-                              a.status !== "realizada"
-                                ? {
-                                    key: "complete",
-                                    label: "Marcar realizada",
-                                    onClick: () => handleMarkCompleted(a),
-                                  }
-                                : null,
-                              {
-                                key: "edit",
-                                label: "Editar",
-                                onClick: () => handleEdit(a),
-                              },
-                              {
-                                key: "delete",
-                                label: "Eliminar",
-                                danger: true,
-                                onClick: () => handleDelete(a),
-                              },
-                            ]}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
+                    )}
                   </div>
 
-                  <div className="records-mobile-meta-grid">
-                    <div className="records-mobile-meta-item">
-                      <span className="records-mobile-meta-label">Tipo</span>
-                      <span>{cleanUiText(typeLabels[a.type] || a.type)}</span>
-                    </div>
-                    <div className="records-mobile-meta-item">
-                      <span className="records-mobile-meta-label">Fecha</span>
-                      <span>{formatAppointmentDateLabel(a)}</span>
-                    </div>
+                  {/* Fecha y hora */}
+                  <div className="appt-burjeel-datetime">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="14" height="14">
+                      <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>
+                      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                    </svg>
+                    {formatAppointmentDateLabel(a)}
                   </div>
 
-                  <div className="records-mobile-footer">
-                    <button
-                      type="button"
-                      className="records-mobile-link"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleOpenDetail(a);
-                      }}
-                    >
-                      Más detalle
-                    </button>
-                  </div>
+                  {/* Botones de acción */}
+                  {canEditActiveProfile && (
+                    <div className="appt-burjeel-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="appt-burjeel-btn-cancel"
+                        onClick={() => handleDelete(a)}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        className="appt-burjeel-btn-edit"
+                        onClick={() => handleEdit(a)}
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  )}
+                  {!canEditActiveProfile && (
+                    <div className="appt-burjeel-actions">
+                      <button
+                        type="button"
+                        className="appt-burjeel-btn-edit"
+                        style={{ flex: 1 }}
+                        onClick={(e) => { e.stopPropagation(); handleOpenDetail(a); }}
+                      >
+                        Ver detalle
+                      </button>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>

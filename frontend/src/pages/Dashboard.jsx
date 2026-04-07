@@ -328,6 +328,7 @@ export default function Dashboard({ user }) {
   const activeProfileIdRef = useRef(null);
   const radarPollTimeoutRef = useRef(null);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -470,6 +471,12 @@ export default function Dashboard({ user }) {
         window.clearTimeout(radarPollTimeoutRef.current);
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   useEffect(() => {
@@ -887,6 +894,345 @@ export default function Dashboard({ user }) {
     const t = window.setTimeout(() => setAiMsgIndex((prev) => (prev + 1) % contextMessages.length), 4500);
     return () => window.clearTimeout(t);
   }, [contextTyper.done, greetPhase, contextMessages.length]);
+
+  if (isMobile) {
+    const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
+    const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
+
+    return (
+      <div className="mobile-dashboard native-mobile-scene">
+        {/* ── HERO ── */}
+        <div className="mobile-hero native-surface native-surface-hero">
+          <div className="mobile-hero-topbar">
+            <div className="mobile-hero-user">
+              <div className="mobile-hero-avatar" onClick={() => navigate("/settings")}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="12" cy="8" r="4"/>
+                  <path d="M6 20a6 6 0 0 1 12 0"/>
+                </svg>
+              </div>
+              <div className="mobile-hero-user-info">
+                <p className="mobile-hero-greeting-sub">
+                  {(() => {
+                    const h = new Date().getHours();
+                    if (h < 12) return "Buenos días";
+                    if (h < 18) return "Buenas tardes";
+                    return "Buenas noches";
+                  })()}
+                </p>
+                <h1 className="mobile-hero-greeting-name">
+                  Hola, <em>{firstName}</em>
+                </h1>
+              </div>
+            </div>
+            <div className="mobile-hero-actions">
+              <button
+                type="button"
+                className="mobile-hero-action-btn"
+                aria-label="Citas"
+                onClick={() => navigate("/appointments")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="mobile-hero-action-btn"
+                aria-label="Documentos"
+                onClick={() => navigate("/documents")}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="mobile-hero-greeting" style={{ display: "none" }}></div>
+
+          <div>
+            <div className="mobile-hero-stat-label">
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+              Adherencia de medicamentos
+            </div>
+            <div className="mobile-hero-stat-row">
+              <span className="mobile-hero-stat-value">
+                {activeMedications.length ? adherence : "--"}
+                {activeMedications.length ? <span className="stat-decimal">%</span> : null}
+              </span>
+              <span className={`mobile-hero-stat-badge ${adherenceTone}`}>
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  {overallStatus.level === "ok" || overallStatus.level === "neutral" ? (
+                    <polyline points="20 6 9 17 4 12"/>
+                  ) : (
+                    <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
+                  )}
+                </svg>
+                {adherenceBadgeLabel}
+              </span>
+            </div>
+            <div className="mobile-hero-badges">
+              <span className="mobile-hero-profile-badge">
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="8" r="3"/>
+                  <path d="M6 19.5a6 6 0 0 1 12 0"/>
+                </svg>
+                {activeProfileName}
+              </span>
+              {nextAppointment && (
+                <span className="mobile-hero-profile-badge">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                  {toRelativeDayLabel(parseDate(nextAppointment.date_time))}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── ACTION BAR ── */}
+        <div className="mobile-action-bar">
+          <button type="button" className="mobile-action-btn" onClick={() => navigate("/appointments")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Agenda
+          </button>
+          <button type="button" className="mobile-action-btn is-center" onClick={() => navigate("/ai")} aria-label="IA Klinip">
+            <span className="mobile-ai-k">K</span>
+            <span className="mobile-ai-label">IA</span>
+          </button>
+          <button type="button" className="mobile-action-btn" onClick={() => navigate("/medications")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              <g transform="rotate(-35 12 12)">
+                <rect x="5" y="8" width="14" height="8" rx="4"/>
+                <path d="M12 8v8"/>
+              </g>
+            </svg>
+            Medicamentos
+          </button>
+        </div>
+
+        {/* ── WHITE SHEET ── */}
+        <div className="mobile-sheet">
+          <div className="mobile-sheet-handle" />
+
+          {/* Acceso rápido */}
+          <div className="mobile-section native-section native-section-delay-1">
+            <div className="mobile-section-header">
+              <h2 className="mobile-section-title">Acceso rápido</h2>
+            </div>
+            <div className="mobile-quick-grid">
+              <button type="button" className="mobile-quick-item tone-blue is-featured is-glow" onClick={() => navigate("/appointments")}>
+                <span className="mobile-card-orb" aria-hidden />
+                <span className="mobile-quick-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <line x1="16" y1="2" x2="16" y2="6"/>
+                    <line x1="8" y1="2" x2="8" y2="6"/>
+                    <line x1="3" y1="10" x2="21" y2="10"/>
+                  </svg>
+                </span>
+                <p className="mobile-quick-label">Citas</p>
+                <span className="mobile-quick-highlight">Agenda activa</span>
+                <p className="mobile-quick-sub">
+                  {futureAppointments.length > 0 ? `${futureAppointments.length} próxima${futureAppointments.length > 1 ? "s" : ""}` : "Sin citas"}
+                </p>
+              </button>
+              <button type="button" className="mobile-quick-item tone-teal is-spotlight" onClick={() => navigate("/documents")}>
+                <span className="mobile-card-orb is-secondary" aria-hidden />
+                <span className="mobile-quick-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                  </svg>
+                </span>
+                <p className="mobile-quick-label">Documentos</p>
+                <p className="mobile-quick-sub">{documents.length} registros</p>
+              </button>
+              <button type="button" className="mobile-quick-item tone-sky" onClick={() => navigate("/voice")}>
+                <span className="mobile-quick-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <rect x="9" y="2" width="6" height="11" rx="3"/>
+                    <path d="M5 10a7 7 0 0 0 14 0"/>
+                    <path d="M12 17v4M8 21h8"/>
+                  </svg>
+                </span>
+                <p className="mobile-quick-label">Klinip Voice</p>
+                <p className="mobile-quick-sub">Grabar consulta</p>
+              </button>
+              <button type="button" className="mobile-quick-item tone-violet" onClick={() => navigate("/family")}>
+                <span className="mobile-quick-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="8" cy="9" r="2.5"/>
+                    <circle cx="16" cy="9" r="2.5"/>
+                    <path d="M3.5 19a4.5 4.5 0 0 1 9 0"/>
+                    <path d="M11.5 19a4.5 4.5 0 0 1 9 0"/>
+                  </svg>
+                </span>
+                <p className="mobile-quick-label">Mi familia</p>
+                <p className="mobile-quick-sub">
+                  {linkedProfiles > 0 ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}` : "Gestionar perfiles"}
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* Alertas de salud */}
+          {activeHealthAlerts.length > 0 && (
+            <div className="mobile-section native-section native-section-delay-2">
+              <div className="mobile-section-header">
+                <h2 className="mobile-section-title">Alertas de salud</h2>
+                <button type="button" className="mobile-section-link" onClick={() => navigate("/ai")}>
+                  Abrir IA
+                </button>
+              </div>
+              {activeHealthAlerts.slice(0, 2).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`mobile-activity-item ${item.severity === "high" ? "is-critical" : "is-elevated"}`}
+                  onClick={() => navigate("/ai")}
+                  style={{ borderLeft: `3px solid ${item.severity === "high" ? "#ef4444" : "#f59e0b"}` }}
+                >
+                  <span
+                    className="mobile-activity-icon"
+                    style={{
+                      background: item.severity === "high" ? "#fef2f2" : "#fffbeb",
+                      color: item.severity === "high" ? "#ef4444" : "#d97706",
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
+                    </svg>
+                  </span>
+                  <div className="mobile-activity-info">
+                    <p className="mobile-activity-title">{getFriendlyAlertTitle(item)}</p>
+                    <p className="mobile-activity-sub">Toca para orientación con Klinip IA</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Próxima actividad */}
+          {upcomingEvents.length > 0 && (
+            <div className="mobile-section native-section native-section-delay-3">
+              <div className="mobile-section-header">
+                <h2 className="mobile-section-title">Próxima actividad</h2>
+                <button type="button" className="mobile-section-link" onClick={() => navigate("/calendar")}>
+                  Ver todo
+                </button>
+              </div>
+              {upcomingEvents.slice(0, 3).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`mobile-activity-item ${item.urgent ? "is-critical" : "is-elevated"}`}
+                  onClick={() => navigate(item.kind === "medication" ? "/medications" : "/appointments")}
+                >
+                  <span className={`mobile-activity-icon tone-${item.kind === "medication" ? "amber" : item.kind === "exam" ? "teal" : "blue"}`}>
+                    {item.kind === "medication" ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <g transform="rotate(-35 12 12)">
+                          <rect x="5" y="8" width="14" height="8" rx="4"/>
+                          <path d="M12 8v8"/>
+                        </g>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                    )}
+                  </span>
+                  <div className="mobile-activity-info">
+                    <p className="mobile-activity-title">{item.title}</p>
+                    <p className="mobile-activity-sub">
+                      {item.urgent ? "Hoy" : toDayLabel(item.date)}{item.meta ? ` · ${item.meta}` : ""}
+                    </p>
+                  </div>
+                  <span className={`mobile-activity-tag tone-${item.kind === "medication" ? "amber" : "blue"}`}>
+                    {item.urgent ? "HOY" : item.tag}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Actividad reciente */}
+          {recentActivity.length > 0 && (
+            <div className="mobile-section native-section native-section-delay-4">
+              <div className="mobile-section-header">
+                <h2 className="mobile-section-title">Actividad reciente</h2>
+                <button type="button" className="mobile-section-link" onClick={() => navigate("/timeline")}>
+                  Ver todo
+                </button>
+              </div>
+              {recentActivity.slice(0, 3).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="mobile-activity-item"
+                  onClick={() => navigate(
+                    item.kind === "document" ? "/documents" :
+                    item.kind === "medication" ? "/medications" : "/appointments"
+                  )}
+                >
+                  <span className={`mobile-activity-icon tone-${item.kind === "document" ? "teal" : item.kind === "medication" ? "amber" : "blue"}`}>
+                    {item.kind === "document" ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    ) : item.kind === "medication" ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <g transform="rotate(-35 12 12)">
+                          <rect x="5" y="8" width="14" height="8" rx="4"/>
+                          <path d="M12 8v8"/>
+                        </g>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                    )}
+                  </span>
+                  <div className="mobile-activity-info">
+                    <p className="mobile-activity-title">{item.title}</p>
+                    <p className="mobile-activity-sub">{item.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {upcomingEvents.length === 0 && recentActivity.length === 0 && !loading && (
+            <div className="mobile-empty-state">
+              Registra citas y medicamentos para ver tu actividad aquí.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <section className="home-editorial">
