@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   createMedicationPurchase,
@@ -1362,7 +1363,7 @@ export default function Medications() {
         </div>
       )}
 
-      {canEditActiveProfile && missingFrequency && !showForm && (
+      {canEditActiveProfile && missingFrequency && !showForm && createPortal(
         <div
           className="modal-backdrop"
           onClick={() => setMissingFrequency(null)}
@@ -1401,9 +1402,9 @@ export default function Medications() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {showForm && canEditActiveProfile && (
+      {showForm && canEditActiveProfile && createPortal(
         <div className="floating-form-backdrop" onClick={handleCloseForm}>
           <div className="floating-form-card" onClick={(e) => e.stopPropagation()}>
             <div className="card-header med-form-header" style={{ marginBottom: "0.5rem" }}>
@@ -2079,9 +2080,9 @@ export default function Medications() {
             </form>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {detailOpen && detailTarget && (
+      {detailOpen && detailTarget && createPortal(
         <div className="modal-backdrop" onClick={handleCloseDetail}>
           <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
             <div className="detail-modal-header">
@@ -2335,7 +2336,7 @@ export default function Medications() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
       <div className="card medications-surface-free medications-filters-card">
         <h3 className="card-title">Filtros</h3>
