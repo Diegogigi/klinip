@@ -491,19 +491,20 @@ export default function Appointments() {
       )}
 
       {detailOpen && detailTarget && (
-        <div className="modal-backdrop appointments-detail-backdrop" onClick={handleCloseDetail}>
+        <div className="appointments-overlay appointments-detail-overlay" onClick={handleCloseDetail}>
           <div
             key={`detail-${detailTarget.id ?? "activity"}`}
-            className="modal-card detail-modal-card appointments-detail-sheet"
+            className="appointments-sheet appointments-detail-sheet"
             onClick={(event) => event.stopPropagation()}
           >
+            <span className="appointments-sheet-grabber" aria-hidden />
             <div className="detail-modal-header">
               <h3>Detalle de la actividad</h3>
               <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
                 ×
               </button>
             </div>
-            <div className="detail-modal-content appointments-detail-scroll">
+            <div className="appointments-sheet-body appointments-detail-scroll">
               <div className="appointment-detail-hero">
                 <div className="appointment-detail-hero-copy">
                   <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
@@ -580,7 +581,8 @@ export default function Appointments() {
                 </div>
               </div>
             </div>
-            <div className="modal-actions">
+            <div className="appointments-sheet-footer appointments-detail-footer">
+              <div className="appointments-detail-actions">
               {canEditActiveProfile ? (
                 <button
                   className="secondary-btn"
@@ -604,6 +606,7 @@ export default function Appointments() {
                   Marcar realizada
                 </button>
               ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -717,13 +720,14 @@ export default function Appointments() {
       )}
 
       {showForm && canEditActiveProfile && (
-        <div className="floating-form-backdrop appointments-form-backdrop" onClick={() => setShowForm(false)}>
+        <div className="appointments-overlay appointments-form-overlay" onClick={() => setShowForm(false)}>
           <div
             key={form.id ?? "new-appointment"}
-            className="floating-form-card appointments-form-sheet"
+            className="appointments-sheet appointments-form-sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="card-header appointments-form-header" style={{ marginBottom: "0.75rem" }}>
+            <span className="appointments-sheet-grabber" aria-hidden />
+            <div className="card-header appointments-form-header">
               <div>
                 <h3 className="card-title" style={{ marginBottom: 0 }}>
                   {form.id ? "Editar actividad" : "Nueva actividad"}
@@ -740,93 +744,97 @@ export default function Appointments() {
                 Cerrar
               </button>
             </div>
-            <form className="appointments-form-scroll" onSubmit={handleSubmit}>
-              <div className="form-row">
+            <form className="appointments-form-shell" onSubmit={handleSubmit}>
+              <div className="appointments-sheet-body appointments-form-scroll">
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label">Tipo</label>
+                    <select
+                      className="select-field"
+                      value={form.type}
+                      onChange={(e) => setForm({ ...form, type: e.target.value })}
+                    >
+                      <option value="cita">Cita médica</option>
+                      <option value="examen">Examen</option>
+                      <option value="tramite">Trámite</option>
+                    </select>
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Especialidad</label>
+                    <input
+                      className="input-field"
+                      value={form.specialty}
+                      onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+                      placeholder="Medicina general, odontología, oftalmología..."
+                    />
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label">Centro de salud</label>
+                    <input
+                      className="input-field"
+                      value={form.center}
+                      onChange={(e) => setForm({ ...form, center: e.target.value })}
+                      placeholder="CESFAM, hospital, clínica..."
+                    />
+                  </div>
+                  <div className="input-group">
+                    <label className="input-label">Fecha y hora</label>
+                    <input
+                      className="input-field"
+                      type="datetime-local"
+                      value={form.date_time}
+                      onChange={(e) => setForm({ ...form, date_time: e.target.value })}
+                    />
+                    <span className="tiny-note">
+                      Puedes dejarlo vacío si aún no tienes la hora exacta.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="form-row">
+                  <div className="input-group">
+                    <label className="input-label">Estado</label>
+                    <select
+                      className="select-field"
+                      value={form.status}
+                      onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    >
+                      <option value="pendiente">Pendiente</option>
+                      <option value="agendada">Agendada</option>
+                      <option value="realizada">Realizada</option>
+                    </select>
+                  </div>
+                </div>
+
                 <div className="input-group">
-                  <label className="input-label">Tipo</label>
-                  <select
-                    className="select-field"
-                    value={form.type}
-                    onChange={(e) => setForm({ ...form, type: e.target.value })}
+                  <label className="input-label">Notas</label>
+                  <textarea
+                    className="textarea-field"
+                    value={form.notes}
+                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                    placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
+                  />
+                </div>
+              </div>
+              <div className="appointments-sheet-footer appointments-form-footer">
+                <div className="floating-actions appointments-form-actions">
+                  <button className="primary-btn" type="submit" disabled={loading}>
+                    {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => {
+                      resetForm();
+                      setShowForm(false);
+                    }}
                   >
-                    <option value="cita">Cita médica</option>
-                    <option value="examen">Examen</option>
-                    <option value="tramite">Trámite</option>
-                  </select>
+                    Cancelar
+                  </button>
                 </div>
-                <div className="input-group">
-                  <label className="input-label">Especialidad</label>
-                  <input
-                    className="input-field"
-                    value={form.specialty}
-                    onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-                    placeholder="Medicina general, odontología, oftalmología..."
-                  />
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Centro de salud</label>
-                  <input
-                    className="input-field"
-                    value={form.center}
-                    onChange={(e) => setForm({ ...form, center: e.target.value })}
-                    placeholder="CESFAM, hospital, clínica..."
-                  />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Fecha y hora</label>
-                  <input
-                    className="input-field"
-                    type="datetime-local"
-                    value={form.date_time}
-                    onChange={(e) => setForm({ ...form, date_time: e.target.value })}
-                  />
-                  <span className="tiny-note">
-                    Puedes dejarlo vacío si aún no tienes la hora exacta.
-                  </span>
-                </div>
-              </div>
-
-              <div className="form-row">
-                <div className="input-group">
-                  <label className="input-label">Estado</label>
-                  <select
-                    className="select-field"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    <option value="pendiente">Pendiente</option>
-                    <option value="agendada">Agendada</option>
-                    <option value="realizada">Realizada</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="input-group">
-                <label className="input-label">Notas</label>
-                <textarea
-                  className="textarea-field"
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                  placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
-                />
-              </div>
-              <div className="floating-actions appointments-form-actions">
-                <button className="primary-btn" type="submit" disabled={loading}>
-                  {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
-                </button>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => {
-                    resetForm();
-                    setShowForm(false);
-                  }}
-                >
-                  Cancelar
-                </button>
               </div>
             </form>
           </div>
