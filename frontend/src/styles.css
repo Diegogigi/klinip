@@ -36256,8 +36256,8 @@ body.theme-dark .appointments-sheet-grabber {
     top: auto !important;
     width: 100vw !important;
     max-width: none !important;
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 2.5rem) !important;
-    height: calc(100dvh - env(safe-area-inset-top, 0px) - 2.5rem) !important;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.4rem) !important;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.4rem) !important;
     border-radius: 24px 24px 0 0 !important;
     border-left: 0 !important;
     border-right: 0 !important;
