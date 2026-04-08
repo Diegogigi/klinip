@@ -9,6 +9,21 @@
   touch-action: manipulation;
 }
 
+/* Portal de overlays: siempre fijo en el viewport, inmune al scroll lock del body */
+#overlay-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+#overlay-root > * {
+  pointer-events: auto;
+}
+
 html {
   /* Scroll suave nativo */
   scroll-behavior: smooth;
@@ -36231,6 +36246,8 @@ body.theme-dark .appointments-sheet-grabber {
     top: 0 !important;
     left: 0 !important;
     right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
     height: 100dvh !important;
     z-index: 9999 !important;
     background: rgba(15, 23, 42, 0.45) !important;

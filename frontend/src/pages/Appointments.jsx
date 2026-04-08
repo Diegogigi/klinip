@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   getAppointments,
@@ -444,7 +445,7 @@ export default function Appointments() {
         </div>
       )}
 
-      {notifyOpen && notifyTarget && (
+      {notifyOpen && notifyTarget && createPortal(
         <div className="native-sheet-backdrop" onClick={() => {
           setNotifyOpen(false);
           setNotifyTarget(null);
@@ -506,9 +507,9 @@ export default function Appointments() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {detailOpen && detailTarget && (
+      {detailOpen && detailTarget && createPortal(
         <div className="native-sheet-backdrop" onClick={handleCloseDetail}>
           <div
             key={`detail-${detailTarget.id ?? "activity"}`}
@@ -652,9 +653,9 @@ export default function Appointments() {
             ) : null}
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {successOpen && successTarget && (
+      {successOpen && successTarget && createPortal(
         <div className="native-sheet-backdrop" onClick={handleCloseSuccess}>
           <div
             className="native-sheet native-success-sheet"
@@ -766,9 +767,9 @@ export default function Appointments() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {showForm && canEditActiveProfile && (
+      {showForm && canEditActiveProfile && createPortal(
         <div className="native-sheet-backdrop" onClick={() => setShowForm(false)}>
           <div
             key={form.id ?? "new-appointment"}
@@ -925,7 +926,7 @@ export default function Appointments() {
             </form>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
       {/* Tabs estilo Burjeel - visibles solo en mobile */}
       <div className="appt-tabs-bar">
