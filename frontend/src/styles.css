@@ -36230,47 +36230,34 @@ body.theme-dark .appointments-sheet-grabber {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
-    width: 100vw !important;
+    right: 0 !important;
     height: 100dvh !important;
-    display: flex !important;
-    align-items: flex-end !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    margin: 0 !important;
     z-index: 9999 !important;
     background: rgba(15, 23, 42, 0.45) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
-  }
-
-  /* Contrarrestar el top:-scrollY del body cuando overlay-lock está activo */
-  body.klinip-overlay-open .native-sheet-backdrop {
-    transform: translateY(var(--klinip-scroll-y, 0px)) !important;
+    overflow: hidden !important;
   }
 
   .native-sheet {
-    position: relative !important;
-    left: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    top: auto !important;
-    width: 100vw !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: calc(env(safe-area-inset-top, 0px) + 0.4rem) !important;
+    width: 100% !important;
     max-width: none !important;
-    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.4rem) !important;
-    height: calc(100dvh - env(safe-area-inset-top, 0px) - 0.4rem) !important;
+    max-height: none !important;
+    height: auto !important;
     border-radius: 24px 24px 0 0 !important;
-    border-left: 0 !important;
-    border-right: 0 !important;
-    border-bottom: 0 !important;
+    border: none !important;
     background: #ffffff !important;
     box-shadow: 0 -8px 40px rgba(15, 23, 42, 0.18) !important;
-    animation: nativeSheetSlideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1) both !important;
+    animation: nativeSheetSlideUp 0.38s cubic-bezier(0.32, 0.72, 0, 1) both !important;
     z-index: 10000 !important;
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
-    /* Asegurar que el footer nunca se corte */
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
 
   body.theme-dark .native-sheet {
@@ -36331,7 +36318,7 @@ body.theme-dark .appointments-sheet-grabber {
   /* Footer mobile */
   .native-sheet-footer {
     flex: 0 0 auto !important;
-    padding: 0.75rem 1rem 0.75rem !important;
+    padding: 0.7rem 1rem calc(0.7rem + env(safe-area-inset-bottom, 0px)) !important;
     border-top: 1px solid rgba(226, 232, 240, 0.7) !important;
     background: #ffffff !important;
     display: flex !important;
@@ -36485,13 +36472,15 @@ body.theme-dark .appointments-sheet-grabber {
 @media (max-width: 768px) {
   .native-success-sheet {
     top: auto !important;
-    max-height: 85vh !important;
+    bottom: 0 !important;
+    max-height: 85dvh !important;
     height: auto !important;
   }
 
   .native-notify-sheet {
     top: auto !important;
-    max-height: 50vh !important;
+    bottom: 0 !important;
+    max-height: 50dvh !important;
     height: auto !important;
   }
 }
