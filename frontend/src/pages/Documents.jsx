@@ -70,6 +70,10 @@ function inferViewerKind(doc) {
   return "other";
 }
 
+function getPreviewActionLabel(doc) {
+  return inferViewerKind(doc) === "pdf" ? "Abrir PDF" : "Visualizar";
+}
+
 function getErrorDetail(err, fallback) {
   const detail = err?.response?.data?.detail;
   if (typeof detail === "string" && detail.trim()) return detail.trim();
@@ -294,15 +298,53 @@ export default function Documents() {
     setDetailTarget(null);
     const kind = inferViewerKind(doc);
     if (kind === "pdf") {
-      releaseViewerUrl();
-      setViewerTarget(doc);
-      setViewerKind("pdf");
-      setViewerZoom(1);
-      setViewerBlob(null);
-      setViewerStepUpToken(stepUpToken || "");
-      setViewerUrl("");
-      setViewerOpen(true);
-      setViewerLoading(false);
+      let previewWindow = null;
+      try {
+        previewWindow = window.open("", "_blank");
+        if (previewWindow && !previewWindow.closed) {
+          previewWindow.opener = null;
+          previewWindow.document.title = "Klinip | Cargando PDF";
+          previewWindow.document.body.innerHTML =
+            "<div style=\"font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#0f172a\">Preparando PDF...</div>";
+        }
+      } catch (_) {
+        previewWindow = null;
+      }
+      setViewerLoading(true);
+      try {
+        const blob = stepUpToken
+          ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
+          : await getDocumentFile(doc.id);
+        const url = window.URL.createObjectURL(blob);
+        if (previewWindow && !previewWindow.closed) {
+          previewWindow.location.href = url;
+          window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+          setViewerLoading(false);
+          return;
+        }
+        releaseViewerUrl();
+        setViewerTarget(doc);
+        setViewerKind("pdf");
+        setViewerZoom(1);
+        setViewerBlob(blob);
+        setViewerStepUpToken(stepUpToken || "");
+        setViewerUrl(url);
+        setViewerOpen(true);
+      } catch (err) {
+        if (previewWindow && !previewWindow.closed) {
+          previewWindow.close();
+        }
+        if (err.stepUpRequired) {
+          setStepUpPending({ action: "view", doc });
+          setStepUpOpen(true);
+          return;
+        }
+        console.error("Error al abrir documento:", err);
+        closeViewer();
+        window.alert(`No se pudo abrir el documento. ${getErrorDetail(err, err.message)}`);
+      } finally {
+        setViewerLoading(false);
+      }
       return;
     }
     setViewerLoading(true);
@@ -616,7 +658,7 @@ export default function Documents() {
             </div>
             <div className="modal-actions docs-detail-actions">
               <button className="secondary-btn" type="button" onClick={() => handleOpenViewer(detailTarget)}>
-                Visualizar
+                {getPreviewActionLabel(detailTarget)}
               </button>
               <button className="primary-btn" type="button" onClick={() => handleDownload(detailTarget)}>
                 Descargar
@@ -824,7 +866,7 @@ export default function Documents() {
                         items={[
                           {
                             key: "preview",
-                            label: "Visualizar",
+                            label: getPreviewActionLabel(doc),
                             onClick: () => handleOpenViewer(doc),
                           },
                           {
@@ -882,7 +924,7 @@ export default function Documents() {
                         items={[
                           {
                             key: "preview",
-                            label: "Visualizar",
+                            label: getPreviewActionLabel(doc),
                             onClick: () => handleOpenViewer(doc),
                           },
                           {
@@ -928,7 +970,7 @@ export default function Documents() {
                       handleOpenViewer(doc);
                     }}
                   >
-                    Visualizar
+                    {getPreviewActionLabel(doc)}
                   </button>
                   <button
                     type="button"
