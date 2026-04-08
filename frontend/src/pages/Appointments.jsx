@@ -158,7 +158,7 @@ export default function Appointments() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!canEditActiveProfile) {
       alert("Este perfil está en modo solo lectura. No puedes modificar citas.");
       return;
@@ -491,123 +491,147 @@ export default function Appointments() {
       )}
 
       {detailOpen && detailTarget && (
-        <div className="floating-form-backdrop appointments-detail-backdrop calendar-selected-backdrop" onClick={handleCloseDetail}>
+        <div className="native-sheet-backdrop" onClick={handleCloseDetail}>
           <div
             key={`detail-${detailTarget.id ?? "activity"}`}
-            className="floating-form-card appointments-sheet appointments-detail-sheet"
+            className="native-sheet native-detail-sheet"
             onClick={(event) => event.stopPropagation()}
           >
-            <span className="appointments-sheet-grabber" aria-hidden />
-            <div className="detail-modal-header">
-              <h3>Detalle de la actividad</h3>
-              <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
-                ×
-              </button>
-            </div>
-            <div className="appointments-sheet-body appointments-detail-scroll">
-              <div className="appointment-detail-hero">
-                <div className="appointment-detail-hero-copy">
-                  <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
-                    {cleanUiText(typeLabels[detailTarget.type] || detailTarget.type)}
-                  </span>
-                  <h4>{cleanUiText(detailTarget.specialty, "Actividad médica")}</h4>
-                  <p>{cleanUiText(detailTarget.center, "Centro por confirmar")}</p>
-                </div>
-                <span className={`detail-chip detail-chip-status ${detailTarget.status}`}>
+            <span className="native-sheet-grabber" aria-hidden />
+
+            {/* Header nativo con gradiente */}
+            <div className="native-detail-header">
+              <div className="native-detail-header-top">
+                <span className={`native-chip native-chip-type ${detailTarget.type}`}>
+                  {cleanUiText(typeLabels[detailTarget.type] || detailTarget.type)}
+                </span>
+                <button className="native-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <h3 className="native-detail-title">{cleanUiText(detailTarget.specialty, "Actividad médica")}</h3>
+              <p className="native-detail-subtitle">{cleanUiText(detailTarget.center, "Centro por confirmar")}</p>
+              <div className="native-detail-badges">
+                <span className={`native-chip native-chip-status ${detailTarget.status}`}>
                   {cleanUiText(statusLabels[detailTarget.status] || detailTarget.status)}
                 </span>
-              </div>
-              <div className="detail-highlight">
-                <span className="detail-chip detail-chip-muted">
+                <span className="native-chip native-chip-muted">
                   {detailTarget.date_time ? "Programada" : "Pendiente de fecha"}
                 </span>
               </div>
-              <div className="detail-grid">
-                <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M4 7h16M7 4v6M17 4v6M6 20h12a2 2 0 0 0 2-2V8H4v10a2 2 0 0 0 2 2Z"/>
-                    </svg>
-                  </span>
-                  <div>
-                    <span className="detail-label">Especialidad</span>
-                    <p>{cleanUiText(detailTarget.specialty, "Sin especialidad")}</p>
+            </div>
+
+            {/* Cuerpo con campos */}
+            <div className="native-sheet-body">
+              <div className="native-detail-section">
+                <h5 className="native-section-title">Informaci&oacute;n de la cita</h5>
+
+                <div className="native-info-card">
+                  <div className="native-info-row">
+                    <span className="native-info-icon" aria-hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                      </svg>
+                    </span>
+                    <div className="native-info-content">
+                      <span className="native-info-label">Especialidad</span>
+                      <span className="native-info-value">{cleanUiText(detailTarget.specialty, "Sin especialidad")}</span>
+                    </div>
+                  </div>
+
+                  <div className="native-info-divider" />
+
+                  <div className="native-info-row">
+                    <span className="native-info-icon" aria-hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <path d="M3 21h18"/>
+                        <path d="M5 21V7l7-4 7 4v14"/>
+                        <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
+                      </svg>
+                    </span>
+                    <div className="native-info-content">
+                      <span className="native-info-label">Centro</span>
+                      <span className="native-info-value">{cleanUiText(detailTarget.center, "Sin centro")}</span>
+                    </div>
+                  </div>
+
+                  <div className="native-info-divider" />
+
+                  <div className="native-info-row">
+                    <span className="native-info-icon" aria-hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                    </span>
+                    <div className="native-info-content">
+                      <span className="native-info-label">Fecha y hora</span>
+                      <span className="native-info-value">
+                        {detailTarget.date_time
+                          ? toLocaleDateTimeOrEmpty(detailTarget.date_time)
+                          : "Por agendar"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M3 21h18"/>
-                      <path d="M5 21V7l7-4 7 4v14"/>
-                      <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
-                    </svg>
-                  </span>
-                  <div>
-                    <span className="detail-label">Centro</span>
-                    <p>{cleanUiText(detailTarget.center, "Sin centro")}</p>
+
+                {/* Notas en card separada */}
+                {detailTarget.notes ? (
+                  <div className="native-notes-card">
+                    <div className="native-notes-header">
+                      <span className="native-info-icon" aria-hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                          <line x1="8" y1="13" x2="16" y2="13"/>
+                          <line x1="8" y1="17" x2="13" y2="17"/>
+                        </svg>
+                      </span>
+                      <span className="native-info-label">Notas</span>
+                    </div>
+                    <p className="native-notes-text">{cleanUiText(detailTarget.notes)}</p>
                   </div>
-                </div>
-                <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <rect x="3" y="4" width="18" height="18" rx="2"/>
-                      <line x1="8" y1="2" x2="8" y2="6"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/>
-                      <line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                  </span>
-                  <div>
-                    <span className="detail-label">Fecha y hora</span>
-                    <p>
-                      {detailTarget.date_time
-                        ? toLocaleDateTimeOrEmpty(detailTarget.date_time)
-                        : "Por agendar"}
-                    </p>
-                  </div>
-                </div>
-                <div className="detail-field">
-                  <span className="detail-item-icon" aria-hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="8" y1="13" x2="16" y2="13"/>
-                      <line x1="8" y1="17" x2="13" y2="17"/>
-                    </svg>
-                  </span>
-                  <div>
-                    <span className="detail-label">Notas</span>
-                    <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
-                  </div>
-                </div>
+                ) : null}
               </div>
             </div>
-            <div className="appointments-sheet-footer appointments-detail-footer">
-              <div className="appointments-detail-actions">
-              {canEditActiveProfile ? (
+
+            {/* Footer con acciones */}
+            {canEditActiveProfile ? (
+              <div className="native-sheet-footer">
                 <button
-                  className="secondary-btn"
+                  className="native-btn native-btn-outline"
                   type="button"
                   onClick={() => {
                     handleEdit(detailTarget);
                     handleCloseDetail();
                   }}
                 >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
                   Editar
                 </button>
-              ) : null}
-              {canEditActiveProfile && detailTarget.status !== "realizada" ? (
-                <button
-                  className="primary-btn"
-                  type="button"
-                  onClick={() => {
-                    handleMarkCompleted(detailTarget).finally(handleCloseDetail);
-                  }}
-                >
-                  Marcar realizada
-                </button>
-              ) : null}
+                {detailTarget.status !== "realizada" ? (
+                  <button
+                    className="native-btn native-btn-primary"
+                    type="button"
+                    onClick={() => {
+                      handleMarkCompleted(detailTarget).finally(handleCloseDetail);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" width="18" height="18">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Marcar realizada
+                  </button>
+                ) : null}
               </div>
-            </div>
+            ) : null}
           </div>
         </div>
       )}
@@ -720,121 +744,158 @@ export default function Appointments() {
       )}
 
       {showForm && canEditActiveProfile && (
-        <div className="floating-form-backdrop appointments-form-backdrop calendar-selected-backdrop" onClick={() => setShowForm(false)}>
+        <div className="native-sheet-backdrop" onClick={() => setShowForm(false)}>
           <div
             key={form.id ?? "new-appointment"}
-            className="floating-form-card appointments-sheet appointments-form-sheet"
+            className="native-sheet native-form-sheet"
             onClick={(e) => e.stopPropagation()}
           >
-            <span className="appointments-sheet-grabber" aria-hidden />
-            <div className="card-header appointments-form-header">
-              <div>
-                <h3 className="card-title" style={{ marginBottom: 0 }}>
+            <span className="native-sheet-grabber" aria-hidden />
+
+            {/* Header nativo del formulario */}
+            <div className="native-form-header">
+              <div className="native-form-header-row">
+                <button
+                  className="native-header-action"
+                  type="button"
+                  onClick={() => { resetForm(); setShowForm(false); }}
+                >
+                  Cancelar
+                </button>
+                <h3 className="native-form-title">
                   {form.id ? "Editar actividad" : "Nueva actividad"}
                 </h3>
-                <p className="appointments-form-subtitle">
-                  Completa los datos principales y deja el resto listo para seguimiento.
-                </p>
+                <button
+                  className="native-header-action native-header-action-primary"
+                  type="button"
+                  disabled={loading}
+                  onClick={handleSubmit}
+                >
+                  {loading ? "..." : form.id ? "Guardar" : "Agregar"}
+                </button>
               </div>
-              <button
-                className="secondary-btn"
-                type="button"
-                onClick={() => setShowForm(false)}
-              >
-                Cerrar
-              </button>
+              <p className="native-form-subtitle">
+                Completa los datos principales de tu cita
+              </p>
             </div>
-            <form className="appointments-form-shell" onSubmit={handleSubmit}>
-              <div className="appointments-sheet-body appointments-form-scroll">
-                <div className="form-row">
-                  <div className="input-group">
-                    <label className="input-label">Tipo</label>
-                    <select
-                      className="select-field"
-                      value={form.type}
-                      onChange={(e) => setForm({ ...form, type: e.target.value })}
-                    >
-                      <option value="cita">Cita médica</option>
-                      <option value="examen">Examen</option>
-                      <option value="tramite">Trámite</option>
-                    </select>
-                  </div>
-                  <div className="input-group">
-                    <label className="input-label">Especialidad</label>
-                    <input
-                      className="input-field"
-                      value={form.specialty}
-                      onChange={(e) => setForm({ ...form, specialty: e.target.value })}
-                      placeholder="Medicina general, odontología, oftalmología..."
-                    />
+
+            <form className="native-form-shell" onSubmit={handleSubmit}>
+              <div className="native-sheet-body">
+                {/* Tipo */}
+                <div className="native-form-section">
+                  <h5 className="native-section-title">Tipo de actividad</h5>
+                  <div className="native-type-selector">
+                    {[
+                      { value: "cita", label: "Cita m\u00e9dica", icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                      )},
+                      { value: "examen", label: "Examen", icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
+                      )},
+                      { value: "tramite", label: "Tr\u00e1mite", icon: (
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      )},
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className={`native-type-option ${form.type === opt.value ? "active" : ""}`}
+                        onClick={() => setForm({ ...form, type: opt.value })}
+                      >
+                        <span className="native-type-icon">{opt.icon}</span>
+                        <span className="native-type-label">{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="form-row">
-                  <div className="input-group">
-                    <label className="input-label">Centro de salud</label>
-                    <input
-                      className="input-field"
-                      value={form.center}
-                      onChange={(e) => setForm({ ...form, center: e.target.value })}
-                      placeholder="CESFAM, hospital, clínica..."
-                    />
-                  </div>
-                  <div className="input-group">
-                    <label className="input-label">Fecha y hora</label>
-                    <input
-                      className="input-field"
-                      type="datetime-local"
-                      value={form.date_time}
-                      onChange={(e) => setForm({ ...form, date_time: e.target.value })}
-                    />
-                    <span className="tiny-note">
-                      Puedes dejarlo vacío si aún no tienes la hora exacta.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="form-row">
-                  <div className="input-group">
-                    <label className="input-label">Estado</label>
-                    <select
-                      className="select-field"
-                      value={form.status}
-                      onChange={(e) => setForm({ ...form, status: e.target.value })}
-                    >
-                      <option value="pendiente">Pendiente</option>
-                      <option value="agendada">Agendada</option>
-                      <option value="realizada">Realizada</option>
-                    </select>
+                {/* Campos principales */}
+                <div className="native-form-section">
+                  <h5 className="native-section-title">Detalles</h5>
+                  <div className="native-form-card">
+                    <div className="native-form-field">
+                      <label className="native-field-label">Especialidad</label>
+                      <input
+                        className="native-field-input"
+                        value={form.specialty}
+                        onChange={(e) => setForm({ ...form, specialty: e.target.value })}
+                        placeholder="Ej: Medicina general"
+                      />
+                    </div>
+                    <div className="native-form-field-divider" />
+                    <div className="native-form-field">
+                      <label className="native-field-label">Centro de salud</label>
+                      <input
+                        className="native-field-input"
+                        value={form.center}
+                        onChange={(e) => setForm({ ...form, center: e.target.value })}
+                        placeholder="Ej: Hospital, cl\u00ednica..."
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="input-group">
-                  <label className="input-label">Notas</label>
-                  <textarea
-                    className="textarea-field"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
-                  />
+                {/* Fecha y estado */}
+                <div className="native-form-section">
+                  <h5 className="native-section-title">Programaci&oacute;n</h5>
+                  <div className="native-form-card">
+                    <div className="native-form-field">
+                      <label className="native-field-label">Fecha y hora</label>
+                      <input
+                        className="native-field-input"
+                        type="datetime-local"
+                        value={form.date_time}
+                        onChange={(e) => setForm({ ...form, date_time: e.target.value })}
+                      />
+                      <span className="native-field-hint">
+                        Opcional si a&uacute;n no tienes la hora exacta
+                      </span>
+                    </div>
+                    <div className="native-form-field-divider" />
+                    <div className="native-form-field">
+                      <label className="native-field-label">Estado</label>
+                      <select
+                        className="native-field-select"
+                        value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="agendada">Agendada</option>
+                        <option value="realizada">Realizada</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notas */}
+                <div className="native-form-section">
+                  <h5 className="native-section-title">Notas</h5>
+                  <div className="native-form-card">
+                    <div className="native-form-field">
+                      <textarea
+                        className="native-field-textarea"
+                        value={form.notes}
+                        onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                        placeholder="Ej: Traer ex&aacute;menes, venir en ayunas..."
+                        rows={4}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="appointments-sheet-footer appointments-form-footer">
-                <div className="floating-actions appointments-form-actions">
-                  <button className="primary-btn" type="submit" disabled={loading}>
-                    {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => {
-                      resetForm();
-                      setShowForm(false);
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
+
+              {/* Footer con botones nativos */}
+              <div className="native-sheet-footer">
+                <button className="native-btn native-btn-primary native-btn-full" type="submit" disabled={loading}>
+                  {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar actividad"}
+                </button>
+                <button
+                  type="button"
+                  className="native-btn native-btn-ghost"
+                  onClick={() => { resetForm(); setShowForm(false); }}
+                >
+                  Cancelar
+                </button>
               </div>
             </form>
           </div>
