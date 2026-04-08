@@ -445,21 +445,39 @@ export default function Appointments() {
       )}
 
       {notifyOpen && notifyTarget && (
-        <div className="modal-backdrop" onClick={() => {
+        <div className="native-sheet-backdrop" onClick={() => {
           setNotifyOpen(false);
           setNotifyTarget(null);
           navigate("/appointments", { replace: true });
         }}>
-          <div className="modal-card" onClick={(event) => event.stopPropagation()}>
-            <h3>Actividad desde notificación</h3>
-            <p className="muted">
-              {cleanUiText(notifyTarget.specialty, typeLabels[notifyTarget.type] || "Cita")}{" "}
-              {notifyTarget.center ? `· ${cleanUiText(notifyTarget.center)}` : ""}
-              {notifyTarget.date_time ? ` · ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
-            </p>
-            <div className="modal-actions">
+          <div className="native-sheet native-notify-sheet" onClick={(event) => event.stopPropagation()}>
+            <span className="native-sheet-grabber" aria-hidden />
+            <div className="native-detail-header">
+              <div className="native-detail-header-top">
+                <span className={`native-chip native-chip-type ${notifyTarget.type}`}>
+                  {cleanUiText(typeLabels[notifyTarget.type] || notifyTarget.type)}
+                </span>
+                <button className="native-close-btn" type="button" onClick={() => {
+                  setNotifyOpen(false);
+                  setNotifyTarget(null);
+                  navigate("/appointments", { replace: true });
+                }} aria-label="Cerrar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+              <h3 className="native-detail-title">
+                {cleanUiText(notifyTarget.specialty, typeLabels[notifyTarget.type] || "Cita")}
+              </h3>
+              <p className="native-detail-subtitle">
+                {notifyTarget.center ? cleanUiText(notifyTarget.center) : ""}
+                {notifyTarget.date_time ? ` \u00b7 ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
+              </p>
+            </div>
+            <div className="native-sheet-footer">
               <button
-                className="secondary-btn"
+                className="native-btn native-btn-primary"
                 type="button"
                 onClick={() => {
                   setNotifyOpen(false);
@@ -470,9 +488,9 @@ export default function Appointments() {
               >
                 Ver detalle
               </button>
-              {canEditActiveProfile ? (
+              {canEditActiveProfile && notifyTarget.status !== "realizada" ? (
                 <button
-                  className="primary-btn"
+                  className="native-btn native-btn-outline"
                   type="button"
                   onClick={() => {
                     handleMarkCompleted(notifyTarget).finally(() => {
@@ -637,99 +655,99 @@ export default function Appointments() {
       )}
 
       {successOpen && successTarget && (
-        <div className="modal-backdrop appointments-success-backdrop" onClick={handleCloseSuccess}>
+        <div className="native-sheet-backdrop" onClick={handleCloseSuccess}>
           <div
-            className="modal-card appointments-success-card"
+            className="native-sheet native-success-sheet"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="appointments-success-hero">
-              <div className="appointments-success-icon" aria-hidden>
+            <span className="native-sheet-grabber" aria-hidden />
+
+            <div className="native-success-hero">
+              <div className="native-success-icon" aria-hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </div>
-              <p className="appointments-success-kicker">
+              <p className="native-success-kicker">
                 {successMode === "updated" ? "Actividad actualizada" : "Actividad guardada"}
               </p>
-              <h3>
+              <h3 className="native-success-title">
                 {successMode === "updated" ? "Cambios aplicados" : "Todo listo"}
               </h3>
-              <p className="appointments-success-copy">
+              <p className="native-success-copy">
                 {successMode === "updated"
-                  ? "La información quedó actualizada y ya forma parte de tu seguimiento clínico."
-                  : "La actividad quedó registrada correctamente y ya aparece en tu agenda clínica."}
+                  ? "La informaci\u00f3n qued\u00f3 actualizada y ya forma parte de tu seguimiento cl\u00ednico."
+                  : "La actividad qued\u00f3 registrada correctamente y ya aparece en tu agenda cl\u00ednica."}
               </p>
               {successTarget?.id ? (
-                <p className="appointments-success-reference">
+                <p className="native-success-ref">
                   Referencia <strong>#{successTarget.id}</strong>
                 </p>
               ) : null}
             </div>
 
-            <div className="appointments-success-details">
-              <div className="appointments-success-detail-row">
-                <span className="appointments-success-detail-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                    <circle cx="12" cy="8" r="3.5" />
-                    <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
-                  </svg>
-                </span>
-                <div>
-                  <span className="appointments-success-detail-label">Perfil activo</span>
-                  <strong>{cleanUiText(activeProfile?.display_name || activeProfile?.full_name || "Mi perfil")}</strong>
+            <div className="native-sheet-body">
+              <div className="native-info-card">
+                <div className="native-info-row">
+                  <span className="native-info-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <circle cx="12" cy="8" r="3.5" />
+                      <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
+                    </svg>
+                  </span>
+                  <div className="native-info-content">
+                    <span className="native-info-label">Perfil activo</span>
+                    <span className="native-info-value">{cleanUiText(activeProfile?.display_name || activeProfile?.full_name || "Mi perfil")}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="appointments-success-detail-row">
-                <span className="appointments-success-detail-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                </span>
-                <div>
-                  <span className="appointments-success-detail-label">Actividad</span>
-                  <strong>{cleanUiText(successTarget.specialty, typeLabels[successTarget.type] || "Actividad")}</strong>
+                <div className="native-info-divider" />
+                <div className="native-info-row">
+                  <span className="native-info-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                  </span>
+                  <div className="native-info-content">
+                    <span className="native-info-label">Actividad</span>
+                    <span className="native-info-value">{cleanUiText(successTarget.specialty, typeLabels[successTarget.type] || "Actividad")}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="appointments-success-detail-row">
-                <span className="appointments-success-detail-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                    <path d="M3 21h18" />
-                    <path d="M5 21V7l7-4 7 4v14" />
-                    <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01" />
-                  </svg>
-                </span>
-                <div>
-                  <span className="appointments-success-detail-label">Centro</span>
-                  <strong>{cleanUiText(successTarget.center, "Centro por confirmar")}</strong>
+                <div className="native-info-divider" />
+                <div className="native-info-row">
+                  <span className="native-info-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <path d="M3 21h18" />
+                      <path d="M5 21V7l7-4 7 4v14" />
+                      <path d="M9 10h.01M15 10h.01M9 14h.01M15 14h.01" />
+                    </svg>
+                  </span>
+                  <div className="native-info-content">
+                    <span className="native-info-label">Centro</span>
+                    <span className="native-info-value">{cleanUiText(successTarget.center, "Centro por confirmar")}</span>
+                  </div>
                 </div>
-              </div>
-              <div className="appointments-success-detail-row">
-                <span className="appointments-success-detail-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
-                    <path d="M12 6v6l4 2" />
-                    <circle cx="12" cy="12" r="9" />
-                  </svg>
-                </span>
-                <div>
-                  <span className="appointments-success-detail-label">Fecha</span>
-                  <strong>{formatAppointmentDateLabel(successTarget)}</strong>
+                <div className="native-info-divider" />
+                <div className="native-info-row">
+                  <span className="native-info-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+                      <path d="M12 6v6l4 2" />
+                      <circle cx="12" cy="12" r="9" />
+                    </svg>
+                  </span>
+                  <div className="native-info-content">
+                    <span className="native-info-label">Fecha</span>
+                    <span className="native-info-value">{formatAppointmentDateLabel(successTarget)}</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="modal-actions appointments-success-actions">
+            <div className="native-sheet-footer">
               <button
-                className="secondary-btn"
-                type="button"
-                onClick={handleCloseSuccess}
-              >
-                Volver a citas
-              </button>
-              <button
-                className="primary-btn"
+                className="native-btn native-btn-primary"
                 type="button"
                 onClick={() => {
                   handleCloseSuccess();
@@ -737,6 +755,13 @@ export default function Appointments() {
                 }}
               >
                 Ver detalle
+              </button>
+              <button
+                className="native-btn native-btn-ghost"
+                type="button"
+                onClick={handleCloseSuccess}
+              >
+                Volver a citas
               </button>
             </div>
           </div>
