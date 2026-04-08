@@ -2201,6 +2201,14 @@ export default function App() {
                         notifications={notifications}
                         onClearNotifications={handleClearNotifications}
                         onOpenNotification={handleOpenNotification}
+                        onLogout={handleLogout}
+                        theme={theme}
+                        onToggleTheme={handleToggleTheme}
+                        planInfo={planInfo}
+                        healthProfiles={healthProfiles}
+                        activeProfileId={activeHealthProfileId}
+                        onSwitchProfile={handleSwitchActiveProfile}
+                        switchingProfile={switchingProfile}
                       />
                     </ProtectedRoute>
                   ) : (

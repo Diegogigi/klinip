@@ -33001,6 +33001,12 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     box-shadow: 0 8px 18px rgba(15, 35, 70, 0.06);
   }
 
+  .mobile-hero-user-wrap .topbar-user-menu {
+    right: 0;
+    top: calc(100% + 0.55rem);
+    z-index: 5600;
+  }
+
   .mobile-hero-profile-name {
     color: var(--mobile-text);
     font-size: 0.76rem;
@@ -33501,6 +33507,10 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     border-color: rgba(148, 163, 184, 0.16);
     color: #e5eefb;
     box-shadow: 0 12px 24px rgba(2, 6, 23, 0.22);
+  }
+
+  body.theme-dark .mobile-hero-user-wrap .topbar-user-menu {
+    background: rgba(15, 23, 39, 0.98);
   }
 
   body.theme-dark .mobile-hero-profile-name {

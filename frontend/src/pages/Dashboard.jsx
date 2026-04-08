@@ -66,6 +66,16 @@ function toRelativeDayLabel(date) {
   return "Reciente";
 }
 
+function getHealthProfileAccessLabel(item, userId) {
+  if (!item) return "";
+  const isOwnProfile = Number(item.owner_user_id) === Number(userId);
+  if (isOwnProfile) return "propio";
+  if (item.is_primary_profile) return "titular";
+  const role = (item.access_role || "").toLowerCase();
+  if (role === "admin") return "admin";
+  return "invitado";
+}
+
 function profileInitials(name) {
   return (name || "KP")
     .split(" ")
@@ -327,12 +337,21 @@ export default function Dashboard({
   notifications = [],
   onClearNotifications,
   onOpenNotification,
+  onLogout,
+  theme = "light",
+  onToggleTheme,
+  planInfo,
+  healthProfiles: menuHealthProfiles = [],
+  activeProfileId,
+  onSwitchProfile,
+  switchingProfile,
 }) {
   const navigate = useNavigate();
   const isMountedRef = useRef(false);
   const activeProfileIdRef = useRef(null);
   const radarPollTimeoutRef = useRef(null);
   const notificationsRef = useRef(null);
+  const profileMenuRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [appointments, setAppointments] = useState([]);
@@ -359,6 +378,7 @@ export default function Dashboard({
   const [greetPhase, setGreetPhase] = useState(0);
   const [aiMsgIndex, setAiMsgIndex] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   useEffect(() => {
     activeProfileIdRef.current = activeProfile?.id ? Number(activeProfile.id) : null;
@@ -366,6 +386,7 @@ export default function Dashboard({
 
   useEffect(() => {
     setNotificationsOpen(false);
+    setProfileMenuOpen(false);
   }, [isMobile]);
 
   useEffect(() => {
@@ -388,6 +409,27 @@ export default function Dashboard({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [notificationsOpen]);
+
+  useEffect(() => {
+    if (!profileMenuOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (!profileMenuRef.current) return;
+      if (!profileMenuRef.current.contains(event.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [profileMenuOpen]);
 
   async function loadHealthInsights(profileId) {
     const resolvedProfileId = profileId ? Number(profileId) : undefined;
@@ -877,6 +919,19 @@ export default function Dashboard({
   const activeProfileName = activeProfile?.full_name || "Mi perfil";
   const firstName = (user?.name || activeProfile?.full_name || "").split(" ")[0] || userName;
   const userInitial = (user?.name || userName).trim().slice(0, 1).toUpperCase() || "K";
+  const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
+  const canSwitchProfiles = Array.isArray(menuHealthProfiles) && menuHealthProfiles.length > 1;
+  const activeMenuProfile =
+    menuHealthProfiles.find((item) => Number(item.id) === Number(activeProfileId)) ||
+    activeProfile ||
+    menuHealthProfiles[0] ||
+    null;
+  const planLabel =
+    normalizedPlan === "familiar"
+      ? "Plan Familiar"
+      : normalizedPlan === "plus"
+      ? "Plan Plus"
+      : "Plan Básico";
   const greetText = greetStarted ? `Hola, ${firstName}` : "";
   const contextMessages = useMemo(
     () =>
@@ -965,7 +1020,10 @@ export default function Dashboard({
                   className="mobile-hero-action-btn"
                   aria-label="Ver notificaciones"
                   aria-expanded={notificationsOpen}
-                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                  onClick={() => {
+                    setProfileMenuOpen(false);
+                    setNotificationsOpen((prev) => !prev);
+                  }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1017,15 +1075,125 @@ export default function Dashboard({
                   </div>
                 )}
               </div>
-              <button
-                type="button"
-                className="mobile-hero-profile-chip"
-                aria-label="Abrir perfil"
-                onClick={() => navigate("/settings")}
-              >
-                <span className="mobile-hero-profile-initial">{userInitial}</span>
-                <span className="mobile-hero-profile-name">{userName}</span>
-              </button>
+              <div className="topbar-user-wrap mobile-hero-user-wrap" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  className="mobile-hero-profile-chip"
+                  aria-label="Abrir menú de usuario"
+                  aria-expanded={profileMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    setProfileMenuOpen((prev) => !prev);
+                  }}
+                >
+                  <span className="mobile-hero-profile-initial">{userInitial}</span>
+                  <span className="mobile-hero-profile-name">{userName}</span>
+                </button>
+                {profileMenuOpen && (
+                  <div className="topbar-user-menu" role="menu">
+                    <div className="topbar-user-menu-head">
+                      <span className="topbar-user-menu-avatar">{userInitial}</span>
+                      <div>
+                        <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
+                        <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
+                      </div>
+                    </div>
+                    <div className="topbar-user-menu-profile-card">
+                      <div className="topbar-user-menu-profile-head">
+                        <span className="topbar-user-menu-profile-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <circle cx="12" cy="8" r="3.2" />
+                            <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                          </svg>
+                        </span>
+                        <span className="topbar-user-menu-plan">{planLabel}</span>
+                      </div>
+                      <p className="topbar-user-menu-profile-name">
+                        {activeMenuProfile
+                          ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
+                          : user?.name || "Perfil personal"}
+                      </p>
+                      {canSwitchProfiles ? (
+                        <select
+                          className="topbar-user-menu-profile-select"
+                          value={activeProfileId || ""}
+                          onChange={(event) => onSwitchProfile?.(event.target.value)}
+                          disabled={!!switchingProfile}
+                        >
+                          {menuHealthProfiles.map((item) => (
+                            <option value={item.id} key={item.id}>
+                              {item.full_name}
+                              {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                            </option>
+                          ))}
+                        </select>
+                      ) : null}
+                    </div>
+                    <div className="topbar-user-menu-actions">
+                      <button
+                        type="button"
+                        className="topbar-user-menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setProfileMenuOpen(false);
+                          navigate("/settings");
+                        }}
+                      >
+                        <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <circle cx="12" cy="8" r="3.2" />
+                            <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                          </svg>
+                        </span>
+                        <span>Mi perfil</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="topbar-user-menu-item"
+                        role="menuitem"
+                      >
+                        <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                            <circle cx="12" cy="12" r="4" />
+                            <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                          </svg>
+                        </span>
+                        <span className="topbar-user-theme-text">
+                          {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+                        </span>
+                        <label className="switch topbar-user-theme-switch">
+                          <input
+                            type="checkbox"
+                            checked={theme === "dark"}
+                            onChange={() => onToggleTheme?.()}
+                          />
+                          <span className="switch-slider" />
+                        </label>
+                      </button>
+                    </div>
+                    <div className="topbar-user-menu-divider" />
+                    <button
+                      type="button"
+                      className="topbar-user-menu-item is-danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setProfileMenuOpen(false);
+                        onLogout?.();
+                      }}
+                    >
+                      <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                          <path d="M16 17l5-5-5-5" />
+                          <path d="M21 12H9" />
+                        </svg>
+                      </span>
+                      <span>Cerrar sesión</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
