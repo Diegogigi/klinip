@@ -34560,8 +34560,8 @@ body.theme-dark .calendar-summary-pill.is-green {
     max-height: calc(100dvh - max(0.45rem, env(safe-area-inset-top))) !important;
     padding: 0.82rem !important;
     overflow: hidden !important;
-    display: grid !important;
-    grid-template-rows: auto minmax(0, 1fr) auto auto auto !important;
+    display: flex !important;
+    flex-direction: column !important;
     background: var(--mobile-surface) !important;
     overscroll-behavior: contain;
   }
@@ -34635,10 +34635,15 @@ body.theme-dark .calendar-summary-pill.is-green {
   }
 
   .document-viewer-stage {
+    flex: 1 1 auto;
     min-height: 0 !important;
     max-height: none !important;
     height: auto !important;
     margin-top: 0.1rem;
+  }
+
+  .document-viewer-actions {
+    padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
   }
 
   .document-viewer-canvas {

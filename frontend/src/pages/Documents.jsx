@@ -70,6 +70,15 @@ function inferViewerKind(doc) {
   return "other";
 }
 
+function inferViewerKindFromBlob(doc, blob) {
+  const filenameKind = inferViewerKind(doc);
+  if (filenameKind !== "other") return filenameKind;
+  const mime = String(blob?.type || "").toLowerCase();
+  if (mime.includes("pdf")) return "pdf";
+  if (mime.startsWith("image/")) return "image";
+  return "other";
+}
+
 function getPreviewActionLabel(doc) {
   return inferViewerKind(doc) === "pdf" ? "Abrir PDF" : "Visualizar";
 }
@@ -296,73 +305,30 @@ export default function Documents() {
   const handleOpenViewer = async (doc, stepUpToken) => {
     setDetailOpen(false);
     setDetailTarget(null);
-    const kind = inferViewerKind(doc);
-    if (kind === "pdf") {
-      let previewWindow = null;
-      try {
-        previewWindow = window.open("", "_blank");
-        if (previewWindow && !previewWindow.closed) {
-          previewWindow.opener = null;
-          previewWindow.document.title = "Klinip | Cargando PDF";
-          previewWindow.document.body.innerHTML =
-            "<div style=\"font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:24px;color:#0f172a\">Preparando PDF...</div>";
-        }
-      } catch (_) {
-        previewWindow = null;
-      }
-      setViewerLoading(true);
-      try {
-        const blob = stepUpToken
-          ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
-          : await getDocumentFile(doc.id);
-        const url = window.URL.createObjectURL(blob);
-        if (previewWindow && !previewWindow.closed) {
-          previewWindow.location.href = url;
-          window.setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-          setViewerLoading(false);
-          return;
-        }
-        releaseViewerUrl();
-        setViewerTarget(doc);
-        setViewerKind("pdf");
-        setViewerZoom(1);
-        setViewerBlob(blob);
-        setViewerStepUpToken(stepUpToken || "");
-        setViewerUrl(url);
-        setViewerOpen(true);
-      } catch (err) {
-        if (previewWindow && !previewWindow.closed) {
-          previewWindow.close();
-        }
-        if (err.stepUpRequired) {
-          setStepUpPending({ action: "view", doc });
-          setStepUpOpen(true);
-          return;
-        }
-        console.error("Error al abrir documento:", err);
-        closeViewer();
-        window.alert(`No se pudo abrir el documento. ${getErrorDetail(err, err.message)}`);
-      } finally {
-        setViewerLoading(false);
-      }
-      return;
-    }
+    const initialKind = inferViewerKind(doc);
+    releaseViewerUrl();
+    setViewerTarget(doc);
+    setViewerKind(initialKind);
+    setViewerZoom(1);
+    setViewerBlob(null);
+    setViewerStepUpToken(stepUpToken || "");
+    setViewerUrl("");
+    setViewerSharing(false);
+    setViewerOpen(true);
     setViewerLoading(true);
     try {
       const blob = stepUpToken
         ? await getDocumentFileWithStepUp(doc.id, stepUpToken)
         : await getDocumentFile(doc.id);
       const url = window.URL.createObjectURL(blob);
-      releaseViewerUrl();
-      setViewerTarget(doc);
-      setViewerKind(kind);
-      setViewerZoom(1);
+      const resolvedKind = inferViewerKindFromBlob(doc, blob);
       setViewerBlob(blob);
       setViewerStepUpToken(stepUpToken || "");
+      setViewerKind(resolvedKind);
       setViewerUrl(url);
-      setViewerOpen(true);
     } catch (err) {
       if (err.stepUpRequired) {
+        closeViewer();
         setStepUpPending({ action: "view", doc });
         setStepUpOpen(true);
         return;
@@ -476,6 +442,31 @@ export default function Documents() {
     }
   };
 
+  const handleOpenPdfInNewTab = () => {
+    if (!viewerUrl) return;
+    try {
+      const opened = window.open(viewerUrl, "_blank", "noopener,noreferrer");
+      if (opened) {
+        opened.opener = null;
+        return;
+      }
+    } catch (_) {
+      // Fallback below.
+    }
+    try {
+      const link = document.createElement("a");
+      link.href = viewerUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("No se pudo abrir el PDF en una pestaña nueva:", err);
+      window.alert("No se pudo abrir el PDF en una pestaña nueva. Puedes descargarlo.");
+    }
+  };
+
   const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
   const viewerIsPdf = viewerKind === "pdf";
 
@@ -484,7 +475,7 @@ export default function Documents() {
       <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDFs de recetas, órdenes, resultados e informes. Se almacenan de forma segura en Klinip.
+          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Se almacenan de forma segura en Klinip.
         </p>
       </div>
 
@@ -692,10 +683,17 @@ export default function Documents() {
                 <div className="document-viewer-empty document-viewer-pdf-safe">
                   <strong>Vista segura para PDF</strong>
                   <span>
-                    Para evitar fallos del navegador, los PDF ya no se incrustan dentro de Klinip.
-                    Puedes abrirlos en una pestaña nueva o descargarlos.
+                    Puedes abrir el PDF en una pestaña nueva o descargarlo sin salir de esta pantalla.
                   </span>
                   <div className="document-viewer-pdf-actions">
+                    <button
+                      className="secondary-btn"
+                      type="button"
+                      onClick={handleOpenPdfInNewTab}
+                      disabled={viewerLoading || !viewerUrl}
+                    >
+                      Abrir PDF
+                    </button>
                     <button
                       className="primary-btn"
                       type="button"
