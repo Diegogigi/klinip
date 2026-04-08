@@ -472,7 +472,7 @@ export default function Appointments() {
               </h3>
               <p className="native-detail-subtitle">
                 {notifyTarget.center ? cleanUiText(notifyTarget.center) : ""}
-                {notifyTarget.date_time ? ` \u00b7 ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
+                {notifyTarget.date_time ? ` · ${toLocaleDateTimeOrEmpty(notifyTarget.date_time)}` : ""}
               </p>
             </div>
             <div className="native-sheet-footer">
@@ -544,7 +544,7 @@ export default function Appointments() {
             {/* Cuerpo con campos */}
             <div className="native-sheet-body">
               <div className="native-detail-section">
-                <h5 className="native-section-title">Informaci&oacute;n de la cita</h5>
+                <h5 className="native-section-title">Información de la cita</h5>
 
                 <div className="native-info-card">
                   <div className="native-info-row">
@@ -676,8 +676,8 @@ export default function Appointments() {
               </h3>
               <p className="native-success-copy">
                 {successMode === "updated"
-                  ? "La informaci\u00f3n qued\u00f3 actualizada y ya forma parte de tu seguimiento cl\u00ednico."
-                  : "La actividad qued\u00f3 registrada correctamente y ya aparece en tu agenda cl\u00ednica."}
+                  ? "La información quedó actualizada y ya forma parte de tu seguimiento clínico."
+                  : "La actividad quedó registrada correctamente y ya aparece en tu agenda clínica."}
               </p>
               {successTarget?.id ? (
                 <p className="native-success-ref">
@@ -811,13 +811,13 @@ export default function Appointments() {
                   <h5 className="native-section-title">Tipo de actividad</h5>
                   <div className="native-type-selector">
                     {[
-                      { value: "cita", label: "Cita m\u00e9dica", icon: (
+                      { value: "cita", label: "Cita médica", icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                       )},
                       { value: "examen", label: "Examen", icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>
                       )},
-                      { value: "tramite", label: "Tr\u00e1mite", icon: (
+                      { value: "tramite", label: "Trámite", icon: (
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                       )},
                     ].map((opt) => (
@@ -854,7 +854,7 @@ export default function Appointments() {
                         className="native-field-input"
                         value={form.center}
                         onChange={(e) => setForm({ ...form, center: e.target.value })}
-                        placeholder="Ej: Hospital, cl\u00ednica..."
+                        placeholder="Ej: Hospital, clínica..."
                       />
                     </div>
                   </div>
@@ -862,7 +862,7 @@ export default function Appointments() {
 
                 {/* Fecha y estado */}
                 <div className="native-form-section">
-                  <h5 className="native-section-title">Programaci&oacute;n</h5>
+                  <h5 className="native-section-title">Programación</h5>
                   <div className="native-form-card">
                     <div className="native-form-field">
                       <label className="native-field-label">Fecha y hora</label>
@@ -873,7 +873,7 @@ export default function Appointments() {
                         onChange={(e) => setForm({ ...form, date_time: e.target.value })}
                       />
                       <span className="native-field-hint">
-                        Opcional si a&uacute;n no tienes la hora exacta
+                        Opcional si aún no tienes la hora exacta
                       </span>
                     </div>
                     <div className="native-form-field-divider" />
@@ -901,7 +901,7 @@ export default function Appointments() {
                         className="native-field-textarea"
                         value={form.notes}
                         onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                        placeholder="Ej: Traer ex&aacute;menes, venir en ayunas..."
+                        placeholder="Ej: Traer exámenes, venir en ayunas..."
                         rows={4}
                       />
                     </div>

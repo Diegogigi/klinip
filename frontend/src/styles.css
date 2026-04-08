@@ -36256,8 +36256,8 @@ body.theme-dark .appointments-sheet-grabber {
     top: auto !important;
     width: 100vw !important;
     max-width: none !important;
-    max-height: 94dvh !important;
-    height: 94dvh !important;
+    max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 2.5rem) !important;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 2.5rem) !important;
     border-radius: 24px 24px 0 0 !important;
     border-left: 0 !important;
     border-right: 0 !important;
@@ -36269,6 +36269,8 @@ body.theme-dark .appointments-sheet-grabber {
     display: flex !important;
     flex-direction: column !important;
     overflow: hidden !important;
+    /* Asegurar que el footer nunca se corte */
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   }
 
   body.theme-dark .native-sheet {
@@ -36329,38 +36331,38 @@ body.theme-dark .appointments-sheet-grabber {
   /* Footer mobile */
   .native-sheet-footer {
     flex: 0 0 auto !important;
-    padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom)) !important;
+    padding: 0.75rem 1rem 0.75rem !important;
     border-top: 1px solid rgba(226, 232, 240, 0.7) !important;
-    background: rgba(255, 255, 255, 0.95) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
+    background: #ffffff !important;
     display: flex !important;
     flex-direction: column !important;
-    gap: 0.5rem !important;
+    gap: 0.45rem !important;
   }
 
   body.theme-dark .native-sheet-footer {
-    background: rgba(15, 23, 42, 0.95) !important;
+    background: #0f172a !important;
     border-top-color: rgba(148, 163, 184, 0.12) !important;
   }
 
   /* Cuando el footer del detail tiene 2 botones, mostrar en fila */
   .native-detail-sheet .native-sheet-footer {
     flex-direction: row !important;
+    gap: 0.5rem !important;
   }
 
   .native-detail-sheet .native-sheet-footer .native-btn {
     flex: 1 1 0 !important;
-    min-height: 50px;
-    border-radius: 14px;
-    font-size: 0.9rem;
+    min-height: 46px !important;
+    border-radius: 13px;
+    font-size: 0.88rem;
+    padding: 0.55rem 0.5rem !important;
   }
 
-  /* Formulario y success: botones en columna full width */
+  /* Formulario y success: botones full width */
   .native-form-sheet .native-sheet-footer .native-btn,
   .native-success-sheet .native-sheet-footer .native-btn,
   .native-notify-sheet .native-sheet-footer .native-btn {
-    min-height: 52px;
+    min-height: 50px;
     border-radius: 14px;
     font-size: 0.95rem;
     width: 100%;
