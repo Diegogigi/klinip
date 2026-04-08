@@ -35398,6 +35398,7 @@ body.theme-dark .splash-brand-footnote {
 }
 
 .appointments-sheet {
+  position: relative;
   width: min(680px, calc(100vw - 1.4rem));
   max-height: min(88vh, 860px);
   min-height: 0;
@@ -35489,10 +35490,6 @@ body.theme-dark .splash-brand-footnote {
   touch-action: manipulation;
 }
 
-body.theme-dark .appointments-overlay {
-  background: rgba(2, 6, 23, 0.66);
-}
-
 body.theme-dark .appointments-sheet {
   border-color: rgba(148, 163, 184, 0.18);
   background:
@@ -35517,6 +35514,12 @@ body.theme-dark .appointments-sheet-footer {
   .appointments-overlay {
     align-items: flex-end;
     padding: max(0.35rem, env(safe-area-inset-top)) 0 0;
+  }
+
+  .appointments-detail-backdrop,
+  .appointments-form-backdrop {
+    align-items: flex-end !important;
+    padding: max(0.35rem, env(safe-area-inset-top)) 0 0 !important;
   }
 
   .appointments-sheet {

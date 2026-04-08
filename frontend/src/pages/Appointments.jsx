@@ -491,10 +491,10 @@ export default function Appointments() {
       )}
 
       {detailOpen && detailTarget && (
-        <div className="appointments-overlay appointments-detail-overlay" onClick={handleCloseDetail}>
+        <div className="floating-form-backdrop appointments-detail-backdrop calendar-selected-backdrop" onClick={handleCloseDetail}>
           <div
             key={`detail-${detailTarget.id ?? "activity"}`}
-            className="appointments-sheet appointments-detail-sheet"
+            className="floating-form-card appointments-sheet appointments-detail-sheet"
             onClick={(event) => event.stopPropagation()}
           >
             <span className="appointments-sheet-grabber" aria-hidden />
@@ -720,10 +720,10 @@ export default function Appointments() {
       )}
 
       {showForm && canEditActiveProfile && (
-        <div className="appointments-overlay appointments-form-overlay" onClick={() => setShowForm(false)}>
+        <div className="floating-form-backdrop appointments-form-backdrop calendar-selected-backdrop" onClick={() => setShowForm(false)}>
           <div
             key={form.id ?? "new-appointment"}
-            className="appointments-sheet appointments-form-sheet"
+            className="floating-form-card appointments-sheet appointments-form-sheet"
             onClick={(e) => e.stopPropagation()}
           >
             <span className="appointments-sheet-grabber" aria-hidden />
