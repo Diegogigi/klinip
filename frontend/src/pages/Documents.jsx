@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile, getMfaStatus, isAuthSessionError } from "../api";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
@@ -421,6 +422,7 @@ export default function Documents() {
   };
 
   const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
+  const viewerIsPdf = viewerKind === "pdf";
 
   return (
     <>
@@ -449,9 +451,13 @@ export default function Documents() {
         </div>
       ) : null}
 
-      {showForm && canEditActiveProfile && (
+      {showForm && canEditActiveProfile && createPortal(
         <div className="floating-form-backdrop" onClick={handleFormClose}>
-          <div className="floating-form-card" onClick={(event) => event.stopPropagation()}>
+          <div
+            key={form.id ?? "new-document"}
+            className="floating-form-card"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="card-header" style={{ marginBottom: "0.75rem" }}>
               <h3 className="card-title" style={{ marginBottom: 0 }}>Nuevo documento</h3>
               <button className="secondary-btn" type="button" onClick={handleFormClose}>
@@ -540,11 +546,15 @@ export default function Documents() {
             </form>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {detailOpen && detailTarget && (
+      {detailOpen && detailTarget && createPortal(
         <div className="modal-backdrop" onClick={handleCloseDetail}>
-          <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
+          <div
+            key={`document-detail-${detailTarget.id ?? "item"}`}
+            className="modal-card detail-modal-card"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="detail-modal-header">
               <h3>Detalle del documento</h3>
               <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
@@ -591,7 +601,7 @@ export default function Documents() {
                 </div>
               </div>
             </div>
-            <div className="modal-actions">
+            <div className="modal-actions docs-detail-actions">
               <button className="secondary-btn" type="button" onClick={() => handleOpenViewer(detailTarget)}>
                 Visualizar
               </button>
@@ -601,11 +611,15 @@ export default function Documents() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
-      {viewerOpen && viewerTarget && (
+      {viewerOpen && viewerTarget && createPortal(
         <div className="modal-backdrop document-viewer-backdrop" onClick={closeViewer}>
-          <div className="modal-card document-viewer-modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            key={`document-viewer-${viewerTarget.id ?? "item"}`}
+            className="modal-card document-viewer-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="document-viewer-header">
               <div>
                 <h3>Visualización de documento</h3>
@@ -619,13 +633,29 @@ export default function Documents() {
             <div className="document-viewer-stage">
               {viewerLoading ? (
                 <div className="document-viewer-empty">Cargando documento...</div>
-              ) : viewerUrl && viewerKind === "pdf" ? (
-                <div className="document-viewer-canvas" style={{ "--viewer-scale": viewerZoom }}>
-                  <iframe
-                    className="document-viewer-frame"
-                    src={`${viewerUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                    title={cleanUiText(viewerTarget.filename, "Documento PDF")}
-                  />
+              ) : viewerUrl && viewerIsPdf ? (
+                <div className="document-viewer-empty document-viewer-pdf-safe">
+                  <strong>Vista segura para PDF</strong>
+                  <span>
+                    Para evitar fallos del navegador, los PDF ya no se incrustan dentro de Klinip.
+                    Puedes abrirlos en una pestaña nueva o descargarlos.
+                  </span>
+                  <div className="document-viewer-pdf-actions">
+                    <button
+                      className="secondary-btn"
+                      type="button"
+                      onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
+                    >
+                      Abrir PDF
+                    </button>
+                    <button
+                      className="primary-btn"
+                      type="button"
+                      onClick={() => handleDownload(viewerTarget, viewerStepUpToken)}
+                    >
+                      Descargar PDF
+                    </button>
+                  </div>
                 </div>
               ) : viewerUrl && viewerKind === "image" ? (
                 <div className="document-viewer-canvas" style={{ "--viewer-scale": viewerZoom }}>
@@ -648,7 +678,7 @@ export default function Documents() {
                 className="document-viewer-zoom-btn"
                 type="button"
                 onClick={() => setViewerZoom((current) => Math.max(0.75, Number((current - 0.1).toFixed(2))))}
-                disabled={viewerKind === "other" || viewerLoading}
+                disabled={viewerKind === "other" || viewerLoading || viewerIsPdf}
               >
                 Zoom -
               </button>
@@ -657,7 +687,7 @@ export default function Documents() {
                 className="document-viewer-zoom-btn"
                 type="button"
                 onClick={() => setViewerZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
-                disabled={viewerKind === "other" || viewerLoading}
+                disabled={viewerKind === "other" || viewerLoading || viewerIsPdf}
               >
                 Zoom +
               </button>
@@ -701,7 +731,7 @@ export default function Documents() {
             </div>
           </div>
         </div>
-      )}
+      , document.getElementById("overlay-root") || document.body)}
 
       <div className="card documents-surface-free documents-list-card documents-filters-card">
         <h3 className="card-title">Documentos guardados</h3>
