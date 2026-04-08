@@ -36244,7 +36244,7 @@ body.theme-dark .appointments-sheet-grabber {
     left: 0 !important;
     right: 0 !important;
     bottom: 0 !important;
-    top: max(0.35rem, env(safe-area-inset-top)) !important;
+    top: max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem)) !important;
     width: 100vw !important;
     max-width: none !important;
     max-height: none !important;
@@ -36257,6 +36257,9 @@ body.theme-dark .appointments-sheet-grabber {
     box-shadow: 0 -8px 40px rgba(15, 23, 42, 0.18) !important;
     animation: nativeSheetSlideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1) both !important;
     z-index: 10000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden !important;
   }
 
   body.theme-dark .native-sheet {
@@ -36286,8 +36289,14 @@ body.theme-dark .appointments-sheet-grabber {
 
   /* Detail header mobile */
   .native-detail-header {
-    padding: 0.75rem 1rem 0.9rem;
-    background: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%);
+    flex: 0 0 auto !important;
+    padding: 0.75rem 1rem 0.9rem !important;
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 55%, #3b82f6 100%) !important;
+  }
+
+  /* Form header mobile */
+  .native-form-header {
+    flex: 0 0 auto !important;
   }
 
   .native-detail-title {
@@ -36300,18 +36309,38 @@ body.theme-dark .appointments-sheet-grabber {
 
   /* Body mobile */
   .native-sheet-body {
-    padding: 0.15rem 1rem 1rem;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 0.15rem 1rem 1rem !important;
   }
 
   /* Footer mobile */
   .native-sheet-footer {
-    padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom));
+    flex: 0 0 auto !important;
+    padding: 0.85rem 1rem calc(0.85rem + env(safe-area-inset-bottom)) !important;
+    border-top: 1px solid rgba(226, 232, 240, 0.7) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  body.theme-dark .native-sheet-footer {
+    background: rgba(15, 23, 42, 0.95) !important;
+    border-top-color: rgba(148, 163, 184, 0.12) !important;
   }
 
   .native-sheet-footer .native-btn {
     min-height: 52px;
     border-radius: 14px;
     font-size: 0.95rem;
+    width: 100%;
+    flex: none;
   }
 
   /* Info cards mobile */
