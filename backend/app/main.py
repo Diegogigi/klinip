@@ -21157,8 +21157,9 @@ async def get_document_file(
                 detail="No tienes permiso para descargar documentos de este perfil.",
             )
 
-    # Step-up requerido para descargar documentos clínicos
-    _check_stepup(request, current_user)
+    # Step-up requerido solo si el usuario tiene MFA habilitado
+    if current_user.mfa_enabled:
+        _check_stepup(request, current_user)
 
     doc = (
         db.query(models.Document)
