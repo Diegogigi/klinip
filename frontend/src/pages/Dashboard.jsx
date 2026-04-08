@@ -322,11 +322,17 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
   return msgs;
 }
 
-export default function Dashboard({ user }) {
+export default function Dashboard({
+  user,
+  notifications = [],
+  onClearNotifications,
+  onOpenNotification,
+}) {
   const navigate = useNavigate();
   const isMountedRef = useRef(false);
   const activeProfileIdRef = useRef(null);
   const radarPollTimeoutRef = useRef(null);
+  const notificationsRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [appointments, setAppointments] = useState([]);
@@ -352,10 +358,36 @@ export default function Dashboard({ user }) {
   const [greetStarted, setGreetStarted] = useState(false);
   const [greetPhase, setGreetPhase] = useState(0);
   const [aiMsgIndex, setAiMsgIndex] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     activeProfileIdRef.current = activeProfile?.id ? Number(activeProfile.id) : null;
   }, [activeProfile?.id]);
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+    const handlePointerDown = (event) => {
+      if (!notificationsRef.current) return;
+      if (!notificationsRef.current.contains(event.target)) {
+        setNotificationsOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [notificationsOpen]);
 
   async function loadHealthInsights(profileId) {
     const resolvedProfileId = profileId ? Number(profileId) : undefined;
@@ -844,6 +876,7 @@ export default function Dashboard({ user }) {
   const userName = user?.name || activeProfile?.full_name || "tu cuenta";
   const activeProfileName = activeProfile?.full_name || "Mi perfil";
   const firstName = (user?.name || activeProfile?.full_name || "").split(" ")[0] || userName;
+  const userInitial = (user?.name || userName).trim().slice(0, 1).toUpperCase() || "K";
   const greetText = greetStarted ? `Hola, ${firstName}` : "";
   const contextMessages = useMemo(
     () =>
@@ -925,30 +958,73 @@ export default function Dashboard({ user }) {
                 </h1>
               </div>
             </div>
-            <div className="mobile-hero-actions">
+            <div className="mobile-hero-tools">
+              <div className="mobile-hero-notifications" ref={notificationsRef}>
+                <button
+                  type="button"
+                  className="mobile-hero-action-btn"
+                  aria-label="Ver notificaciones"
+                  aria-expanded={notificationsOpen}
+                  onClick={() => setNotificationsOpen((prev) => !prev)}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                  {notifications.length > 0 && (
+                    <span className="notification-badge">{notifications.length}</span>
+                  )}
+                </button>
+                {notificationsOpen && (
+                  <div className="notifications-dropdown">
+                    <div className="notifications-header">
+                      <span className="notifications-heading">Notificaciones</span>
+                      {notifications.length > 0 && (
+                        <button
+                          className="secondary-btn notifications-clear-btn"
+                          type="button"
+                          onClick={() => {
+                            onClearNotifications?.();
+                            setNotificationsOpen(false);
+                          }}
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+                    {notifications.length ? (
+                      <ul className="notifications-list">
+                        {notifications.slice(0, 6).map((item) => (
+                          <li
+                            key={item.id}
+                            className="notifications-item"
+                            onClick={() => {
+                              onOpenNotification?.(item);
+                              setNotificationsOpen(false);
+                            }}
+                          >
+                            <div className="notifications-title">{item.title || "Recordatorio"}</div>
+                            <div className="notifications-body">{item.body || ""}</div>
+                            <div className="notifications-meta">
+                              {item.timestamp ? new Date(item.timestamp).toLocaleString() : ""}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="notifications-empty">Sin notificaciones recientes</div>
+                    )}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
-                className="mobile-hero-action-btn"
-                aria-label="Citas"
-                onClick={() => navigate("/appointments")}
+                className="mobile-hero-profile-chip"
+                aria-label="Abrir perfil"
+                onClick={() => navigate("/settings")}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="mobile-hero-action-btn"
-                aria-label="Documentos"
-                onClick={() => navigate("/documents")}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                </svg>
+                <span className="mobile-hero-profile-initial">{userInitial}</span>
+                <span className="mobile-hero-profile-name">{userName}</span>
               </button>
             </div>
           </div>

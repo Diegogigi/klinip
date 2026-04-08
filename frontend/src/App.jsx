@@ -1693,7 +1693,13 @@ export default function App() {
   const isLegalRoute = location.pathname.startsWith("/legal/");
   const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
   const isPublicMarketingRoute = (!user && location.pathname === "/") || isPlansRoute;
-  const isPublicStandaloneRoute = isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute;
+  const isPublicAuthRoute =
+    location.pathname === "/login" ||
+    location.pathname === "/register" ||
+    location.pathname === "/forgot-password" ||
+    location.pathname === "/reset-password";
+  const isPublicStandaloneRoute =
+    isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute || isPublicAuthRoute;
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname === "/settings";
@@ -2189,7 +2195,13 @@ export default function App() {
                 element={
                   user ? (
                     <ProtectedRoute user={user}>
-                      <Dashboard key={`dashboard-${activeHealthProfileId || "none"}`} user={user} />
+                      <Dashboard
+                        key={`dashboard-${activeHealthProfileId || "none"}`}
+                        user={user}
+                        notifications={notifications}
+                        onClearNotifications={handleClearNotifications}
+                        onOpenNotification={handleOpenNotification}
+                      />
                     </ProtectedRoute>
                   ) : (
                     <Landing theme={theme} onToggleTheme={handleToggleTheme} />

@@ -32141,10 +32141,14 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     display: none;
   }
 
-  .mobile-hero-actions {
+  .mobile-hero-tools {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .mobile-hero-notifications {
+    position: relative;
   }
 
   .mobile-hero-action-btn {
@@ -32170,6 +32174,44 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
   .mobile-hero-action-btn svg {
     width: 18px;
     height: 18px;
+  }
+
+  .mobile-hero-profile-chip {
+    min-width: 0;
+    max-width: min(46vw, 176px);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.28rem 0.42rem 0.28rem 0.28rem;
+    border-radius: 999px;
+    border: 1.5px solid #e2e8f0;
+    background: #f8fafc;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    color: #0f172a;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .mobile-hero-profile-initial {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #4f46e5, #8b5cf6);
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .mobile-hero-profile-name {
+    min-width: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobile-hero-greeting {
@@ -32611,6 +32653,13 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     color: #94a3b8;
   }
 
+  body.theme-dark .mobile-hero-profile-chip {
+    background: #1e293b;
+    border-color: #334155;
+    color: #e2e8f0;
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.24);
+  }
+
   body.theme-dark .mobile-action-bar {
     background: #0b1120;
   }
@@ -32920,6 +32969,19 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     background: var(--mobile-blue-soft);
     border-color: #bfd4fb;
     color: var(--mobile-blue-strong);
+  }
+
+  .mobile-hero-profile-chip {
+    max-width: min(43vw, 170px);
+    border-radius: 999px;
+    background: #ffffff;
+    border-color: #dfe8f3;
+    box-shadow: 0 8px 18px rgba(15, 35, 70, 0.06);
+  }
+
+  .mobile-hero-profile-name {
+    color: var(--mobile-text);
+    font-size: 0.76rem;
   }
 
   .mobile-hero > div:last-child {
@@ -33410,6 +33472,17 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
   body.theme-dark .mobile-hero-action-btn {
     background: rgba(15, 23, 39, 0.92);
     border-color: rgba(148, 163, 184, 0.16);
+  }
+
+  body.theme-dark .mobile-hero-profile-chip {
+    background: rgba(15, 23, 39, 0.92);
+    border-color: rgba(148, 163, 184, 0.16);
+    color: #e5eefb;
+    box-shadow: 0 12px 24px rgba(2, 6, 23, 0.22);
+  }
+
+  body.theme-dark .mobile-hero-profile-name {
+    color: #e5eefb;
   }
 
   body.theme-dark .mobile-sheet,
@@ -36371,6 +36444,21 @@ body.theme-dark .appointments-sheet-grabber {
     font-size: 0.95rem;
     width: 100%;
     flex: none;
+  }
+
+  /* Medications detail: botones en fila */
+  .med-detail-actions {
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+  }
+
+  .med-detail-actions .primary-btn,
+  .med-detail-actions .secondary-btn {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-height: 46px !important;
+    border-radius: 13px !important;
+    font-size: 0.88rem !important;
   }
 
   /* Info cards mobile */
