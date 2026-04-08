@@ -2309,7 +2309,7 @@ export default function Medications() {
                 )}
               </div>
             </div>
-            <div className="modal-actions">
+            <div className="modal-actions med-detail-actions">
               {canEditActiveProfile ? (
                 <button
                   className="secondary-btn"
