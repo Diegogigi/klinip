@@ -36227,19 +36227,40 @@ body.theme-dark .appointments-sheet-grabber {
 
 @media (max-width: 768px) {
   .native-sheet-backdrop {
-    align-items: flex-end;
-    padding: 0;
+    position: fixed !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    z-index: 9999 !important;
+    background: rgba(15, 23, 42, 0.45) !important;
+    backdrop-filter: blur(6px) !important;
+    -webkit-backdrop-filter: blur(6px) !important;
   }
 
   .native-sheet {
-    width: 100vw;
-    max-height: none;
-    height: calc(100dvh - max(0.35rem, env(safe-area-inset-top)));
-    border-radius: 24px 24px 0 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 0;
-    animation: nativeSheetSlideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1) both;
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: max(0.35rem, env(safe-area-inset-top)) !important;
+    width: 100vw !important;
+    max-width: none !important;
+    max-height: none !important;
+    height: auto !important;
+    border-radius: 24px 24px 0 0 !important;
+    border-left: 0 !important;
+    border-right: 0 !important;
+    border-bottom: 0 !important;
+    background: #ffffff !important;
+    box-shadow: 0 -8px 40px rgba(15, 23, 42, 0.18) !important;
+    animation: nativeSheetSlideUp 0.4s cubic-bezier(0.32, 0.72, 0, 1) both !important;
+    z-index: 10000 !important;
+  }
+
+  body.theme-dark .native-sheet {
+    background: #0f172a !important;
   }
 
   @keyframes nativeSheetSlideUp {
