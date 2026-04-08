@@ -491,15 +491,19 @@ export default function Appointments() {
       )}
 
       {detailOpen && detailTarget && (
-        <div className="modal-backdrop" onClick={handleCloseDetail}>
-          <div className="modal-card detail-modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-backdrop appointments-detail-backdrop" onClick={handleCloseDetail}>
+          <div
+            key={`detail-${detailTarget.id ?? "activity"}`}
+            className="modal-card detail-modal-card appointments-detail-sheet"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="detail-modal-header">
               <h3>Detalle de la actividad</h3>
               <button className="detail-close-btn" type="button" onClick={handleCloseDetail} aria-label="Cerrar">
                 ×
               </button>
             </div>
-            <div className="detail-modal-content">
+            <div className="detail-modal-content appointments-detail-scroll">
               <div className="appointment-detail-hero">
                 <div className="appointment-detail-hero-copy">
                   <span className={`detail-chip detail-chip-type ${detailTarget.type}`}>
@@ -713,9 +717,10 @@ export default function Appointments() {
       )}
 
       {showForm && canEditActiveProfile && (
-        <div className="floating-form-backdrop" onClick={() => setShowForm(false)}>
+        <div className="floating-form-backdrop appointments-form-backdrop" onClick={() => setShowForm(false)}>
           <div
-            className="floating-form-card"
+            key={form.id ?? "new-appointment"}
+            className="floating-form-card appointments-form-sheet"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="card-header appointments-form-header" style={{ marginBottom: "0.75rem" }}>
@@ -735,7 +740,7 @@ export default function Appointments() {
                 Cerrar
               </button>
             </div>
-            <form onSubmit={handleSubmit}>
+            <form className="appointments-form-scroll" onSubmit={handleSubmit}>
               <div className="form-row">
                 <div className="input-group">
                   <label className="input-label">Tipo</label>
@@ -808,7 +813,7 @@ export default function Appointments() {
                   placeholder="Ej: Traer exámenes, venir en ayunas, pedir interconsulta, etc."
                 />
               </div>
-              <div className="floating-actions">
+              <div className="floating-actions appointments-form-actions">
                 <button className="primary-btn" type="submit" disabled={loading}>
                   {loading ? "Guardando..." : form.id ? "Actualizar" : "Agregar"}
                 </button>
