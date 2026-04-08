@@ -292,6 +292,19 @@ export default function Documents() {
   const handleOpenViewer = async (doc, stepUpToken) => {
     setDetailOpen(false);
     setDetailTarget(null);
+    const kind = inferViewerKind(doc);
+    if (kind === "pdf") {
+      releaseViewerUrl();
+      setViewerTarget(doc);
+      setViewerKind("pdf");
+      setViewerZoom(1);
+      setViewerBlob(null);
+      setViewerStepUpToken(stepUpToken || "");
+      setViewerUrl("");
+      setViewerOpen(true);
+      setViewerLoading(false);
+      return;
+    }
     setViewerLoading(true);
     try {
       const blob = stepUpToken
@@ -300,7 +313,7 @@ export default function Documents() {
       const url = window.URL.createObjectURL(blob);
       releaseViewerUrl();
       setViewerTarget(doc);
-      setViewerKind(inferViewerKind(doc));
+      setViewerKind(kind);
       setViewerZoom(1);
       setViewerBlob(blob);
       setViewerStepUpToken(stepUpToken || "");
@@ -633,7 +646,7 @@ export default function Documents() {
             <div className="document-viewer-stage">
               {viewerLoading ? (
                 <div className="document-viewer-empty">Cargando documento...</div>
-              ) : viewerUrl && viewerIsPdf ? (
+              ) : viewerIsPdf && viewerTarget ? (
                 <div className="document-viewer-empty document-viewer-pdf-safe">
                   <strong>Vista segura para PDF</strong>
                   <span>
@@ -641,13 +654,6 @@ export default function Documents() {
                     Puedes abrirlos en una pestaña nueva o descargarlos.
                   </span>
                   <div className="document-viewer-pdf-actions">
-                    <button
-                      className="secondary-btn"
-                      type="button"
-                      onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
-                    >
-                      Abrir PDF
-                    </button>
                     <button
                       className="primary-btn"
                       type="button"
@@ -673,27 +679,30 @@ export default function Documents() {
               )}
             </div>
 
-            <div className="document-viewer-toolbar">
-              <button
-                className="document-viewer-zoom-btn"
-                type="button"
-                onClick={() => setViewerZoom((current) => Math.max(0.75, Number((current - 0.1).toFixed(2))))}
-                disabled={viewerKind === "other" || viewerLoading || viewerIsPdf}
-              >
-                Zoom -
-              </button>
-              <span className="document-viewer-zoom-value">{zoomLabel}</span>
-              <button
-                className="document-viewer-zoom-btn"
-                type="button"
-                onClick={() => setViewerZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
-                disabled={viewerKind === "other" || viewerLoading || viewerIsPdf}
-              >
-                Zoom +
-              </button>
-            </div>
+            {!viewerIsPdf ? (
+              <div className="document-viewer-toolbar">
+                <button
+                  className="document-viewer-zoom-btn"
+                  type="button"
+                  onClick={() => setViewerZoom((current) => Math.max(0.75, Number((current - 0.1).toFixed(2))))}
+                  disabled={viewerKind === "other" || viewerLoading}
+                >
+                  Zoom -
+                </button>
+                <span className="document-viewer-zoom-value">{zoomLabel}</span>
+                <button
+                  className="document-viewer-zoom-btn"
+                  type="button"
+                  onClick={() => setViewerZoom((current) => Math.min(2, Number((current + 0.1).toFixed(2))))}
+                  disabled={viewerKind === "other" || viewerLoading}
+                >
+                  Zoom +
+                </button>
+              </div>
+            ) : null}
 
-            <div className="document-viewer-share">
+            {!viewerIsPdf ? (
+              <div className="document-viewer-share">
               <div className="document-viewer-share-copy">
                 <span className="document-viewer-share-kicker">Salida segura</span>
                 <strong>Compartir archivo</strong>
@@ -719,7 +728,8 @@ export default function Documents() {
                   </span>
                 </button>
               </div>
-            </div>
+              </div>
+            ) : null}
 
             <div className="document-viewer-actions">
               <button className="primary-btn" type="button" onClick={() => handleDownload(viewerTarget, viewerStepUpToken)}>
