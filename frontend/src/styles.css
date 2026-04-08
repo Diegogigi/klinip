@@ -36256,8 +36256,8 @@ body.theme-dark .appointments-sheet-grabber {
     top: auto !important;
     width: 100vw !important;
     max-width: none !important;
-    max-height: calc(100dvh - max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem))) !important;
-    height: calc(100dvh - max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem))) !important;
+    max-height: 94dvh !important;
+    height: 94dvh !important;
     border-radius: 24px 24px 0 0 !important;
     border-left: 0 !important;
     border-right: 0 !important;
@@ -36344,7 +36344,22 @@ body.theme-dark .appointments-sheet-grabber {
     border-top-color: rgba(148, 163, 184, 0.12) !important;
   }
 
-  .native-sheet-footer .native-btn {
+  /* Cuando el footer del detail tiene 2 botones, mostrar en fila */
+  .native-detail-sheet .native-sheet-footer {
+    flex-direction: row !important;
+  }
+
+  .native-detail-sheet .native-sheet-footer .native-btn {
+    flex: 1 1 0 !important;
+    min-height: 50px;
+    border-radius: 14px;
+    font-size: 0.9rem;
+  }
+
+  /* Formulario y success: botones en columna full width */
+  .native-form-sheet .native-sheet-footer .native-btn,
+  .native-success-sheet .native-sheet-footer .native-btn,
+  .native-notify-sheet .native-sheet-footer .native-btn {
     min-height: 52px;
     border-radius: 14px;
     font-size: 0.95rem;
