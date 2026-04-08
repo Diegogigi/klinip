@@ -1088,7 +1088,6 @@ export default function Dashboard({
                   }}
                 >
                   <span className="mobile-hero-profile-initial">{userInitial}</span>
-                  <span className="mobile-hero-profile-name">{userName}</span>
                 </button>
                 {profileMenuOpen && (
                   <div className="topbar-user-menu" role="menu">
