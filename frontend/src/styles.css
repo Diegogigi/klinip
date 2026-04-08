@@ -36228,27 +36228,36 @@ body.theme-dark .appointments-sheet-grabber {
 @media (max-width: 768px) {
   .native-sheet-backdrop {
     position: fixed !important;
-    inset: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100dvh !important;
     display: flex !important;
     align-items: flex-end !important;
     justify-content: center !important;
     padding: 0 !important;
+    margin: 0 !important;
     z-index: 9999 !important;
     background: rgba(15, 23, 42, 0.45) !important;
     backdrop-filter: blur(6px) !important;
     -webkit-backdrop-filter: blur(6px) !important;
   }
 
+  /* Contrarrestar el top:-scrollY del body cuando overlay-lock está activo */
+  body.klinip-overlay-open .native-sheet-backdrop {
+    transform: translateY(var(--klinip-scroll-y, 0px)) !important;
+  }
+
   .native-sheet {
-    position: fixed !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    top: max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem)) !important;
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    top: auto !important;
     width: 100vw !important;
     max-width: none !important;
-    max-height: none !important;
-    height: auto !important;
+    max-height: calc(100dvh - max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem))) !important;
+    height: calc(100dvh - max(2.8rem, calc(env(safe-area-inset-top) + 0.5rem))) !important;
     border-radius: 24px 24px 0 0 !important;
     border-left: 0 !important;
     border-right: 0 !important;

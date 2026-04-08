@@ -12,12 +12,14 @@ export default function useMobileOverlayLock(locked) {
     body.classList.add("klinip-overlay-open");
     root.classList.add("klinip-overlay-open");
     body.style.top = `-${scrollY}px`;
+    body.style.setProperty("--klinip-scroll-y", `${scrollY}px`);
 
     return () => {
       const savedScrollY = Number(body.dataset.overlayScrollY || scrollY || 0);
       body.classList.remove("klinip-overlay-open");
       root.classList.remove("klinip-overlay-open");
       body.style.top = "";
+      body.style.removeProperty("--klinip-scroll-y");
       delete body.dataset.overlayScrollY;
       window.scrollTo(0, savedScrollY);
     };
