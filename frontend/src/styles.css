@@ -32102,6 +32102,7 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     padding-top: env(safe-area-inset-top);
     color: #0f172a;
     position: relative;
+    overflow: visible;
   }
 
   .mobile-hero-topbar {
@@ -32111,6 +32112,7 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     padding: 1rem 1.1rem 0.9rem;
     background: #ffffff;
     border-bottom: 1px solid #f1f5f9;
+    overflow: visible;
   }
 
   /* Avatar + info del usuario */
@@ -32118,6 +32120,7 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     display: flex;
     align-items: center;
     gap: 0.7rem;
+    overflow: visible;
   }
 
   .mobile-hero-avatar {
@@ -32183,6 +32186,11 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     right: auto;
     top: calc(100% + 0.55rem);
     z-index: 5600;
+  }
+
+  .mobile-hero-avatar-wrap,
+  .mobile-hero-notifications {
+    overflow: visible;
   }
 
   .mobile-hero-notifications {
