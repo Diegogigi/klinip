@@ -178,17 +178,26 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
 }
 
 function renderIcon(name) {
+  const iconProps = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "1.8",
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": "true",
+  };
   switch (name) {
     case "medication":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
           <rect x="9" y="3" width="6" height="4" rx="1" />
         </svg>
       );
     case "appointment":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" />
           <line x1="8" y1="2" x2="8" y2="6" />
@@ -197,20 +206,20 @@ function renderIcon(name) {
       );
     case "document":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
         </svg>
       );
     case "adherence":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
         </svg>
       );
     case "family":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="9" cy="7" r="4" />
           <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
@@ -218,7 +227,7 @@ function renderIcon(name) {
       );
     case "upload":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <polyline points="17 8 12 3 7 8" />
           <line x1="12" y1="3" x2="12" y2="15" />
@@ -226,21 +235,21 @@ function renderIcon(name) {
       );
     case "plus":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
       );
     case "ai":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2z" />
           <path d="M12 16v-4M12 8h.01" />
         </svg>
       );
     case "microphone":
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <rect x="9" y="3" width="6" height="11" rx="3" />
           <path d="M19 11a7 7 0 0 1-14 0" />
           <line x1="12" y1="18" x2="12" y2="21" />
@@ -249,7 +258,7 @@ function renderIcon(name) {
       );
     default:
       return (
-        <svg viewBox="0 0 24 24" aria-hidden="true">
+        <svg {...iconProps}>
           <circle cx="12" cy="12" r="9" />
           <polyline points="12 7 12 12 15 15" />
         </svg>
@@ -1030,18 +1039,6 @@ export default function Dashboard({
     const nextIndex = Math.round(container.scrollLeft / step);
     setActiveQuickActionIndex(Math.max(0, Math.min(nextIndex, mobileQuickActions.length - 1)));
   };
-  const scrollQuickCarouselTo = (index) => {
-    const container = quickCarouselRef.current;
-    if (!container) return;
-    const slides = container.querySelectorAll(".mobile-quick-slide");
-    const target = slides[index];
-    if (!target) return;
-    container.scrollTo({
-      left: target.offsetLeft,
-      behavior: "smooth",
-    });
-    setActiveQuickActionIndex(index);
-  };
   const renderQuickNotesPanel = (panelClassName = "") => (
     <article className={`home-panel-card home-notes-card ${panelClassName}`.trim()}>
       <div className="home-panel-head">
@@ -1262,7 +1259,8 @@ export default function Dashboard({
     const isCompactLandscape = Boolean(
       window.matchMedia?.("(pointer: coarse) and (orientation: landscape) and (max-height: 600px)").matches
     );
-    const quickSlideBasis = isCompactLandscape ? "46%" : "78%";
+    const quickSlideBasis = isCompactLandscape ? "42%" : "68%";
+    const quickSlideRatio = isCompactLandscape ? "1.04 / 1" : "1 / 1";
     const greetingIntro =
       new Date().getHours() < 12
         ? "Buenos días"
@@ -1720,6 +1718,7 @@ export default function Dashboard({
                   style={{
                     flex: `0 0 ${quickSlideBasis}`,
                     maxWidth: quickSlideBasis,
+                    aspectRatio: quickSlideRatio,
                   }}
                 >
                   {(item.featured || item.spotlight) ? (
@@ -1734,20 +1733,6 @@ export default function Dashboard({
                 </button>
               ))}
             </div>
-            {mobileQuickActions.length > 1 ? (
-              <div className="mobile-quick-dots" role="tablist" aria-label={"Paginaci\u00f3n de accesos r\u00e1pidos"}>
-                {mobileQuickActions.map((item, index) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`mobile-quick-dot${index === activeQuickActionIndex ? " is-active" : ""}`}
-                    aria-label={`Ir a ${item.label}`}
-                    aria-pressed={index === activeQuickActionIndex}
-                    onClick={() => scrollQuickCarouselTo(index)}
-                  />
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <div className="mobile-section native-section native-section-delay-2">

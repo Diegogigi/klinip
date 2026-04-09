@@ -32735,14 +32735,6 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     color: #8fb9ff;
   }
 
-  body.theme-dark .mobile-quick-dot {
-    background: #334155;
-  }
-
-  body.theme-dark .mobile-quick-dot.is-active {
-    background: #60a5fa;
-  }
-
   body.theme-dark .mobile-note-card {
     border-color: rgba(148, 163, 184, 0.16);
     background: linear-gradient(180deg, rgba(15, 23, 39, 0.96) 0%, rgba(11, 18, 32, 0.98) 100%);
@@ -33870,30 +33862,6 @@ body.theme-dark .records-mobile-title-group span,
     scroll-snap-stop: always;
     min-width: 0;
     max-width: 78%;
-  }
-
-  .mobile-quick-dots {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.42rem;
-    margin-top: 0.2rem;
-  }
-
-  .mobile-quick-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    border: none;
-    padding: 0;
-    background: #cbd5e1;
-    cursor: pointer;
-    transition: transform 0.18s ease, background-color 0.18s ease, width 0.18s ease;
-  }
-
-  .mobile-quick-dot.is-active {
-    width: 22px;
-    background: #2563eb;
   }
 
   .mobile-note-card {
