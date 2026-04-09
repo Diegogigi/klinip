@@ -21063,6 +21063,16 @@ body.theme-dark .home-suggestion-icon {
     align-items: stretch;
   }
 
+  .mobile-note-card .home-note-row {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .mobile-note-card .home-note-menu-wrap {
+    width: auto;
+    margin-left: auto;
+  }
+
   .home-note-row-actions {
     width: 100%;
     justify-content: flex-end;
@@ -33871,6 +33881,8 @@ body.theme-dark .records-mobile-title-group span,
     background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
     box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
     overflow: visible;
+    isolation: isolate;
+    z-index: 3;
   }
 
   .mobile-note-card .home-panel-head {
@@ -33890,15 +33902,38 @@ body.theme-dark .records-mobile-title-group span,
     font-size: 0.72rem;
   }
 
+  .mobile-note-card .home-notes-list,
+  .mobile-note-card .home-note-row,
+  .mobile-note-card .home-note-menu-wrap {
+    overflow: visible;
+  }
+
+  .mobile-note-card .home-note-row {
+    position: relative;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .mobile-note-card .home-note-row-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .mobile-note-card .home-note-menu-wrap {
+    display: flex;
+    align-self: flex-start;
+    margin-left: auto;
+  }
+
   .mobile-note-card .home-note-menu-popup {
-    z-index: 30;
+    z-index: 1200;
   }
 
   .mobile-quick-carousel {
     display: flex;
     flex-wrap: nowrap;
     align-items: stretch;
-    gap: 0.7rem;
+    gap: 0.5rem;
     overflow-x: auto;
     overflow-y: hidden;
     overscroll-behavior-x: contain;
@@ -33913,8 +33948,8 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-slide {
-    flex: 0 0 78%;
-    max-width: 78%;
+    flex: 0 0 58%;
+    max-width: 58%;
     min-width: 0;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -33926,36 +33961,36 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-item {
-    min-height: 106px;
-    padding: 0.78rem 0.72rem;
-    gap: 0.4rem;
-    border-radius: 18px !important;
+    min-height: 92px;
+    padding: 0.66rem 0.62rem;
+    gap: 0.32rem;
+    border-radius: 16px !important;
   }
 
   .mobile-quick-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px !important;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px !important;
   }
 
   .mobile-quick-icon svg {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
 
   .mobile-quick-label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     line-height: 1.15;
   }
 
   .mobile-quick-highlight {
-    min-height: 22px;
-    padding: 0.12rem 0.42rem;
-    font-size: 0.56rem;
+    min-height: 20px;
+    padding: 0.1rem 0.34rem;
+    font-size: 0.52rem;
   }
 
   .mobile-quick-sub {
-    font-size: 0.65rem !important;
+    font-size: 0.61rem !important;
     line-height: 1.2;
   }
 
@@ -35603,8 +35638,8 @@ body.theme-dark .appointments-success-icon {
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .mobile-quick-slide {
-    flex-basis: 46%;
-    max-width: 46%;
+    flex-basis: 36%;
+    max-width: 36%;
   }
 
   .mobile-note-card {

@@ -1259,8 +1259,8 @@ export default function Dashboard({
     const isCompactLandscape = Boolean(
       window.matchMedia?.("(pointer: coarse) and (orientation: landscape) and (max-height: 600px)").matches
     );
-    const quickSlideBasis = isCompactLandscape ? "42%" : "68%";
-    const quickSlideRatio = isCompactLandscape ? "1.04 / 1" : "1 / 1";
+    const quickSlideBasis = isCompactLandscape ? "36%" : "58%";
+    const quickSlideRatio = isCompactLandscape ? "1 / 1" : "1 / 1";
     const greetingIntro =
       new Date().getHours() < 12
         ? "Buenos días"
