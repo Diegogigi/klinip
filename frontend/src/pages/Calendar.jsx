@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import {
   getAppointments,
@@ -18,6 +19,7 @@ import {
   getMedicationScheduleSummary,
 } from "../utils/medicationSchedule";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import { ensureArray } from "../utils/arrays";
 
 const typeColors = {
   cita: "event-green",
@@ -177,7 +179,7 @@ export default function Calendar() {
       setLoading(true);
       try {
         const profilesResponse = await getHealthProfiles().catch(() => []);
-        const rawProfiles = Array.isArray(profilesResponse) ? profilesResponse : [];
+        const rawProfiles = ensureArray(profilesResponse);
         const orderedProfiles = [...rawProfiles].sort((a, b) => {
           const aSelf = String(a.relationship_type || "").toLowerCase() === "self" ? 1 : 0;
           const bSelf = String(b.relationship_type || "").toLowerCase() === "self" ? 1 : 0;
@@ -202,8 +204,8 @@ export default function Calendar() {
             ]);
             return {
               profileId: profile.id,
-              appointments: Array.isArray(appointments) ? appointments : [],
-              medications: Array.isArray(medications) ? medications : [],
+              appointments: ensureArray(appointments),
+              medications: ensureArray(medications),
             };
           })
         );
@@ -405,10 +407,10 @@ export default function Calendar() {
       <div className="card calendar-card">
         <div className="card-header calendar-header">
           <div className="calendar-hero-copy">
-            <p className="calendar-hero-eyebrow">Planificación mensual</p>
+            <p className="calendar-hero-eyebrow">PlanificaciÃ³n mensual</p>
             <h2 className="card-title">Calendario de salud</h2>
             <p className="muted calendar-intro-copy">
-              Vista mensual para citas, exámenes, trámites y medicación. Pulsa un día para ver el
+              Vista mensual para citas, exÃ¡menes, trÃ¡mites y medicaciÃ³n. Pulsa un dÃ­a para ver el
               detalle.
             </p>
             <div className="calendar-hero-summary">
@@ -428,7 +430,7 @@ export default function Calendar() {
               aria-label="Ir al mes anterior"
               onClick={() => setViewDate(addMonths(normalizedViewDate, -1))}
             >
-              <span aria-hidden="true">‹</span>
+              <span aria-hidden="true">â€¹</span>
               <span>Anterior</span>
             </button>
             <button
@@ -438,7 +440,7 @@ export default function Calendar() {
               onClick={() => setViewDate(addMonths(normalizedViewDate, 1))}
             >
               <span>Siguiente</span>
-              <span aria-hidden="true">›</span>
+              <span aria-hidden="true">â€º</span>
             </button>
           </div>
         </div>
@@ -447,7 +449,7 @@ export default function Calendar() {
           <article className="calendar-overview-card tone-blue">
             <span className="calendar-overview-label">Mes actual</span>
             <strong className="calendar-overview-value">{monthLabel}</strong>
-            <span className="calendar-overview-meta">Seguimiento clínico mensual</span>
+            <span className="calendar-overview-meta">Seguimiento clÃ­nico mensual</span>
           </article>
           <article className="calendar-overview-card tone-white">
             <span className="calendar-overview-label">Agenda visible</span>
@@ -455,7 +457,7 @@ export default function Calendar() {
             <span className="calendar-overview-meta">Eventos del mes en vista</span>
           </article>
           <article className="calendar-overview-card tone-green">
-            <span className="calendar-overview-label">Medicación</span>
+            <span className="calendar-overview-label">MedicaciÃ³n</span>
             <strong className="calendar-overview-value">{medicationMonthCount}</strong>
             <span className="calendar-overview-meta">Tomas estimadas en el periodo</span>
           </article>
@@ -521,9 +523,9 @@ export default function Calendar() {
 
         <div className="legend">
           <span className="legend-dot event-green" /> Citas
-          <span className="legend-dot event-blue" /> Exámenes
-          <span className="legend-dot event-yellow" /> Trámites
-          <span className="legend-dot event-purple" /> Medicación
+          <span className="legend-dot event-blue" /> ExÃ¡menes
+          <span className="legend-dot event-yellow" /> TrÃ¡mites
+          <span className="legend-dot event-purple" /> MedicaciÃ³n
         </div>
 
         {loading ? (
@@ -592,109 +594,127 @@ export default function Calendar() {
         )}
       </div>
 
-      {selected && (
-        <div className="floating-form-backdrop calendar-selected-backdrop" onClick={() => setSelected(null)}>
-          <div className="floating-form-card calendar-selected-sheet" onClick={(event) => event.stopPropagation()}>
-            <span className="calendar-sheet-grabber" aria-hidden="true" />
-            <div className="calendar-selected-header">
-              <div className="calendar-selected-topline">
-                <span className="calendar-selected-kicker">Agenda del día</span>
-                <span className="calendar-selected-count">{selectedCountLabel}</span>
-              </div>
-              <div className="calendar-selected-heading">
-                <div className="calendar-selected-heading-copy">
-                  <p className="calendar-selected-weekday">{selectedWeekdayLabel}</p>
-                  <h3 className="card-title calendar-selected-date">{selectedDateLabel}</h3>
-                  <p className="calendar-selected-subtitle">
-                    {selectedEvents.length
-                      ? "Revisa el detalle del día y agrega nuevas actividades si hace falta."
-                      : "No hay registros en esta fecha todavía."}
-                  </p>
-                </div>
+      {selected && createPortal(
+        <div className="native-sheet-backdrop calendar-native-backdrop" onClick={() => setSelected(null)}>
+          <div
+            className="native-sheet native-detail-sheet calendar-native-sheet"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span className="native-sheet-grabber" aria-hidden />
+            <div className="native-detail-header calendar-native-header">
+              <div className="native-detail-header-top">
+                <span className="native-chip native-chip-muted">{selectedCountLabel}</span>
                 <button
-                  className="calendar-selected-close"
+                  className="native-close-btn"
                   type="button"
                   onClick={() => setSelected(null)}
                   aria-label="Cerrar detalle del día"
                 >
-                  <span aria-hidden="true">×</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
+              <h3 className="native-detail-title">{selectedDateLabel}</h3>
+              <p className="native-detail-subtitle">{selectedWeekdayLabel}</p>
+              <div className="native-detail-badges">
+                <span className="native-chip native-chip-type">Agenda del día</span>
+                {currentActionProfile ? (
+                  <span className="native-chip native-chip-muted">
+                    {cleanUiText(currentActionProfile.display_name, "Perfil activo")}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            {selectedEvents.length === 0 ? (
-              <p className="muted calendar-selected-empty">Sin actividades en esta fecha.</p>
-            ) : (
-              <ul className="timeline calendar-selected-timeline">
-                {selectedEvents.map((eventItem) => (
-                  <li key={eventItem.event_id} className={`timeline-item calendar-timeline-item type-${eventItem.type}`}>
-                    <div className="timeline-main calendar-timeline-main">
-                      <span className={`chip ${eventItem.type}`}>
+
+            <div className="native-sheet-body">
+              {selectedEvents.length === 0 ? (
+                <div className="calendar-native-empty">
+                  No hay registros en esta fecha todavía.
+                </div>
+              ) : (
+                <div className="calendar-native-list">
+                  {selectedEvents.map((eventItem) => (
+                    <article key={eventItem.event_id} className={`calendar-native-item type-${eventItem.type}`}>
+                      <div className="calendar-native-item-top">
+                        <div className="calendar-native-item-tags">
+                          <span className={`chip ${eventItem.type}`}>
+                            {eventItem.type === "medication"
+                              ? "Medicación"
+                              : cleanUiText(eventTypeLabel(eventItem.type), "Actividad")}
+                          </span>
+                          {eventItem.status ? (
+                            <span className={`chip-status-${eventItem.status}`}>{cleanUiText(eventItem.status)}</span>
+                          ) : null}
+                        </div>
+                        <span className={`calendar-profile-pill calendar-native-profile ${eventItem.profileTone || ""}`}>
+                          {cleanUiText(eventItem.profileName, "Perfil")}
+                        </span>
+                      </div>
+                      <p className="calendar-native-item-title">
                         {eventItem.type === "medication"
-                          ? "Medicaci\u00F3n"
-                          : cleanUiText(eventItem.type, "Actividad")}
-                      </span>
-                      {eventItem.status ? (
-                        <span className={`chip-status-${eventItem.status}`}>{cleanUiText(eventItem.status)}</span>
-                      ) : null}
-                      <span className={`calendar-profile-pill ${eventItem.profileTone || ""}`}>
-                        {eventItem.profileName}
-                      </span>
-                    </div>
-                    <p className="timeline-title">
-                      {eventItem.type === "medication"
-                        ? cleanUiText(eventItem.name, "Medicamento")
-                        : `${cleanUiText(eventItem.specialty, "Sin especialidad")} - ${cleanUiText(
-                            eventItem.center,
-                            "Centro no definido"
-                          )}`}
-                    </p>
-                    <p className="timeline-meta">
-                      {eventItem.type === "medication"
-                        ? `${cleanUiText(eventItem.dose)} ${cleanUiText(
-                            eventItem.frequency,
-                            "Según indicación"
-                          )}`.trim()
-                        : eventItem.date_time
-                        ? toLocaleDateTimeOrEmpty(eventItem.date_time) || "Por agendar"
-                        : "Por agendar"}
-                    </p>
-                    {eventItem.notes ? <p className="timeline-notes">Notas: {cleanUiText(eventItem.notes)}</p> : null}
-                    {eventItem.type === "medication" && eventItem.effective_end_date ? (
-                      <p className="timeline-meta">
-                        Última toma estimada: {toLocaleDateOrEmpty(eventItem.effective_end_date)}
+                          ? cleanUiText(eventItem.name, "Medicamento")
+                          : `${cleanUiText(eventItem.specialty, "Sin especialidad")} · ${cleanUiText(
+                              eventItem.center,
+                              "Centro no definido"
+                            )}`}
                       </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="floating-actions calendar-floating-actions">
+                      <p className="calendar-native-item-meta">
+                        {eventItem.type === "medication"
+                          ? `${cleanUiText(eventItem.dose)} ${cleanUiText(
+                              eventItem.frequency,
+                              "Según indicación"
+                            )}`.trim()
+                          : eventItem.date_time
+                          ? toLocaleDateTimeOrEmpty(eventItem.date_time) || "Por agendar"
+                          : "Por agendar"}
+                      </p>
+                      {eventItem.notes ? (
+                        <p className="calendar-native-item-note">Notas: {cleanUiText(eventItem.notes)}</p>
+                      ) : null}
+                      {eventItem.type === "medication" && eventItem.effective_end_date ? (
+                        <p className="calendar-native-item-meta">
+                          Última toma estimada: {toLocaleDateOrEmpty(eventItem.effective_end_date)}
+                        </p>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="native-sheet-footer calendar-native-footer">
               {calendarScope === "both" ? (
-                <p className="muted calendar-helper-note calendar-helper-note-clean">
+                <p className="calendar-native-helper">
                   Elige "Mío" o "Compartido" para crear una actividad en un perfil específico.
                 </p>
               ) : currentActionProfile && canCreateOnCurrentProfile ? (
                 <>
+                  <p className="calendar-native-helper calendar-native-helper-context">
+                    Se registrará en {cleanUiText(currentActionProfile.display_name, "el perfil activo")}.
+                  </p>
                   <button
-                    className="primary-btn calendar-selected-primary"
+                    className="native-btn native-btn-primary native-btn-full"
                     type="button"
                     disabled={switchingProfile}
                     onClick={handleCreateFromCalendar}
                   >
                     {switchingProfile ? "Abriendo..." : "Agregar actividad"}
                   </button>
-                  <p className="calendar-selected-action-context">
-                    Se registrará en {currentActionProfile.display_name}.
-                  </p>
                 </>
               ) : currentActionProfile ? (
-                <p className="muted calendar-helper-note">
-                  Tienes vista de solo lectura para el calendario de {currentActionProfile.display_name}.
+                <p className="calendar-native-helper">
+                  Tienes vista de solo lectura para el calendario de {cleanUiText(
+                    currentActionProfile.display_name,
+                    "este perfil"
+                  )}.
                 </p>
               ) : null}
             </div>
           </div>
-        </div>
+        </div>,
+        document.getElementById("overlay-root") || document.body
       )}
     </>
   );
