@@ -6452,6 +6452,9 @@ body.theme-dark .primary-btn {
   max-width: min(560px, calc(100vw - 1.2rem));
   padding: 1.15rem;
   border-radius: 28px;
+  background: #ffffff;
+  border: 1px solid #dbe5f2;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
   display: flex;
   flex-direction: column;
   max-height: calc(100dvh - 2.4rem);
@@ -6483,6 +6486,7 @@ body.theme-dark .primary-btn {
 
 .stepup-modal-title-wrap h3 {
   margin: 0;
+  color: #0f172a;
   font-size: 1.08rem;
   line-height: 1.15;
 }

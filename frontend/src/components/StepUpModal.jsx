@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { requestStepUpEmailCode, stepUpVerify } from "../api";
 
 const METHOD_EMAIL = "email_code";
@@ -275,7 +276,7 @@ export default function StepUpModal({
     </>
   );
 
-  return (
+  const modal = (
     <div
       className="modal-backdrop stepup-modal-backdrop"
       onClick={(event) => event.target === event.currentTarget && onClose()}
@@ -330,4 +331,6 @@ export default function StepUpModal({
       </div>
     </div>
   );
+
+  return createPortal(modal, document.getElementById("overlay-root") || document.body);
 }
