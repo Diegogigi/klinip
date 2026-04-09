@@ -15,18 +15,28 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "profile_notes",
-        sa.Column("color", sa.String(), nullable=True, server_default="yellow"),
-    )
-    op.add_column(
-        "profile_notes",
-        sa.Column("reminder_at", sa.DateTime(), nullable=True),
-    )
-    op.add_column(
-        "profile_notes",
-        sa.Column("reminder_sent", sa.Boolean(), nullable=True, server_default=sa.false()),
-    )
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    existing_columns = {
+        column["name"]
+        for column in inspector.get_columns("profile_notes")
+    }
+
+    if "color" not in existing_columns:
+        op.add_column(
+            "profile_notes",
+            sa.Column("color", sa.String(), nullable=True, server_default="yellow"),
+        )
+    if "reminder_at" not in existing_columns:
+        op.add_column(
+            "profile_notes",
+            sa.Column("reminder_at", sa.DateTime(), nullable=True),
+        )
+    if "reminder_sent" not in existing_columns:
+        op.add_column(
+            "profile_notes",
+            sa.Column("reminder_sent", sa.Boolean(), nullable=True, server_default=sa.false()),
+        )
 
 
 def downgrade() -> None:
