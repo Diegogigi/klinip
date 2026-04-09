@@ -1685,69 +1685,9 @@ export default function Dashboard({
           <div className="mobile-sheet-handle" />
 
           {/* Acceso rápido */}
-          <div className="mobile-section native-section native-section-delay-1 legacy-mobile-quick-section">
-            <div className="mobile-section-header">
-              <h2 className="mobile-section-title">Acceso rápido</h2>
-            </div>
-            <div className="mobile-quick-grid mobile-quick-grid-legacy">
-              <button type="button" className="mobile-quick-item tone-blue is-featured is-glow" onClick={() => navigate("/appointments")}>
-                <span className="mobile-card-orb" aria-hidden />
-                <span className="mobile-quick-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                    <line x1="16" y1="2" x2="16" y2="6"/>
-                    <line x1="8" y1="2" x2="8" y2="6"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                </span>
-                <p className="mobile-quick-label">Citas</p>
-                <span className="mobile-quick-highlight">Agenda activa</span>
-                <p className="mobile-quick-sub">
-                  {futureAppointments.length > 0 ? `${futureAppointments.length} próxima${futureAppointments.length > 1 ? "s" : ""}` : "Sin citas"}
-                </p>
-              </button>
-              <button type="button" className="mobile-quick-item tone-teal is-spotlight" onClick={() => navigate("/documents")}>
-                <span className="mobile-card-orb is-secondary" aria-hidden />
-                <span className="mobile-quick-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                </span>
-                <p className="mobile-quick-label">Documentos</p>
-                <p className="mobile-quick-sub">{documents.length} registros</p>
-              </button>
-              <button type="button" className="mobile-quick-item tone-sky" onClick={() => navigate("/voice")}>
-                <span className="mobile-quick-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <rect x="9" y="2" width="6" height="11" rx="3"/>
-                    <path d="M5 10a7 7 0 0 0 14 0"/>
-                    <path d="M12 17v4M8 21h8"/>
-                  </svg>
-                </span>
-                <p className="mobile-quick-label">Klinip Voice</p>
-                <p className="mobile-quick-sub">Grabar consulta</p>
-              </button>
-              <button type="button" className="mobile-quick-item tone-violet" onClick={() => navigate("/family")}>
-                <span className="mobile-quick-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <circle cx="8" cy="9" r="2.5"/>
-                    <circle cx="16" cy="9" r="2.5"/>
-                    <path d="M3.5 19a4.5 4.5 0 0 1 9 0"/>
-                    <path d="M11.5 19a4.5 4.5 0 0 1 9 0"/>
-                  </svg>
-                </span>
-                <p className="mobile-quick-label">Mi familia</p>
-                <p className="mobile-quick-sub">
-                  {linkedProfiles > 0 ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}` : "Gestionar perfiles"}
-                </p>
-              </button>
-            </div>
-          </div>
-
           <div className="mobile-section native-section native-section-delay-1">
             <div className="mobile-section-header">
-              <h2 className="mobile-section-title">{"Accesos r\u00e1pidos"}</h2>
+              <h2 className="mobile-section-title">Acceso rápido</h2>
               <span className="mobile-quick-counter">
                 {activeQuickActionIndex + 1}/{mobileQuickActions.length}
               </span>

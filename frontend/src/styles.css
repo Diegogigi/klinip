@@ -33833,11 +33833,6 @@ body.theme-dark .records-mobile-title-group span,
     font-size: 0.72rem;
   }
 
-  .legacy-mobile-quick-section,
-  .mobile-quick-grid-legacy {
-    display: none;
-  }
-
   .mobile-quick-counter {
     display: inline-flex;
     align-items: center;
@@ -33855,9 +33850,7 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-carousel {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(70%, 1fr);
+    display: flex;
     gap: 0.55rem;
     overflow-x: auto;
     overscroll-behavior-x: contain;
@@ -33872,9 +33865,11 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-slide {
+    flex: 0 0 78%;
     scroll-snap-align: start;
     scroll-snap-stop: always;
     min-width: 0;
+    max-width: 78%;
   }
 
   .mobile-quick-dots {
@@ -35613,8 +35608,9 @@ body.theme-dark .appointments-success-icon {
 }
 
 @media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
-  .mobile-quick-carousel {
-    grid-auto-columns: minmax(46%, 1fr);
+  .mobile-quick-slide {
+    flex-basis: 46%;
+    max-width: 46%;
   }
 
   .mobile-note-card {
