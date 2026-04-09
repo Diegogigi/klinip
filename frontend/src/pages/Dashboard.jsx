@@ -357,6 +357,7 @@ export default function Dashboard({
   const notificationsRef = useRef(null);
   const profileMenuRef = useRef(null);
   const profileMenuOverlayRef = useRef(null);
+  const quickCarouselRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(() => isHandheldViewport(768));
   const [appointments, setAppointments] = useState([]);
@@ -376,6 +377,7 @@ export default function Dashboard({
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteMenuOpenId, setNoteMenuOpenId] = useState(null);
+  const [activeQuickActionIndex, setActiveQuickActionIndex] = useState(0);
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -946,6 +948,257 @@ export default function Dashboard({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
+  const mobileQuickActions = [
+    {
+      id: "appointments",
+      icon: "appointment",
+      label: "Citas",
+      highlight: "Agenda activa",
+      subtitle:
+        futureAppointments.length > 0
+          ? `${futureAppointments.length} pr\u00f3xima${futureAppointments.length > 1 ? "s" : ""}`
+          : "Sin citas",
+      tone: "blue",
+      featured: true,
+      onClick: () => navigate("/appointments"),
+    },
+    {
+      id: "documents",
+      icon: "document",
+      label: "Documentos",
+      subtitle: `${documents.length} registro${documents.length === 1 ? "" : "s"}`,
+      tone: "teal",
+      spotlight: true,
+      onClick: () => navigate("/documents"),
+    },
+    {
+      id: "voice",
+      icon: "microphone",
+      label: "Klinip Voice",
+      subtitle: "Grabar consulta",
+      tone: "sky",
+      onClick: () => navigate("/voice"),
+    },
+    {
+      id: "family",
+      icon: "family",
+      label: "Mi familia",
+      subtitle:
+        linkedProfiles > 0
+          ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
+          : "Gestionar perfiles",
+      tone: "violet",
+      onClick: () => navigate("/family"),
+    },
+    {
+      id: "ai",
+      icon: "ai",
+      label: "IA Klinip",
+      subtitle:
+        activeHealthAlerts.length > 0
+          ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
+          : "Abrir asistente",
+      tone: "green",
+      onClick: () => navigate("/ai"),
+    },
+  ];
+  const quickNotesActionLabel = canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura";
+  const openQuickNotesPanel = () => {
+    if (composerOpen) {
+      handleCancelNote();
+    } else if (canEditActiveProfile) {
+      setComposerOpen(true);
+    }
+  };
+  const syncQuickCarouselIndex = (container) => {
+    if (!container || !mobileQuickActions.length) {
+      setActiveQuickActionIndex(0);
+      return;
+    }
+    const firstSlide = container.querySelector(".mobile-quick-slide");
+    if (!firstSlide) {
+      setActiveQuickActionIndex(0);
+      return;
+    }
+    const styles = window.getComputedStyle(container);
+    const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+    const step = firstSlide.offsetWidth + gap;
+    if (!step) {
+      setActiveQuickActionIndex(0);
+      return;
+    }
+    const nextIndex = Math.round(container.scrollLeft / step);
+    setActiveQuickActionIndex(Math.max(0, Math.min(nextIndex, mobileQuickActions.length - 1)));
+  };
+  const scrollQuickCarouselTo = (index) => {
+    const container = quickCarouselRef.current;
+    if (!container) return;
+    const slides = container.querySelectorAll(".mobile-quick-slide");
+    const target = slides[index];
+    if (!target) return;
+    container.scrollTo({
+      left: target.offsetLeft,
+      behavior: "smooth",
+    });
+    setActiveQuickActionIndex(index);
+  };
+  const renderQuickNotesPanel = (panelClassName = "") => (
+    <article className={`home-panel-card home-notes-card ${panelClassName}`.trim()}>
+      <div className="home-panel-head">
+        <div>
+          <h2 className="home-panel-title">{"Notas r\u00e1pidas"}</h2>
+          <p className="home-panel-subtitle">Pendientes e ideas de tu cuidado.</p>
+        </div>
+        <button
+          type="button"
+          className="home-panel-link"
+          onClick={openQuickNotesPanel}
+        >
+          {quickNotesActionLabel}
+        </button>
+      </div>
+      {composerOpen && canEditActiveProfile && (
+        <div className={`home-note-composer note-color-${noteColor}`}>
+          <div className="home-note-color-picker" role="group" aria-label="Color de nota">
+            {["yellow", "pink", "mint", "lavender", "peach"].map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`home-note-color-swatch home-note-color-swatch-${c}${noteColor === c ? " is-selected" : ""}`}
+                onClick={() => setNoteColor(c)}
+                aria-label={c}
+                aria-pressed={noteColor === c}
+              />
+            ))}
+          </div>
+          <textarea
+            className="home-note-textarea"
+            value={noteDraft}
+            onChange={(event) => setNoteDraft(event.target.value)}
+            placeholder="Guardar pendiente o idea clave."
+            rows={3}
+          />
+          <div className="home-note-reminder-row">
+            <label className="home-note-reminder-label">
+              Recordarme el:
+              <input
+                type="datetime-local"
+                className="home-note-reminder-input"
+                value={noteReminder}
+                onChange={(e) => setNoteReminder(e.target.value)}
+                min={toLocalInputValue(new Date())}
+              />
+            </label>
+            {noteReminder && (
+              <button
+                type="button"
+                className="home-note-reminder-clear"
+                onClick={() => setNoteReminder("")}
+              >
+                Quitar recordatorio
+              </button>
+            )}
+          </div>
+          <div className="home-note-actions">
+            <button
+              type="button"
+              className="home-note-secondary"
+              onClick={handleCancelNote}
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className="home-note-primary"
+              onClick={handleSaveNote}
+              disabled={noteSubmitting}
+            >
+              {noteSubmitting ? "Guardando..." : editingNoteId ? "Guardar cambios" : "Guardar nota"}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="home-notes-list">
+        {notesLoading ? (
+          <div className="home-loading">{"Cargando notas r\u00e1pidas..."}</div>
+        ) : quickNotes.length ? (
+          quickNotes.map((item) => (
+            <article key={item.id} className={`home-note-row note-color-${item.color || "yellow"}`}>
+              <div className="home-note-row-main">
+                <span className={`home-note-dot note-color-dot-${item.color || "yellow"}`} />
+                <span className="home-note-copy">
+                  <strong>{cleanUiText(item.note || item.text)}</strong>
+                  <small>
+                    {parseDate(item.updated_at || item.created_at)?.toLocaleString("es-CL", {
+                      day: "2-digit",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }) || "Reciente"}
+                  </small>
+                  {item.reminder_at ? (
+                    <small className={`home-note-reminder-badge${item.reminder_sent ? " is-sent" : ""}`}>
+                      {item.reminder_sent
+                        ? "Recordatorio enviado"
+                        : `Recordatorio: ${parseDate(item.reminder_at)?.toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) || item.reminder_at}`}
+                    </small>
+                  ) : null}
+                </span>
+              </div>
+              {canEditActiveProfile ? (
+                <div className="home-note-menu-wrap">
+                  <button
+                    type="button"
+                    className="home-note-menu-trigger"
+                    aria-label="Opciones de nota"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setNoteMenuOpenId((prev) => (prev === item.id ? null : item.id));
+                    }}
+                  >
+                    &#8942;
+                  </button>
+                  {noteMenuOpenId === item.id && (
+                    <div className="home-note-menu-popup" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="home-note-menu-item"
+                        onClick={() => {
+                          handleStartEditNote(item);
+                          setNoteMenuOpenId(null);
+                        }}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="home-note-menu-item"
+                        onClick={() => handleMarkNoteDone(item.id)}
+                      >
+                        Marcar como listo
+                      </button>
+                      <button
+                        type="button"
+                        className="home-note-menu-item is-danger"
+                        onClick={() => {
+                          handleDeleteNote(item.id);
+                          setNoteMenuOpenId(null);
+                        }}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </article>
+          ))
+        ) : (
+          <div className="home-empty-state">{"Todav\u00eda no guardas notas r\u00e1pidas."}</div>
+        )}
+      </div>
+    </article>
+  );
   const greetText = greetStarted ? `Hola, ${firstName}` : "";
   const contextMessages = useMemo(
     () =>
@@ -996,6 +1249,14 @@ export default function Dashboard({
     const t = window.setTimeout(() => setAiMsgIndex((prev) => (prev + 1) % contextMessages.length), 4500);
     return () => window.clearTimeout(t);
   }, [contextTyper.done, greetPhase, contextMessages.length]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    setActiveQuickActionIndex(0);
+    if (quickCarouselRef.current) {
+      quickCarouselRef.current.scrollLeft = 0;
+    }
+  }, [isMobile]);
 
   if (isMobile) {
     const greetingIntro =
@@ -1424,11 +1685,11 @@ export default function Dashboard({
           <div className="mobile-sheet-handle" />
 
           {/* Acceso rápido */}
-          <div className="mobile-section native-section native-section-delay-1">
+          <div className="mobile-section native-section native-section-delay-1 legacy-mobile-quick-section">
             <div className="mobile-section-header">
               <h2 className="mobile-section-title">Acceso rápido</h2>
             </div>
-            <div className="mobile-quick-grid">
+            <div className="mobile-quick-grid mobile-quick-grid-legacy">
               <button type="button" className="mobile-quick-item tone-blue is-featured is-glow" onClick={() => navigate("/appointments")}>
                 <span className="mobile-card-orb" aria-hidden />
                 <span className="mobile-quick-icon">
@@ -1484,9 +1745,60 @@ export default function Dashboard({
             </div>
           </div>
 
+          <div className="mobile-section native-section native-section-delay-1">
+            <div className="mobile-section-header">
+              <h2 className="mobile-section-title">{"Accesos r\u00e1pidos"}</h2>
+              <span className="mobile-quick-counter">
+                {activeQuickActionIndex + 1}/{mobileQuickActions.length}
+              </span>
+            </div>
+            <div
+              ref={quickCarouselRef}
+              className="mobile-quick-carousel"
+              onScroll={(event) => syncQuickCarouselIndex(event.currentTarget)}
+            >
+              {mobileQuickActions.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`mobile-quick-item mobile-quick-slide tone-${item.tone}${item.featured ? " is-featured is-glow" : ""}${item.spotlight ? " is-spotlight" : ""}`}
+                  onClick={item.onClick}
+                >
+                  {(item.featured || item.spotlight) ? (
+                    <span className={`mobile-card-orb${item.spotlight ? " is-secondary" : ""}`} aria-hidden />
+                  ) : null}
+                  <span className="mobile-quick-icon">{renderIcon(item.icon)}</span>
+                  <p className="mobile-quick-label">{item.label}</p>
+                  {item.highlight ? (
+                    <span className="mobile-quick-highlight">{item.highlight}</span>
+                  ) : null}
+                  <p className="mobile-quick-sub">{item.subtitle}</p>
+                </button>
+              ))}
+            </div>
+            {mobileQuickActions.length > 1 ? (
+              <div className="mobile-quick-dots" role="tablist" aria-label={"Paginaci\u00f3n de accesos r\u00e1pidos"}>
+                {mobileQuickActions.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`mobile-quick-dot${index === activeQuickActionIndex ? " is-active" : ""}`}
+                    aria-label={`Ir a ${item.label}`}
+                    aria-pressed={index === activeQuickActionIndex}
+                    onClick={() => scrollQuickCarouselTo(index)}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mobile-section native-section native-section-delay-2">
+            {renderQuickNotesPanel("mobile-note-card")}
+          </div>
+
           {/* Alertas de salud */}
           {activeHealthAlerts.length > 0 && (
-            <div className="mobile-section native-section native-section-delay-2">
+            <div className="mobile-section native-section native-section-delay-3">
               <div className="mobile-section-header">
                 <h2 className="mobile-section-title">Alertas de salud</h2>
                 <button type="button" className="mobile-section-link" onClick={() => navigate("/ai")}>
@@ -1961,161 +2273,7 @@ export default function Dashboard({
             </div>
           </article>
 
-          <article className="home-panel-card home-notes-card">
-            <div className="home-panel-head">
-              <div>
-                <h2 className="home-panel-title">{"Notas r\u00E1pidas"}</h2>
-                <p className="home-panel-subtitle">Pendientes e ideas de tu cuidado.</p>
-              </div>
-              <button
-                type="button"
-                className="home-panel-link"
-                onClick={() => {
-                  if (composerOpen) {
-                    handleCancelNote();
-                  } else if (canEditActiveProfile) {
-                    setComposerOpen(true);
-                  }
-                }}
-              >
-                {canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura"}
-              </button>
-            </div>
-            {composerOpen && canEditActiveProfile && (
-              <div className={`home-note-composer note-color-${noteColor}`}>
-                <div className="home-note-color-picker" role="group" aria-label="Color de nota">
-                  {["yellow", "pink", "mint", "lavender", "peach"].map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`home-note-color-swatch home-note-color-swatch-${c}${noteColor === c ? " is-selected" : ""}`}
-                      onClick={() => setNoteColor(c)}
-                      aria-label={c}
-                      aria-pressed={noteColor === c}
-                    />
-                  ))}
-                </div>
-                <textarea
-                  className="home-note-textarea"
-                  value={noteDraft}
-                  onChange={(event) => setNoteDraft(event.target.value)}
-                  placeholder="Guardar pendiente o idea clave."
-                  rows={3}
-                />
-                <div className="home-note-reminder-row">
-                  <label className="home-note-reminder-label">
-                    Recordarme el:
-                    <input
-                      type="datetime-local"
-                      className="home-note-reminder-input"
-                      value={noteReminder}
-                      onChange={(e) => setNoteReminder(e.target.value)}
-                      min={toLocalInputValue(new Date())}
-                    />
-                  </label>
-                  {noteReminder && (
-                    <button
-                      type="button"
-                      className="home-note-reminder-clear"
-                      onClick={() => setNoteReminder("")}
-                    >
-                      Quitar recordatorio
-                    </button>
-                  )}
-                </div>
-                <div className="home-note-actions">
-                  <button
-                    type="button"
-                    className="home-note-secondary"
-                    onClick={handleCancelNote}
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    className="home-note-primary"
-                    onClick={handleSaveNote}
-                    disabled={noteSubmitting}
-                  >
-                    {noteSubmitting ? "Guardando..." : editingNoteId ? "Guardar cambios" : "Guardar nota"}
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="home-notes-list">
-              {notesLoading ? (
-                <div className="home-loading">{"Cargando notas r\u00E1pidas..."}</div>
-              ) : quickNotes.length ? (
-                quickNotes.map((item) => (
-                  <article key={item.id} className={`home-note-row note-color-${item.color || "yellow"}`}>
-                    <div className="home-note-row-main">
-                      <span className={`home-note-dot note-color-dot-${item.color || "yellow"}`} />
-                      <span className="home-note-copy">
-                        <strong>{cleanUiText(item.note || item.text)}</strong>
-                        <small>
-                          {parseDate(item.updated_at || item.created_at)?.toLocaleString("es-CL", {
-                            day: "2-digit",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }) || "Reciente"}
-                        </small>
-                        {item.reminder_at ? (
-                          <small className={`home-note-reminder-badge${item.reminder_sent ? " is-sent" : ""}`}>
-                            {item.reminder_sent
-                              ? "Recordatorio enviado"
-                              : `Recordatorio: ${parseDate(item.reminder_at)?.toLocaleString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) || item.reminder_at}`}
-                          </small>
-                        ) : null}
-                      </span>
-                    </div>
-                    {canEditActiveProfile ? (
-                      <div className="home-note-menu-wrap">
-                        <button
-                          type="button"
-                          className="home-note-menu-trigger"
-                          aria-label="Opciones de nota"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setNoteMenuOpenId((prev) => (prev === item.id ? null : item.id));
-                          }}
-                        >
-                          &#8942;
-                        </button>
-                        {noteMenuOpenId === item.id && (
-                          <div className="home-note-menu-popup" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button"
-                              className="home-note-menu-item"
-                              onClick={() => { handleStartEditNote(item); setNoteMenuOpenId(null); }}
-                            >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              className="home-note-menu-item"
-                              onClick={() => handleMarkNoteDone(item.id)}
-                            >
-                              Marcar como listo
-                            </button>
-                            <button
-                              type="button"
-                              className="home-note-menu-item is-danger"
-                              onClick={() => { handleDeleteNote(item.id); setNoteMenuOpenId(null); }}
-                            >
-                              Eliminar
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </article>
-                ))
-              ) : (
-                <div className="home-empty-state">{"Todav\u00EDa no guardas notas r\u00E1pidas."}</div>
-              )}
-            </div>
-          </article>
+          {renderQuickNotesPanel()}
         </div>
       </div>
 
