@@ -32508,12 +32508,12 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
   .mobile-quick-item {
     background: white;
     border: 1.5px solid #f1f5f9;
-    border-radius: 20px;
-    padding: 1rem 0.9rem;
+    border-radius: 16px;
+    padding: 0.9rem 0.82rem;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.55rem;
+    gap: 0.46rem;
     cursor: pointer;
     text-align: left;
     transition: transform 0.15s, box-shadow 0.15s;
@@ -32527,17 +32527,17 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
   }
 
   .mobile-quick-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 13px;
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
     display: grid;
     place-items: center;
     flex-shrink: 0;
   }
 
   .mobile-quick-icon svg {
-    width: 20px;
-    height: 20px;
+    width: 19px;
+    height: 19px;
   }
 
   .mobile-quick-label {
@@ -33198,16 +33198,16 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
   }
 
   .mobile-quick-item {
-    min-height: 128px;
-    padding: 1rem 0.95rem;
-    gap: 0.62rem;
+    min-height: 118px;
+    padding: 0.88rem 0.82rem;
+    gap: 0.5rem;
   }
 
   .mobile-quick-icon,
   .mobile-activity-icon,
   .records-mobile-icon-badge,
   .appt-burjeel-icon {
-    border-radius: 16px !important;
+    border-radius: 12px !important;
     box-shadow: none !important;
   }
 
@@ -33867,11 +33867,11 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-slide {
-    flex: 0 0 78%;
+    flex: 0 0 46%;
     scroll-snap-align: start;
     scroll-snap-stop: always;
     min-width: 0;
-    max-width: 78%;
+    max-width: 46%;
   }
 
   .mobile-note-card {
@@ -33948,8 +33948,8 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-slide {
-    flex: 0 0 58%;
-    max-width: 58%;
+    flex: 0 0 46%;
+    max-width: 46%;
     min-width: 0;
     scroll-snap-align: start;
     scroll-snap-stop: always;
@@ -33961,26 +33961,26 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-item {
-    min-height: 92px;
-    padding: 0.66rem 0.62rem;
-    gap: 0.32rem;
-    border-radius: 16px !important;
+    min-height: 84px;
+    padding: 0.58rem 0.56rem;
+    gap: 0.26rem;
+    border-radius: 14px !important;
   }
 
   .mobile-quick-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 10px !important;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px !important;
   }
 
   .mobile-quick-icon svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
   }
 
   .mobile-quick-label {
-    font-size: 0.72rem;
-    line-height: 1.15;
+    font-size: 0.69rem;
+    line-height: 1.1;
   }
 
   .mobile-quick-highlight {
@@ -33990,8 +33990,12 @@ body.theme-dark .records-mobile-title-group span,
   }
 
   .mobile-quick-sub {
-    font-size: 0.61rem !important;
-    line-height: 1.2;
+    font-size: 0.58rem !important;
+    line-height: 1.16;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
   }
 
   .mobile-activity-item {
@@ -37251,5 +37255,907 @@ body.theme-dark .native-chip-status.realizada {
 body.theme-dark .native-chip-muted {
   background: rgba(148, 163, 184, 0.1);
   color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .settings-shell-native-scene {
+    display: block;
+    overflow: visible;
+    background: transparent;
+    --settings-native-surface: rgba(255, 255, 255, 0.98);
+    --settings-native-surface-muted: #f7fbff;
+    --settings-native-border: var(--mobile-border);
+    --settings-native-text: var(--mobile-text);
+    --settings-native-muted: var(--mobile-text-muted);
+    --settings-native-shadow: var(--mobile-shadow-soft);
+  }
+
+  body.theme-dark .settings-shell-native-scene {
+    --settings-native-surface: rgba(15, 23, 39, 0.96);
+    --settings-native-surface-muted: rgba(16, 32, 49, 0.96);
+    --settings-native-border: rgba(148, 163, 184, 0.16);
+    --settings-native-text: #edf3fc;
+    --settings-native-muted: #9cb0c8;
+    --settings-native-shadow: 0 18px 34px rgba(2, 6, 23, 0.28);
+  }
+
+  .settings-shell-native-scene .settings-sidebar-native {
+    padding: 0 0.72rem 0.45rem;
+    gap: 0.78rem;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .settings-shell-native-scene .settings-mobile-hero {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    padding: 1.12rem 1rem 1rem;
+    margin: 0 0 0.78rem;
+    border: 1px solid var(--settings-native-border);
+    border-radius: 30px;
+    background:
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 36%),
+      linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  .settings-shell-native-scene .settings-mobile-avatar {
+    width: 70px;
+    height: 70px;
+    margin-bottom: 0.65rem;
+    border: 4px solid rgba(255, 255, 255, 0.76);
+    box-shadow: 0 18px 34px rgba(37, 99, 235, 0.2);
+  }
+
+  .settings-shell-native-scene .settings-mobile-hero h3 {
+    font-size: 1.16rem;
+    letter-spacing: -0.02em;
+    color: var(--settings-native-text);
+  }
+
+  .settings-shell-native-scene .settings-mobile-hero p {
+    margin-top: 0.24rem;
+    font-size: 0.82rem;
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-nav-label {
+    margin: 0 0 0.08rem;
+    padding: 0 0.18rem;
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-nav {
+    gap: 0.56rem;
+  }
+
+  .settings-shell-native-scene .settings-nav-btn {
+    min-height: 62px;
+    padding: 0.9rem 0.96rem;
+    border-radius: 22px;
+    border: 1px solid var(--settings-native-border);
+    background: var(--settings-native-surface);
+    color: var(--settings-native-text);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  .settings-shell-native-scene .settings-nav-btn::after {
+    content: ">";
+    right: 0.95rem;
+    color: var(--settings-native-muted);
+    font-size: 0.92rem;
+  }
+
+  .settings-shell-native-scene .settings-nav-btn-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: var(--mobile-blue-soft);
+    border-color: rgba(37, 99, 235, 0.12);
+    color: var(--mobile-blue);
+  }
+
+  .settings-shell-native-scene .settings-nav-btn.is-active {
+    border-color: transparent;
+    background:
+      radial-gradient(circle at top right, rgba(255, 255, 255, 0.26), transparent 35%),
+      linear-gradient(145deg, #1d4ed8 0%, #2563eb 64%, #4f8fff 100%);
+    color: #ffffff;
+    box-shadow: var(--mobile-shadow-strong);
+    transform: translateY(-1px);
+  }
+
+  .settings-shell-native-scene .settings-nav-btn.is-active::after {
+    color: rgba(255, 255, 255, 0.82);
+  }
+
+  .settings-shell-native-scene .settings-nav-btn.is-active .settings-nav-btn-icon {
+    background: rgba(255, 255, 255, 0.16);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+  }
+
+  .settings-shell-native-scene .settings-theme-box,
+  .settings-shell-native-scene .settings-logout-btn {
+    margin-top: 0;
+    border-radius: 24px;
+    border-color: var(--settings-native-border);
+    background: var(--settings-native-surface);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  .settings-shell-native-scene .settings-theme-box {
+    padding: 0.82rem 0.84rem;
+  }
+
+  .settings-shell-native-scene .settings-theme-label {
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-logout-btn {
+    padding: 0.82rem 0.92rem;
+    background: linear-gradient(180deg, rgba(255, 245, 245, 0.96) 0%, #ffffff 100%);
+  }
+
+  .settings-shell-native-scene .settings-main-native {
+    padding: 0 0.72rem calc(0.45rem + env(safe-area-inset-bottom));
+  }
+
+  .settings-shell-native-scene .settings-mobile-backbar {
+    position: sticky;
+    top: max(0.1rem, env(safe-area-inset-top));
+    z-index: 4;
+    margin: 0 0 0.7rem;
+    padding: 0.06rem 0 0.34rem;
+    background: var(--mobile-bg);
+  }
+
+  .settings-shell-native-scene .settings-mobile-backbar .secondary-btn {
+    min-width: 104px;
+    min-height: 42px;
+    border-radius: 16px;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .settings-shell-native-scene .settings-mobile-backbar span {
+    font-size: 0.96rem;
+    color: var(--settings-native-text);
+  }
+
+  .settings-shell-native-scene .settings-section-native {
+    display: grid;
+    gap: 0.72rem;
+    padding-bottom: 0.2rem;
+    --settings-hero-accent: rgba(59, 130, 246, 0.14);
+    --settings-hero-accent-soft: rgba(20, 184, 166, 0.08);
+  }
+
+  .settings-shell-native-scene .settings-section-perfil {
+    --settings-hero-accent: rgba(59, 130, 246, 0.16);
+    --settings-hero-accent-soft: rgba(20, 184, 166, 0.1);
+  }
+
+  .settings-shell-native-scene .settings-section-seguridad {
+    --settings-hero-accent: rgba(37, 99, 235, 0.16);
+    --settings-hero-accent-soft: rgba(248, 113, 113, 0.09);
+  }
+
+  .settings-shell-native-scene .settings-section-privacidad {
+    --settings-hero-accent: rgba(244, 114, 182, 0.12);
+    --settings-hero-accent-soft: rgba(251, 191, 36, 0.1);
+  }
+
+  .settings-shell-native-scene .settings-section-notificaciones {
+    --settings-hero-accent: rgba(14, 165, 233, 0.14);
+    --settings-hero-accent-soft: rgba(96, 165, 250, 0.08);
+  }
+
+  .settings-shell-native-scene .settings-section-datos,
+  .settings-shell-native-scene .settings-section-legal {
+    --settings-hero-accent: rgba(100, 116, 139, 0.12);
+    --settings-hero-accent-soft: rgba(59, 130, 246, 0.08);
+  }
+
+  .settings-shell-native-scene .settings-section-reportes {
+    --settings-hero-accent: rgba(20, 184, 166, 0.14);
+    --settings-hero-accent-soft: rgba(37, 99, 235, 0.08);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-header,
+  .settings-shell-native-scene .settings-section-native .family-page-header {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 0;
+    padding: 1.18rem 1.04rem 1rem;
+    border: 1px solid var(--settings-native-border);
+    border-radius: 30px;
+    background:
+      radial-gradient(circle at top right, var(--settings-hero-accent), transparent 38%),
+      radial-gradient(circle at bottom left, var(--settings-hero-accent-soft), transparent 42%),
+      linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-eyebrow {
+    color: var(--mobile-blue);
+    font-size: 0.68rem;
+    letter-spacing: 0.13em;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-title {
+    font-size: clamp(1.68rem, 8vw, 2.1rem);
+    line-height: 1.02;
+    color: var(--settings-native-text);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-title em {
+    color: var(--mobile-blue);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-header .muted,
+  .settings-shell-native-scene .settings-section-native .family-page-header .muted {
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-grid {
+    display: flex;
+    gap: 0.62rem;
+    margin-bottom: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 0.08rem;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-grid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-card {
+    flex: 0 0 74%;
+    min-height: 132px;
+    border-radius: 24px;
+    border-color: var(--settings-native-border);
+    background: var(--settings-native-surface);
+    box-shadow: var(--settings-native-shadow);
+    scroll-snap-align: start;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    background: var(--mobile-blue-soft);
+    border-color: rgba(37, 99, 235, 0.12);
+    color: var(--mobile-blue);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-title,
+  .settings-shell-native-scene .settings-section-native .privacy-card h4,
+  .settings-shell-native-scene .settings-section-native .export-card h4,
+  .settings-shell-native-scene .settings-section-native .profile-page-card h4,
+  .settings-shell-native-scene .settings-section-native .security-card-heading h4 {
+    color: var(--settings-native-text);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-quick-description,
+  .settings-shell-native-scene .settings-section-native .profile-quick-action,
+  .settings-shell-native-scene .settings-section-native .card-sub,
+  .settings-shell-native-scene .settings-section-native .muted,
+  .settings-shell-native-scene .settings-section-native .export-note,
+  .settings-shell-native-scene .settings-section-native .export-footer-tip,
+  .settings-shell-native-scene .settings-section-native .lr-arrow {
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-card,
+  .settings-shell-native-scene .settings-section-native .privacy-card,
+  .settings-shell-native-scene .settings-section-native .export-card,
+  .settings-shell-native-scene .settings-section-native .security-overview-tile,
+  .settings-shell-native-scene .settings-section-native .security-faq-item,
+  .settings-shell-native-scene .settings-section-native .security-inline-block,
+  .settings-shell-native-scene .settings-section-native .security-mini-stat,
+  .settings-shell-native-scene .settings-section-native .security-step-card,
+  .settings-shell-native-scene .settings-section-native .security-session-card,
+  .settings-shell-native-scene .settings-section-native .security-audit-item,
+  .settings-shell-native-scene .settings-section-native .export-footer,
+  .settings-shell-native-scene .settings-section-native .legal-row {
+    border-radius: 24px;
+    border-color: var(--settings-native-border);
+    background: var(--settings-native-surface);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-card,
+  .settings-shell-native-scene .settings-section-native .privacy-card,
+  .settings-shell-native-scene .settings-section-native .export-card {
+    padding: 1.02rem;
+    margin-bottom: 0;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-page-card-line {
+    height: 4px;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-active-strip,
+  .settings-shell-native-scene .settings-section-native .settings-email-reminder-row,
+  .settings-shell-native-scene .settings-section-native .security-mfa-secret,
+  .settings-shell-native-scene .settings-section-native .security-mfa-qr,
+  .settings-shell-native-scene .settings-section-native .security-session-meta-item {
+    border-radius: 20px;
+    border-color: var(--settings-native-border);
+    background: var(--settings-native-surface-muted);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-active-strip {
+    margin-bottom: 0.82rem;
+    padding: 0.92rem 0.96rem;
+  }
+
+  .settings-shell-native-scene .settings-section-native .form-info-row,
+  .settings-shell-native-scene .settings-section-native .form-grid-2,
+  .settings-shell-native-scene .settings-section-native .privacy-layout,
+  .settings-shell-native-scene .settings-section-native .export-layout,
+  .settings-shell-native-scene .settings-section-native .security-grid,
+  .settings-shell-native-scene .settings-section-native .security-overview-grid {
+    gap: 0.68rem;
+  }
+
+  .settings-shell-native-scene .settings-section-native .form-info-row,
+  .settings-shell-native-scene .settings-section-native .privacy-layout,
+  .settings-shell-native-scene .settings-section-native .export-layout,
+  .settings-shell-native-scene .settings-section-native .security-grid,
+  .settings-shell-native-scene .settings-section-native .security-overview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-tile {
+    border-radius: 18px;
+    border: 1px solid var(--settings-native-border);
+    background: var(--settings-native-surface-muted);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-label,
+  .settings-shell-native-scene .settings-section-native .form-label,
+  .settings-shell-native-scene .settings-section-native .input-label,
+  .settings-shell-native-scene .settings-section-native .security-overview-kicker,
+  .settings-shell-native-scene .settings-section-native .security-inline-label {
+    color: var(--settings-native-muted);
+  }
+
+  .settings-shell-native-scene .settings-section-native .profile-value,
+  .settings-shell-native-scene .settings-section-native .lr-title,
+  .settings-shell-native-scene .settings-section-native .security-overview-tile strong,
+  .settings-shell-native-scene .settings-section-native .security-faq-item strong,
+  .settings-shell-native-scene .settings-section-native .security-inline-block strong,
+  .settings-shell-native-scene .settings-section-native .security-step-card strong,
+  .settings-shell-native-scene .settings-section-native .security-session-title,
+  .settings-shell-native-scene .settings-section-native .security-session-meta-item strong {
+    color: var(--settings-native-text);
+  }
+
+  .settings-shell-native-scene .settings-section-native .form-input,
+  .settings-shell-native-scene .settings-section-native .input-field,
+  .settings-shell-native-scene .settings-section-native .select-field,
+  .settings-shell-native-scene .settings-section-native .textarea-field,
+  .settings-shell-native-scene .settings-section-native .profile-selector,
+  .settings-shell-native-scene .settings-section-native .secondary-btn,
+  .settings-shell-native-scene .settings-section-native .primary-btn,
+  .settings-shell-native-scene .settings-section-native .btn-save,
+  .settings-shell-native-scene .settings-section-native .btn-sm {
+    border-radius: 18px;
+  }
+
+  .settings-shell-native-scene .settings-section-native .legal-list {
+    display: grid;
+    gap: 0.62rem;
+  }
+
+  .settings-shell-native-scene .settings-section-native .legal-row {
+    padding: 0.92rem 0.94rem;
+    border: 1px solid var(--settings-native-border);
+  }
+
+  .settings-shell-native-scene .settings-section-native .legal-row:hover {
+    padding-left: 0.94rem;
+    transform: translateY(-1px);
+  }
+
+  .settings-shell-native-scene .settings-section-native .export-footer {
+    padding: 0.95rem;
+    margin-top: 0;
+    align-items: stretch;
+  }
+
+  .settings-shell-native-scene .settings-section-native .privacy-card-header,
+  .settings-shell-native-scene .settings-section-native .security-card-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .settings-shell-native-scene .settings-section-native .privacy-actions,
+  .settings-shell-native-scene .settings-section-native .export-actions,
+  .settings-shell-native-scene .settings-section-native .privacy-form-actions {
+    width: 100%;
+  }
+
+  .settings-shell-native-scene .settings-section-native .privacy-actions > *,
+  .settings-shell-native-scene .settings-section-native .export-actions > *,
+  .settings-shell-native-scene .settings-section-native .privacy-form-actions > * {
+    width: 100%;
+  }
+
+  .settings-shell-native-scene .settings-section-native .privacy-form-grid {
+    grid-template-columns: 1fr;
+    gap: 0.65rem;
+  }
+
+  .settings-shell-native-scene .settings-section-native .security-session-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .settings-shell-native-scene .settings-section-native .security-session-meta {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .settings-shell-native-scene .settings-section-native .security-audit-date {
+    color: var(--settings-native-muted);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-mobile-hero,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-page-header,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .family-page-header {
+    background:
+      radial-gradient(circle at top right, var(--settings-hero-accent), transparent 38%),
+      radial-gradient(circle at bottom left, var(--settings-hero-accent-soft), transparent 42%),
+      linear-gradient(180deg, rgba(11, 18, 32, 0.98) 0%, rgba(15, 23, 39, 0.98) 100%);
+    border-color: var(--settings-native-border);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-mobile-avatar {
+    border-color: rgba(15, 23, 39, 0.92);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-nav-btn {
+    background: var(--settings-native-surface);
+    border-color: var(--settings-native-border);
+    color: var(--settings-native-text);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-theme-box,
+  body.theme-dark .settings-shell-native-scene .settings-logout-btn,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-page-card,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .privacy-card,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .export-card,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-overview-tile,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-faq-item,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-inline-block,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-mini-stat,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-step-card,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-session-card,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-audit-item,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .export-footer,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .legal-row,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-quick-card {
+    background: var(--settings-native-surface);
+    border-color: var(--settings-native-border);
+    box-shadow: var(--settings-native-shadow);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-active-strip,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .settings-email-reminder-row,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-mfa-secret,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-mfa-qr,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-session-meta-item,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-tile {
+    background: var(--settings-native-surface-muted);
+    border-color: var(--settings-native-border);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-page-title,
+  body.theme-dark .settings-shell-native-scene .settings-mobile-backbar span,
+  body.theme-dark .settings-shell-native-scene .settings-mobile-hero h3,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-quick-title,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .privacy-card h4,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .export-card h4,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-page-card h4,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .security-card-heading h4,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .lr-title {
+    color: var(--settings-native-text);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-page-header .muted,
+  body.theme-dark .settings-shell-native-scene .settings-mobile-hero p,
+  body.theme-dark .settings-shell-native-scene .settings-theme-label,
+  body.theme-dark .settings-shell-native-scene .settings-nav-label,
+  body.theme-dark .settings-shell-native-scene .settings-nav-btn::after,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .muted,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .card-sub,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .export-note,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .export-footer-tip,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .lr-arrow {
+    color: var(--settings-native-muted);
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-nav-btn-icon,
+  body.theme-dark .settings-shell-native-scene .settings-section-native .profile-quick-icon {
+    background: rgba(37, 99, 235, 0.16);
+    border-color: rgba(96, 165, 250, 0.22);
+    color: #8fb9ff;
+  }
+
+  body.theme-dark .settings-shell-native-scene .settings-nav-btn.is-active {
+    background:
+      radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 35%),
+      linear-gradient(145deg, #0b46c2 0%, #1d4ed8 64%, #2563eb 100%);
+    box-shadow: var(--mobile-shadow-strong);
+  }
+
+body.theme-dark .settings-shell-native-scene .settings-logout-btn {
+  background: linear-gradient(180deg, rgba(127, 29, 29, 0.3) 0%, rgba(15, 23, 39, 0.96) 100%);
+  color: #fecaca;
+}
+}
+
+.settings-shell-native-scene .settings-section-familia {
+  --family-native-surface: var(--settings-native-surface, linear-gradient(180deg, #ffffff 0%, #f8fbff 100%));
+  --family-native-surface-muted: var(--settings-native-surface-muted, rgba(248, 250, 252, 0.96));
+  --family-native-border: var(--settings-native-border, rgba(203, 213, 225, 0.9));
+  --family-native-text: var(--settings-native-text, #0f172a);
+  --family-native-muted: var(--settings-native-muted, #64748b);
+  --family-native-shadow: var(--settings-native-shadow, 0 18px 40px rgba(15, 23, 42, 0.1));
+  --settings-hero-accent: rgba(20, 184, 166, 0.14);
+  --settings-hero-accent-soft: rgba(37, 99, 235, 0.1);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone {
+  gap: 0.9rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-page-header {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.8rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-page-header .card-title {
+  font-size: clamp(1.66rem, 8vw, 2.08rem);
+  line-height: 1.02;
+  color: var(--family-native-text);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-page-plan-chip {
+  border-color: rgba(37, 99, 235, 0.16);
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--mobile-blue, #2563eb);
+  padding: 0.36rem 0.72rem;
+  border-radius: 999px;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.9rem;
+  border-radius: 30px;
+  padding: 1.05rem 1rem;
+  box-shadow: 0 20px 42px rgba(37, 99, 235, 0.16);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner-copy {
+  align-items: flex-start;
+  gap: 0.78rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 16px;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner-title {
+  font-size: 1rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner-subtitle {
+  font-size: 0.82rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-banner-actions {
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-avatar-cluster {
+  min-width: 0;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-klinip-upgrade {
+  min-height: 40px;
+  padding-inline: 1rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-grid {
+  display: flex;
+  gap: 0.78rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 0.08rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-grid::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-card {
+  flex: 0 0 min(84vw, 320px);
+  min-height: 100%;
+  border-radius: 26px;
+  border-color: var(--family-native-border);
+  background: var(--family-native-surface);
+  box-shadow: var(--family-native-shadow);
+  scroll-snap-align: start;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-card.is-active {
+  border-color: rgba(37, 99, 235, 0.3);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.16), 0 24px 44px rgba(37, 99, 235, 0.12);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-card-collaborator,
+.settings-shell-native-scene .settings-section-familia .family-member-card-add,
+.settings-shell-native-scene .settings-section-familia .family-create-card,
+.settings-shell-native-scene .settings-section-familia .family-collab-card,
+.settings-shell-native-scene .settings-section-familia .family-profile-switcher-card {
+  border-color: var(--family-native-border);
+  background: var(--family-native-surface);
+  box-shadow: var(--family-native-shadow);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-head,
+.settings-shell-native-scene .settings-section-familia .family-card-head {
+  gap: 0.78rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-name,
+.settings-shell-native-scene .settings-section-familia .family-card-kicker,
+.settings-shell-native-scene .settings-section-familia .family-role-name,
+.settings-shell-native-scene .settings-section-familia .family-report-highlight-name,
+.settings-shell-native-scene .settings-section-familia .family-smart-alert-title,
+.settings-shell-native-scene .settings-section-familia .family-name {
+  color: var(--family-native-text);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-meta,
+.settings-shell-native-scene .settings-section-familia .family-inline-muted,
+.settings-shell-native-scene .settings-section-familia .family-note-purpose,
+.settings-shell-native-scene .settings-section-familia .family-role-meta,
+.settings-shell-native-scene .settings-section-familia .family-smart-alert-body,
+.settings-shell-native-scene .settings-section-familia .family-smart-alert-tip,
+.settings-shell-native-scene .settings-section-familia .family-timeline-meta,
+.settings-shell-native-scene .settings-section-familia .family-profile-row-meta,
+.settings-shell-native-scene .settings-section-familia .family-member-add-sub,
+.settings-shell-native-scene .settings-section-familia .muted {
+  color: var(--family-native-muted);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-details,
+.settings-shell-native-scene .settings-section-familia .family-member-collab-details,
+.settings-shell-native-scene .settings-section-familia .family-roles-help,
+.settings-shell-native-scene .settings-section-familia .family-role-row,
+.settings-shell-native-scene .settings-section-familia .family-inv-row,
+.settings-shell-native-scene .settings-section-familia .family-note-item,
+.settings-shell-native-scene .settings-section-familia .family-timeline-item,
+.settings-shell-native-scene .settings-section-familia .family-smart-alert,
+.settings-shell-native-scene .settings-section-familia .family-report-kpi,
+.settings-shell-native-scene .settings-section-familia .family-report-highlight,
+.settings-shell-native-scene .settings-section-familia .family-automation-row,
+.settings-shell-native-scene .settings-section-familia .family-item {
+  border: 1px solid var(--family-native-border);
+  background: var(--family-native-surface-muted);
+  box-shadow: none;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-details,
+.settings-shell-native-scene .settings-section-familia .family-member-collab-details,
+.settings-shell-native-scene .settings-section-familia .family-roles-help,
+.settings-shell-native-scene .settings-section-familia .family-note-item,
+.settings-shell-native-scene .settings-section-familia .family-timeline-item,
+.settings-shell-native-scene .settings-section-familia .family-smart-alert,
+.settings-shell-native-scene .settings-section-familia .family-report-highlight {
+  border-radius: 20px;
+  padding: 0.88rem 0.94rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-role-row,
+.settings-shell-native-scene .settings-section-familia .family-inv-row,
+.settings-shell-native-scene .settings-section-familia .family-automation-row,
+.settings-shell-native-scene .settings-section-familia .family-item {
+  border-radius: 20px;
+  padding: 0.88rem 0.92rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-btn,
+.settings-shell-native-scene .settings-section-familia .family-link-btn,
+.settings-shell-native-scene .settings-section-familia .secondary-btn,
+.settings-shell-native-scene .settings-section-familia .select-field,
+.settings-shell-native-scene .settings-section-familia .input-field,
+.settings-shell-native-scene .settings-section-familia .textarea-field {
+  border-radius: 18px;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-link-btn {
+  min-height: 38px;
+  padding: 0.56rem 0.86rem;
+  border: 1px solid var(--family-native-border);
+  background: var(--family-native-surface-muted);
+  color: var(--family-native-text);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-lower-layout {
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-lower-left,
+.settings-shell-native-scene .settings-section-familia .family-lower-right,
+.settings-shell-native-scene .settings-section-familia .family-secondary-stack {
+  gap: 0.9rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-collab-card,
+.settings-shell-native-scene .settings-section-familia .family-create-card {
+  border-radius: 28px;
+  padding: 1rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-card-head {
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 0.88rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-roles-list,
+.settings-shell-native-scene .settings-section-familia .family-invitations-list,
+.settings-shell-native-scene .settings-section-familia .family-notes-history,
+.settings-shell-native-scene .settings-section-familia .family-timeline,
+.settings-shell-native-scene .settings-section-familia .family-smart-alerts,
+.settings-shell-native-scene .settings-section-familia .family-automation-list,
+.settings-shell-native-scene .settings-section-familia .family-list {
+  gap: 0.72rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-notes-textarea {
+  min-height: 110px;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-full-btn,
+.settings-shell-native-scene .settings-section-familia .family-automation-actions > *,
+.settings-shell-native-scene .settings-section-familia .family-profile-row .secondary-btn {
+  width: 100%;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-report-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-report-kpi {
+  border-radius: 20px;
+  padding: 0.84rem 0.88rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-report-kpi strong,
+.settings-shell-native-scene .settings-section-familia .family-report-danger,
+.settings-shell-native-scene .settings-section-familia .family-timeline-text {
+  color: var(--family-native-text);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-report-kpi span,
+.settings-shell-native-scene .settings-section-familia .family-timeline-note-preview,
+.settings-shell-native-scene .settings-section-familia .family-report-inline-stats p,
+.settings-shell-native-scene .settings-section-familia .family-report-progress-meta span {
+  color: var(--family-native-muted);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-automation-actions,
+.settings-shell-native-scene .settings-section-familia .form-row {
+  grid-template-columns: 1fr;
+  gap: 0.72rem;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-item,
+.settings-shell-native-scene .settings-section-familia .family-profile-row {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-status-pill {
+  box-shadow: none;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-item > div,
+.settings-shell-native-scene .settings-section-familia .family-profile-row > div {
+  width: 100%;
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-btn-outline,
+.settings-shell-native-scene .settings-section-familia .secondary-btn {
+  border-color: var(--family-native-border);
+  background: var(--family-native-surface-muted);
+  color: var(--family-native-text);
+}
+
+.settings-shell-native-scene .settings-section-familia .family-member-btn-solid {
+  background: linear-gradient(135deg, #0ea5e9, #2563eb);
+  color: #ffffff;
+}
+
+body.theme-dark .settings-shell-native-scene .settings-section-familia {
+  --family-native-surface: linear-gradient(180deg, rgba(11, 18, 32, 0.98) 0%, rgba(15, 23, 39, 0.98) 100%);
+  --family-native-surface-muted: rgba(15, 23, 39, 0.92);
+  --family-native-border: rgba(71, 85, 105, 0.74);
+  --family-native-text: #e5eefc;
+  --family-native-muted: #94a3b8;
+  --family-native-shadow: 0 20px 42px rgba(2, 6, 23, 0.42);
+}
+
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-page-plan-chip,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-link-btn,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-member-btn-outline,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .secondary-btn,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .select-field,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .input-field,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .textarea-field {
+  border-color: var(--family-native-border);
+  background: var(--family-native-surface-muted);
+  color: var(--family-native-text);
+}
+
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-card-kicker,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-blue,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-teal,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-violet,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-red,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-green,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-member-name,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-role-name,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-highlight-name,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-title,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-name,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-kpi strong,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-timeline-text,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-danger {
+  color: var(--family-native-text);
+}
+
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-member-meta,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-inline-muted,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-note-purpose,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-role-meta,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-body,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-tip,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-timeline-meta,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-timeline-note-preview,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-kpi span,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-inline-stats p,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-progress-meta span,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
+  color: var(--family-native-muted);
 }
 

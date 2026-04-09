@@ -374,8 +374,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       permissionSummary:
         row.role === "admin"
           ? "Puede ver, editar y gestionar colaboradores."
-          : row.role === "caregiver"
-          ? "Puede ver y editar datos clinicos."
+        : row.role === "caregiver"
+          ? "Puede ver y editar datos clínicos."
           : "Acceso de solo lectura.",
       sharedProfileName: activeHealthProfile?.full_name || "Perfil activo",
     };
@@ -1200,15 +1200,45 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     }
   };
 
+  const settingsShellClassName = [
+    "settings-shell",
+    isMobileSettings ? "settings-shell-native-scene native-mobile-scene" : "",
+    isMobileSettings && mobileSectionOpen ? "is-mobile-section-open" : "",
+    isFamilyStandalone ? "is-family-standalone" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const settingsSidebarClassName = [
+    "settings-sidebar",
+    isMobileSettings ? "settings-sidebar-native native-surface native-surface-hero" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const settingsMainClassName = [
+    "settings-main",
+    isFamilyStandalone ? "is-family-standalone-main" : "",
+    isMobileSettings ? "settings-main-native" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const getSettingsSectionClassName = (sectionId, extraClassName = "") =>
+    [
+      "settings-section",
+      `settings-section-${sectionId}`,
+      isMobileSettings ? "settings-section-native native-section native-section-delay-2" : "",
+      extraClassName,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
   return (
     <>
-      <div
-        className={`settings-shell ${
-          isMobileSettings && mobileSectionOpen ? "is-mobile-section-open" : ""
-        } ${isFamilyStandalone ? "is-family-standalone" : ""}`}
-      >
+      <div className={settingsShellClassName}>
         {!isFamilyStandalone && (
-        <aside className="settings-sidebar">
+        <aside className={settingsSidebarClassName}>
           <div className="settings-profile-card">
             <div className="settings-profile-avatar">{profileInitial}</div>
             <div className="settings-profile-name">{profileDisplayName}</div>
@@ -1293,9 +1323,9 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         </aside>
         )}
 
-        <div className={`settings-main ${isFamilyStandalone ? "is-family-standalone-main" : ""}`}>
+        <div className={settingsMainClassName}>
       {isMobileSettings && mobileSectionOpen && !isFamilyStandalone && (
-        <div className="settings-mobile-backbar">
+        <div className="settings-mobile-backbar native-section native-section-delay-1">
           <button
             className="secondary-btn"
             type="button"
@@ -1308,7 +1338,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "perfil" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("perfil")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Configuración personal</p>
@@ -1510,12 +1540,12 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "familia" && (
-      <div className={`settings-section ${isFamilyStandalone ? "family-section-standalone" : ""}`}>
+      <div className={getSettingsSectionClassName("familia", isFamilyStandalone ? "family-section-standalone" : "")}>
         {isFamilyStandalone && (
           <div className="family-page-header">
             <div>
               <h2 className="card-title">Mi familia</h2>
-              <p className="muted">Gestiona perfiles, accesos y colaboracion de forma centralizada.</p>
+              <p className="muted">Gestiona perfiles, accesos y colaboración de forma centralizada.</p>
             </div>
             <div className="family-page-plan-chip">
               {planInfo?.plan_type || "basico"}
@@ -1523,12 +1553,15 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
         )}
         {!isFamilyStandalone && (
-          <>
-            <h2 className="card-title">Mi familia</h2>
-            <p className="muted" style={{ marginBottom: "0.75rem" }}>
-              Gestiona perfiles de salud vinculados según tu plan actual.
-            </p>
-          </>
+          <div className="family-page-header">
+            <div>
+              <h2 className="card-title">Mi familia</h2>
+              <p className="muted">Gestiona perfiles de salud vinculados según tu plan actual.</p>
+            </div>
+            <div className="family-page-plan-chip">
+              {planInfo?.plan_type || "basico"}
+            </div>
+          </div>
         )}
 
         <div className="family-klinip-banner">
@@ -1545,7 +1578,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                 Plan {planInfo?.plan_type || "familiar"} - {planCurrentProfiles} perfil{planCurrentProfiles === 1 ? "" : "es"} activo{planCurrentProfiles === 1 ? "" : "s"} de {planMaxProfiles}
               </p>
               <p className="family-klinip-banner-subtitle">
-                Gestion coordinada para tu grupo de salud. Hay {linkedMembersCount} miembro{linkedMembersCount === 1 ? "" : "s"} vinculado{linkedMembersCount === 1 ? "" : "s"} y quedan {familySlotsRemaining} espacio{familySlotsRemaining === 1 ? "" : "s"} de perfil disponible{familySlotsRemaining === 1 ? "" : "s"}.
+                Gestión coordinada para tu grupo de salud. Hay {linkedMembersCount} miembro{linkedMembersCount === 1 ? "" : "s"} vinculado{linkedMembersCount === 1 ? "" : "s"} y quedan {familySlotsRemaining} espacio{familySlotsRemaining === 1 ? "" : "s"} de perfil disponible{familySlotsRemaining === 1 ? "" : "s"}.
               </p>
             </div>
           </div>
@@ -1752,7 +1785,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                         {row.user_name || row.user_email || `Usuario #${row.user_id}`}
                       </p>
                       <p className="family-role-meta">
-                        {row.user_email || "Sin correo"} · {row.relationship_type || "Sin relacion"}
+                        {row.user_email || "Sin correo"} · {row.relationship_type || "Sin relación"}
                       </p>
                     </div>
                     <div className="family-role-actions">
@@ -2128,7 +2161,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   ) : null}
                 </>
               ) : (
-                <p className="muted">Sin datos de reporte aun.</p>
+                <p className="muted">Sin datos de reporte aún.</p>
               )}
             </section>
 
@@ -2248,7 +2281,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                     onChange={(e) =>
                       setNewFamilyProfile((prev) => ({ ...prev, full_name: e.target.value }))
                     }
-                    placeholder="Ej: Maria Gonzalez"
+                    placeholder="Ej: María González"
                   />
                 </div>
                 <div className="input-group">
@@ -2263,7 +2296,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                   />
                 </div>
                 <div className="input-group">
-                  <label className="input-label">Sexo/Genero (opcional)</label>
+                  <label className="input-label">Sexo/Género (opcional)</label>
                   <input
                     className="input-field"
                     value={newFamilyProfile.gender}
@@ -2280,7 +2313,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
             </div>
           ) : (
             <p className="muted">
-              Alcanzaste el limite de perfiles de tu plan. Para agregar mas, sube de plan.
+              Alcanzaste el límite de perfiles de tu plan. Para agregar más, sube de plan.
             </p>
           )}
 
@@ -2328,7 +2361,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "datos" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("datos")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Portabilidad</p>
@@ -2383,7 +2416,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "reportes" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("reportes")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Copiloto IA</p>
@@ -2427,7 +2460,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "notificaciones" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("notificaciones")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Alertas</p>
@@ -2447,7 +2480,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "legal" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("legal")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Documentación</p>
@@ -2500,7 +2533,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "seguridad" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("seguridad")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Cuenta</p>
@@ -2844,7 +2877,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       )}
 
       {activeSection === "privacidad" && (
-      <div className="settings-section">
+      <div className={getSettingsSectionClassName("privacidad")}>
         <div className="profile-page-header">
           <div>
             <p className="profile-page-eyebrow"><span />Seguridad</p>
@@ -2963,19 +2996,19 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           <div className="modal-card" role="dialog" aria-modal="true">
             <h3>Eliminar mi cuenta y todos mis datos</h3>
             <p className="muted">
-              Esta accion es permanente. Se eliminaran tus datos de citas,
+              Esta acción es permanente. Se eliminarán tus datos de citas,
               medicamentos y documentos. No podrás deshacer este cambio.
             </p>
             <p className="muted">
-              ?Estas seguro de que deseas eliminar tu cuenta y todos tus datos de Klinip?
-              Esta accion es irreversible.
+              ¿Estás seguro de que deseas eliminar tu cuenta y todos tus datos de Klinip?
+              Esta acción es irreversible.
             </p>
             <div className="modal-actions">
               <button className="secondary-btn" type="button" onClick={() => setShowDeleteConfirm(false)}>
                 Cancelar
               </button>
               <button className="primary-btn" type="button" onClick={handleDeleteAccount}>
-                Si, eliminar definitivamente
+                Sí, eliminar definitivamente
               </button>
             </div>
           </div>
