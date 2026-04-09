@@ -987,17 +987,134 @@ export default function Dashboard({
     const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
     const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
 
+    const mobileProfileMenu = profileMenuOpen ? (
+      <div className="topbar-user-menu" role="menu">
+        <div className="topbar-user-menu-head">
+          <span className="topbar-user-menu-avatar">{userInitial}</span>
+          <div>
+            <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
+            <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
+          </div>
+        </div>
+        <div className="topbar-user-menu-profile-card">
+          <div className="topbar-user-menu-profile-head">
+            <span className="topbar-user-menu-profile-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="8" r="3.2" />
+                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <span className="topbar-user-menu-plan">{planLabel}</span>
+          </div>
+          <p className="topbar-user-menu-profile-name">
+            {activeMenuProfile
+              ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
+              : user?.name || "Perfil personal"}
+          </p>
+          {canSwitchProfiles ? (
+            <select
+              className="topbar-user-menu-profile-select"
+              value={activeProfileId || ""}
+              onChange={(event) => onSwitchProfile?.(event.target.value)}
+              disabled={!!switchingProfile}
+            >
+              {menuHealthProfiles.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.full_name}
+                  {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+        <div className="topbar-user-menu-actions">
+          <button
+            type="button"
+            className="topbar-user-menu-item"
+            role="menuitem"
+            onClick={() => {
+              setProfileMenuOpen(false);
+              navigate("/settings");
+            }}
+          >
+            <span className="topbar-user-menu-item-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="8" r="3.2" />
+                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </span>
+            <span>Mi perfil</span>
+          </button>
+          <button
+            type="button"
+            className="topbar-user-menu-item"
+            role="menuitem"
+          >
+            <span className="topbar-user-menu-item-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+              </svg>
+            </span>
+            <span className="topbar-user-theme-text">
+              {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+            </span>
+            <label className="switch topbar-user-theme-switch">
+              <input
+                type="checkbox"
+                checked={theme === "dark"}
+                onChange={() => onToggleTheme?.()}
+              />
+              <span className="switch-slider" />
+            </label>
+          </button>
+        </div>
+        <div className="topbar-user-menu-divider" />
+        <button
+          type="button"
+          className="topbar-user-menu-item is-danger"
+          role="menuitem"
+          onClick={() => {
+            setProfileMenuOpen(false);
+            onLogout?.();
+          }}
+        >
+          <span className="topbar-user-menu-item-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="M16 17l5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+          </span>
+          <span>Cerrar sesion</span>
+        </button>
+      </div>
+    ) : null;
+
     return (
       <div className="mobile-dashboard native-mobile-scene">
         {/* ── HERO ── */}
         <div className="mobile-hero native-surface native-surface-hero">
           <div className="mobile-hero-topbar">
             <div className="mobile-hero-user">
-              <div className="mobile-hero-avatar" onClick={() => navigate("/settings")}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                  <circle cx="12" cy="8" r="4"/>
-                  <path d="M6 20a6 6 0 0 1 12 0"/>
-                </svg>
+              <div className="topbar-user-wrap mobile-hero-avatar-wrap" ref={profileMenuRef}>
+                <button
+                  type="button"
+                  className="mobile-hero-avatar"
+                  aria-label="Abrir menu de usuario"
+                  aria-expanded={profileMenuOpen}
+                  aria-haspopup="menu"
+                  onClick={() => {
+                    setNotificationsOpen(false);
+                    setProfileMenuOpen((prev) => !prev);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="12" cy="8" r="4"/>
+                    <path d="M6 20a6 6 0 0 1 12 0"/>
+                  </svg>
+                </button>
+                {mobileProfileMenu}
               </div>
               <div className="mobile-hero-user-info">
                 <p className="mobile-hero-greeting-sub">
@@ -1075,7 +1192,7 @@ export default function Dashboard({
                   </div>
                 )}
               </div>
-              <div className="topbar-user-wrap mobile-hero-user-wrap" ref={profileMenuRef}>
+              <div className="topbar-user-wrap mobile-hero-user-wrap" aria-hidden="true" style={{ display: "none" }}>
                 <button
                   type="button"
                   className="mobile-hero-profile-chip"

@@ -32131,6 +32131,9 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     color: #2563eb;
     cursor: pointer;
     flex-shrink: 0;
+    padding: 0;
+    font: inherit;
+    appearance: none;
   }
 
   .mobile-hero-avatar svg {
@@ -32173,6 +32176,13 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
     display: flex;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .mobile-hero-avatar-wrap .topbar-user-menu {
+    left: 0;
+    right: auto;
+    top: calc(100% + 0.55rem);
+    z-index: 5600;
   }
 
   .mobile-hero-notifications {
@@ -33007,10 +33017,16 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     box-shadow: 0 8px 18px rgba(15, 35, 70, 0.06);
   }
 
+  .mobile-hero-avatar-wrap .topbar-user-menu,
   .mobile-hero-user-wrap .topbar-user-menu {
     right: 0;
     top: calc(100% + 0.55rem);
     z-index: 5600;
+  }
+
+  .mobile-hero-avatar-wrap .topbar-user-menu {
+    left: 0;
+    right: auto;
   }
 
   .mobile-hero-profile-name {
@@ -33515,6 +33531,7 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     box-shadow: 0 12px 24px rgba(2, 6, 23, 0.22);
   }
 
+  body.theme-dark .mobile-hero-avatar-wrap .topbar-user-menu,
   body.theme-dark .mobile-hero-user-wrap .topbar-user-menu {
     background: rgba(15, 23, 39, 0.98);
   }
