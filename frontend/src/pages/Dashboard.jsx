@@ -1259,6 +1259,10 @@ export default function Dashboard({
   }, [isMobile]);
 
   if (isMobile) {
+    const isCompactLandscape = Boolean(
+      window.matchMedia?.("(pointer: coarse) and (orientation: landscape) and (max-height: 600px)").matches
+    );
+    const quickSlideBasis = isCompactLandscape ? "46%" : "78%";
     const greetingIntro =
       new Date().getHours() < 12
         ? "Buenos días"
@@ -1696,6 +1700,16 @@ export default function Dashboard({
               ref={quickCarouselRef}
               className="mobile-quick-carousel"
               onScroll={(event) => syncQuickCarouselIndex(event.currentTarget)}
+              style={{
+                display: "flex",
+                flexWrap: "nowrap",
+                alignItems: "stretch",
+                overflowX: "auto",
+                overflowY: "hidden",
+                gap: "0.55rem",
+                scrollSnapType: "x mandatory",
+                WebkitOverflowScrolling: "touch",
+              }}
             >
               {mobileQuickActions.map((item) => (
                 <button
@@ -1703,6 +1717,10 @@ export default function Dashboard({
                   type="button"
                   className={`mobile-quick-item mobile-quick-slide tone-${item.tone}${item.featured ? " is-featured is-glow" : ""}${item.spotlight ? " is-spotlight" : ""}`}
                   onClick={item.onClick}
+                  style={{
+                    flex: `0 0 ${quickSlideBasis}`,
+                    maxWidth: quickSlideBasis,
+                  }}
                 >
                   {(item.featured || item.spotlight) ? (
                     <span className={`mobile-card-orb${item.spotlight ? " is-secondary" : ""}`} aria-hidden />
