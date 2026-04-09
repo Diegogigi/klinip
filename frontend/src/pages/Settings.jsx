@@ -2,6 +2,7 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import StepUpModal from "../components/StepUpModal";
+import { isHandheldViewport } from "../utils/mobileViewport";
 import {
   updateMe,
   getAppointments,
@@ -43,6 +44,7 @@ import {
   getAuditLogs,
 } from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
+import { ensureArray } from "../utils/arrays";
 
 const ACTION_TYPE_LABELS = {
   invitation_accepted: "Invitación aceptada",
@@ -163,7 +165,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
   const [stepUpPending, setStepUpPending] = useState(null); // action name string
   const [auditLoading, setAuditLoading] = useState(false);
   const [isMobileSettings, setIsMobileSettings] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth <= 640 : false
+    typeof window !== "undefined" ? isHandheldViewport(640) : false
   );
   const [mobileSectionOpen, setMobileSectionOpen] = useState(false);
   const [planInfo, setPlanInfo] = useState(null);
@@ -249,7 +251,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
   const normalizeCaregivers = (items) => {
     const seen = new Set();
-    return (Array.isArray(items) ? items : []).filter((row) => {
+    return ensureArray(items).filter((row) => {
       const isSelfRow =
         Number(row?.user_id || 0) === Number(profile?.id || 0) ||
         String(row?.relationship_type || "").toLowerCase() === "self";
@@ -423,7 +425,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
 
   useEffect(() => {
     const onResize = () => {
-      const isMobile = window.innerWidth <= 640;
+      const isMobile = isHandheldViewport(640);
       setIsMobileSettings(isMobile);
       if (!isMobile) {
         setMobileSectionOpen(false);
@@ -458,7 +460,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         ]);
         if (!mounted) return;
         setPlanInfo(plan || null);
-        setFamilyProfiles(Array.isArray(profiles) ? profiles : []);
+        setFamilyProfiles(ensureArray(profiles));
         setActiveFamilyProfileId(active?.id || null);
       } catch (err) {
         if (!mounted) return;
@@ -485,11 +487,11 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           getAiFamilyContext(30).catch(() => null),
           getMyPendingProfileInvitations().catch(() => []),
         ]);
-        if (mounted) setFamilyPanelCards(Array.isArray(cards) ? cards : []);
-        if (mounted) setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+        if (mounted) setFamilyPanelCards(ensureArray(cards));
+        if (mounted) setFamilyAlerts(ensureArray(alerts));
         if (mounted) setFamilyReport(report || null);
         if (mounted) setFamilyAiContext(aiContext || null);
-        if (mounted) setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
+        if (mounted) setMyPendingInvitations(ensureArray(pendingForMe));
       } catch (err) {
         if (mounted) setFamilyPanelCards([]);
         if (mounted) setFamilyAlerts([]);
@@ -519,10 +521,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         ]);
         if (!mounted) return;
         setCaregivers(normalizeCaregivers(careList));
-        setInvitations(Array.isArray(invList) ? invList : []);
-        setActivityLog(Array.isArray(actList) ? actList : []);
+        setInvitations(ensureArray(invList));
+        setActivityLog(ensureArray(actList));
         if (autoCfg) setAutomationSettings(autoCfg);
-        setProfileNotes(Array.isArray(notesList) ? notesList : []);
+        setProfileNotes(ensureArray(notesList));
       } catch (err) {
         if (!mounted) return;
         setCaregivers([]);
@@ -867,7 +869,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setSessionsLoading(true);
     try {
       const data = await getSessions();
-      setSessions(Array.isArray(data) ? data : []);
+      setSessions(ensureArray(data));
     } catch {} finally {
       setSessionsLoading(false);
     }
@@ -899,7 +901,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
     setAuditLoading(true);
     try {
       const data = await getAuditLogs({ limit: 30 });
-      setAuditLogs(Array.isArray(data) ? data : []);
+      setAuditLogs(ensureArray(data));
     } catch {} finally {
       setAuditLoading(false);
     }
@@ -957,7 +959,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       const plan = await getMyPlan();
       const cards = await getFamilyPanel().catch(() => []);
       setPlanInfo(plan || null);
-      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
+      setFamilyPanelCards(ensureArray(cards));
       setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -1001,8 +1003,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
       setCaregivers(normalizeCaregivers(careList));
-      setInvitations(Array.isArray(invList) ? invList : []);
-      setActivityLog(Array.isArray(actList) ? actList : []);
+      setInvitations(ensureArray(invList));
+      setActivityLog(ensureArray(actList));
       setInviteForm({ email: "", role: "viewer", relationship_type: "" });
       setFamilyStatus("Invitacion/provision de acceso creada correctamente");
     } catch (err) {
@@ -1024,10 +1026,10 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getFamilyPanel().catch(() => []),
         getMyPendingProfileInvitations().catch(() => []),
       ]);
-      setFamilyProfiles(Array.isArray(profiles) ? profiles : []);
+      setFamilyProfiles(ensureArray(profiles));
       setActiveFamilyProfileId(active?.id || activeFamilyProfileId);
-      setFamilyPanelCards(Array.isArray(cards) ? cards : []);
-      setMyPendingInvitations(Array.isArray(pendingForMe) ? pendingForMe : []);
+      setFamilyPanelCards(ensureArray(cards));
+      setMyPendingInvitations(ensureArray(pendingForMe));
       setFamilyStatus("Invitacion aceptada correctamente");
       setActiveSection("familia");
       navigate("/family");
@@ -1066,7 +1068,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
       setCaregivers(normalizeCaregivers(careList));
-      setActivityLog(Array.isArray(actList) ? actList : []);
+      setActivityLog(ensureArray(actList));
       setFamilyStatus("Rol actualizado");
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -1085,7 +1087,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
       setCaregivers(normalizeCaregivers(careList));
-      setActivityLog(Array.isArray(actList) ? actList : []);
+      setActivityLog(ensureArray(actList));
       setFamilyStatus("Colaborador removido");
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -1102,8 +1104,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getProfileInvitations(activeFamilyProfileId).catch(() => []),
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
-      setInvitations(Array.isArray(invList) ? invList : []);
-      setActivityLog(Array.isArray(actList) ? actList : []);
+      setInvitations(ensureArray(invList));
+      setActivityLog(ensureArray(actList));
       setFamilyStatus("Invitacion revocada");
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -1124,7 +1126,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setAutomationSettings(updated || automationSettings);
       setAutomationStatus("Automatizaciones actualizadas");
       const alerts = await getFamilyAlerts().catch(() => []);
-      setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+      setFamilyAlerts(ensureArray(alerts));
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setAutomationStatus(detail || "No se pudo actualizar automatizaciones");
@@ -1145,7 +1147,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getFamilyReportSummary(30).catch(() => null),
         getAiFamilyContext(30).catch(() => null),
       ]);
-      setFamilyAlerts(Array.isArray(alerts) ? alerts : []);
+      setFamilyAlerts(ensureArray(alerts));
       setFamilyReport(report || null);
       setFamilyAiContext(aiContext || null);
     } catch (err) {
@@ -1168,8 +1170,8 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
         getProfileNotes(activeFamilyProfileId).catch(() => []),
         getHealthProfileActivity(activeFamilyProfileId),
       ]);
-      setProfileNotes(Array.isArray(notesList) ? notesList : []);
-      setActivityLog(Array.isArray(actList) ? actList : []);
+      setProfileNotes(ensureArray(notesList));
+      setActivityLog(ensureArray(actList));
       setNewProfileNote("");
       setFamilyStatus("Nota colaborativa guardada");
     } catch (err) {

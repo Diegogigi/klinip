@@ -21,7 +21,7 @@
 }
 
 /* ── 1. FONDO GENERAL EN MOBILE ── */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .main-area {
     background: #f1f5f9 !important;
   }
@@ -546,7 +546,7 @@
 }
 
 /* ── MOBILE: Ocultar tabla, mostrar lista cards siempre ── */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .appointments-table-shell {
     display: none !important;
   }

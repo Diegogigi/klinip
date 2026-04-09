@@ -2564,7 +2564,7 @@ body.theme-dark .pp-footer {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .pp-navbar-inner,
   .pp-content,
   .pp-footer-inner {
@@ -4618,7 +4618,7 @@ body.theme-dark .primary-btn {
 }
 
 /* Responsive: mobile app look - Bottom navigation bar */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .layout {
     flex-direction: column;
   }
@@ -5292,7 +5292,7 @@ body.theme-dark .primary-btn {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   body.theme-dark .sidebar-link.is-mobile-ai {
     color: #e2e8f0;
     background: transparent;
@@ -17533,7 +17533,7 @@ body.theme-dark .vp2-empty-title { color: #f1f5f9; }
 
 /* ── Mobile responsive ─────────────────────────────────────────────────────── */
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .vp2-page {
     padding: 1rem 0.75rem calc(6.5rem + env(safe-area-inset-bottom, 0px));
   }
@@ -17954,7 +17954,7 @@ body.theme-dark .vp2-feedback-ok {
   color: #6ee7b7;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .vp2-header-actions {
     width: 100%;
     flex-direction: column;
@@ -20504,7 +20504,7 @@ body.theme-dark .home-suggestion-icon {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .home-editorial {
     width: 100%;
     margin-left: 0;
@@ -31856,7 +31856,7 @@ body.theme-dark .kfeed-sidebar-close-btn { background: #0f172a; color: #94a3b8; 
 body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .kfeed-page { padding: 0.75rem 0.5rem 5rem; gap: 0.6rem; }
   .kfeed-layout-wrapper { padding: 0; }
   .kfeed-modal-backdrop { align-items: flex-end; padding: 0; }
@@ -31927,7 +31927,7 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
    ============================================================ */
 
 /* ── TOPBAR: ocultar en dashboard móvil, compacto en otras páginas ── */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .topbar.topbar-hidden-mobile {
     display: none !important;
   }
@@ -32642,7 +32642,7 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
 }
 
 /* Dark mode: mobile - mantiene el azul del bottom nav */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   body.theme-dark .sidebar {
     background: #1d4ed8 !important;
     border-top: none !important;
@@ -32778,7 +32778,7 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
    KLINIP MOBILE SYSTEM REFRESH
    Blanco dominante + azul Klinip + acentos verdes
    ============================================================ */
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   :root {
     --mobile-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
     --mobile-bg: #f4f7fb;
@@ -33453,7 +33453,7 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   body.theme-dark {
     --mobile-bg: #08111f;
     --mobile-surface: #0f1727;
@@ -34167,7 +34167,7 @@ body.theme-dark .calendar-summary-pill.is-green {
   color: #7de8c0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .appointments-hero-main {
     flex-direction: column;
     align-items: stretch;
@@ -34498,7 +34498,7 @@ body.theme-dark .calendar-summary-pill.is-green {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   html.klinip-overlay-open,
   body.klinip-overlay-open {
     overflow: hidden !important;
@@ -34839,7 +34839,7 @@ body.theme-dark .modal-footer {
   flex: 1 1 0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .native-mobile-scene .native-surface-hero,
   .native-mobile-scene .native-section {
     opacity: 0;
@@ -35014,7 +35014,7 @@ body.theme-dark .appointments-success-detail-icon {
   color: #8fb9ff;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   body.theme-dark .mobile-quick-item.is-featured {
     background:
       radial-gradient(circle at top right, rgba(255, 255, 255, 0.22), transparent 36%),
@@ -35045,7 +35045,7 @@ body.theme-dark .appointments-success-detail-icon {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .mobile-quick-item,
   .mobile-activity-item,
   .appointments-stat-card,
@@ -35178,7 +35178,7 @@ body.theme-dark .appointments-success-detail-icon {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   body.theme-dark .mobile-quick-item.tone-blue,
   body.theme-dark .mobile-quick-item.is-featured {
     background: #1d4ed8 !important;
@@ -35536,7 +35536,7 @@ body.theme-dark .splash-brand-footnote {
   color: rgba(255, 255, 255, 0.78);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .route-scene-mobile {
     padding-bottom: 0.2rem;
   }
@@ -35713,7 +35713,7 @@ body.theme-dark .appointments-sheet-footer {
     linear-gradient(180deg, rgba(15, 23, 39, 0.94) 0%, #0f1727 34%, #111b2d 100%);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .appointments-overlay {
     align-items: flex-end;
     padding: max(0.35rem, env(safe-area-inset-top)) 0 0;
@@ -36381,7 +36381,7 @@ body.theme-dark .appointments-sheet-grabber {
    MOBILE RESPONSIVE — app nativa
    ═══════════════════════════════════════════════ */
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .native-sheet-backdrop {
     position: fixed !important;
     top: 0 !important;
@@ -36656,7 +36656,7 @@ body.theme-dark .appointments-sheet-grabber {
   max-height: min(50vh, 400px);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .native-success-sheet {
     top: auto !important;
     bottom: 0 !important;

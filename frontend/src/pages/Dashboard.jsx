@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import useClickOutside from "../hooks/useClickOutside";
 import {
   getActiveHealthProfile,
   getAiAdherence,
@@ -18,12 +19,14 @@ import {
 import { parseDate, toLocalInputValue } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
+import { isHandheldViewport } from "../utils/mobileViewport";
 import { cleanUiText } from "../utils/textEncoding";
 import {
   getMedicationScheduleSummary,
   getMedicationScheduleTimes,
   getNextMedicationDose,
 } from "../utils/medicationSchedule";
+import { ensureArray } from "../utils/arrays";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
@@ -355,7 +358,7 @@ export default function Dashboard({
   const profileMenuRef = useRef(null);
   const profileMenuOverlayRef = useRef(null);
   const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(() => isHandheldViewport(768));
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [medications, setMedications] = useState([]);
@@ -417,48 +420,10 @@ export default function Dashboard({
     setProfileMenuOpen(false);
   }, [isMobile]);
 
-  useEffect(() => {
-    if (!notificationsOpen) return undefined;
-    const handlePointerDown = (event) => {
-      if (!notificationsRef.current) return;
-      if (!notificationsRef.current.contains(event.target)) {
-        setNotificationsOpen(false);
-      }
-    };
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setNotificationsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [notificationsOpen]);
-
-  useEffect(() => {
-    if (!profileMenuOpen) return undefined;
-    const handlePointerDown = (event) => {
-      const insideTrigger = profileMenuRef.current?.contains(event.target);
-      const insideMenu = profileMenuOverlayRef.current?.contains(event.target);
-      if (!insideTrigger && !insideMenu) {
-        setProfileMenuOpen(false);
-      }
-    };
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setProfileMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
-    };
-  }, [profileMenuOpen]);
+  const closeNotifications = useCallback(() => setNotificationsOpen(false), []);
+  const closeProfileMenu = useCallback(() => setProfileMenuOpen(false), []);
+  useClickOutside(notificationsOpen, closeNotifications, notificationsRef);
+  useClickOutside(profileMenuOpen, closeProfileMenu, [profileMenuRef, profileMenuOverlayRef]);
 
   useEffect(() => {
     if (!profileMenuOpen || !isMobile) return undefined;
@@ -491,7 +456,7 @@ export default function Dashboard({
     if (!isMountedRef.current) {
       return adherenceResponse || {};
     }
-    setHealthRadar(Array.isArray(radarResponse) ? radarResponse : []);
+    setHealthRadar(ensureArray(radarResponse));
     setAdherenceSummary(adherenceResponse || {});
     return adherenceResponse || {};
   }
@@ -539,10 +504,10 @@ export default function Dashboard({
         };
       }
       setActiveProfile(activeProfileResponse || null);
-      setHealthProfiles(Array.isArray(profilesResponse) ? profilesResponse : []);
-      setAppointments(Array.isArray(appointmentsResponse) ? appointmentsResponse : []);
-      setDocuments(Array.isArray(documentsResponse) ? documentsResponse : []);
-      setMedications(Array.isArray(medicationsResponse) ? medicationsResponse : []);
+      setHealthProfiles(ensureArray(profilesResponse));
+      setAppointments(ensureArray(appointmentsResponse));
+      setDocuments(ensureArray(documentsResponse));
+      setMedications(ensureArray(medicationsResponse));
       return {
         profileId: resolvedProfileId,
         pendingRefresh: Boolean(adherenceResponse?.pending_refresh),
@@ -599,7 +564,7 @@ export default function Dashboard({
   }, []);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    const handleResize = () => setIsMobile(isHandheldViewport(768));
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -614,7 +579,7 @@ export default function Dashboard({
       setNotesLoading(true);
       try {
         const response = await getProfileNotes(activeProfile.id).catch(() => []);
-        let nextNotes = Array.isArray(response) ? response.filter((n) => n.visibility !== "done").slice(0, 6) : [];
+        let nextNotes = ensureArray(response).filter((n) => n.visibility !== "done").slice(0, 6);
         if (canEditActiveProfile && !nextNotes.length && notesStorageKey) {
           try {
             const raw = localStorage.getItem(notesStorageKey);
@@ -681,10 +646,8 @@ export default function Dashboard({
       : activeMedications.length
       ? 100
       : 0;
-  const lowAdherenceItems = Array.isArray(adherenceSummary?.low_adherence_items)
-    ? adherenceSummary.low_adherence_items
-    : [];
-  const activeHealthAlerts = Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : [];
+  const lowAdherenceItems = ensureArray(adherenceSummary?.low_adherence_items);
+  const activeHealthAlerts = ensureArray(healthRadar).filter((item) => item.status === "active");
   const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
   const pendingDocuments = documents.filter((item) => {
     const status = String(item.ocr_status || "").toLowerCase();

@@ -13,6 +13,7 @@ import {
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
 import { clearScheduledNotifications } from "./services/notificationManager";
+import { isHandheldViewport } from "./utils/mobileViewport";
 import {
   getMedicationScheduleTimes,
   isMedicationActiveAt,
@@ -199,12 +200,12 @@ function Sidebar({
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isLegalRoute = location.pathname.startsWith("/legal/");
   const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [isMobile, setIsMobile] = useState(() => isHandheldViewport(768));
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      setIsMobile(isHandheldViewport(768));
     };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
@@ -395,7 +396,7 @@ function Topbar({
   const initials = (user?.name || "Klinip").slice(0, 1).toUpperCase();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [isMobileTopbar, setIsMobileTopbar] = useState(window.innerWidth <= 768);
+  const [isMobileTopbar, setIsMobileTopbar] = useState(() => isHandheldViewport(768));
   const profileMenuRef = useRef(null);
   const today = new Date().toLocaleDateString(undefined, {
     weekday: "short",
@@ -404,7 +405,7 @@ function Topbar({
   });
 
   useEffect(() => {
-    const handleResize = () => setIsMobileTopbar(window.innerWidth <= 768);
+    const handleResize = () => setIsMobileTopbar(isHandheldViewport(768));
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -756,7 +757,7 @@ export default function App() {
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
   const [switchingProfile, setSwitchingProfile] = useState(false);
-  const [isMobileShell, setIsMobileShell] = useState(window.innerWidth <= 768);
+  const [isMobileShell, setIsMobileShell] = useState(() => isHandheldViewport(768));
   const [routeTransitionKey, setRouteTransitionKey] = useState(0);
   const [routeTransitionDirection, setRouteTransitionDirection] = useState("forward");
   const [onboardingData, setOnboardingData] = useState({
@@ -781,7 +782,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    const handleResize = () => setIsMobileShell(window.innerWidth <= 768);
+    const handleResize = () => setIsMobileShell(isHandheldViewport(768));
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
