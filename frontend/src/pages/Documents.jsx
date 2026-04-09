@@ -468,6 +468,7 @@ export default function Documents() {
   };
 
   const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
+  const viewerImageWidth = `${Math.round(viewerZoom * 100)}%`;
   const viewerIsPdf = viewerKind === "pdf";
 
   return (
@@ -704,11 +705,12 @@ export default function Documents() {
                   </div>
                 </div>
               ) : viewerUrl && viewerKind === "image" ? (
-                <div className="document-viewer-canvas" style={{ "--viewer-scale": viewerZoom }}>
+                <div className="document-viewer-canvas">
                   <img
                     className="document-viewer-image"
                     src={viewerUrl}
                     alt={cleanUiText(viewerTarget.filename, "Documento")}
+                    style={{ width: viewerImageWidth, maxWidth: "none" }}
                   />
                 </div>
               ) : (

@@ -7082,10 +7082,11 @@ body.theme-dark .primary-btn {
 }
 
 .document-viewer-canvas {
-  --viewer-scale: 1;
-  width: calc(100% / var(--viewer-scale));
-  transform: scale(var(--viewer-scale));
-  transform-origin: top center;
+  min-width: 100%;
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 .document-viewer-frame,
@@ -7103,9 +7104,10 @@ body.theme-dark .primary-btn {
 }
 
 .document-viewer-image {
-  max-width: 100%;
+  flex: 0 0 auto;
   height: auto;
   object-fit: contain;
+  transition: width 0.18s ease;
 }
 
 .document-viewer-empty {
