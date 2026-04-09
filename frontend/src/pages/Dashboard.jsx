@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -352,6 +353,7 @@ export default function Dashboard({
   const radarPollTimeoutRef = useRef(null);
   const notificationsRef = useRef(null);
   const profileMenuRef = useRef(null);
+  const profileMenuOverlayRef = useRef(null);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [appointments, setAppointments] = useState([]);
@@ -379,6 +381,32 @@ export default function Dashboard({
   const [aiMsgIndex, setAiMsgIndex] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [profileMenuStyle, setProfileMenuStyle] = useState({
+    top: 0,
+    left: 0,
+    width: Math.min(320, window.innerWidth - 16),
+  });
+
+  const syncProfileMenuPosition = () => {
+    if (!profileMenuRef.current || !isMobile) return;
+    const rect = profileMenuRef.current.getBoundingClientRect();
+    const viewportPad = 8;
+    const nextWidth = Math.min(320, window.innerWidth - viewportPad * 2);
+    const nextLeft = Math.max(
+      viewportPad,
+      Math.min(rect.left, window.innerWidth - nextWidth - viewportPad)
+    );
+    const measuredHeight = profileMenuOverlayRef.current?.offsetHeight || 360;
+    let nextTop = rect.bottom + 8;
+    if (nextTop + measuredHeight > window.innerHeight - viewportPad) {
+      nextTop = Math.max(viewportPad, rect.top - measuredHeight - 8);
+    }
+    setProfileMenuStyle({
+      top: Math.round(nextTop),
+      left: Math.round(nextLeft),
+      width: Math.round(nextWidth),
+    });
+  };
 
   useEffect(() => {
     activeProfileIdRef.current = activeProfile?.id ? Number(activeProfile.id) : null;
@@ -413,8 +441,9 @@ export default function Dashboard({
   useEffect(() => {
     if (!profileMenuOpen) return undefined;
     const handlePointerDown = (event) => {
-      if (!profileMenuRef.current) return;
-      if (!profileMenuRef.current.contains(event.target)) {
+      const insideTrigger = profileMenuRef.current?.contains(event.target);
+      const insideMenu = profileMenuOverlayRef.current?.contains(event.target);
+      if (!insideTrigger && !insideMenu) {
         setProfileMenuOpen(false);
       }
     };
@@ -430,6 +459,28 @@ export default function Dashboard({
       document.removeEventListener("keydown", handleEscape);
     };
   }, [profileMenuOpen]);
+
+  useEffect(() => {
+    if (!profileMenuOpen || !isMobile) return undefined;
+    syncProfileMenuPosition();
+    const frameId = window.requestAnimationFrame(() => {
+      syncProfileMenuPosition();
+    });
+    const handleViewportChange = () => {
+      syncProfileMenuPosition();
+    };
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    window.visualViewport?.addEventListener("resize", handleViewportChange);
+    window.visualViewport?.addEventListener("scroll", handleViewportChange);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+      window.visualViewport?.removeEventListener("resize", handleViewportChange);
+      window.visualViewport?.removeEventListener("scroll", handleViewportChange);
+    };
+  }, [profileMenuOpen, isMobile]);
 
   async function loadHealthInsights(profileId) {
     const resolvedProfileId = profileId ? Number(profileId) : undefined;
@@ -984,11 +1035,29 @@ export default function Dashboard({
   }, [contextTyper.done, greetPhase, contextMessages.length]);
 
   if (isMobile) {
+    const greetingIntro =
+      new Date().getHours() < 12
+        ? "Buenos días"
+        : new Date().getHours() < 18
+        ? "Buenas tardes"
+        : "Buenas noches";
     const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
     const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
 
-    const mobileProfileMenu = profileMenuOpen ? (
-      <div className="topbar-user-menu" role="menu">
+    const mobileProfileMenu = profileMenuOpen
+      ? createPortal(
+      <div
+        ref={profileMenuOverlayRef}
+        className="topbar-user-menu mobile-hero-profile-overlay"
+        role="menu"
+        style={{
+          position: "fixed",
+          top: `${profileMenuStyle.top}px`,
+          left: `${profileMenuStyle.left}px`,
+          right: "auto",
+          width: `${profileMenuStyle.width}px`,
+        }}
+      >
         <div className="topbar-user-menu-head">
           <span className="topbar-user-menu-avatar">{userInitial}</span>
           <div>
@@ -1086,10 +1155,12 @@ export default function Dashboard({
               <path d="M21 12H9" />
             </svg>
           </span>
-          <span>Cerrar sesion</span>
+          <span>Cerrar sesión</span>
         </button>
-      </div>
-    ) : null;
+      </div>,
+      document.getElementById("overlay-root") || document.body
+    )
+      : null;
 
     return (
       <div className="mobile-dashboard native-mobile-scene">
@@ -1101,7 +1172,7 @@ export default function Dashboard({
                 <button
                   type="button"
                   className="mobile-hero-avatar"
-                  aria-label="Abrir menu de usuario"
+                  aria-label="Abrir menú de usuario"
                   aria-expanded={profileMenuOpen}
                   aria-haspopup="menu"
                   onClick={() => {
@@ -1116,7 +1187,7 @@ export default function Dashboard({
                 </button>
                 {mobileProfileMenu}
               </div>
-              <div className="mobile-hero-user-info">
+              <div className="mobile-hero-user-info" data-greeting={greetingIntro}>
                 <p className="mobile-hero-greeting-sub">
                   {(() => {
                     const h = new Date().getHours();
