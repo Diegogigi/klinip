@@ -82,24 +82,30 @@
 
   .appt-tab-btn {
     flex: 1;
-    padding: 0.6rem 0.5rem;
+    padding: 0.65rem 0.5rem;
     border-radius: 999px;
-    border: 1.5px solid #e2e8f0;
-    background: #ffffff;
+    border: 1.5px solid rgba(226, 232, 240, 0.8);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     color: #64748b;
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
     text-align: center;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  }
+
+  .appt-tab-btn:active {
+    transform: scale(0.96);
+    transition-duration: 0.08s;
   }
 
   .appt-tab-btn.active {
-    background: #2563eb;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     border-color: #2563eb;
     color: #ffffff;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
   /* ── 3. BARRA DE BUSQUEDA MOBILE ── */
@@ -112,11 +118,17 @@
     display: flex;
     align-items: center;
     gap: 0.65rem;
-    background: #ffffff;
-    border: 1.5px solid #e2e8f0;
+    background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+    border: 1.5px solid rgba(226, 232, 240, 0.8);
     border-radius: 14px;
-    padding: 0.72rem 1rem;
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+    padding: 0.75rem 1rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05), inset 0 1px 3px rgba(15, 23, 42, 0.03);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .appt-search-wrap:focus-within {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), 0 2px 8px rgba(15, 23, 42, 0.05);
   }
 
   .appt-search-wrap svg {
@@ -144,19 +156,21 @@
   .appt-burjeel-card {
     background: #ffffff;
     border-radius: 20px;
-    padding: 1rem 1.1rem;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07);
-    border: 1.5px solid #f1f5f9;
+    padding: 1.1rem 1.15rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 6px 18px rgba(15, 23, 42, 0.05);
+    border: 1px solid rgba(241, 245, 249, 0.8);
     cursor: pointer;
     position: relative;
-    transition: box-shadow 0.2s ease;
+    transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1);
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
   }
 
   .appt-burjeel-card:active {
-    box-shadow: 0 4px 20px rgba(37, 99, 235, 0.12);
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    transition-duration: 0.08s;
   }
 
   .appt-burjeel-badge {
@@ -170,19 +184,22 @@
   }
 
   .appt-badge-agendada {
-    background: #22c55e;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
     color: #ffffff;
+    box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
   }
 
   .appt-badge-realizada {
-    background: #2563eb;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
     color: #ffffff;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
   }
 
   .appt-badge-pendiente {
-    background: #fef3c7;
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
     color: #92400e;
     border: 1px solid #fde68a;
+    box-shadow: 0 2px 6px rgba(253, 230, 138, 0.4);
   }
 
   .appt-burjeel-head {
@@ -201,6 +218,7 @@
     flex-shrink: 0;
     background: #eff6ff;
     color: #2563eb;
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
   }
 
   .appt-burjeel-icon.is-cita { background: #f0fdfa; color: #0d9488; }
@@ -249,9 +267,11 @@
     font-size: 0.82rem;
     color: #475569;
     font-weight: 500;
-    background: #f8fafc;
-    border-radius: 10px;
-    padding: 0.5rem 0.75rem;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 12px;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.04);
   }
 
   .appt-burjeel-datetime svg {
@@ -266,16 +286,22 @@
 
   .appt-burjeel-btn-cancel {
     flex: 1;
-    padding: 0.62rem 0.5rem;
+    padding: 0.65rem 0.5rem;
     border-radius: 999px;
-    border: 1.5px solid #e2e8f0;
-    background: #ffffff;
+    border: 1.5px solid rgba(226, 232, 240, 0.8);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     color: #475569;
     font-size: 0.83rem;
     font-weight: 600;
     cursor: pointer;
     font-family: inherit;
-    transition: all 0.2s;
+    transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+  }
+
+  .appt-burjeel-btn-cancel:active {
+    transform: scale(0.96);
+    transition-duration: 0.08s;
   }
 
   .appt-burjeel-btn-cancel:active {
@@ -286,36 +312,47 @@
 
   .appt-burjeel-btn-edit {
     flex: 1;
-    padding: 0.62rem 0.5rem;
+    padding: 0.65rem 0.5rem;
     border-radius: 999px;
     border: none;
-    background: #2563eb;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
     color: #ffffff;
     font-size: 0.83rem;
     font-weight: 700;
     cursor: pointer;
     font-family: inherit;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .appt-burjeel-btn-edit:active {
-    background: #1d4ed8;
+    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    transform: scale(0.96);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+    transition-duration: 0.08s;
   }
 
   /* ── 5. CARDS MOBILE GENERICAS ── */
   .records-mobile-card {
     border-radius: 20px !important;
-    border: 1.5px solid #f1f5f9 !important;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.07) !important;
-    padding: 1.1rem 1rem !important;
+    border: 1px solid rgba(241, 245, 249, 0.8) !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), 0 6px 18px rgba(15, 23, 42, 0.05) !important;
+    padding: 1.1rem 1.05rem !important;
     background: #ffffff !important;
+    transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  }
+
+  .records-mobile-card:active {
+    transform: scale(0.98) !important;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
+    transition-duration: 0.08s !important;
   }
 
   .records-mobile-icon-badge {
     width: 48px !important;
     height: 48px !important;
     border-radius: 14px !important;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08) !important;
   }
 
   .records-mobile-title-group strong {
@@ -332,16 +369,23 @@
   .records-mobile-link {
     display: inline-flex !important;
     align-items: center !important;
-    padding: 0.5rem 1.25rem !important;
+    padding: 0.52rem 1.25rem !important;
     border-radius: 999px !important;
-    background: #2563eb !important;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%) !important;
     color: #ffffff !important;
     font-size: 0.82rem !important;
     font-weight: 700 !important;
     border: none !important;
     cursor: pointer !important;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.28) !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
     text-decoration: none !important;
+    transition: all 0.15s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  }
+
+  .records-mobile-link:active {
+    transform: scale(0.96) !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+    transition-duration: 0.08s !important;
   }
 
   /* ── 6. MODALES: encabezado azul ── */
@@ -352,11 +396,12 @@
   }
 
   .detail-modal-header {
-    background: #2563eb !important;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%) !important;
     padding: 1.1rem 1.2rem !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2) !important;
   }
 
   .detail-modal-header h3 {
@@ -388,10 +433,11 @@
   }
 
   .floating-form-card .card-header {
-    background: #2563eb !important;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 60%, #1d4ed8 100%) !important;
     margin: -1.2rem -1.2rem 1.2rem -1.2rem !important;
     padding: 1rem 1.2rem !important;
     border-radius: 0 !important;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2) !important;
   }
 
   .floating-form-card .card-title {
