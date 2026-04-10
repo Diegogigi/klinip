@@ -58,8 +58,8 @@ const features = [
     ),
   },
   {
-    title: "KlinipFeed familiar",
-    desc: "Comparte avances, resultados y actualizaciones de salud en un feed privado para tu hogar; el alcance crece seg\u00fan tu plan.",
+    title: "Red familiar",
+    desc: "Comparte avances, resultados y actualizaciones de salud en un espacio privado para tu hogar; el alcance crece seg\u00fan tu plan.",
     tone: "violet",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -83,7 +83,7 @@ const moreFeatures = [
     desc: "Detecta fecha, centro y texto clave desde fotos o PDFs autom\u00e1ticamente.",
   },
   {
-    title: "Feed de salud familiar",
+    title: "Actualizaciones familiares",
     desc: "Ve publicaciones, avances y contexto reciente del hogar en un espacio privado de seguimiento.",
   },
   {
@@ -278,7 +278,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               Klinip es tu compa&ntilde;ero digital de salud. Organiza tus <strong>citas m&eacute;dicas</strong>,
               gestiona tu <strong>medicaci&oacute;n</strong>, almacena <strong>documentos</strong> importantes
               y mant&eacute;n un <strong>historial completo</strong> con IA que te ayuda a no olvidar nada. Ahora
-              tambi&eacute;n puedes compartir avances privados con tu hogar desde <strong>KlinipFeed</strong>.
+              tambi&eacute;n puedes compartir avances privados con tu hogar desde <strong>Familia</strong>.
             </p>
 
             <div className="lp-hero-actions lp-anim lp-anim-d4">
@@ -436,7 +436,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         <div className="lp-section-inner">
           <div className="lp-section-eyebrow"><span />Planes<span /></div>
           <h2 className="lp-section-title">Pensados para <em>cada necesidad</em></h2>
-          <p className="lp-section-sub">Empieza gratis y escala cuando necesites m&aacute;s perfiles, m&aacute;s colaboraci&oacute;n o un KlinipFeed m&aacute;s compartido.</p>
+          <p className="lp-section-sub">Empieza gratis y escala cuando necesites m&aacute;s perfiles, m&aacute;s colaboraci&oacute;n o una red familiar m&aacute;s compartida.</p>
 
           <div className="lp-billing-toggle">
             <span className={billing === "monthly" ? "is-active" : ""}>Mensual</span>

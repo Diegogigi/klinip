@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import axios from "axios";
 import {
   getFamilyFeed,
@@ -1249,7 +1250,7 @@ function FamilySidebar({ user, profiles, groupCaregivers, onAvatarUpload, isOpen
         {/* ── Encabezado propio ── */}
         <div className="kfeed-sidebar-group-head">
           <div>
-            <span className="kfeed-sidebar-group-kicker">KlinipFeed familiar</span>
+            <span className="kfeed-sidebar-group-kicker">Red familiar</span>
             <h3 className="kfeed-sidebar-group-title">Grupo familiar</h3>
           </div>
           <span className="kfeed-sidebar-group-count">
@@ -1470,7 +1471,7 @@ export default function KlinipFeed({ user }) {
         setGroupCaregivers(map);
       }
     } catch {
-      setError("No se pudo cargar el feed.");
+      setError("No se pudieron cargar las actualizaciones.");
     } finally {
       setLoading(false);
     }
@@ -1644,7 +1645,7 @@ export default function KlinipFeed({ user }) {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" style={{ color: "#2563eb" }}>
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
             </svg>
-            <h1 className="kfeed-page-title">KlinipFeed</h1>
+            <h1 className="kfeed-page-title">Familia</h1>
             {profiles.length > 0 && (
               <button
                 type="button"
@@ -1658,6 +1659,9 @@ export default function KlinipFeed({ user }) {
             )}
           </div>
           <p className="kfeed-page-subtitle">Comparte tu salud con tu familia</p>
+          <Link className="kfeed-manage-link" to="/settings/familia">
+            Gestionar familia
+          </Link>
         </div>
 
         {/* Composer */}

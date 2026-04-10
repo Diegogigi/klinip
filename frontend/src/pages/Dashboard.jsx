@@ -983,7 +983,7 @@ export default function Dashboard({
     {
       id: "voice",
       icon: "microphone",
-      label: "Klinip Voice",
+      label: "Voz",
       subtitle: "Grabar consulta",
       tone: "sky",
       onClick: () => navigate("/voice"),
@@ -991,7 +991,7 @@ export default function Dashboard({
     {
       id: "family",
       icon: "family",
-      label: "Mi familia",
+      label: "Familia",
       subtitle:
         linkedProfiles > 0
           ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
@@ -1002,7 +1002,7 @@ export default function Dashboard({
     {
       id: "ai",
       icon: "ai",
-      label: "IA Klinip",
+      label: "Asistente",
       subtitle:
         activeHealthAlerts.length > 0
           ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
@@ -1269,6 +1269,19 @@ export default function Dashboard({
         : "Buenas noches";
     const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
     const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
+    const adherencePercentLabel = activeMedications.length ? `${adherence}%` : "--";
+    const adherenceRingProgress = activeMedications.length ? Math.max(0, Math.min(adherence, 100)) : 0;
+    const adherenceHelperText = activeMedications.length
+      ? adherence < 80
+        ? "Recuerda tomar tus medicamentos a tiempo."
+        : "Vas bien con tus medicamentos."
+      : "Registra tus medicamentos para activar el seguimiento.";
+    const assistantInsightTitle = activeHealthAlerts.length ? "Asistente de salud" : "Seguimiento inteligente";
+    const assistantInsightText = activeHealthAlerts.length
+      ? "Hay alertas importantes para revisar hoy."
+      : lowAdherenceItems.length
+      ? "Detectamos baja adherencia esta semana. ¿Necesitas ayuda?"
+      : "Tu información principal está ordenada para hoy.";
 
     const mobileProfileMenu = profileMenuOpen
       ? createPortal(
@@ -1612,46 +1625,72 @@ export default function Dashboard({
 
           <div className="mobile-hero-greeting" style={{ display: "none" }}></div>
 
-          <div>
+          <div className="mobile-hero-health-card">
             <div className="mobile-hero-stat-label">
               <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
               </svg>
               Adherencia de medicamentos
             </div>
-            <div className="mobile-hero-stat-row">
-              <span className="mobile-hero-stat-value">
-                {activeMedications.length ? adherence : "--"}
-                {activeMedications.length ? <span className="stat-decimal">%</span> : null}
-              </span>
-              <span className={`mobile-hero-stat-badge ${adherenceTone}`}>
-                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  {overallStatus.level === "ok" || overallStatus.level === "neutral" ? (
-                    <polyline points="20 6 9 17 4 12"/>
-                  ) : (
-                    <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
+            <div className="mobile-hero-health-main">
+              <div>
+                <div className="mobile-hero-stat-row">
+                  <span className="mobile-hero-stat-value">
+                    {adherencePercentLabel}
+                  </span>
+                  <span className={`mobile-hero-stat-badge ${adherenceTone}`}>
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      {overallStatus.level === "ok" || overallStatus.level === "neutral" ? (
+                        <polyline points="20 6 9 17 4 12"/>
+                      ) : (
+                        <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
+                      )}
+                    </svg>
+                    {adherenceBadgeLabel}
+                  </span>
+                </div>
+                <div className="mobile-hero-badges">
+                  <span className="mobile-hero-profile-badge">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="8" r="3"/>
+                      <path d="M6 19.5a6 6 0 0 1 12 0"/>
+                    </svg>
+                    {activeProfileName}
+                  </span>
+                  {nextAppointment && (
+                    <span className="mobile-hero-profile-badge">
+                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                      {toRelativeDayLabel(parseDate(nextAppointment.date_time))}
+                    </span>
                   )}
-                </svg>
-                {adherenceBadgeLabel}
-              </span>
+                </div>
+              </div>
+              <div
+                className="mobile-hero-progress"
+                style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                aria-label={`Adherencia ${adherencePercentLabel}`}
+              >
+                <span>{adherencePercentLabel}</span>
+              </div>
             </div>
-            <div className="mobile-hero-badges">
-              <span className="mobile-hero-profile-badge">
-                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="8" r="3"/>
-                  <path d="M6 19.5a6 6 0 0 1 12 0"/>
-                </svg>
-                {activeProfileName}
-              </span>
-              {nextAppointment && (
-                <span className="mobile-hero-profile-badge">
-                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="4" width="18" height="18" rx="2"/>
-                    <line x1="3" y1="10" x2="21" y2="10"/>
-                  </svg>
-                  {toRelativeDayLabel(parseDate(nextAppointment.date_time))}
-                </span>
-              )}
+            <div className="mobile-hero-health-footer">
+              <p className="mobile-hero-health-copy">{adherenceHelperText}</p>
+              <button
+                type="button"
+                className="mobile-hero-recommendation-btn"
+                onClick={() =>
+                  navigate("/ai", {
+                    state: {
+                      autoPrompt: "Ayúdame a revisar mi adherencia de medicamentos y dime qué debo hacer hoy.",
+                    },
+                  })
+                }
+              >
+                Ver recomendación
+              </button>
             </div>
           </div>
         </div>
@@ -1667,7 +1706,7 @@ export default function Dashboard({
             </svg>
             Agenda
           </button>
-          <button type="button" className="mobile-action-btn is-center" onClick={() => navigate("/ai")} aria-label="IA Klinip">
+          <button type="button" className="mobile-action-btn is-center" onClick={() => navigate("/ai")} aria-label="Asistente">
             <span className="mobile-ai-k">K</span>
             <span className="mobile-ai-label">IA</span>
           </button>
@@ -1686,8 +1725,33 @@ export default function Dashboard({
         <div className="mobile-sheet">
           <div className="mobile-sheet-handle" />
 
+          <button
+            type="button"
+            className="mobile-intelligence-card native-section native-section-delay-1"
+            onClick={() =>
+              navigate("/ai", {
+                state: {
+                  autoPrompt: "Ayúdame a revisar mis alertas y pendientes de salud de hoy.",
+                },
+              })
+            }
+          >
+            <span className="mobile-intelligence-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z" />
+                <path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14z" />
+                <path d="M5 15l.8 1.7L7.5 17.5l-1.7.8L5 20l-.8-1.7-1.7-.8 1.7-.8L5 15z" />
+              </svg>
+            </span>
+            <span className="mobile-intelligence-copy">
+              <strong>{assistantInsightTitle}</strong>
+              <small>{assistantInsightText}</small>
+            </span>
+            <span className="mobile-intelligence-cta">Actualizar</span>
+          </button>
+
           {/* Acceso rápido */}
-          <div className="mobile-section native-section native-section-delay-1">
+          <div className="mobile-section native-section native-section-delay-2">
             <div className="mobile-section-header">
               <h2 className="mobile-section-title">Acceso rápido</h2>
               <span className="mobile-quick-counter">
@@ -1721,9 +1785,6 @@ export default function Dashboard({
                     aspectRatio: quickSlideRatio,
                   }}
                 >
-                  {(item.featured || item.spotlight) ? (
-                    <span className={`mobile-card-orb${item.spotlight ? " is-secondary" : ""}`} aria-hidden />
-                  ) : null}
                   <span className="mobile-quick-icon">{renderIcon(item.icon)}</span>
                   <p className="mobile-quick-label">{item.label}</p>
                   {item.highlight ? (
@@ -1735,7 +1796,7 @@ export default function Dashboard({
             </div>
           </div>
 
-          <div className="mobile-section native-section native-section-delay-2">
+          <div className="mobile-section native-section native-section-delay-3">
             {renderQuickNotesPanel("mobile-note-card")}
           </div>
 
@@ -1953,7 +2014,7 @@ export default function Dashboard({
           <article className="home-panel-card home-voice-card">
             <div className="home-panel-head">
               <div>
-                <h2 className="home-panel-title">Klinip Voice</h2>
+                <h2 className="home-panel-title">Voz</h2>
                 <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
               </div>
             </div>

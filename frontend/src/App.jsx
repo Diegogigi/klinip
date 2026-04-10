@@ -32,6 +32,7 @@ const Documents = React.lazy(() => import("./pages/Documents"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const Timeline = React.lazy(() => import("./pages/Timeline"));
 const Stats = React.lazy(() => import("./pages/Stats"));
+const MiSalud = React.lazy(() => import("./pages/MiSalud"));
 const AiKlinip = React.lazy(() => import("./pages/AiKlinip"));
 const ClinicalReports = React.lazy(() => import("./pages/ClinicalReports"));
 const Landing = React.lazy(() => import("./pages/Landing"));
@@ -142,19 +143,36 @@ const icons = {
 
 const ROUTE_TRANSITION_ORDER = [
   "/",
-  "/appointments",
-  "/calendar",
-  "/medications",
-  "/documents",
-  "/feed",
   "/ai",
   "/voice",
-  "/timeline",
-  "/stats",
   "/family",
+  "/mi-salud",
+  "/appointments",
+  "/calendar",
+  "/timeline",
+  "/documents",
+  "/medications",
+  "/stats",
   "/clinical-reports",
   "/settings",
+  "/settings/familia",
 ];
+
+const HEALTH_SECTION_PATHS = [
+  "/mi-salud",
+  "/appointments",
+  "/calendar",
+  "/timeline",
+  "/documents",
+  "/medications",
+  "/stats",
+  "/clinical-reports",
+];
+
+function isSidebarLinkActive(pathname, link) {
+  if (link.activePaths?.includes(pathname)) return true;
+  return pathname === link.to;
+}
 
 function getRouteTransitionDirection(fromPath, toPath) {
   if (!fromPath || !toPath || fromPath === toPath) return "forward";
@@ -222,23 +240,21 @@ function Sidebar({
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/feed", label: "KlinipFeed", icon: icons.feed },
-    { to: "/ai", label: "IA Klinip", icon: icons.aiMobile },
-    { to: "/voice", label: "Klinip Voice", icon: icons.voice },
-    { to: "/appointments", label: "Citas", icon: icons.appointment, badge: notificationCounts.appointments },
-    { to: "/calendar", label: "Calendario", icon: icons.calendar, badge: notificationCounts.calendar },
-    { to: "/stats", label: "Stats", icon: icons.chart },
-    { to: "/timeline", label: "Historia", icon: icons.timeline },
-    { to: "/medications", label: "Meds", icon: icons.heart, badge: notificationCounts.medications },
-    { to: "/documents", label: "Docs", icon: icons.doc, badge: notificationCounts.documents },
-    { to: "/family", label: "Mi familia", icon: icons.family },
+    { to: "/ai", label: "Asistente", icon: icons.aiMobile },
+    { to: "/voice", label: "Voz", icon: icons.voice },
+    { to: "/family", label: "Familia", icon: icons.family, activePaths: ["/family", "/feed"] },
+    {
+      to: "/mi-salud",
+      label: "Mi salud",
+      icon: icons.heart,
+      badge: notificationCounts.medications + notificationCounts.documents,
+      activePaths: HEALTH_SECTION_PATHS,
+    },
   ];
-  const mobilePrimaryLinks = ["/", "/appointments", "/ai", "/medications"]
+  const mobilePrimaryLinks = ["/", "/ai", "/voice", "/family", "/mi-salud"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
-  const mobileOverflowLinks = links.filter((item) =>
-    ["/feed", "/voice", "/calendar", "/stats", "/timeline", "/documents", "/family"].includes(item.to)
-  );
+  const mobileOverflowLinks = [];
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfilesMobile =
     Array.isArray(healthProfiles) && healthProfiles.length > 1;
@@ -275,7 +291,7 @@ function Sidebar({
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`sidebar-link ${location.pathname === link.to ? "active" : ""} ${
+                  className={`sidebar-link ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
                     link.to === "/ai" ? "is-mobile-ai" : ""
                   }`}
                   onClick={() => setShowMobileMenu(false)}
@@ -289,44 +305,48 @@ function Sidebar({
                 <span className="sidebar-label">{link.label}</span>
               </Link>
             ))}
-            <button
-              type="button"
-              className={`sidebar-link sidebar-more ${showMobileMenu ? "active" : ""}`}
-              aria-expanded={showMobileMenu}
-              aria-controls="sidebar-more-menu"
-              onClick={() => setShowMobileMenu((prev) => !prev)}
-            >
-              <span className="sidebar-icon">{icons.extras}</span>
-              <span className="sidebar-label">Otros</span>
-            </button>
-            <div
-              id="sidebar-more-menu"
-              className={`sidebar-more-menu ${showMobileMenu ? "open" : ""}`}
-            >
-              {mobileOverflowLinks.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={`sidebar-menu-link ${
-                    location.pathname === link.to ? "active" : ""
-                  }`}
-                  onClick={() => setShowMobileMenu(false)}
+            {mobileOverflowLinks.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  className={`sidebar-link sidebar-more ${showMobileMenu ? "active" : ""}`}
+                  aria-expanded={showMobileMenu}
+                  aria-controls="sidebar-more-menu"
+                  onClick={() => setShowMobileMenu((prev) => !prev)}
                 >
-                  <span className="sidebar-icon">{link.icon}</span>
-                  {link.badge > 0 && (
-                    <span className="sidebar-badge">{link.badge}</span>
-                  )}
-                  <span className="sidebar-label">{link.label}</span>
-                </Link>
-              ))}
-            </div>
+                  <span className="sidebar-icon">{icons.extras}</span>
+                  <span className="sidebar-label">Otros</span>
+                </button>
+                <div
+                  id="sidebar-more-menu"
+                  className={`sidebar-more-menu ${showMobileMenu ? "open" : ""}`}
+                >
+                  {mobileOverflowLinks.map((link) => (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className={`sidebar-menu-link ${
+                        isSidebarLinkActive(location.pathname, link) ? "active" : ""
+                      }`}
+                      onClick={() => setShowMobileMenu(false)}
+                    >
+                      <span className="sidebar-icon">{link.icon}</span>
+                      {link.badge > 0 && (
+                        <span className="sidebar-badge">{link.badge}</span>
+                      )}
+                      <span className="sidebar-label">{link.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              </>
+            )}
           </>
         ) : (
           links.map((link) => (
             <Link
               key={link.to}
               to={link.to}
-              className={`sidebar-link ${location.pathname === link.to ? "active" : ""}`}
+              className={`sidebar-link ${isSidebarLinkActive(location.pathname, link) ? "active" : ""}`}
               aria-label={link.label}
             >
               <span className="sidebar-icon">{link.icon}</span>
@@ -374,19 +394,21 @@ function Topbar({
   const isLegalRoute = location.pathname.startsWith("/legal/");
   const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
   const titles = {
-    "/": "Resumen",
+    "/": "Inicio",
     "/appointments": "Citas",
     "/documents": "Documentos",
     "/medications": "Medicamentos",
     "/calendar": "Calendario",
     "/stats": "Estadísticas",
-    "/ai": "IA Klinip",
-    "/timeline": "Historia",
-    "/family": "Mi familia",
-    "/feed": "KlinipFeed",
-    "/voice": "Klinip Voice",
+    "/ai": "Asistente",
+    "/timeline": "Historia clínica",
+    "/family": "Familia",
+    "/feed": "Familia",
+    "/voice": "Voz",
+    "/mi-salud": "Mi salud",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
+    "/settings/familia": "Gestionar familia",
   };
   const title = titles[location.pathname] || "Klinip";
   const subtitle =
@@ -1703,7 +1725,7 @@ export default function App() {
     isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute || isPublicAuthRoute;
   const isAiRoute = location.pathname === "/ai";
   const isFamilyRoute = location.pathname === "/family";
-  const isSettingsRoute = location.pathname === "/settings";
+  const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;
 
   return (
@@ -2266,6 +2288,14 @@ export default function App() {
                 }
               />
               <Route
+                path="/mi-salud"
+                element={
+                  <ProtectedRoute user={user}>
+                    <MiSalud key={`mi-salud-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/ai"
                 element={
                   <ProtectedRoute user={user}>
@@ -2285,15 +2315,7 @@ export default function App() {
                 path="/family"
                 element={
                   <ProtectedRoute user={user}>
-                    <Settings
-                      key={`family-${activeHealthProfileId || "none"}`}
-                      user={user}
-                      onLogout={handleLogout}
-                      theme={theme}
-                      onToggleTheme={handleToggleTheme}
-                      onUserUpdate={setUser}
-                      initialSection="familia"
-                    />
+                    <KlinipFeed user={user} />
                   </ProtectedRoute>
                 }
               />
@@ -2314,10 +2336,26 @@ export default function App() {
                 }
               />
               <Route
+                path="/settings/familia"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Settings
+                      key={`settings-family-${activeHealthProfileId || "none"}`}
+                      user={user}
+                      onLogout={handleLogout}
+                      theme={theme}
+                      onToggleTheme={handleToggleTheme}
+                      onUserUpdate={setUser}
+                      initialSection="familia"
+                    />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/feed"
                 element={
                   <ProtectedRoute user={user}>
-                    <KlinipFeed user={user} />
+                    <Navigate to="/family" replace />
                   </ProtectedRoute>
                 }
               />

@@ -99,8 +99,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "KlinipFeed personal",
-        desc: "Publica avances y novedades de salud en un feed privado desde tu propia cuenta.",
+        title: "Red familiar personal",
+        desc: "Publica avances y novedades de salud en un espacio privado desde tu propia cuenta.",
         tone: "amber",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -211,7 +211,7 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "KlinipFeed por hogar",
+        title: "Red familiar por hogar",
         desc: "Sigue avances, resultados y publicaciones privadas entre hasta 3 perfiles administrados desde tu cuenta.",
         tone: "green",
         icon: (
@@ -325,8 +325,8 @@ const PLAN_PAGE_COPY = {
         ),
       },
       {
-        title: "KlinipFeed familiar compartido",
-        desc: "Convierte Klinip en una pequeña red social privada para cuidadores y familia con actividad del grupo.",
+        title: "Red familiar compartida",
+        desc: "Coordina avances privados de salud entre cuidadores y familia con actividad del grupo.",
         tone: "teal",
         icon: (
           <svg viewBox="0 0 24 24">
@@ -370,9 +370,9 @@ const COMPARISON_ROWS = [
     ],
   },
   {
-    group: "KlinipFeed",
+    group: "Familia",
     rows: [
-      { label: "Modo de feed", basico: "Personal", plus: "Hogar", familiar: "Familiar compartido" },
+      { label: "Modo familiar", basico: "Personal", plus: "Hogar", familiar: "Familiar compartido" },
       { label: "Publicaciones privadas de salud", basico: true, plus: true, familiar: true },
       { label: "Actividad compartida entre cuidadores", basico: false, plus: false, familiar: true },
     ],
@@ -486,7 +486,7 @@ export default function Plans({ user }) {
         <div className="pp-hero-inner">
           <div className="pp-hero-eyebrow"><span />Planes y precios<span /></div>
           <h1>Elige el plan para tu <em>salud y tu familia</em></h1>
-          <p>Empieza gratis y escala cuando necesites más perfiles, más colaboración, IA completa o un KlinipFeed más compartido.</p>
+          <p>Empieza gratis y escala cuando necesites más perfiles, más colaboración, IA completa o una red familiar más compartida.</p>
 
           <div className="pp-billing-wrap">
             <span className={`pp-billing-label ${billing === "monthly" ? "is-on" : ""}`}>Mensual</span>

@@ -683,13 +683,13 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       const link = `${window.location.origin}/#share=${encoded}`;
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
-        window.alert("Link de comparticiÐ˜n copiado al portapapeles.");
+        window.alert("Enlace de compartición copiado al portapapeles.");
       } else {
-        prompt("Copia este link", link);
+        prompt("Copia este enlace", link);
       }
     } catch (err) {
-      console.error("No se pudo generar link", err);
-      window.alert("No se pudo generar el link.");
+      console.error("No se pudo generar el enlace", err);
+      window.alert("No se pudo generar el enlace.");
     } finally {
       setExporting(false);
     }
@@ -1032,7 +1032,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       setMyPendingInvitations(ensureArray(pendingForMe));
       setFamilyStatus("Invitacion aceptada correctamente");
       setActiveSection("familia");
-      navigate("/family");
+      navigate("/settings/familia");
       if (isMobileSettings) {
         setMobileSectionOpen(true);
       }
@@ -2073,7 +2073,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
                     </article>
                     <article className="family-report-kpi">
                       <strong>{familyAiContext.pending_documents_total ?? 0}</strong>
-                      <span>Docs pendientes</span>
+                      <span>Documentos pendientes</span>
                     </article>
                   </div>
                   <div className="family-ai-profile-list">
@@ -2408,7 +2408,7 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
           </div>
           <div>
             <button className="primary-btn" type="button" onClick={shareLink} disabled={exporting}>
-              {exporting ? "Generando..." : "Compartir link rápido"}
+              {exporting ? "Generando..." : "Compartir enlace rápido"}
             </button>
           </div>
         </div>

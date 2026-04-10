@@ -24,6 +24,7 @@ import {
 import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
+import { ensureArray } from "../utils/arrays";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -338,7 +339,7 @@ export default function AiKlinip() {
       id: item.id,
       role: item.role === "user" ? "user" : "assistant",
       content: item.content,
-      references: Array.isArray(item?.metadata_json?.references) ? item.metadata_json.references : [],
+      references: ensureArray(item?.metadata_json?.references),
       createdAt: normalizeServerTimestamp(item.created_at) || null,
       conversationId: item.conversation_id || "",
       conversationTitle: item.conversation_title || "",
@@ -388,10 +389,10 @@ export default function AiKlinip() {
 
       if (!mountedRef()) return;
 
-      setHealthRadar(Array.isArray(radar) ? radar : []);
+      setHealthRadar(ensureArray(radar));
       setAdherenceSummary(adherence || {});
-      setDocumentIntelligence(Array.isArray(docIntel) ? docIntel : []);
-      setClinicalReports(Array.isArray(reports) ? reports : []);
+      setDocumentIntelligence(ensureArray(docIntel));
+      setClinicalReports(ensureArray(reports));
     })();
 
     try {
@@ -422,12 +423,12 @@ export default function AiKlinip() {
 
         setResources({
           profile,
-          appointments: Array.isArray(appointments) ? appointments : [],
-          documents: Array.isArray(documents) ? documents : [],
-          medications: Array.isArray(medications) ? medications : [],
+          appointments: ensureArray(appointments),
+          documents: ensureArray(documents),
+          medications: ensureArray(medications),
         });
         setPlanInfo(plan || null);
-        setRadarProfiles(Array.isArray(profiles) ? profiles : []);
+        setRadarProfiles(ensureArray(profiles));
 
         if (profile?.full_name) {
           setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
@@ -455,7 +456,7 @@ export default function AiKlinip() {
       conversationsRequestRef.current = (async () => {
         const items = await getAiConversations().catch(() => []);
         if (!mounted) return [];
-        const safeItems = Array.isArray(items) ? items : [];
+        const safeItems = ensureArray(items);
         setConversations(safeItems);
         return safeItems;
       })();
@@ -590,7 +591,7 @@ export default function AiKlinip() {
     try {
       const raw = localStorage.getItem(storageKey);
       const parsed = raw ? JSON.parse(raw) : [];
-      setPinnedConversationIds(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+      setPinnedConversationIds(ensureArray(parsed).filter(Boolean));
     } catch {
       setPinnedConversationIds([]);
     }
@@ -626,7 +627,7 @@ export default function AiKlinip() {
   const nextAppointment = upcomingAppointments[0] || null;
   const activeMedications = useMemo(() => getActiveMedications(resources.medications), [resources.medications]);
   const activeRadarAlerts = useMemo(
-    () => (Array.isArray(healthRadar) ? healthRadar.filter((item) => item.status === "active") : []),
+    () => ensureArray(healthRadar).filter((item) => item.status === "active"),
     [healthRadar]
   );
   const filteredRadarAlerts = useMemo(() => {
@@ -638,9 +639,7 @@ export default function AiKlinip() {
     });
   }, [activeRadarAlerts, radarPeriod]);
   const topDocumentInsights = useMemo(() => documentIntelligence.slice(0, 4), [documentIntelligence]);
-  const lowAdherenceItems = Array.isArray(adherenceSummary?.low_adherence_items)
-    ? adherenceSummary.low_adherence_items
-    : [];
+  const lowAdherenceItems = ensureArray(adherenceSummary?.low_adherence_items);
   const overallAdherenceRate =
     adherenceSummary?.overall_adherence_rate === null || adherenceSummary?.overall_adherence_rate === undefined
       ? null
@@ -785,14 +784,14 @@ export default function AiKlinip() {
           id: `assistant-${Date.now()}`,
           role: "assistant",
           content: cleanAssistantText(response?.reply || "No pude generar una respuesta en este momento. Intenta reformular tu consulta."),
-          references: Array.isArray(response?.references) ? response.references : [],
+          references: ensureArray(response?.references),
           createdAt: response?.assistant_message_created_at || new Date().toISOString(),
           conversationId: nextConversationId,
           conversationTitle: nextConversationTitle,
         },
       ]);
       const nextConversations = await getAiConversations().catch(() => []);
-      setConversations(Array.isArray(nextConversations) ? nextConversations : []);
+      setConversations(ensureArray(nextConversations));
       const profile = await getActiveHealthProfile().catch(() => null);
       const [appointments, documents, medications] = await Promise.all([
         getAppointments().catch(() => []),
@@ -801,9 +800,9 @@ export default function AiKlinip() {
       ]);
       setResources({
         profile,
-        appointments: Array.isArray(appointments) ? appointments : [],
-        documents: Array.isArray(documents) ? documents : [],
-        medications: Array.isArray(medications) ? medications : [],
+        appointments: ensureArray(appointments),
+        documents: ensureArray(documents),
+        medications: ensureArray(medications),
       });
       const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
       loadInsights(resolvedRadarProfileId).catch((refreshError) => {
@@ -1027,7 +1026,7 @@ export default function AiKlinip() {
     try {
       const resolvedProfileId = radarProfileId === "active" ? resources.profile?.id : Number(radarProfileId);
       const items = await runAiHealthRadar(resolvedProfileId || undefined);
-      setHealthRadar(Array.isArray(items) ? items : []);
+      setHealthRadar(ensureArray(items));
     } catch (error) {
       console.error("No se pudo recalcular el radar de salud", error);
     } finally {
@@ -1058,7 +1057,7 @@ export default function AiKlinip() {
       await deleteAiConversation(targetConversationId);
       persistPinnedConversations(pinnedConversationIds.filter((item) => item !== targetConversationId));
       const nextConversations = await getAiConversations().catch(() => []);
-      const safeConversations = Array.isArray(nextConversations) ? nextConversations : [];
+      const safeConversations = ensureArray(nextConversations);
       setConversations(safeConversations);
       if (targetConversationId === conversationId) {
         if (safeConversations.length) {
@@ -1179,7 +1178,7 @@ export default function AiKlinip() {
           <div className="ai-copilot-stage">
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-copy">
-                <span>IA Klinip</span>
+                <span>Asistente</span>
                 <strong>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</strong>
               </div>
               <button
@@ -1443,8 +1442,8 @@ export default function AiKlinip() {
           <div className="ai-right-tabs">
             <button type="button" className={rightTab === "chat" ? "is-active" : ""} onClick={() => setRightTab("chat")}>Chat</button>
             <button type="button" className={rightTab === "today" ? "is-active" : ""} onClick={() => setRightTab("today")}>Hoy</button>
-            <button type="button" className={rightTab === "meds" ? "is-active" : ""} onClick={() => setRightTab("meds")}>Meds</button>
-            <button type="button" className={rightTab === "docs" ? "is-active" : ""} onClick={() => setRightTab("docs")}>Docs</button>
+            <button type="button" className={rightTab === "meds" ? "is-active" : ""} onClick={() => setRightTab("meds")}>Medicamentos</button>
+            <button type="button" className={rightTab === "docs" ? "is-active" : ""} onClick={() => setRightTab("docs")}>Documentos</button>
           </div>
 
           {rightTab === "today" ? (

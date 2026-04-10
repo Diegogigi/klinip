@@ -407,10 +407,10 @@ export default function Calendar() {
       <div className="card calendar-card">
         <div className="card-header calendar-header">
           <div className="calendar-hero-copy">
-            <p className="calendar-hero-eyebrow">PlanificaciÃ³n mensual</p>
+            <p className="calendar-hero-eyebrow">Planificación mensual</p>
             <h2 className="card-title">Calendario de salud</h2>
             <p className="muted calendar-intro-copy">
-              Vista mensual para citas, exÃ¡menes, trÃ¡mites y medicaciÃ³n. Pulsa un dÃ­a para ver el
+              Vista mensual para citas, exámenes, trámites y medicación. Pulsa un día para ver el
               detalle.
             </p>
             <div className="calendar-hero-summary">
@@ -430,7 +430,7 @@ export default function Calendar() {
               aria-label="Ir al mes anterior"
               onClick={() => setViewDate(addMonths(normalizedViewDate, -1))}
             >
-              <span aria-hidden="true">â€¹</span>
+              <span aria-hidden="true">‹</span>
               <span>Anterior</span>
             </button>
             <button
@@ -440,7 +440,7 @@ export default function Calendar() {
               onClick={() => setViewDate(addMonths(normalizedViewDate, 1))}
             >
               <span>Siguiente</span>
-              <span aria-hidden="true">â€º</span>
+              <span aria-hidden="true">›</span>
             </button>
           </div>
         </div>
@@ -449,7 +449,7 @@ export default function Calendar() {
           <article className="calendar-overview-card tone-blue">
             <span className="calendar-overview-label">Mes actual</span>
             <strong className="calendar-overview-value">{monthLabel}</strong>
-            <span className="calendar-overview-meta">Seguimiento clÃ­nico mensual</span>
+            <span className="calendar-overview-meta">Seguimiento clínico mensual</span>
           </article>
           <article className="calendar-overview-card tone-white">
             <span className="calendar-overview-label">Agenda visible</span>
@@ -457,7 +457,7 @@ export default function Calendar() {
             <span className="calendar-overview-meta">Eventos del mes en vista</span>
           </article>
           <article className="calendar-overview-card tone-green">
-            <span className="calendar-overview-label">MedicaciÃ³n</span>
+            <span className="calendar-overview-label">Medicación</span>
             <strong className="calendar-overview-value">{medicationMonthCount}</strong>
             <span className="calendar-overview-meta">Tomas estimadas en el periodo</span>
           </article>
@@ -523,9 +523,9 @@ export default function Calendar() {
 
         <div className="legend">
           <span className="legend-dot event-green" /> Citas
-          <span className="legend-dot event-blue" /> ExÃ¡menes
-          <span className="legend-dot event-yellow" /> TrÃ¡mites
-          <span className="legend-dot event-purple" /> MedicaciÃ³n
+          <span className="legend-dot event-blue" /> Exámenes
+          <span className="legend-dot event-yellow" /> Trámites
+          <span className="legend-dot event-purple" /> Medicación
         </div>
 
         {loading ? (
