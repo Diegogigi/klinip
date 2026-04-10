@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resetPassword } from "../api";
+import { extractApiError } from "../utils/errors";
+import { validatePassword, validatePasswordMatch } from "../utils/validation";
 
 function useQuery() {
   return new URLSearchParams(useLocation().search);
@@ -24,14 +26,10 @@ export default function ResetPassword() {
       setError("Token inválido o expirado.");
       return;
     }
-    if (password !== confirm) {
-      setError("Las contraseñas no coinciden.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres.");
-      return;
-    }
+    const matchErr = validatePasswordMatch(password, confirm);
+    if (matchErr) { setError(matchErr); return; }
+    const passErr = validatePassword(password);
+    if (passErr) { setError(passErr); return; }
     setLoading(true);
     try {
       await resetPassword({ token, new_password: password });
@@ -39,7 +37,7 @@ export default function ResetPassword() {
       setTimeout(() => navigate("/login"), 1200);
     } catch (err) {
       console.error(err);
-      setError(err?.response?.data?.detail || "No se pudo restablecer la contraseña.");
+      setError(extractApiError(err, "No se pudo restablecer la contraseña."));
     } finally {
       setLoading(false);
     }

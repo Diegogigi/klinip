@@ -37,6 +37,7 @@ import RowActionsMenu from "../components/RowActionsMenu";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import { ensureArray } from "../utils/arrays";
 
 const MED_ALERT_POLL_MS = 15000;
 const FREQUENCY_PRESETS = [
@@ -246,7 +247,7 @@ export default function Medications() {
     setDetailIntakesLoading(true);
     try {
       const response = await getMedicationIntakes(medicationId, 60);
-      setDetailIntakes(Array.isArray(response?.items) ? response.items : []);
+      setDetailIntakes(ensureArray(response?.items));
     } catch (error) {
       console.error("No se pudo cargar la línea de tiempo de adherencia", error);
       setDetailIntakes([]);
@@ -261,7 +262,7 @@ export default function Medications() {
     }
     try {
       const items = await getMedicationPurchases({ limit: 60 });
-      setPurchaseHistory(Array.isArray(items) ? items : []);
+      setPurchaseHistory(ensureArray(items));
     } catch (error) {
       console.error("No se pudo cargar el historial de compras de medicamentos", error);
       if (!options.silent) {

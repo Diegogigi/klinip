@@ -2,6 +2,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from .env_loader import load_project_env
+
+load_project_env()
 
 DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./mirutasalud.db"
 

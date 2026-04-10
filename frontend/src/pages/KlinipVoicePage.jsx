@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import ImmersiveVoice from "../components/ImmersiveVoice";
+import { ensureArray } from "../utils/arrays";
 
 const DEFAULT_AUTOMATION = {
   voice_auto_share_enabled: false,
@@ -67,9 +68,7 @@ function normalizeAutomation(data) {
   return {
     voice_auto_share_enabled: Boolean(data?.voice_auto_share_enabled),
     voice_auto_share_include_audio: data?.voice_auto_share_include_audio !== false,
-    voice_auto_share_recipient_ids: Array.isArray(data?.voice_auto_share_recipient_ids)
-      ? data.voice_auto_share_recipient_ids.map((item) => Number(item)).filter(Boolean)
-      : [],
+    voice_auto_share_recipient_ids: ensureArray(data?.voice_auto_share_recipient_ids).map((item) => Number(item)).filter(Boolean),
   };
 }
 
@@ -410,9 +409,9 @@ export default function KlinipVoicePage() {
         targetsPromise,
       ]);
 
-      setSessions(Array.isArray(ownData) ? ownData : []);
-      setReceivedSessions(Array.isArray(sharedData) ? sharedData : []);
-      setShareTargets(Array.isArray(targetsData) ? targetsData : []);
+      setSessions(ensureArray(ownData));
+      setReceivedSessions(ensureArray(sharedData));
+      setShareTargets(ensureArray(targetsData));
       setAutomationDraft(normalizeAutomation(automationData));
     } finally {
       setSessionsLoading(false);
@@ -431,7 +430,7 @@ export default function KlinipVoicePage() {
         ]);
         if (cancelled) return;
 
-        const safeProfiles = Array.isArray(profilesData) ? profilesData : [];
+        const safeProfiles = ensureArray(profilesData);
         let resolvedProfile = activeData || safeProfiles[0] || null;
 
         if (requestedProfileId) {

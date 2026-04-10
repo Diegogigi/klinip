@@ -1,3 +1,5 @@
+import { ensureArray } from "./arrays";
+
 const CLINICAL_REFRESH_EVENT = "klinip-clinical-data-changed";
 const CLINICAL_REFRESH_STORAGE_KEY = "klinip:clinical-refresh";
 
@@ -5,7 +7,7 @@ function normalizePayload(detail = {}) {
   return {
     at: Date.now(),
     profileId: detail?.profileId ? Number(detail.profileId) : null,
-    sources: Array.isArray(detail?.sources) ? detail.sources.filter(Boolean) : [],
+    sources: ensureArray(detail?.sources).filter(Boolean),
   };
 }
 

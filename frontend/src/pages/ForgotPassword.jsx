@@ -1,6 +1,7 @@
 ﻿import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { forgotPassword } from "../api";
+import { extractApiError } from "../utils/errors";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -20,10 +21,7 @@ export default function ForgotPassword() {
       );
     } catch (err) {
       console.error(err);
-        setError(
-          err?.response?.data?.detail ||
-          "No se pudo enviar el correo de recuperación."
-        );
+        setError(extractApiError(err, "No se pudo enviar el correo de recuperación."));
     } finally {
       setLoading(false);
     }

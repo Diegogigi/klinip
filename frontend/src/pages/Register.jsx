@@ -1,6 +1,9 @@
 ﻿import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { register, login, getMe } from "../api";
+import { clearAppCaches } from "../utils/cache";
+import { extractApiError } from "../utils/errors";
+import { validatePassword, validatePasswordMatch } from "../utils/validation";
 
 export default function Register({ onRegistered }) {
   const [name, setName] = useState("");
@@ -12,27 +15,13 @@ export default function Register({ onRegistered }) {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
-  const clearAppCaches = async () => {
-    if (!("caches" in window)) return;
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((key) => key.startsWith("klinip-cache"))
-        .map((key) => caches.delete(key))
-    );
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (password !== confirm) {
-      setError("Las contraseñas no coinciden.");
-      return;
-    }
-    if (password.length < 6) {
-      setError("La contraseña debe tener al menos 6 caracteres.");
-      return;
-    }
+    const matchErr = validatePasswordMatch(password, confirm);
+    if (matchErr) { setError(matchErr); return; }
+    const passErr = validatePassword(password);
+    if (passErr) { setError(passErr); return; }
     if (!acceptedLegal) {
       setError(
         "Debes aceptar los Términos, la Política de Privacidad y el Consentimiento informado."
@@ -69,7 +58,7 @@ export default function Register({ onRegistered }) {
           if (me?.email && me.email.toLowerCase() !== email.trim().toLowerCase()) {
             localStorage.removeItem("token");
             throw new Error(
-              "La sesion no coincide con el usuario registrado. Intenta de nuevo."
+              "La sesión no coincide con el usuario registrado. Intenta de nuevo."
             );
           }
           console.log("Usuario obtenido:", me);
@@ -87,7 +76,7 @@ export default function Register({ onRegistered }) {
       }
     } catch (err) {
       console.error("Error completo:", err);
-      setError(err?.response?.data?.detail || err?.message || "No se pudo crear la cuenta. ¿Correo ya registrado?");
+      setError(extractApiError(err, "No se pudo crear la cuenta. ¿Correo ya registrado?"));
     } finally {
       setLoading(false);
     }

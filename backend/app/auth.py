@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .database import SessionLocal
+from .env_loader import load_project_env
+
+load_project_env()
 
 # Obtener SECRET_KEY de variables de entorno, con fallback para desarrollo
 _INVALID_SECRET_KEY_VALUES = {

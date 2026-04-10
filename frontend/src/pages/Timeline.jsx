@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getActiveHealthProfile, getAiLifeTimeline, getHealthProfiles } from "../api";
 import { toLocaleDateOrEmpty } from "../utils/dates";
 import { cleanUiText } from "../utils/textEncoding";
+import { ensureArray } from "../utils/arrays";
 
 const SUMMARY_TOKEN_LABELS = [
   [/health_alerts?/gi, "alertas de salud"],
@@ -97,7 +98,7 @@ export default function Timeline() {
           getHealthProfiles().catch(() => []),
         ]);
         if (cancelled) return;
-        setProfiles(Array.isArray(profilesData) ? profilesData : []);
+        setProfiles(ensureArray(profilesData));
         const resolvedProfileId = selectedProfileId === "active" ? activeProfile?.id : Number(selectedProfileId);
         const response = await getAiLifeTimeline({
           profile_id: resolvedProfileId || undefined,
@@ -118,7 +119,7 @@ export default function Timeline() {
 
   const events = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
-    return (Array.isArray(timeline.events) ? timeline.events : []).filter((item) => {
+    return ensureArray(timeline.events).filter((item) => {
       const matchesType = !filterMap[filter] || item.event_type === filterMap[filter];
       const haystack = [
         cleanUiText(item.title),

@@ -1,3 +1,4 @@
+import { ensureArray } from "../utils/arrays";
 import axios from "axios";
 import { buildVoiceUploadName } from "../utils/voiceRecording";
 
@@ -370,8 +371,8 @@ export async function getMyPlan() {
 
 export async function getPublicPlans() {
   const res = await api.get("/public/plans");
-  return Array.isArray(res.data)
-    ? res.data.map((plan) => ({
+  return ensureArray(res.data)
+    .map((plan) => ({
         slug: plan.slug,
         name: plan.name,
         priceMonthly: plan.price_monthly,
@@ -381,21 +382,16 @@ export async function getPublicPlans() {
         summary: plan.summary,
         recommended: !!plan.recommended,
         cta: plan.cta,
-        features: Array.isArray(plan.features) ? plan.features : [],
-        detailSections: Array.isArray(plan.detail_sections)
-          ? plan.detail_sections.map((section) => ({
+        features: ensureArray(plan.features),
+        detailSections: ensureArray(plan.detail_sections).map((section) => ({
               title: section.title,
-              items: Array.isArray(section.items) ? section.items : [],
-            }))
-          : [],
-        metrics: Array.isArray(plan.metrics)
-          ? plan.metrics.map((metric) => ({
+              items: ensureArray(section.items),
+            })),
+        metrics: ensureArray(plan.metrics).map((metric) => ({
               label: metric.label,
               value: metric.value,
-            }))
-          : [],
-      }))
-    : [];
+            })),
+      }));
 }
 
 export async function getHealthProfiles() {
@@ -567,14 +563,14 @@ export async function getAiHealthRadar(profileId) {
   const res = await api.get("/ai/health-radar", {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function runAiHealthRadar(profileId) {
   const res = await api.post("/ai/health-radar/run", null, {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function getAiAdherence(profileId) {
@@ -588,7 +584,7 @@ export async function getAiDocumentIntelligence(profileId) {
   const res = await api.get("/ai/documents/intelligence", {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function generateAiClinicalReport(payload, profileId) {
@@ -602,7 +598,7 @@ export async function getAiClinicalReports(profileId) {
   const res = await api.get("/ai/reports", {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function getAiClinicalReport(reportId) {
@@ -631,7 +627,7 @@ export async function getInteroperabilitySources(profileId) {
   const res = await api.get("/ai/interoperability/sources", {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function createInteroperabilitySource(payload, profileId) {
@@ -645,7 +641,7 @@ export async function getInteroperabilityRecords(profileId) {
   const res = await api.get("/ai/interoperability/records", {
     params: profileId ? { profile_id: profileId } : undefined,
   });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function createInteroperabilityRecord(payload, profileId) {
@@ -936,7 +932,7 @@ export async function getAuditLogs({ limit = 50, offset = 0 } = {}) {
 
 export async function getFamilyFeed({ skip = 0, limit = 20 } = {}) {
   const res = await api.get("/feed/family", { params: { skip, limit } });
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function createFeedPost(payload) {
@@ -964,7 +960,7 @@ export async function removeReaction(postId) {
 
 export async function getPostComments(postId) {
   const res = await api.get(`/feed/posts/${postId}/comments`);
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function addPostComment(postId, payload) {
@@ -974,7 +970,7 @@ export async function addPostComment(postId, payload) {
       : {
           content: payload?.content || "",
           parent_comment_id: payload?.parent_comment_id ?? null,
-          mention_user_ids: Array.isArray(payload?.mention_user_ids) ? payload.mention_user_ids : [],
+          mention_user_ids: ensureArray(payload?.mention_user_ids),
         };
   const res = await api.post(`/feed/posts/${postId}/comments`, body);
   return res.data;
@@ -1048,12 +1044,12 @@ export async function getVoiceSession(sessionId) {
 
 export async function getVoiceShareTargets(profileId) {
   const res = await api.get(`/health-profiles/${profileId}/voice-share-targets`);
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function getVoiceReceivedSessions() {
   const res = await api.get("/voice/shared/received");
-  return Array.isArray(res.data) ? res.data : [];
+  return ensureArray(res.data);
 }
 
 export async function shareVoiceWithFamily(sessionId, payload) {

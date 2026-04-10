@@ -14,13 +14,13 @@
 - [ ] Cobro con links de pago
 
 ### No debe salir todavia
-- [ ] App completa con usuarios reales
+- [x] App completa con usuarios reales
 - [ ] Lanzamiento comercial abierto de la plataforma clinica
 
 ### Condicion para abrir la app real
-- [ ] Completar Seguridad critica
-- [ ] Completar Calidad minima operativa
-- [ ] Ejecutar smoke test final
+- [x] Completar Seguridad critica
+- [x] Completar Calidad minima operativa
+- [x] Ejecutar smoke test final
 
 ---
 
@@ -151,11 +151,10 @@ Estos items no bloquean una landing o preventa, pero si afectan la apertura seri
 - [x] Generar una migracion inicial a partir del esquema actual
 - [x] Remover o condicionar la creacion/alteracion automatica de esquema en produccion
 - [x] Ajustar el deploy en Railway para correr `alembic upgrade head` antes del servidor
-- [ ] Probar el flujo completo: migracion -> arranque -> validacion funcional
+- [x] Probar el flujo completo: migracion -> arranque -> validacion funcional
 
 **Estado actual**
-- Parcial: Alembic agregado, baseline creada y deploy ajustado para ejecutar migraciones.
-- Pendiente operativo: desplegar y validar en Railway el flujo completo `alembic upgrade head -> arranque -> prueba funcional`.
+- Completo: Alembic agregado, baseline creada, deploy ajustado y flujo validado en Railway con arranque correcto.
 
 **Contexto**
 - El servidor no deberia mutar la base de datos silenciosamente al arrancar en produccion.
@@ -212,10 +211,10 @@ Estos items si pueden avanzar mientras se trabaja el bloque de seguridad.
 ## 5. Orden recomendado de ejecucion
 
 ### Fase 1
-- [ ] Rotacion VAPID
-- [ ] CORS cerrado
-- [ ] `/health` minimo
-- [ ] `SECRET_KEY` obligatoria
+- [x] Rotacion VAPID
+- [x] CORS cerrado
+- [x] `/health` minimo
+- [x] `SECRET_KEY` obligatoria
 
 ### Fase 2
 - [ ] Definir operacion manual post-pago
@@ -227,12 +226,12 @@ Estos items si pueden avanzar mientras se trabaja el bloque de seguridad.
 - [ ] Abrir lista de espera y/o preventa
 
 ### Fase 4
-- [ ] Crear smoke tests manuales
-- [ ] Implementar migraciones controladas
-- [ ] Validacion final en produccion
+- [x] Crear smoke tests manuales
+- [x] Implementar migraciones controladas
+- [x] Validacion final en produccion
 
 ### Fase 5
-- [ ] Go / No-Go de lanzamiento de la app completa
+- [x] Go / No-Go de lanzamiento de la app completa
 
 ---
 
@@ -245,14 +244,14 @@ Estos items si pueden avanzar mientras se trabaja el bloque de seguridad.
 
 ### Amarillo
 - [ ] Operacion manual post-pago
-- [ ] Smoke tests
-- [ ] Migraciones controladas
+- [x] Smoke tests
+- [x] Migraciones controladas
 
 ### Rojo
-- [ ] Secretos expuestos
-- [ ] CORS abierto
-- [ ] Healthcheck demasiado verboso
-- [ ] `SECRET_KEY` con fallback inseguro
+- [x] Secretos expuestos
+- [x] CORS abierto
+- [x] Healthcheck demasiado verboso
+- [x] `SECRET_KEY` con fallback inseguro
 
 ---
 
@@ -264,10 +263,14 @@ Estos items si pueden avanzar mientras se trabaja el bloque de seguridad.
 - [ ] Operacion manual post-pago definida
 
 ### Se puede lanzar la app completa cuando:
-- [ ] Seguridad critica cerrada
-- [ ] Calidad minima operativa cerrada
-- [ ] Smoke tests aprobados
-- [ ] Despliegue validado
+- [x] Seguridad critica cerrada
+- [x] Calidad minima operativa cerrada
+- [x] Smoke tests aprobados
+- [x] Despliegue validado
+
+**Estado actual**
+- GO tecnico-operativo aprobado para abrir la app completa.
+- Los pendientes restantes corresponden solo a landing, lista de espera, cobro y operacion comercial.
 
 ---
 
@@ -275,15 +278,15 @@ Estos items si pueden avanzar mientras se trabaja el bloque de seguridad.
 
 | Bloque | Estado recomendado |
 |--------|--------------------|
-| Seguridad critica | En curso, con VAPID parcialmente resuelto en repo |
-| Calidad minima operativa | Pendiente antes de lanzar la app completa |
+| Seguridad critica | Completa |
+| Calidad minima operativa | Completa |
 | Landing y cobro | Puede iniciar ya |
 
 ---
 
 **Resumen ejecutivo**
 - La landing y el cobro pueden salir antes.
-- La app completa no debe abrirse todavia.
-- El foco inmediato sigue siendo seguridad critica y preparacion operativa minima.
-- VAPID quedo resuelto parcialmente en codigo y documentacion, pero falta la
-  rotacion real en Railway.
+- La app completa ya puede abrirse desde el punto de vista tecnico-operativo minimo.
+- Seguridad critica y calidad minima operativa ya quedaron resueltas.
+- No quedan bloqueos tecnicos pendientes para la apertura de la app.
+- Los pendientes activos del documento son comerciales y paralelos: landing, lista de espera, links de pago y operacion post-pago.

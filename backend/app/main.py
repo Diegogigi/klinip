@@ -108,6 +108,7 @@ except Exception:
 
 from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
+from .schema_helpers import ensure_columns
 
 try:
     from pywebpush import webpush, WebPushException
@@ -140,91 +141,23 @@ else:
 
 
 def ensure_document_schema():
-    """
-    Garantiza que la tabla documents tenga las columnas nuevas usadas por la app
-    (file_data y filename). Es una migracion ligera para entornos sin Alembic.
-    """
-    try:
-        inspector = inspect(engine)
-        columns = {col["name"] for col in inspector.get_columns("documents")}
-        backend = engine.url.get_backend_name()
-        statements = []
-        added_columns = []
-
-        if "file_data" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_data BYTEA"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN file_data BLOB")
-            added_columns.append("file_data")
-
-        if "filename" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS filename VARCHAR"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN filename VARCHAR")
-            added_columns.append("filename")
-
-        if "ocr_text" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_text TEXT"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN ocr_text TEXT")
-            added_columns.append("ocr_text")
-
-        if "ocr_status" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_status VARCHAR"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN ocr_status VARCHAR")
-            added_columns.append("ocr_status")
-
-        if "ocr_lang" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS ocr_lang VARCHAR"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN ocr_lang VARCHAR")
-            added_columns.append("ocr_lang")
-
-        if "profile_id" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE documents ADD COLUMN IF NOT EXISTS profile_id INTEGER NULL"
-                )
-            else:
-                statements.append("ALTER TABLE documents ADD COLUMN profile_id INTEGER")
-            added_columns.append("profile_id")
-
-        if statements:
-            with engine.begin() as conn:
-                for stmt in statements:
-                    conn.execute(text(stmt))
-                try:
-                    conn.execute(
-                        text(
-                            "CREATE INDEX IF NOT EXISTS ix_documents_profile_id ON documents (profile_id)"
-                        )
-                    )
-                except Exception:
-                    pass
-            print(
-                f"DEBUG ensure_document_schema: columnas agregadas a documents: {', '.join(added_columns)}"
-            )
-        else:
-            print("DEBUG ensure_document_schema: tabla documents ya esta al dia")
-    except Exception as exc:
-        # No detener la app si la verificacion falla; solo dejar el log.
-        print(f"WARNING ensure_document_schema: no se pudo ajustar la tabla: {exc}")
+    """Garantiza que la tabla documents tenga columnas nuevas usadas por la app."""
+    ensure_columns(
+        engine,
+        "documents",
+        [
+            ("file_data", "BYTEA", "BLOB"),
+            ("filename", "VARCHAR"),
+            ("ocr_text", "TEXT"),
+            ("ocr_status", "VARCHAR"),
+            ("ocr_lang", "VARCHAR"),
+            ("profile_id", "INTEGER NULL", "INTEGER"),
+        ],
+        label="ensure_document_schema",
+        extra_indexes=[
+            "CREATE INDEX IF NOT EXISTS ix_documents_profile_id ON documents (profile_id)",
+        ],
+    )
 
 
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
@@ -232,257 +165,46 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
 
 
 def ensure_user_schema():
-    """
-    Garantiza que la tabla users tenga columnas nuevas usadas por la app.
-    """
-    try:
-        inspector = inspect(engine)
-        columns = {col["name"] for col in inspector.get_columns("users")}
-        backend = engine.url.get_backend_name()
-        statements = []
-        added_columns = []
-
-        if "timezone" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS timezone VARCHAR DEFAULT 'America/Santiago'"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN timezone VARCHAR DEFAULT 'America/Santiago'"
-                )
-            added_columns.append("timezone")
-
-        if "notifications_consent" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_consent VARCHAR DEFAULT ''"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN notifications_consent VARCHAR")
-            added_columns.append("notifications_consent")
-
-        if "notifications_last_prompt" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_prompt TIMESTAMP"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN notifications_last_prompt DATETIME")
-            added_columns.append("notifications_last_prompt")
-
-        if "token_version" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 0"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0")
-            added_columns.append("token_version")
-
-        if "failed_login_attempts" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0")
-            added_columns.append("failed_login_attempts")
-
-        if "locked_until" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP NULL"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN locked_until DATETIME")
-            added_columns.append("locked_until")
-
-        if "data_consent_revoked" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS data_consent_revoked BOOLEAN DEFAULT FALSE"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN data_consent_revoked BOOLEAN DEFAULT 0")
-            added_columns.append("data_consent_revoked")
-
-        if "deleted" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN deleted BOOLEAN DEFAULT 0")
-            added_columns.append("deleted")
-
-        if "chronic_condition" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS chronic_condition VARCHAR DEFAULT ''"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN chronic_condition VARCHAR")
-            added_columns.append("chronic_condition")
-
-        if "primary_care_center" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS primary_care_center VARCHAR DEFAULT ''"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN primary_care_center VARCHAR")
-            added_columns.append("primary_care_center")
-
-        if "reminder_preferred_time" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_preferred_time VARCHAR DEFAULT '08:00'"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN reminder_preferred_time VARCHAR DEFAULT '08:00'"
-                )
-            added_columns.append("reminder_preferred_time")
-
-        if "email_reminders_enabled" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS email_reminders_enabled BOOLEAN DEFAULT FALSE"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN email_reminders_enabled BOOLEAN DEFAULT 0"
-                )
-            added_columns.append("email_reminders_enabled")
-
-        if "notification_settings_json" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_settings_json TEXT DEFAULT ''"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN notification_settings_json TEXT DEFAULT ''"
-                )
-            added_columns.append("notification_settings_json")
-
-        if "plan_type" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_type VARCHAR DEFAULT 'basico'"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN plan_type VARCHAR DEFAULT 'basico'"
-                )
-            added_columns.append("plan_type")
-
-        if "active_health_profile_id" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS active_health_profile_id INTEGER"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN active_health_profile_id INTEGER"
-                )
-            added_columns.append("active_health_profile_id")
-
-        if "family_ai_needs_refresh" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_needs_refresh BOOLEAN DEFAULT FALSE"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN family_ai_needs_refresh BOOLEAN DEFAULT 0"
-                )
-            added_columns.append("family_ai_needs_refresh")
-
-        if "family_ai_refresh_requested_at" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_refresh_requested_at TIMESTAMP NULL"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN family_ai_refresh_requested_at DATETIME"
-                )
-            added_columns.append("family_ai_refresh_requested_at")
-
-        if "family_ai_last_refreshed_at" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS family_ai_last_refreshed_at TIMESTAMP NULL"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN family_ai_last_refreshed_at DATETIME"
-                )
-            added_columns.append("family_ai_last_refreshed_at")
-
-        # MFA columns
-        if "mfa_enabled" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE"
-                )
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN mfa_enabled BOOLEAN NOT NULL DEFAULT 0")
-            added_columns.append("mfa_enabled")
-
-        if "mfa_secret" not in columns:
-            if backend == "postgresql":
-                statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret VARCHAR")
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN mfa_secret VARCHAR")
-            added_columns.append("mfa_secret")
-
-        if "mfa_backup_codes_json" not in columns:
-            if backend == "postgresql":
-                statements.append("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_backup_codes_json TEXT")
-            else:
-                statements.append("ALTER TABLE users ADD COLUMN mfa_backup_codes_json TEXT")
-            added_columns.append("mfa_backup_codes_json")
-
-        # permissions_json in profile_relationships
-        try:
-            rel_columns = {col["name"] for col in inspector.get_columns("profile_relationships")}
-            if "permissions_json" not in rel_columns:
-                if backend == "postgresql":
-                    statements.append(
-                        "ALTER TABLE profile_relationships ADD COLUMN IF NOT EXISTS permissions_json TEXT"
-                    )
-                else:
-                    statements.append("ALTER TABLE profile_relationships ADD COLUMN permissions_json TEXT")
-                added_columns.append("profile_relationships.permissions_json")
-        except Exception:
-            pass
-
-        if statements:
-            with engine.begin() as conn:
-                for stmt in statements:
-                    conn.execute(text(stmt))
-                if "family_ai_needs_refresh" in added_columns:
-                    conn.execute(
-                        text(
-                            "UPDATE users SET family_ai_needs_refresh = COALESCE(family_ai_needs_refresh, FALSE)"
-                        )
-                    )
-                if "failed_login_attempts" in added_columns:
-                    conn.execute(
-                        text(
-                            "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)"
-                        )
-                    )
-            print(
-                f"DEBUG ensure_user_schema: columnas agregadas a users: {', '.join(added_columns)}"
-            )
-        else:
-            print("DEBUG ensure_user_schema: tabla users ya esta al dia")
-    except Exception as exc:
-        print(f"WARNING ensure_user_schema: no se pudo ajustar la tabla: {exc}")
+    """Garantiza que la tabla users tenga columnas nuevas usadas por la app."""
+    ensure_columns(
+        engine,
+        "users",
+        [
+            ("timezone", "VARCHAR DEFAULT 'America/Santiago'"),
+            ("notifications_consent", "VARCHAR DEFAULT ''", "VARCHAR"),
+            ("notifications_last_prompt", "TIMESTAMP", "DATETIME"),
+            ("token_version", "INTEGER DEFAULT 0"),
+            ("failed_login_attempts", "INTEGER DEFAULT 0"),
+            ("locked_until", "TIMESTAMP NULL", "DATETIME"),
+            ("data_consent_revoked", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
+            ("deleted", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
+            ("chronic_condition", "VARCHAR DEFAULT ''", "VARCHAR"),
+            ("primary_care_center", "VARCHAR DEFAULT ''", "VARCHAR"),
+            ("reminder_preferred_time", "VARCHAR DEFAULT '08:00'"),
+            ("email_reminders_enabled", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
+            ("notification_settings_json", "TEXT DEFAULT ''"),
+            ("plan_type", "VARCHAR DEFAULT 'basico'"),
+            ("active_health_profile_id", "INTEGER"),
+            ("family_ai_needs_refresh", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
+            ("family_ai_refresh_requested_at", "TIMESTAMP NULL", "DATETIME"),
+            ("family_ai_last_refreshed_at", "TIMESTAMP NULL", "DATETIME"),
+            ("mfa_enabled", "BOOLEAN NOT NULL DEFAULT FALSE", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("mfa_secret", "VARCHAR"),
+            ("mfa_backup_codes_json", "TEXT"),
+        ],
+        label="ensure_user_schema",
+        post_add_sql=[
+            "UPDATE users SET family_ai_needs_refresh = COALESCE(family_ai_needs_refresh, FALSE)",
+            "UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0)",
+        ],
+    )
+    # permissions_json en profile_relationships
+    ensure_columns(
+        engine,
+        "profile_relationships",
+        [("permissions_json", "TEXT")],
+        label="ensure_user_schema(profile_relationships)",
+    )
 
 
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
@@ -490,78 +212,21 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
 
 
 def ensure_health_profile_schema():
-    """
-    Garantiza columnas nuevas de health_profiles para Fase 3.
-    """
-    try:
-        inspector = inspect(engine)
-        columns = {col["name"] for col in inspector.get_columns("health_profiles")}
-        backend = engine.url.get_backend_name()
-        statements = []
-        added_columns = []
-
-        if "automation_settings_json" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS automation_settings_json TEXT DEFAULT ''"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN automation_settings_json TEXT DEFAULT ''"
-                )
-            added_columns.append("automation_settings_json")
-
-        if "ai_needs_refresh" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_needs_refresh BOOLEAN DEFAULT FALSE"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN ai_needs_refresh BOOLEAN DEFAULT 0"
-                )
-            added_columns.append("ai_needs_refresh")
-
-        if "ai_refresh_requested_at" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_refresh_requested_at TIMESTAMP NULL"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN ai_refresh_requested_at DATETIME"
-                )
-            added_columns.append("ai_refresh_requested_at")
-
-        if "ai_last_refreshed_at" not in columns:
-            if backend == "postgresql":
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN IF NOT EXISTS ai_last_refreshed_at TIMESTAMP NULL"
-                )
-            else:
-                statements.append(
-                    "ALTER TABLE health_profiles ADD COLUMN ai_last_refreshed_at DATETIME"
-                )
-            added_columns.append("ai_last_refreshed_at")
-
-        if statements:
-            with engine.begin() as conn:
-                for stmt in statements:
-                    conn.execute(text(stmt))
-                if "ai_needs_refresh" in added_columns:
-                    conn.execute(
-                        text(
-                            "UPDATE health_profiles SET ai_needs_refresh = COALESCE(ai_needs_refresh, FALSE)"
-                        )
-                    )
-            print(
-                "DEBUG ensure_health_profile_schema: columnas agregadas a health_profiles: "
-                + ", ".join(added_columns)
-            )
-        else:
-            print("DEBUG ensure_health_profile_schema: tabla health_profiles ya esta al dia")
-    except Exception as exc:
-        print(f"WARNING ensure_health_profile_schema: no se pudo ajustar la tabla: {exc}")
+    """Garantiza columnas nuevas de health_profiles para Fase 3."""
+    ensure_columns(
+        engine,
+        "health_profiles",
+        [
+            ("automation_settings_json", "TEXT DEFAULT ''"),
+            ("ai_needs_refresh", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
+            ("ai_refresh_requested_at", "TIMESTAMP NULL", "DATETIME"),
+            ("ai_last_refreshed_at", "TIMESTAMP NULL", "DATETIME"),
+        ],
+        label="ensure_health_profile_schema",
+        post_add_sql=[
+            "UPDATE health_profiles SET ai_needs_refresh = COALESCE(ai_needs_refresh, FALSE)",
+        ],
+    )
 
 
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:

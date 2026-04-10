@@ -245,6 +245,13 @@ Se considera smoke test aprobado cuando:
 
 - Fecha: `2026-04-01`
 - Responsable: `hp`
-- Version o commit desplegado: `PENDIENTE`
+- Version o commit desplegado: `Deploy validado manualmente en Railway el 2026-04-01`
 - Resultado general: `APROBADO`
 - Incidencias: `Sin bloqueos criticos reportados en la ejecucion manual en produccion.`
+
+## Cierre final de salida
+
+- Fecha de cierre final: `2026-04-01`
+- Estado final: `SMOKE TEST FINAL APROBADO`
+- Decision operativa: `GO tecnico para apertura de la app completa`
+- Observacion: `No quedan bloqueos tecnicos ni operativos minimos pendientes para abrir la app. Los pendientes restantes corresponden a landing, lista de espera, cobro y operacion comercial.`

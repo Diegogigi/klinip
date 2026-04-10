@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { login, getMe, verifyMfaLogin } from "../api";
+import { clearAppCaches } from "../utils/cache";
+import { extractApiError } from "../utils/errors";
 
 export default function Login({ onAuthenticated }) {
   const [email, setEmail] = useState("");
@@ -9,21 +11,10 @@ export default function Login({ onAuthenticated }) {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // MFA step
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaToken, setMfaToken] = useState("");
   const [mfaCode, setMfaCode] = useState("");
   const mfaInputRef = useRef(null);
-
-  const clearAppCaches = async () => {
-    if (!("caches" in window)) return;
-    const keys = await caches.keys();
-    await Promise.all(
-      keys
-        .filter((key) => key.startsWith("klinip-cache"))
-        .map((key) => caches.delete(key))
-    );
-  };
 
   const finalizeLogin = async (accessToken) => {
     localStorage.setItem("token", accessToken);
@@ -37,8 +28,8 @@ export default function Login({ onAuthenticated }) {
     onAuthenticated(me);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
     try {
@@ -61,14 +52,14 @@ export default function Login({ onAuthenticated }) {
         throw new Error("No se recibió token de acceso");
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.message || "Correo o contraseña incorrectos.");
+      setError(extractApiError(err, "Correo o contraseña incorrectos."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMfaSubmit = async (e) => {
-    e.preventDefault();
+  const handleMfaSubmit = async (event) => {
+    event.preventDefault();
     setError("");
     setLoading(true);
     try {
@@ -80,7 +71,7 @@ export default function Login({ onAuthenticated }) {
         throw new Error("Respuesta inesperada del servidor");
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || err?.message || "Código incorrecto. Intenta de nuevo.");
+      setError(extractApiError(err, "Código incorrecto. Intenta de nuevo."));
       setMfaCode("");
       setTimeout(() => mfaInputRef.current?.focus(), 100);
     } finally {
@@ -91,9 +82,9 @@ export default function Login({ onAuthenticated }) {
   return (
     <div className="auth-container">
       <div className="auth-decoration">
-        <div className="auth-blob blob-1"></div>
-        <div className="auth-blob blob-2"></div>
-        <div className="auth-blob blob-3"></div>
+        <div className="auth-blob blob-1" />
+        <div className="auth-blob blob-2" />
+        <div className="auth-blob blob-3" />
       </div>
 
       <div className="auth-content">
@@ -104,6 +95,7 @@ export default function Login({ onAuthenticated }) {
           </svg>
           Volver al inicio
         </Link>
+
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
@@ -112,6 +104,7 @@ export default function Login({ onAuthenticated }) {
                 <span className="brand-wordmark-compact">K</span>
               </h1>
             </div>
+
             {mfaRequired ? (
               <>
                 <h2 className="auth-welcome">Verificación en dos pasos</h2>
@@ -129,7 +122,7 @@ export default function Login({ onAuthenticated }) {
             )}
           </div>
 
-          {error && (
+          {error ? (
             <div className="auth-alert error">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" />
@@ -138,7 +131,7 @@ export default function Login({ onAuthenticated }) {
               </svg>
               <span>{error}</span>
             </div>
-          )}
+          ) : null}
 
           {mfaRequired ? (
             <form onSubmit={handleMfaSubmit} className="auth-form">
@@ -170,7 +163,7 @@ export default function Login({ onAuthenticated }) {
               <button className="auth-submit" type="submit" disabled={loading || mfaCode.length < 6}>
                 {loading ? (
                   <>
-                    <span className="auth-spinner"></span>
+                    <span className="auth-spinner" />
                     Verificando...
                   </>
                 ) : (
@@ -260,7 +253,7 @@ export default function Login({ onAuthenticated }) {
                 <button className="auth-submit" type="submit" disabled={loading}>
                   {loading ? (
                     <>
-                      <span className="auth-spinner"></span>
+                      <span className="auth-spinner" />
                       Ingresando...
                     </>
                   ) : (

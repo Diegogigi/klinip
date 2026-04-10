@@ -39163,3 +39163,1425 @@ body.theme-dark .mobile-dashboard {
   }
 }
 
+/* Klinip Inicio: detalles visuales de radar y accesos */
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .mobile-dashboard {
+    background:
+      linear-gradient(180deg, #f9fbff 0%, #eef4fb 44%, #edf3fb 100%);
+  }
+
+  .mobile-hero {
+    background:
+      linear-gradient(180deg, #ffffff 0%, #f8fbff 72%, #eef4fb 100%) !important;
+  }
+
+  .mobile-hero-avatar,
+  .mobile-hero-action-btn {
+    width: 46px;
+    height: 46px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.92)) !important;
+    box-shadow:
+      0 18px 34px rgba(15, 35, 70, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .mobile-hero-action-btn:active,
+  .mobile-hero-avatar:active {
+    transform: scale(0.98);
+  }
+
+  .mobile-hero-health-card {
+    isolation: isolate;
+    min-height: 198px;
+    padding: 1rem 1.05rem 1.05rem !important;
+    background:
+      linear-gradient(118deg, rgba(255, 255, 255, 0.15) 0 12%, transparent 12% 100%),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 11px),
+      linear-gradient(145deg, #0d48c7 0%, #2563eb 58%, #37a8ff 100%) !important;
+    box-shadow:
+      0 24px 48px rgba(37, 99, 235, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -26px 54px rgba(11, 45, 130, 0.28);
+  }
+
+  .mobile-hero-health-card::before,
+  .mobile-hero-health-card::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .mobile-hero-health-card::before {
+    inset: 1px;
+    border-radius: 7px;
+    background:
+      linear-gradient(112deg, transparent 0 24%, rgba(255, 255, 255, 0.18) 25%, transparent 40% 100%);
+    opacity: 0.7;
+    transform: translateX(-18%);
+    animation: klinipCardShine 6s ease-in-out infinite;
+  }
+
+  .mobile-hero-health-card::after {
+    inset: auto 0 0 0;
+    height: 46%;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(11, 34, 96, 0.22) 100%),
+      repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 12px);
+  }
+
+  .mobile-hero-stat-label {
+    gap: 0.42rem;
+    min-height: 24px;
+  }
+
+  .mobile-hero-stat-label svg {
+    width: 14px;
+    height: 14px;
+    filter: drop-shadow(0 3px 8px rgba(255, 255, 255, 0.22));
+  }
+
+  .mobile-hero-stat-value {
+    font-size: 2.9rem !important;
+    text-shadow: 0 8px 24px rgba(7, 32, 96, 0.24);
+  }
+
+  .mobile-hero-stat-badge {
+    min-height: 30px;
+    padding: 0.34rem 0.72rem;
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 10px 22px rgba(10, 35, 92, 0.16);
+    backdrop-filter: blur(10px);
+  }
+
+  .mobile-hero-badges {
+    gap: 0.5rem;
+  }
+
+  .mobile-hero-profile-badge {
+    min-height: 30px;
+    padding: 0.26rem 0.7rem;
+    background: rgba(255, 255, 255, 0.13);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(10px);
+  }
+
+  .mobile-hero-progress {
+    position: relative;
+    width: 94px;
+    height: 94px;
+    background:
+      radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
+      conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+    box-shadow:
+      0 18px 34px rgba(11, 35, 96, 0.22),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+  }
+
+  .mobile-hero-progress::before {
+    content: "";
+    position: absolute;
+    inset: 9px;
+    border-radius: 50%;
+    background:
+      linear-gradient(145deg, #1f5ee0, #123aa0);
+    box-shadow:
+      inset 0 16px 26px rgba(255, 255, 255, 0.08),
+      inset 0 -16px 30px rgba(4, 24, 74, 0.34);
+  }
+
+  .mobile-hero-progress::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: conic-gradient(from 215deg, transparent 0 70%, rgba(255, 255, 255, 0.34) 78%, transparent 88% 100%);
+    animation: klinipRingPulse 4.8s ease-in-out infinite;
+  }
+
+  .mobile-hero-progress span {
+    position: relative;
+    z-index: 1;
+    font-size: 1.16rem;
+    text-shadow: 0 6px 16px rgba(5, 20, 64, 0.28);
+  }
+
+  .mobile-hero-health-footer {
+    margin-top: 1rem;
+  }
+
+  .mobile-hero-recommendation-btn {
+    min-height: 42px;
+    padding: 0.56rem 0.78rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.1));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 12px 24px rgba(8, 30, 84, 0.16);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobile-hero-recommendation-btn:active {
+    transform: translateY(1px);
+  }
+
+  .mobile-sheet {
+    background:
+      linear-gradient(180deg, #eef4fb 0%, #f6f9fd 22%, #eef4fb 100%) !important;
+  }
+
+  .mobile-intelligence-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 84px;
+    margin-top: 0.2rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 255, 0.96) 100%);
+    box-shadow:
+      0 18px 38px rgba(15, 35, 70, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+
+  .mobile-intelligence-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.34), transparent);
+  }
+
+  .mobile-intelligence-icon {
+    box-shadow:
+      0 12px 24px rgba(37, 99, 235, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
+
+  .mobile-intelligence-icon svg {
+    filter: drop-shadow(0 4px 8px rgba(4, 28, 82, 0.22));
+  }
+
+  .mobile-intelligence-copy strong {
+    font-size: 0.94rem;
+  }
+
+  .mobile-intelligence-cta {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    background:
+      linear-gradient(180deg, #f4f9ff 0%, #e8f2ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  }
+
+  .mobile-section-header {
+    align-items: center;
+  }
+
+  .mobile-quick-counter {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.36rem;
+  }
+
+  .mobile-quick-counter::after {
+    content: ">";
+    color: #93a4ba;
+    font-weight: 900;
+  }
+
+  .mobile-quick-slide {
+    min-height: 138px;
+  }
+
+  .mobile-quick-item {
+    position: relative;
+    overflow: hidden;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    border-color: transparent !important;
+    color: #ffffff !important;
+    box-shadow:
+      0 16px 30px rgba(15, 35, 70, 0.12),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+  }
+
+  .mobile-quick-item::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0 16%, transparent 16% 100%),
+      repeating-linear-gradient(140deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 13px);
+    opacity: 0.66;
+    pointer-events: none;
+  }
+
+  .mobile-quick-item > * {
+    position: relative;
+    z-index: 1;
+  }
+
+  .mobile-quick-item.tone-blue,
+  .mobile-quick-item.is-featured {
+    background:
+      linear-gradient(145deg, #0d48c7 0%, #2563eb 58%, #3b82f6 100%) !important;
+  }
+
+  .mobile-quick-item.tone-teal,
+  .mobile-quick-item.is-spotlight {
+    background:
+      linear-gradient(145deg, #0f8f87 0%, #14b8a6 58%, #2dd4bf 100%) !important;
+  }
+
+  .mobile-quick-item.tone-sky {
+    background:
+      linear-gradient(145deg, #0b78b8 0%, #0ea5e9 62%, #38bdf8 100%) !important;
+  }
+
+  .mobile-quick-item.tone-violet {
+    background:
+      linear-gradient(145deg, #5b4bc4 0%, #7c3aed 62%, #a78bfa 100%) !important;
+  }
+
+  .mobile-quick-item.tone-green {
+    background:
+      linear-gradient(145deg, #13966f 0%, #22c55e 60%, #4ade80 100%) !important;
+  }
+
+  .mobile-quick-icon {
+    width: 42px;
+    height: 42px;
+    background: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .mobile-quick-highlight {
+    min-height: 28px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  }
+
+  .mobile-note-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 251, 255, 0.96)) !important;
+    border: 1px solid #dbe7f5 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 18px 38px rgba(15, 35, 70, 0.1) !important;
+  }
+
+  .mobile-note-card .home-note-row.note-color-pink,
+  .mobile-note-card .home-note-row.note-color-yellow,
+  .mobile-note-card .home-note-row.note-color-mint,
+  .mobile-note-card .home-note-row.note-color-lavender,
+  .mobile-note-card .home-note-row.note-color-peach {
+    border-radius: 8px !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  }
+}
+
+@media (max-width: 390px) {
+  .mobile-hero-health-card {
+    min-height: 188px;
+  }
+
+  .mobile-hero-progress {
+    width: 78px;
+    height: 78px;
+  }
+
+  .mobile-hero-progress span {
+    font-size: 1rem;
+  }
+
+  .mobile-quick-slide {
+    min-height: 126px;
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  body.theme-dark .mobile-dashboard,
+  body.theme-dark .mobile-hero,
+  body.theme-dark .mobile-sheet {
+    background: #07111f !important;
+  }
+
+  body.theme-dark .mobile-hero-avatar,
+  body.theme-dark .mobile-hero-action-btn {
+    background:
+      linear-gradient(180deg, rgba(15, 23, 39, 0.98), rgba(10, 16, 27, 0.92)) !important;
+    box-shadow: none;
+  }
+
+  body.theme-dark .mobile-hero-health-card {
+    background:
+      linear-gradient(118deg, rgba(255, 255, 255, 0.1) 0 12%, transparent 12% 100%),
+      linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 11px),
+      linear-gradient(145deg, #0b3aa4 0%, #1d4ed8 62%, #0f7bbd 100%) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 -26px 54px rgba(2, 6, 23, 0.26);
+  }
+
+  body.theme-dark .mobile-hero-progress {
+    background:
+      radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
+      conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+    box-shadow: none;
+  }
+
+  body.theme-dark .mobile-hero-progress::before {
+    background: linear-gradient(145deg, #0f2a67, #071a43);
+  }
+
+  body.theme-dark .mobile-intelligence-card,
+  body.theme-dark .mobile-note-card {
+    background: linear-gradient(180deg, rgba(15, 23, 39, 0.98), rgba(10, 16, 27, 0.96)) !important;
+    border-color: rgba(96, 165, 250, 0.22) !important;
+    box-shadow: none !important;
+  }
+
+  body.theme-dark .mobile-intelligence-cta {
+    background: rgba(37, 99, 235, 0.22);
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-hero-health-card::before,
+  .mobile-hero-progress::after {
+    animation: none !important;
+  }
+}
+
+@keyframes klinipCardShine {
+  0%, 55%, 100% {
+    transform: translateX(-28%);
+    opacity: 0.18;
+  }
+  72% {
+    transform: translateX(28%);
+    opacity: 0.7;
+  }
+}
+
+@keyframes klinipRingPulse {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.82;
+    transform: scale(1.035);
+  }
+}
+
+/* Klinip: lenguaje visual compartido para secciones principales */
+:root {
+  --klinip-ui-bg: #f5f9fe;
+  --klinip-ui-surface: rgba(255, 255, 255, 0.96);
+  --klinip-ui-surface-soft: #f8fbff;
+  --klinip-ui-border: #dbe7f5;
+  --klinip-ui-text: #102033;
+  --klinip-ui-muted: #536579;
+  --klinip-ui-primary: #2563eb;
+  --klinip-ui-sky: #0ea5e9;
+  --klinip-ui-teal: #14b8a6;
+  --klinip-ui-green: #22c55e;
+  --klinip-ui-amber: #f59e0b;
+  --klinip-ui-violet: #7c3aed;
+  --klinip-ui-shadow: 0 18px 38px rgba(15, 35, 70, 0.1);
+  --klinip-ui-shadow-strong: 0 24px 48px rgba(37, 99, 235, 0.2);
+  --klinip-ui-radius: 8px;
+  --klinip-ui-hero: linear-gradient(145deg, #0d48c7 0%, #2563eb 58%, #37a8ff 100%);
+  --klinip-ui-hero-dark: linear-gradient(145deg, #0b3aa4 0%, #1d4ed8 62%, #0f7bbd 100%);
+}
+
+body.theme-dark {
+  --klinip-ui-bg: #07111f;
+  --klinip-ui-surface: rgba(15, 23, 39, 0.96);
+  --klinip-ui-surface-soft: #0f1727;
+  --klinip-ui-border: rgba(96, 165, 250, 0.2);
+  --klinip-ui-text: #e5eefc;
+  --klinip-ui-muted: #94a3b8;
+  --klinip-ui-shadow: none;
+  --klinip-ui-shadow-strong: none;
+}
+
+.ai-page,
+.vp2-page,
+.kfeed-page,
+.health-hub-page,
+.clinical-reports-page,
+.stats-page {
+  color: var(--klinip-ui-text);
+}
+
+.ai-landing-center,
+.vp2-header,
+.kfeed-page-header,
+.health-hub-hero,
+.clinical-reports-hero,
+.stats-hero,
+.timeline-overview-card,
+.appointments-intro,
+.documents-intro,
+.medications-intro,
+.calendar-card > .card-header,
+.profile-page-header,
+.family-page-header,
+.family-klinip-banner {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--klinip-ui-radius) !important;
+  border: 1px solid rgba(219, 231, 245, 0.9) !important;
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.16) 0 12%, transparent 12% 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px 11px),
+    var(--klinip-ui-hero) !important;
+  box-shadow: var(--klinip-ui-shadow-strong) !important;
+  color: #ffffff !important;
+}
+
+.ai-landing-center::before,
+.vp2-header::before,
+.kfeed-page-header::before,
+.health-hub-hero::before,
+.clinical-reports-hero::before,
+.stats-hero::before,
+.timeline-overview-card::before,
+.appointments-intro::before,
+.documents-intro::before,
+.medications-intro::before,
+.calendar-card > .card-header::before,
+.profile-page-header::before,
+.family-page-header::before,
+.family-klinip-banner::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: 7px;
+  pointer-events: none;
+  background: linear-gradient(112deg, transparent 0 24%, rgba(255, 255, 255, 0.18) 25%, transparent 40% 100%);
+  opacity: 0.5;
+}
+
+.ai-landing-center > *,
+.vp2-header > *,
+.kfeed-page-header > *,
+.health-hub-hero > *,
+.clinical-reports-hero > *,
+.stats-hero > *,
+.timeline-overview-card > *,
+.appointments-intro > *,
+.documents-intro > *,
+.medications-intro > *,
+.calendar-card > .card-header > *,
+.profile-page-header > *,
+.family-page-header > *,
+.family-klinip-banner > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ai-landing-center h1,
+.ai-landing-center h2,
+.ai-landing-center h3,
+.vp2-header h1,
+.vp2-header h2,
+.kfeed-page-title,
+.health-hub-hero h1,
+.clinical-reports-hero .card-title,
+.stats-hero-title,
+.timeline-overview-card .card-title,
+.appointments-intro .card-title,
+.documents-intro .card-title,
+.medications-intro .card-title,
+.calendar-card > .card-header .card-title,
+.profile-page-title,
+.family-page-header .card-title,
+.family-klinip-banner-title {
+  color: #ffffff !important;
+  letter-spacing: 0 !important;
+  text-shadow: 0 8px 24px rgba(7, 32, 96, 0.24);
+}
+
+.ai-landing-center p,
+.ai-landing-center .muted,
+.vp2-header p,
+.kfeed-page-subtitle,
+.health-hub-hero p,
+.clinical-reports-hero .muted,
+.stats-hero-sub,
+.timeline-overview-card .muted,
+.appointments-intro .muted,
+.documents-intro .muted,
+.medications-intro .muted,
+.calendar-card > .card-header .muted,
+.calendar-card > .card-header p,
+.profile-page-header .muted,
+.family-page-header .muted,
+.family-klinip-banner-subtitle {
+  color: rgba(255, 255, 255, 0.86) !important;
+}
+
+.ai-right-panel,
+.ai-chat,
+.ai-chat-inner,
+.vp2-hero,
+.vp2-library,
+.vp2-automation-card,
+.vp2-session-card,
+.kfeed-layout,
+.kfeed-composer,
+.kfeed-post-card,
+.kfeed-sidebar,
+.health-hub-card,
+.clinical-report-card,
+.clinical-reports-filters-card,
+.clinical-reports-list-card,
+.stats-charts,
+.stats-ring-card,
+.stats-panel,
+.stats-bottom-item,
+.timeline-filters-card,
+.timeline-list-card,
+.timeline-card,
+.appointments-surface-free:not(.appointments-intro),
+.appointments-filters-card,
+.appointments-table-shell,
+.documents-surface-free:not(.documents-intro),
+.documents-filters-card,
+.documents-list-card,
+.medications-surface-free:not(.medications-intro),
+.medications-filters-card,
+.medications-list-card,
+.medications-purchases-card,
+.calendar-card,
+.calendar-cell,
+.calendar-event-card,
+.profile-page-card,
+.settings-section,
+.family-quick-card,
+.family-member-card,
+.family-create-card,
+.family-collab-card,
+.family-management-card,
+.family-canvas-card {
+  border-radius: var(--klinip-ui-radius) !important;
+  border-color: var(--klinip-ui-border) !important;
+  background:
+    linear-gradient(180deg, var(--klinip-ui-surface) 0%, var(--klinip-ui-surface-soft) 100%) !important;
+  box-shadow: var(--klinip-ui-shadow) !important;
+}
+
+.ai-right-panel,
+.kfeed-sidebar,
+.settings-section {
+  overflow: hidden;
+}
+
+.ai-right-panel::before,
+.vp2-hero::before,
+.vp2-automation-card::before,
+.kfeed-composer::before,
+.kfeed-post-card::before,
+.health-hub-card::before,
+.clinical-report-card::before,
+.stats-ring-card::before,
+.timeline-card::before,
+.appointments-surface-free:not(.appointments-intro)::before,
+.documents-surface-free:not(.documents-intro)::before,
+.medications-surface-free:not(.medications-intro)::before,
+.profile-page-card::before,
+.settings-section::before,
+.family-quick-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(37, 99, 235, 0.28), transparent);
+  pointer-events: none;
+}
+
+.ai-right-panel,
+.vp2-hero,
+.vp2-automation-card,
+.kfeed-composer,
+.kfeed-post-card,
+.health-hub-card,
+.clinical-report-card,
+.stats-ring-card,
+.timeline-card,
+.appointments-surface-free:not(.appointments-intro),
+.documents-surface-free:not(.documents-intro),
+.medications-surface-free:not(.medications-intro),
+.profile-page-card,
+.settings-section,
+.family-quick-card {
+  position: relative;
+}
+
+.health-hub-card:hover,
+.clinical-report-card:hover,
+.stats-ring-card:hover,
+.timeline-card:hover,
+.appointments-surface-free:not(.appointments-intro):hover,
+.documents-surface-free:not(.documents-intro):hover,
+.medications-surface-free:not(.medications-intro):hover,
+.calendar-event-card:hover,
+.profile-page-card:hover,
+.family-quick-card:hover,
+.kfeed-post-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(37, 99, 235, 0.34) !important;
+  box-shadow: 0 20px 42px rgba(15, 35, 70, 0.12) !important;
+}
+
+.ai-page .primary-btn,
+.ai-page .secondary-btn,
+.vp2-page button,
+.kfeed-page button,
+.health-hub-page a,
+.clinical-reports-page button,
+.stats-page button,
+.timeline-filter-btn,
+.appointments-surface-free button,
+.documents-surface-free button,
+.medications-surface-free button,
+.calendar-card button,
+.settings-shell button,
+.family-klinip-upgrade {
+  border-radius: var(--klinip-ui-radius) !important;
+}
+
+.ai-page .primary-btn,
+.vp2-hero-btn,
+.kfeed-create-button,
+.health-hub-hero-action,
+.clinical-report-generate-btn,
+.appointments-create .primary-btn,
+.documents-create .primary-btn,
+.medications-create .primary-btn,
+.family-klinip-upgrade,
+.settings-shell .primary-btn,
+.settings-shell .btn-save {
+  background:
+    linear-gradient(90deg, var(--klinip-ui-sky) 0%, var(--klinip-ui-primary) 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.22) !important;
+}
+
+.ai-page .secondary-btn,
+.kfeed-page .secondary-btn,
+.clinical-reports-page .secondary-btn,
+.appointments-surface-free .secondary-btn,
+.documents-surface-free .secondary-btn,
+.medications-surface-free .secondary-btn,
+.calendar-card .secondary-btn,
+.settings-shell .secondary-btn,
+.settings-shell .btn-sm,
+.health-hub-card,
+.calendar-nav-btn,
+.calendar-scope-btn {
+  border-color: var(--klinip-ui-border) !important;
+  background: rgba(255, 255, 255, 0.72) !important;
+  color: var(--klinip-ui-text) !important;
+}
+
+.ai-page .input-field,
+.ai-page .textarea-field,
+.vp2-page input,
+.vp2-page select,
+.vp2-page textarea,
+.kfeed-page input,
+.kfeed-page textarea,
+.clinical-reports-page .input-field,
+.timeline-filters-card .input-field,
+.appointments-filters-card .input-field,
+.appointments-filters-card .select-field,
+.documents-filters-card .input-field,
+.documents-filters-card .select-field,
+.medications-filters-card .input-field,
+.medications-filters-card .select-field,
+.settings-shell .input-field,
+.settings-shell .select-field,
+.settings-shell .textarea-field {
+  border-radius: var(--klinip-ui-radius) !important;
+  border-color: var(--klinip-ui-border) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--klinip-ui-text) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+}
+
+.stats-ring {
+  box-shadow:
+    0 18px 34px rgba(11, 35, 96, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.stats-kpi,
+.timeline-stat-card,
+.clinical-summary-chip,
+.calendar-profile-pill,
+.calendar-event-profile,
+.vp2-hero-tag,
+.health-hub-card-eyebrow,
+.family-page-plan-chip,
+.status-badge {
+  border-radius: var(--klinip-ui-radius) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.stats-kpi,
+.timeline-stat-card.is-appointments,
+.clinical-summary-chip,
+.calendar-profile-pill.profile-blue {
+  background: linear-gradient(145deg, #0d48c7 0%, #2563eb 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.timeline-stat-card.is-documents,
+.calendar-profile-pill.profile-teal,
+.health-hub-card:nth-child(2n),
+.family-quick-card:nth-child(2n) {
+  background: linear-gradient(145deg, #0f8f87 0%, #14b8a6 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.timeline-stat-card.is-medications,
+.calendar-profile-pill.profile-amber,
+.health-hub-card:nth-child(3n),
+.family-quick-card:nth-child(3n) {
+  background: linear-gradient(145deg, #c56a08 0%, #f59e0b 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.timeline-stat-card.is-total,
+.calendar-profile-pill.profile-violet,
+.health-hub-card:nth-child(4n),
+.family-quick-card:nth-child(4n) {
+  background: linear-gradient(145deg, #5b4bc4 0%, #7c3aed 100%) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.timeline-stat-card *,
+.stats-kpi *,
+.clinical-summary-chip *,
+.calendar-profile-pill *,
+.health-hub-card:nth-child(n) strong,
+.health-hub-card:nth-child(n) span,
+.family-quick-card:nth-child(n) * {
+  color: inherit !important;
+}
+
+.calendar-event-card.event-green {
+  background: linear-gradient(145deg, #13966f 0%, #22c55e 100%) !important;
+}
+
+.calendar-event-card.event-blue {
+  background: linear-gradient(145deg, #0d48c7 0%, #2563eb 100%) !important;
+}
+
+.calendar-event-card.event-yellow {
+  background: linear-gradient(145deg, #c56a08 0%, #f59e0b 100%) !important;
+}
+
+.calendar-event-card.event-purple {
+  background: linear-gradient(145deg, #5b4bc4 0%, #7c3aed 100%) !important;
+}
+
+.calendar-event-card.event-green,
+.calendar-event-card.event-blue,
+.calendar-event-card.event-yellow,
+.calendar-event-card.event-purple {
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+.calendar-event-card.event-green *,
+.calendar-event-card.event-blue *,
+.calendar-event-card.event-yellow *,
+.calendar-event-card.event-purple * {
+  color: inherit !important;
+}
+
+body.theme-dark .ai-landing-center,
+body.theme-dark .vp2-header,
+body.theme-dark .kfeed-page-header,
+body.theme-dark .health-hub-hero,
+body.theme-dark .clinical-reports-hero,
+body.theme-dark .stats-hero,
+body.theme-dark .timeline-overview-card,
+body.theme-dark .appointments-intro,
+body.theme-dark .documents-intro,
+body.theme-dark .medications-intro,
+body.theme-dark .calendar-card > .card-header,
+body.theme-dark .profile-page-header,
+body.theme-dark .family-page-header,
+body.theme-dark .family-klinip-banner {
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.1) 0 12%, transparent 12% 100%),
+    linear-gradient(155deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px 11px),
+    var(--klinip-ui-hero-dark) !important;
+}
+
+body.theme-dark .ai-page .secondary-btn,
+body.theme-dark .kfeed-page .secondary-btn,
+body.theme-dark .clinical-reports-page .secondary-btn,
+body.theme-dark .appointments-surface-free .secondary-btn,
+body.theme-dark .documents-surface-free .secondary-btn,
+body.theme-dark .medications-surface-free .secondary-btn,
+body.theme-dark .calendar-card .secondary-btn,
+body.theme-dark .settings-shell .secondary-btn,
+body.theme-dark .settings-shell .btn-sm,
+body.theme-dark .calendar-nav-btn,
+body.theme-dark .calendar-scope-btn {
+  background: rgba(15, 23, 39, 0.88) !important;
+  color: var(--klinip-ui-text) !important;
+}
+
+body.theme-dark .ai-page .input-field,
+body.theme-dark .ai-page .textarea-field,
+body.theme-dark .vp2-page input,
+body.theme-dark .vp2-page select,
+body.theme-dark .vp2-page textarea,
+body.theme-dark .kfeed-page input,
+body.theme-dark .kfeed-page textarea,
+body.theme-dark .clinical-reports-page .input-field,
+body.theme-dark .timeline-filters-card .input-field,
+body.theme-dark .appointments-filters-card .input-field,
+body.theme-dark .appointments-filters-card .select-field,
+body.theme-dark .documents-filters-card .input-field,
+body.theme-dark .documents-filters-card .select-field,
+body.theme-dark .medications-filters-card .input-field,
+body.theme-dark .medications-filters-card .select-field,
+body.theme-dark .settings-shell .input-field,
+body.theme-dark .settings-shell .select-field,
+body.theme-dark .settings-shell .textarea-field {
+  background: rgba(10, 16, 27, 0.92) !important;
+  color: var(--klinip-ui-text) !important;
+  box-shadow: none;
+}
+
+body.theme-dark .health-hub-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:nth-child(4n)),
+body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:nth-child(4n)) {
+  color: var(--klinip-ui-text) !important;
+}
+
+@media (max-width: 768px) {
+  .ai-landing-center,
+  .vp2-header,
+  .kfeed-page-header,
+  .health-hub-hero,
+  .clinical-reports-hero,
+  .stats-hero,
+  .timeline-overview-card,
+  .appointments-intro,
+  .documents-intro,
+  .medications-intro,
+  .calendar-card > .card-header,
+  .profile-page-header,
+  .family-page-header,
+  .family-klinip-banner {
+    padding: 0.9rem !important;
+  }
+
+  .ai-right-panel,
+  .vp2-hero,
+  .vp2-automation-card,
+  .vp2-session-card,
+  .kfeed-composer,
+  .kfeed-post-card,
+  .health-hub-card,
+  .clinical-report-card,
+  .clinical-reports-filters-card,
+  .clinical-reports-list-card,
+  .stats-ring-card,
+  .stats-panel,
+  .timeline-filters-card,
+  .timeline-list-card,
+  .timeline-card,
+  .appointments-surface-free:not(.appointments-intro),
+  .documents-surface-free:not(.documents-intro),
+  .medications-surface-free:not(.medications-intro),
+  .calendar-card,
+  .calendar-cell,
+  .profile-page-card,
+  .settings-section,
+  .family-quick-card {
+    padding: 0.82rem !important;
+    box-shadow: none !important;
+  }
+
+  .health-hub-grid,
+  .health-hub-support-grid,
+  .clinical-report-grid,
+  .stats-rings,
+  .stats-panels,
+  .stats-bottom,
+  .timeline-stats,
+  .appointments-filters-row,
+  .documents-filters-row,
+  .medications-filters-row {
+    gap: 0.62rem !important;
+  }
+
+  .stats-ring {
+    width: 74px !important;
+    height: 74px !important;
+  }
+
+  .calendar-event-card,
+  .timeline-card {
+    min-height: 0 !important;
+  }
+}
+
+/* Klinip Mi salud: panel visual tipo Inicio */
+.health-hub-page {
+  position: relative;
+  gap: 1.15rem;
+}
+
+.health-hub-native-header {
+  display: none;
+}
+
+.health-hub-hero {
+  align-items: flex-start !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  min-height: 240px;
+  padding: 1.75rem !important;
+  border: 1px solid rgba(174, 198, 235, 0.72) !important;
+  background:
+    radial-gradient(circle at 8% 42%, rgba(255, 255, 255, 0.94) 0 2px, transparent 3px 100%),
+    radial-gradient(circle at 94% 34%, rgba(255, 255, 255, 0.9) 0 2px, transparent 3px 100%),
+    radial-gradient(circle at 78% 68%, rgba(37, 99, 235, 0.12) 0 1px, transparent 2px 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(239, 247, 255, 0.96) 54%, rgba(226, 239, 255, 0.92) 100%) !important;
+  color: #102033 !important;
+  box-shadow:
+    0 24px 48px rgba(37, 99, 235, 0.13),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98) !important;
+}
+
+.health-hub-hero::before {
+  inset: 0 !important;
+  border-radius: 8px !important;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.72) 0 18%, transparent 19% 100%),
+    radial-gradient(circle at 0% 76%, rgba(37, 99, 235, 0.12), transparent 28%) !important;
+  opacity: 0.86 !important;
+}
+
+.health-hub-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0.7rem;
+  pointer-events: none;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 2% 46%, rgba(255, 255, 255, 0.96) 0 2px, transparent 3px 100%),
+    radial-gradient(circle at 7% 54%, rgba(255, 255, 255, 0.72) 0 1px, transparent 2px 100%),
+    radial-gradient(circle at 92% 36%, rgba(255, 255, 255, 0.82) 0 2px, transparent 3px 100%),
+    linear-gradient(115deg, transparent 0 52%, rgba(255, 255, 255, 0.34) 53%, transparent 64% 100%);
+  opacity: 0.74;
+}
+
+.health-hub-hero h1 {
+  max-width: 640px;
+  color: #14213d !important;
+  font-size: clamp(1.85rem, 2.9vw, 2.7rem) !important;
+  line-height: 1.18 !important;
+  text-shadow: none !important;
+}
+
+.health-hub-hero p {
+  max-width: 680px;
+  color: #485a72 !important;
+  font-size: 1.05rem;
+  line-height: 1.62;
+}
+
+.health-hub-hero-action {
+  width: min(100%, 420px);
+  min-height: 50px;
+  margin-top: 0.45rem;
+  background: linear-gradient(90deg, #0d48c7 0%, #2563eb 100%) !important;
+  box-shadow: 0 16px 30px rgba(37, 99, 235, 0.24) !important;
+}
+
+.health-hub-page > .health-hub-section:nth-of-type(2) {
+  padding: 1.25rem;
+  border: 1px solid rgba(219, 231, 245, 0.9);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 18px 42px rgba(15, 35, 70, 0.08);
+}
+
+.health-hub-page > .health-hub-section:nth-of-type(3) {
+  padding-top: 0.15rem;
+}
+
+.health-hub-section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.health-hub-section-head h2 {
+  color: #14213d !important;
+  font-size: 1.25rem;
+}
+
+.health-hub-section-head p {
+  max-width: 520px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.health-hub-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.health-hub-card {
+  position: relative;
+  overflow: hidden;
+  align-content: space-between;
+  min-height: 214px;
+  padding: 1.25rem !important;
+  color: #14213d !important;
+  border-color: rgba(255, 255, 255, 0.72) !important;
+  background: linear-gradient(145deg, #edf6ff 0%, #dcecff 100%) !important;
+  box-shadow:
+    0 18px 34px rgba(37, 99, 235, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82) !important;
+}
+
+.health-hub-card::before {
+  inset: 0 !important;
+  height: auto !important;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 15% 18%, rgba(255, 255, 255, 0.9) 0 2px, transparent 3px 100%),
+    radial-gradient(circle at 88% 48%, rgba(255, 255, 255, 0.68) 0 2px, transparent 3px 100%),
+    linear-gradient(128deg, transparent 0 48%, rgba(255, 255, 255, 0.24) 49%, transparent 66% 100%) !important;
+  opacity: 0.84;
+}
+
+.health-hub-card::after {
+  content: "";
+  position: absolute;
+  inset: auto -12% -20% 26%;
+  height: 74%;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.24);
+  pointer-events: none;
+  transform: rotate(-18deg);
+}
+
+.health-hub-card-copy,
+.health-hub-card-visual {
+  position: relative;
+  z-index: 1;
+}
+
+.health-hub-card-copy {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.health-hub-card-visual {
+  display: inline-flex;
+  width: 78px;
+  height: 78px;
+  margin-bottom: 1.15rem;
+  color: rgba(37, 99, 235, 0.86);
+  filter: drop-shadow(0 14px 18px rgba(37, 99, 235, 0.18));
+}
+
+.health-hub-card-visual svg {
+  width: 100%;
+  height: 100%;
+}
+
+.health-hub-card-eyebrow {
+  color: rgba(20, 33, 61, 0.68) !important;
+  font-size: 0.68rem;
+}
+
+.health-hub-card strong {
+  color: inherit !important;
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+.health-hub-card span {
+  color: inherit !important;
+}
+
+.health-hub-card-copy > span:last-child {
+  max-width: 220px;
+  color: rgba(20, 33, 61, 0.76) !important;
+  font-size: 1.02rem;
+}
+
+.health-hub-card.health-hub-card-blue {
+  background: linear-gradient(145deg, #eef7ff 0%, #dbeafe 100%) !important;
+}
+
+.health-hub-card.health-hub-card-teal {
+  background: linear-gradient(145deg, #e4fbf7 0%, #c7f3ec 100%) !important;
+}
+
+.health-hub-card.health-hub-card-teal .health-hub-card-visual {
+  color: rgba(15, 143, 135, 0.88);
+  filter: drop-shadow(0 14px 18px rgba(20, 184, 166, 0.2));
+}
+
+.health-hub-card.health-hub-card-lavender {
+  background: linear-gradient(145deg, #f1efff 0%, #e1ddff 100%) !important;
+}
+
+.health-hub-card.health-hub-card-lavender .health-hub-card-visual {
+  color: rgba(91, 75, 196, 0.84);
+  filter: drop-shadow(0 14px 18px rgba(124, 58, 237, 0.18));
+}
+
+.health-hub-card.health-hub-card-amber {
+  background: linear-gradient(145deg, #fff8df 0%, #ffe8a8 100%) !important;
+}
+
+.health-hub-card.health-hub-card-amber .health-hub-card-visual {
+  color: rgba(181, 103, 9, 0.88);
+  filter: drop-shadow(0 14px 18px rgba(245, 158, 11, 0.18));
+}
+
+.health-hub-card.health-hub-card-compact {
+  min-height: 118px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, #f8fbff 100%) !important;
+}
+
+.health-hub-card-compact .health-hub-card-copy > span:last-child {
+  max-width: none;
+  font-size: 0.92rem;
+}
+
+body.theme-dark .health-hub-hero {
+  border-color: rgba(96, 165, 250, 0.22) !important;
+  background:
+    radial-gradient(circle at 8% 42%, rgba(147, 197, 253, 0.24) 0 2px, transparent 3px 100%),
+    radial-gradient(circle at 94% 34%, rgba(45, 212, 191, 0.16) 0 2px, transparent 3px 100%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(17, 34, 64, 0.96) 58%, rgba(12, 53, 92, 0.92) 100%) !important;
+  color: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .health-hub-hero h1,
+body.theme-dark .health-hub-section-head h2 {
+  color: #f8fafc !important;
+}
+
+body.theme-dark .health-hub-hero p,
+body.theme-dark .health-hub-section-head p {
+  color: #cbd5e1 !important;
+}
+
+body.theme-dark .health-hub-page > .health-hub-section:nth-of-type(2) {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(15, 23, 42, 0.68);
+  box-shadow: none;
+}
+
+body.theme-dark .health-hub-card {
+  color: #eef6ff !important;
+  border-color: rgba(96, 165, 250, 0.2) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .health-hub-card.health-hub-card-blue {
+  background: linear-gradient(145deg, rgba(20, 54, 116, 0.92) 0%, rgba(30, 64, 175, 0.7) 100%) !important;
+}
+
+body.theme-dark .health-hub-card.health-hub-card-teal {
+  background: linear-gradient(145deg, rgba(19, 78, 74, 0.9) 0%, rgba(15, 118, 110, 0.64) 100%) !important;
+}
+
+body.theme-dark .health-hub-card.health-hub-card-lavender {
+  background: linear-gradient(145deg, rgba(49, 46, 129, 0.9) 0%, rgba(91, 33, 182, 0.62) 100%) !important;
+}
+
+body.theme-dark .health-hub-card.health-hub-card-amber {
+  background: linear-gradient(145deg, rgba(120, 53, 15, 0.9) 0%, rgba(180, 83, 9, 0.62) 100%) !important;
+}
+
+body.theme-dark .health-hub-card.health-hub-card-compact {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94) 0%, rgba(17, 24, 39, 0.9) 100%) !important;
+}
+
+body.theme-dark .health-hub-card-copy > span:last-child,
+body.theme-dark .health-hub-card-eyebrow {
+  color: rgba(238, 246, 255, 0.76) !important;
+}
+
+@media (max-width: 768px) {
+  .health-hub-page {
+    gap: 0.92rem;
+    padding: 0.25rem 0 6.25rem;
+  }
+
+  .health-hub-native-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.15rem 0.1rem 0.2rem;
+  }
+
+  .health-hub-native-header h1 {
+    flex: 1;
+    margin: 0;
+    color: #14213d;
+    font-size: 1.9rem;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+
+  .health-hub-native-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgba(174, 198, 235, 0.68);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.76);
+    color: #1d4ed8 !important;
+    box-shadow: 0 10px 22px rgba(37, 99, 235, 0.1);
+  }
+
+  .health-hub-native-icon svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  .health-hub-hero {
+    min-height: 0;
+    padding: 1.15rem !important;
+  }
+
+  .health-hub-hero h1 {
+    font-size: 1.62rem !important;
+  }
+
+  .health-hub-hero p {
+    font-size: 0.98rem;
+    line-height: 1.48;
+  }
+
+  .health-hub-hero-action {
+    min-height: 46px;
+  }
+
+  .health-hub-page > .health-hub-section:nth-of-type(2) {
+    padding: 0.82rem;
+  }
+
+  .health-hub-section-head {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .health-hub-section-head h2 {
+    font-size: 1.05rem;
+  }
+
+  .health-hub-section-head p {
+    margin: 0;
+    max-width: none;
+    text-align: left;
+    font-size: 0.86rem;
+  }
+
+  .health-hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.65rem !important;
+  }
+
+  .health-hub-support-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .health-hub-card {
+    min-height: 174px;
+    padding: 0.85rem !important;
+  }
+
+  .health-hub-card-visual {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 0.9rem;
+  }
+
+  .health-hub-card strong {
+    font-size: 1.05rem;
+  }
+
+  .health-hub-card-copy > span:last-child {
+    font-size: 0.88rem;
+    line-height: 1.34;
+  }
+
+  .health-hub-card-eyebrow {
+    display: none;
+  }
+
+  .health-hub-card-compact {
+    min-height: 92px;
+  }
+
+  body.theme-dark .health-hub-native-header h1 {
+    color: #f8fafc;
+  }
+
+  body.theme-dark .health-hub-native-icon {
+    border-color: rgba(96, 165, 250, 0.24);
+    background: rgba(15, 23, 42, 0.78);
+    color: #93c5fd !important;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .health-hub-grid {
+    gap: 0.52rem !important;
+  }
+
+  .health-hub-card {
+    min-height: 158px;
+    padding: 0.72rem !important;
+  }
+
+  .health-hub-card-visual {
+    width: 50px;
+    height: 50px;
+    margin-bottom: 0.65rem;
+  }
+
+  .health-hub-card-copy > span:last-child {
+    font-size: 0.82rem;
+  }
+}
+

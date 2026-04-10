@@ -9,6 +9,7 @@ import {
   getHealthProfiles,
 } from "../api";
 import { parseDate } from "../utils/dates";
+import { ensureArray } from "../utils/arrays";
 
 function formatStamp(value) {
   const parsed = parseDate(value);
@@ -94,7 +95,7 @@ export default function ClinicalReports() {
         ]);
         if (cancelled) return;
 
-        const availableProfiles = Array.isArray(profilesData) ? profilesData : [];
+        const availableProfiles = ensureArray(profilesData);
         setProfiles(availableProfiles);
 
         const resolvedProfileId =
@@ -113,9 +114,9 @@ export default function ClinicalReports() {
             : availableProfiles.find((item) => Number(item.id) === Number(selectedProfileId)) || activeProfile || null;
 
         setProfile(currentProfile);
-        setReports(Array.isArray(reportsData) ? reportsData : []);
+        setReports(ensureArray(reportsData));
         setAdherence(adherenceData || {});
-        setRadar(Array.isArray(radarData) ? radarData : []);
+        setRadar(ensureArray(radarData));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -128,13 +129,13 @@ export default function ClinicalReports() {
   }, [selectedProfileId]);
 
   const activeAlerts = useMemo(
-    () => (Array.isArray(radar) ? radar.filter((item) => item.status === "active") : []),
+    () => ensureArray(radar).filter((item) => item.status === "active"),
     [radar]
   );
 
   const filteredReports = useMemo(() => {
     const cutoff = getPeriodCutoff(selectedPeriod);
-    return (Array.isArray(reports) ? reports : []).filter((report) => {
+    return ensureArray(reports).filter((report) => {
       const matchesType = selectedType === "all" || report.report_type === selectedType;
       if (!matchesType) return false;
       if (!cutoff) return true;
