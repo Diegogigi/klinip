@@ -172,19 +172,7 @@ export default function MiSalud() {
           </svg>
         </Link>
         <h1>Mi salud</h1>
-        <Link className="health-hub-native-icon" to="/settings" aria-label="Abrir ajustes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M12 3v3" />
-            <path d="M12 18v3" />
-            <path d="M3 12h3" />
-            <path d="M18 12h3" />
-            <path d="m5.64 5.64 2.12 2.12" />
-            <path d="m16.24 16.24 2.12 2.12" />
-            <path d="m5.64 18.36 2.12-2.12" />
-            <path d="m16.24 7.76 2.12-2.12" />
-            <circle cx="12" cy="12" r="3.2" />
-          </svg>
-        </Link>
+        <span className="health-hub-native-spacer" aria-hidden="true" />
       </header>
 
       <section className="health-hub-quick-shell" aria-labelledby="health-hub-quick-title">
