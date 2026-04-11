@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   getActiveHealthProfile,
   generateAiClinicalReport,
@@ -258,7 +258,6 @@ function Ring({ value }) {
 }
 
 export default function AiKlinip() {
-  const navigate = useNavigate();
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState("");
@@ -308,14 +307,6 @@ export default function AiKlinip() {
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const voiceStopTimerRef = useRef(null);
-
-  const handleExitAssistant = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/");
-  };
 
   const clearVoiceTimer = () => {
     if (voiceStopTimerRef.current) {
@@ -1210,18 +1201,8 @@ export default function AiKlinip() {
           <div className="ai-copilot-stage">
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-main">
-                <button
-                  type="button"
-                  className="ai-mobile-back-btn klinip-back-btn"
-                  onClick={handleExitAssistant}
-                  aria-label="Volver a la pantalla anterior"
-                >
-                  <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m15 18-6-6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
                 <div className="ai-mobile-topbar-copy">
-                  <span>Asistente</span>
+                  <span>Perfil activo</span>
                   <strong>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</strong>
                 </div>
               </div>

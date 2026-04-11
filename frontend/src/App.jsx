@@ -1724,7 +1724,7 @@ export default function App() {
   const isPublicStandaloneRoute =
     isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute || isPublicAuthRoute;
   const isAiRoute = location.pathname === "/ai";
-  const hideAppChrome = isAiRoute;
+  const hideAppChrome = false;
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;

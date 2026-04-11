@@ -27781,18 +27781,15 @@ body.theme-dark .ai-next-card em {
     max-width: 100%;
     width: 100%;
     margin: 0;
-    flex: 0 0 auto;
-    padding-top: 0.56rem;
-    padding-bottom: 0;
-    padding-left: 0.56rem;
-    padding-right: 0.56rem;
-    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 0.56rem 0.56rem 0;
     overflow: hidden;
   }
 
   .main-area:has(.main-content.main-content-ai) {
     display: flex;
-    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    min-height: 0;
   }
 
   .ai-copilot-shell {
@@ -27800,8 +27797,9 @@ body.theme-dark .ai-next-card em {
     flex-direction: column;
     gap: 0.55rem;
     margin-top: 0;
-    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom) - 0.56rem);
-    height: calc(100dvh - 74px - env(safe-area-inset-bottom) - 0.56rem);
+    min-height: 0;
+    height: 100%;
+    flex: 1;
   }
 
   .ai-copilot-stage,
@@ -41801,7 +41799,7 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
-    padding: 0;
+    padding: 0 0 calc(4.6rem + env(safe-area-inset-bottom));
     overflow: hidden;
   }
 
@@ -42160,7 +42158,10 @@ body.theme-dark .health-hub-card-meta {
 
 @media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .main-content.main-content-ai {
-    padding: 0 !important;
+    padding-top: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)) !important;
   }
 
   .ai-page.ai-copilot-page,
