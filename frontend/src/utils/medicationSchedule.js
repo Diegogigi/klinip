@@ -195,3 +195,19 @@ export function isMedicationActiveAt(med, now = new Date()) {
   return now.getTime() <= endAt.getTime();
 }
 
+export function isMedicationFinished(med, now = new Date()) {
+  if (!med) return false;
+  if (med.completed) return true;
+  const endAt = getMedicationEffectiveEndAt(med);
+  if (!endAt) return false;
+  return now.getTime() > endAt.getTime();
+}
+
+export function getMedicationFinishReason(med, now = new Date()) {
+  if (!med) return null;
+  if (med.completed) return "manual";
+  const endAt = getMedicationEffectiveEndAt(med);
+  if (endAt && now.getTime() > endAt.getTime()) return "expired";
+  return null;
+}
+

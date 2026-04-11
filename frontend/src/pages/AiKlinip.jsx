@@ -601,18 +601,18 @@ export default function AiKlinip() {
     const body = document.body;
     const root = document.documentElement;
     const prevBodyOverflow = body.style.overflow;
-    const prevBodyTouchAction = body.style.touchAction;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
     const prevRootOverflow = root.style.overflow;
     const prevRootOverscroll = root.style.overscrollBehavior;
 
     body.style.overflow = "hidden";
-    body.style.touchAction = "none";
+    body.style.overscrollBehavior = "none";
     root.style.overflow = "hidden";
     root.style.overscrollBehavior = "none";
 
     return () => {
       body.style.overflow = prevBodyOverflow;
-      body.style.touchAction = prevBodyTouchAction;
+      body.style.overscrollBehavior = prevBodyOverscroll;
       root.style.overflow = prevRootOverflow;
       root.style.overscrollBehavior = prevRootOverscroll;
     };
@@ -1212,7 +1212,7 @@ export default function AiKlinip() {
               <div className="ai-mobile-topbar-main">
                 <button
                   type="button"
-                  className="ai-mobile-back-btn"
+                  className="ai-mobile-back-btn klinip-back-btn"
                   onClick={handleExitAssistant}
                   aria-label="Volver a la pantalla anterior"
                 >

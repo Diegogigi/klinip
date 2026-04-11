@@ -128,7 +128,7 @@ const getSessionDeviceSummary = (deviceLabel) => {
   };
 };
 
-export default function Settings({ user, onLogout, theme, onToggleTheme, onUserUpdate, initialSection = "perfil" }) {
+export default function Settings({ user, onLogout, onUserUpdate, initialSection = "perfil" }) {
   const profile = user || {};
   const navigate = useNavigate();
   const location = useLocation();
@@ -1292,23 +1292,6 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
               </button>
             ))}
           </div>
-          <div className="settings-theme-box">
-            <p className="settings-theme-label">Apariencia</p>
-            <button
-              className="theme-toggle"
-              type="button"
-              onClick={onToggleTheme}
-              role="switch"
-              aria-checked={theme === "dark"}
-            >
-              <span className="theme-toggle-label">
-                {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-              </span>
-              <span className={`theme-switch ${theme === "dark" ? "is-dark" : ""}`}>
-                <span className="theme-switch-thumb" />
-              </span>
-            </button>
-          </div>
           <button
             className="settings-logout-btn"
             type="button"
@@ -1327,11 +1310,14 @@ export default function Settings({ user, onLogout, theme, onToggleTheme, onUserU
       {isMobileSettings && mobileSectionOpen && !isFamilyStandalone && (
         <div className="settings-mobile-backbar native-section native-section-delay-1">
           <button
-            className="secondary-btn"
+            className="klinip-back-btn"
             type="button"
             onClick={() => setMobileSectionOpen(false)}
+            aria-label="Volver a la vista anterior"
           >
-            Volver
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
           </button>
           <span>{activeSectionLabel}</span>
         </div>

@@ -29,8 +29,10 @@ import {
   getMedicationScheduleSummary,
   getMedicationScheduleTimes,
   getMedicationStartAt,
+  getMedicationFinishReason,
   getNextMedicationDose,
   isMedicationActiveAt,
+  isMedicationFinished,
   parseDurationDays,
 } from "../utils/medicationSchedule";
 import RowActionsMenu from "../components/RowActionsMenu";
@@ -966,11 +968,12 @@ export default function Medications() {
       (med.dose || "").toLowerCase().includes(term) ||
       (med.frequency || "").toLowerCase().includes(term) ||
       (med.notes || "").toLowerCase().includes(term);
+    const finished = isMedicationFinished(med);
     const matchesStatus =
       statusFilter === "all" ||
-      (statusFilter === "active" && !med.completed) ||
-      (statusFilter === "completed" && Boolean(med.completed)) ||
-      (statusFilter === "scheduled" && getMedicationScheduleTimes(med).length > 0);
+      (statusFilter === "active" && !finished) ||
+      (statusFilter === "completed" && finished) ||
+      (statusFilter === "scheduled" && !finished && getMedicationScheduleTimes(med).length > 0);
     return matchesSearch && matchesStatus;
   });
   const filteredPurchases = (purchaseHistory || []).filter((item) => {
@@ -2097,9 +2100,20 @@ export default function Medications() {
                 <span className="detail-chip detail-chip-type medicamento">
                   {detailTarget.name || "Medicamento"}
                 </span>
-                <span className={`detail-chip detail-chip-status ${detailTarget.completed ? "realizada" : "pendiente"}`}>
-                  {detailTarget.completed ? "Realizado" : "Activo"}
-                </span>
+                {(() => {
+                  const finishReason = getMedicationFinishReason(detailTarget);
+                  const finished = Boolean(finishReason);
+                  const label = finishReason === "manual"
+                    ? "Realizado"
+                    : finishReason === "expired"
+                    ? "Finalizado"
+                    : "Activo";
+                  return (
+                    <span className={`detail-chip detail-chip-status ${finished ? "realizada" : "pendiente"}`}>
+                      {label}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="detail-grid">
                 <div className="detail-field">
@@ -2323,7 +2337,7 @@ export default function Medications() {
                   Editar
                 </button>
               ) : null}
-              {canEditActiveProfile && !detailTarget.completed ? (
+              {canEditActiveProfile && !isMedicationFinished(detailTarget) ? (
                 <button
                   className="primary-btn"
                   type="button"
@@ -2360,7 +2374,7 @@ export default function Medications() {
             >
               <option value="all">Todos</option>
               <option value="active">Activos</option>
-              <option value="completed">Realizados</option>
+              <option value="completed">Finalizados</option>
               <option value="scheduled">Con horario</option>
             </select>
           </div>
@@ -2403,10 +2417,17 @@ export default function Medications() {
                       : expected > 0
                       ? `${Math.round((taken / expected) * 100)}%`
                       : "0%";
+                    const finishReason = getMedicationFinishReason(m);
+                    const finished = Boolean(finishReason);
+                    const statusLabel = finishReason === "manual"
+                      ? "Realizado"
+                      : finishReason === "expired"
+                      ? "Finalizado"
+                      : "Activo";
                     return (
                       <tr
                         key={m.id}
-                        className="table-row-clickable"
+                        className={`table-row-clickable ${finished ? "is-finished" : ""}`}
                         onClick={() => handleOpenDetail(m)}
                         role="button"
                         tabIndex={0}
@@ -2421,9 +2442,13 @@ export default function Medications() {
                         <td>{m.dose}</td>
                         <td>{m.frequency}</td>
                         <td>{formatMedicationDateTime(m.start_at || m.created_at)}</td>
-                        <td>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</td>
+                        <td>{finished ? "—" : (nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis")}</td>
                         <td>{m.duration}</td>
-                        <td>{m.completed ? "Realizado" : "Activo"}</td>
+                        <td>
+                          <span className={`med-status-chip is-${finishReason || "active"}`}>
+                            {statusLabel}
+                          </span>
+                        </td>
                         <td>
                           {(() => {
                             const effectiveEnd = getMedicationEffectiveEndAt(m);
@@ -2504,10 +2529,17 @@ export default function Medications() {
                   : expected > 0
                   ? `${Math.round((taken / expected) * 100)}%`
                   : "0%";
+                const finishReason = getMedicationFinishReason(m);
+                const finished = Boolean(finishReason);
+                const statusLabel = finishReason === "manual"
+                  ? "Realizado"
+                  : finishReason === "expired"
+                  ? "Finalizado"
+                  : "Activo";
                 return (
                   <article
                     key={`mobile-${m.id}`}
-                    className="records-mobile-card medications-mobile-card"
+                    className={`records-mobile-card medications-mobile-card ${finished ? "is-finished" : ""}`}
                     onClick={() => handleOpenDetail(m)}
                     role="button"
                     tabIndex={0}
@@ -2527,8 +2559,8 @@ export default function Medications() {
                         </div>
                       </div>
                       <div className="records-mobile-head-side">
-                        <span className={`chip ${m.completed ? "completed" : "medication"}`}>
-                          {m.completed ? "Realizado" : "Activo"}
+                        <span className={`chip med-status-chip is-${finishReason || "active"}`}>
+                          {statusLabel}
                         </span>
                         {canEditActiveProfile ? (
                           <div onClick={(event) => event.stopPropagation()}>
@@ -2555,7 +2587,7 @@ export default function Medications() {
                     <div className="records-mobile-meta-grid">
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Próxima dosis</span>
-                        <span>{nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis"}</span>
+                        <span>{finished ? "—" : (nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis")}</span>
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Adherencia</span>

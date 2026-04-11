@@ -166,7 +166,7 @@ export default function MiSalud() {
   return (
     <div className="health-hub-page health-hub-page-quick">
       <header className="health-hub-native-header" aria-label="Encabezado de Mi salud">
-        <Link className="health-hub-native-icon" to="/" aria-label="Volver a Inicio">
+        <Link className="health-hub-native-icon klinip-back-btn" to="/" aria-label="Volver a Inicio">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m15 18-6-6 6-6" />
           </svg>
