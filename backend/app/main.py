@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from sqlalchemy import text, inspect, func, or_
+from sqlalchemy import text, inspect, func, or_, and_
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 from typing import List
 import os
@@ -2717,6 +2717,37 @@ def _medication_end_at(med: models.Medication) -> datetime | None:
     return end_at
 
 
+def _is_medication_finished(med: models.Medication, now: datetime | None = None) -> bool:
+    """True si el medicamento está marcado como completado o si su fecha de término ya pasó."""
+    if getattr(med, "completed", False):
+        return True
+    end_at = _medication_end_at(med)
+    if not end_at:
+        return False
+    current = now or datetime.now()
+    if end_at.tzinfo and not current.tzinfo:
+        end_at = end_at.replace(tzinfo=None)
+    elif current.tzinfo and not end_at.tzinfo:
+        current = current.replace(tzinfo=None)
+    return current > end_at
+
+
+def _medication_active_sql_filter(now: datetime):
+    """Filtro SQL para medicamentos 'activos' (no completed y cuyo end_date no haya pasado).
+
+    Nota: no cubre los medicamentos cuya duración textual ('7 dias') los haría terminados
+    pero que no tienen end_date explícito. Para esos casos filtrar adicionalmente en memoria
+    con `_is_medication_finished`.
+    """
+    return and_(
+        models.Medication.completed.is_(False),
+        or_(
+            models.Medication.end_date.is_(None),
+            models.Medication.end_date >= now,
+        ),
+    )
+
+
 def _parse_schedule_time(value: str | None):
     if not value:
         return None
@@ -2973,14 +3004,16 @@ def _build_medication_event_defaults(
 
 def _materialize_medication_adherence_events(db: Session, user: models.User, horizon_days: int = 2):
     now = datetime.now(_resolve_user_tz(user))
+    now_naive = now.replace(tzinfo=None)
     meds = (
         db.query(models.Medication)
         .filter(
             models.Medication.user_id == user.id,
-            models.Medication.completed.is_(False),
+            _medication_active_sql_filter(now_naive),
         )
         .all()
     )
+    meds = [m for m in meds if not _is_medication_finished(m, now_naive)]
     for med in meds:
         for scheduled_at in _medication_schedule_events_between(
             med,
@@ -6736,7 +6769,7 @@ def _build_profile_report(
             db.query(models.Medication)
             .filter(
                 models.Medication.user_id == user_id,
-                models.Medication.completed.is_(False),
+                _medication_active_sql_filter(now),
             )
             .count()
         )
@@ -6744,7 +6777,13 @@ def _build_profile_report(
             db.query(models.Medication)
             .filter(
                 models.Medication.user_id == user_id,
-                models.Medication.completed.is_(True),
+                or_(
+                    models.Medication.completed.is_(True),
+                    and_(
+                        models.Medication.end_date.isnot(None),
+                        models.Medication.end_date < now,
+                    ),
+                ),
             )
             .count()
         )
@@ -6878,10 +6917,11 @@ def _generate_smart_alerts_for_profile(
             db.query(models.Medication)
             .filter(
                 models.Medication.user_id == user_id,
-                models.Medication.completed.is_(False),
+                _medication_active_sql_filter(now),
             )
             .all()
         )
+        meds = [m for m in meds if not _is_medication_finished(m, now)]
         meds = _attach_medication_adherence(db, meds, viewer_user)
         risky = [m for m in meds if (getattr(m, "adherence_rate", 100) or 100) < 80]
         if risky:
@@ -7808,7 +7848,7 @@ def _context_total_count(context: dict, key: str, fallback: int = 0) -> int:
 
 
 def _structured_medications_reply(context: dict) -> str:
-    medications = [item for item in (context.get("medications") or []) if not bool(getattr(item, "completed", False))]
+    medications = [item for item in (context.get("medications") or []) if not _is_medication_finished(item)]
     if not medications:
         return "No veo medicamentos activos registrados en el perfil seleccionado."
     active_total = _context_total_count(context, "active_medications", len(medications))
@@ -8402,15 +8442,15 @@ def _medication_insights(medications: list[models.Medication], tz_name: str) -> 
     counts_by_schedule = {"con_horario": 0, "sin_horario": 0}
     counts_by_frequency = {"con_frecuencia": 0, "sin_frecuencia": 0}
     for med in medications:
-        is_completed = bool(med.completed)
-        counts_by_status["realizada" if is_completed else "activa"] += 1
+        is_finished = _is_medication_finished(med)
+        counts_by_status["realizada" if is_finished else "activa"] += 1
         has_schedule = bool((med.schedule_time or "").strip())
         counts_by_schedule["con_horario" if has_schedule else "sin_horario"] += 1
         has_frequency = bool((med.frequency or "").strip())
         counts_by_frequency["con_frecuencia" if has_frequency else "sin_frecuencia"] += 1
 
     with_created = [item for item in medications if item.created_at]
-    active_items = [item for item in medications if not bool(item.completed) and item.created_at]
+    active_items = [item for item in medications if not _is_medication_finished(item) and item.created_at]
     last_created = max(with_created, key=lambda item: _ts(item.created_at), default=None)
     last_active_created = max(active_items, key=lambda item: _ts(item.created_at), default=None)
     return {
@@ -10090,7 +10130,7 @@ def _build_ai_profile_memory(
     for key in aggregated_signals.keys():
         aggregated_signals[key] = list(dict.fromkeys(aggregated_signals[key]))[:8]
 
-    active_meds = [med for med in (medications or []) if not bool(getattr(med, "completed", False))]
+    active_meds = [med for med in (medications or []) if not _is_medication_finished(med)]
     active_med_names = []
     for med in active_meds[:8]:
         detail = (med.name or "").strip() or "Medicamento"
@@ -10298,7 +10338,7 @@ def _upsert_adherence_summaries(
         missed = max(explicit_missed, max(expected - taken, 0))
         adherence_rate = int(round(min((taken / max(expected, 1)) * 100, 100))) if expected else 0
         overall_rates.append(adherence_rate)
-        if adherence_rate < 80 and not bool(med.completed):
+        if adherence_rate < 80 and not _is_medication_finished(med):
             low_items.append(
                 {
                     "medication_id": med.id,
@@ -10426,7 +10466,7 @@ def _load_adherence_summary_cached(
             }
         )
         overall_rates.append(adherence_rate)
-        if adherence_rate < 80 and not bool(med.completed):
+        if adherence_rate < 80 and not _is_medication_finished(med):
             low_items.append(
                 {
                     "medication_id": med.id,
@@ -10885,7 +10925,7 @@ def _collect_missing_document_flags(
         counts_by_type[_infer_document_type(doc)] = counts_by_type.get(_infer_document_type(doc), 0) + 1
     has_orders = counts_by_type.get("orden", 0) > 0
     has_results = counts_by_type.get("resultado", 0) > 0
-    active_meds = [med for med in medications if not bool(med.completed)]
+    active_meds = [med for med in medications if not _is_medication_finished(med)]
     return {
         "missing_lab_results": bool(has_orders and not has_results),
         "missing_recent_documents": len(documents) == 0,
@@ -10931,10 +10971,10 @@ def _upsert_profile_health_features(
     )
     feature.next_appointment_at = next_appointment.date_time if next_appointment else None
     feature.last_appointment_at = last_appointment.date_time if last_appointment else None
-    feature.active_medications_count = len([med for med in medications if not bool(med.completed)])
+    feature.active_medications_count = len([med for med in medications if not _is_medication_finished(med)])
     feature.low_adherence_risk = bool(adherence_summary.get("low_adherence"))
     active_count = feature.active_medications_count or 0
-    completed_count = len([med for med in medications if bool(med.completed)])
+    completed_count = len([med for med in medications if _is_medication_finished(med)])
     total_treatments = active_count + completed_count
     feature.treatment_completion_score = int(round((completed_count / total_treatments) * 100)) if total_treatments else 0
     feature.missing_documents_flags_json = _collect_missing_document_flags(documents, appointments, medications)
@@ -11187,7 +11227,7 @@ def _build_clinical_report_payload(
     current_medications = [
         _medication_to_ai_dict(item, context.get("timezone_name") or DEFAULT_TZ_NAME)
         for item in medications
-        if not bool(item.completed)
+        if not _is_medication_finished(item)
     ][:10]
     return {
         "report_type": report_type,
@@ -11434,7 +11474,7 @@ def _ai_context_bundle_for_profile(
     ]
     if future_upcoming:
         upcoming = future_upcoming
-    active_medications = [med for med in medications if not bool(med.completed)]
+    active_medications = [med for med in medications if not _is_medication_finished(med)]
     latest_document = documents[0] if documents else None
     latest_document_text = _clip_text(getattr(latest_document, "ocr_text", "") or "", 2400)
     appointment_insights = _appointment_insights(appointments, timezone_name)
@@ -11674,7 +11714,7 @@ def _extract_profile_relevant_conditions(
 def _relevant_medications_snapshot(medications: list[models.Medication]) -> list[str]:
     items: list[str] = []
     for med in medications:
-        if bool(getattr(med, "completed", False)):
+        if _is_medication_finished(med):
             continue
         detail = getattr(med, "name", "") or "Medicamento"
         if getattr(med, "dose", ""):
@@ -11717,7 +11757,7 @@ def _build_profile_ai_summary_payload(
     documents: list[models.Document],
     advanced_context: dict,
 ) -> dict:
-    active_medications = [med for med in medications if not bool(med.completed)]
+    active_medications = [med for med in medications if not _is_medication_finished(med)]
     compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
     now_dt = datetime.now(compare_tz)
     upcoming_count = len(
@@ -12103,6 +12143,10 @@ def _build_chat_context_base(
                 .filter(
                     models.Medication.user_id == target_user_id,
                     or_(models.Medication.completed.is_(False), models.Medication.completed.is_(None)),
+                    or_(
+                        models.Medication.end_date.is_(None),
+                        models.Medication.end_date >= datetime.now(),
+                    ),
                 )
                 .scalar()
                 or 0
@@ -12217,7 +12261,7 @@ def _build_chat_context_base(
     if future_upcoming:
         upcoming = future_upcoming
 
-    active_medications = [med for med in medications if not bool(med.completed)]
+    active_medications = [med for med in medications if not _is_medication_finished(med)]
     context_totals["appointments"] = max(int(context_totals.get("appointments") or 0), len(appointments))
     context_totals["documents"] = max(int(context_totals.get("documents") or 0), len(documents))
     context_totals["medications"] = max(int(context_totals.get("medications") or 0), len(medications))
@@ -15371,7 +15415,7 @@ async def family_panel(
                 db.query(models.Medication)
                 .filter(
                     models.Medication.user_id == profile.owner_user_id,
-                    models.Medication.completed.is_(False),
+                    _medication_active_sql_filter(now),
                 )
                 .count()
             )
@@ -18666,13 +18710,14 @@ def _life_timeline_events_from_context(context: dict, include_alerts: bool = Fal
 
     for med in context.get("medications") or []:
         summary_parts = [part for part in [getattr(med, "dose", ""), getattr(med, "frequency", ""), getattr(med, "duration", "")] if part]
+        med_finished = _is_medication_finished(med)
         events.append(
             {
                 "id": f"medication-{med.id}",
                 "profile_id": profile_id,
                 "profile_name": profile_name,
-                "event_type": "treatment" if getattr(med, "completed", False) else "medication",
-                "category": "completed" if getattr(med, "completed", False) else "active",
+                "event_type": "treatment" if med_finished else "medication",
+                "category": "completed" if med_finished else "active",
                 "title": getattr(med, "name", "") or "Medicamento",
                 "summary": " | ".join(summary_parts) if summary_parts else "Tratamiento registrado",
                 "event_at": getattr(med, "created_at", None),

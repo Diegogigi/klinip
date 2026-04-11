@@ -945,6 +945,83 @@ export default function Medications() {
     }
   };
 
+  const handleArchiveFinished = async (med) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes modificar medicamentos.");
+      return;
+    }
+    if (!med?.id) return;
+    if (med.completed) return;
+    const confirmMsg =
+      "¿Marcar este tratamiento como finalizado? Quedará archivado en 'Finalizados'.";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      await saveMedication({ id: med.id, completed: true });
+      await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudo archivar el medicamento: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
+    }
+  };
+
+  const handleRenewMedication = async (med) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes crear medicamentos.");
+      return;
+    }
+    if (!med?.id) return;
+    const confirmMsg =
+      "¿Crear un tratamiento nuevo con los mismos datos, comenzando hoy?";
+    if (!window.confirm(confirmMsg)) return;
+    try {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      const startAtIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+      const payload = {
+        name: med.name || "",
+        dose: med.dose || "",
+        frequency: med.frequency || "",
+        duration: med.duration || "",
+        start_at: startAtIso,
+        schedule_time: med.schedule_time || "",
+        completed: false,
+        end_date: null,
+        notes: med.notes || "",
+        document_id: med.document_id || null,
+        refill_enabled: false,
+        refill_mode: med.refill_mode || "rotativo",
+        refill_fixed_user_id: null,
+        refill_participant_user_ids: [],
+        doses_per_intake: Number(med.doses_per_intake) || 1,
+        frequency_per_day: Number(med.frequency_per_day) || 1,
+        stock_total_doses: 0,
+        refill_alert_threshold_doses: 0,
+      };
+      if (!med.completed) {
+        await saveMedication({ id: med.id, completed: true });
+      }
+      await saveMedication(payload);
+      await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudo renovar el tratamiento: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
+    }
+  };
+
   const medsMissingFrequency = (meds || []).filter(
     (m) => !m.frequency || m.frequency.trim() === ""
   );
@@ -989,6 +1066,24 @@ export default function Medications() {
   const detailPurchases = detailTarget?.id
     ? (purchaseHistory || []).filter((item) => Number(item.medication_id) === Number(detailTarget.id)).slice(0, 6)
     : [];
+  const recentlyFinishedMeds = (() => {
+    const now = new Date();
+    const cutoff = now.getTime() - 14 * 24 * 60 * 60 * 1000;
+    return (meds || [])
+      .filter((med) => {
+        if (med.completed) return false;
+        const endAt = getMedicationEffectiveEndAt(med);
+        if (!endAt) return false;
+        const ts = endAt.getTime();
+        return ts < now.getTime() && ts >= cutoff;
+      })
+      .sort((a, b) => {
+        const ta = getMedicationEffectiveEndAt(a)?.getTime() || 0;
+        const tb = getMedicationEffectiveEndAt(b)?.getTime() || 0;
+        return tb - ta;
+      })
+      .slice(0, 5);
+  })();
   const familyRefillAvailable =
     hasAcceptedFamilyCollaborators;
   const familyRefillOptions = familyCaregivers.map((item) => ({
@@ -2337,6 +2432,28 @@ export default function Medications() {
                   Editar
                 </button>
               ) : null}
+              {canEditActiveProfile && isMedicationFinished(detailTarget) && !detailTarget.completed ? (
+                <button
+                  className="secondary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleArchiveFinished(detailTarget).finally(handleCloseDetail);
+                  }}
+                >
+                  Marcar como finalizado
+                </button>
+              ) : null}
+              {canEditActiveProfile && isMedicationFinished(detailTarget) ? (
+                <button
+                  className="primary-btn"
+                  type="button"
+                  onClick={() => {
+                    handleRenewMedication(detailTarget).finally(handleCloseDetail);
+                  }}
+                >
+                  Renovar tratamiento
+                </button>
+              ) : null}
               {canEditActiveProfile && !isMedicationFinished(detailTarget) ? (
                 <button
                   className="primary-btn"
@@ -2352,6 +2469,57 @@ export default function Medications() {
           </div>
         </div>
       , document.getElementById("overlay-root") || document.body)}
+
+      {recentlyFinishedMeds.length > 0 ? (
+        <div className="card medications-surface-free med-finished-banner">
+          <div className="med-finished-banner-head">
+            <div>
+              <h3 className="card-title" style={{ marginBottom: 4 }}>
+                Tratamientos recién finalizados
+              </h3>
+              <p className="muted" style={{ margin: 0 }}>
+                {recentlyFinishedMeds.length === 1
+                  ? "Un tratamiento llegó a su fecha de término. Decide qué hacer con él."
+                  : `${recentlyFinishedMeds.length} tratamientos llegaron a su fecha de término. Decide qué hacer con ellos.`}
+              </p>
+            </div>
+          </div>
+          <ul className="med-finished-banner-list">
+            {recentlyFinishedMeds.map((med) => {
+              const endAt = getMedicationEffectiveEndAt(med);
+              return (
+                <li key={`finished-${med.id}`} className="med-finished-banner-item">
+                  <div className="med-finished-banner-info">
+                    <strong>{med.name || "Medicamento"}</strong>
+                    <span className="muted">
+                      {med.dose ? `${med.dose} · ` : ""}
+                      Terminó {endAt ? formatMedicationDateTime(endAt) : "recientemente"}
+                    </span>
+                  </div>
+                  {canEditActiveProfile ? (
+                    <div className="med-finished-banner-actions">
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => handleArchiveFinished(med)}
+                      >
+                        Archivar
+                      </button>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        onClick={() => handleRenewMedication(med)}
+                      >
+                        Renovar
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="card medications-surface-free medications-filters-card">
         <h3 className="card-title">Filtros</h3>
@@ -2494,6 +2662,20 @@ export default function Medications() {
                                   label: "Editar",
                                   onClick: () => handleEdit(m),
                                 },
+                                finished && !m.completed
+                                  ? {
+                                      key: "archive",
+                                      label: "Marcar como finalizado",
+                                      onClick: () => handleArchiveFinished(m),
+                                    }
+                                  : null,
+                                finished
+                                  ? {
+                                      key: "renew",
+                                      label: "Renovar tratamiento",
+                                      onClick: () => handleRenewMedication(m),
+                                    }
+                                  : null,
                                 m.refill_enabled
                                   ? {
                                       key: "purchased",
@@ -2571,6 +2753,20 @@ export default function Medications() {
                                   label: "Editar",
                                   onClick: () => handleEdit(m),
                                 },
+                                finished && !m.completed
+                                  ? {
+                                      key: "archive",
+                                      label: "Marcar como finalizado",
+                                      onClick: () => handleArchiveFinished(m),
+                                    }
+                                  : null,
+                                finished
+                                  ? {
+                                      key: "renew",
+                                      label: "Renovar tratamiento",
+                                      onClick: () => handleRenewMedication(m),
+                                    }
+                                  : null,
                                 {
                                   key: "delete",
                                   label: "Eliminar",
