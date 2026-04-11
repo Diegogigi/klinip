@@ -1724,6 +1724,7 @@ export default function App() {
   const isPublicStandaloneRoute =
     isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute || isPublicAuthRoute;
   const isAiRoute = location.pathname === "/ai";
+  const hideAppChrome = isAiRoute;
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;
@@ -2107,32 +2108,38 @@ export default function App() {
         </div>
       )}
       <div className="layout">
-        <Sidebar
-          user={user}
-          notifications={notifications}
-          planInfo={planInfo}
-          healthProfiles={healthProfiles}
-          activeProfileId={activeHealthProfileId}
-          onSwitchProfile={handleSwitchActiveProfile}
-          switchingProfile={switchingProfile}
-        />
-        <div className={`main-area ${isPublicStandaloneRoute ? "main-area-public" : ""}`}>
-          <Topbar
+        {!hideAppChrome ? (
+          <Sidebar
             user={user}
             notifications={notifications}
-            onClearNotifications={handleClearNotifications}
-            onOpenNotification={handleOpenNotification}
-            onLogout={handleLogout}
-            theme={theme}
-            onToggleTheme={handleToggleTheme}
             planInfo={planInfo}
             healthProfiles={healthProfiles}
             activeProfileId={activeHealthProfileId}
             onSwitchProfile={handleSwitchActiveProfile}
             switchingProfile={switchingProfile}
-            isDashboard={isDashboardRoute}
           />
-          {updateAvailable && !isPublicStandaloneRoute && (
+        ) : null}
+        <div className={`main-area ${isPublicStandaloneRoute ? "main-area-public" : ""} ${
+          hideAppChrome ? "main-area-ai-immersive" : ""
+        }`}>
+          {!hideAppChrome ? (
+            <Topbar
+              user={user}
+              notifications={notifications}
+              onClearNotifications={handleClearNotifications}
+              onOpenNotification={handleOpenNotification}
+              onLogout={handleLogout}
+              theme={theme}
+              onToggleTheme={handleToggleTheme}
+              planInfo={planInfo}
+              healthProfiles={healthProfiles}
+              activeProfileId={activeHealthProfileId}
+              onSwitchProfile={handleSwitchActiveProfile}
+              switchingProfile={switchingProfile}
+              isDashboard={isDashboardRoute}
+            />
+          ) : null}
+          {updateAvailable && !isPublicStandaloneRoute && !hideAppChrome && (
             <div className="update-banner" role="status" aria-live="polite">
               <div>
                 <p className="update-title">Actualización disponible</p>
@@ -2159,13 +2166,15 @@ export default function App() {
               isAiRoute ? "main-content-ai" : ""
             } ${isFamilyRoute ? "main-content-family" : ""} ${
               isSettingsRoute ? "main-content-settings" : ""
-            } ${isDashboardRoute ? "main-content-dashboard" : ""}`}
+            } ${isDashboardRoute ? "main-content-dashboard" : ""} ${
+              hideAppChrome ? "main-content-ai-immersive" : ""
+            }`}
           >
             <div
               key={`${location.pathname}-${routeTransitionKey}`}
               className={`route-scene route-scene-${routeTransitionDirection} ${
                 isMobileShell ? "route-scene-mobile" : "route-scene-desktop"
-              }`}
+              } ${hideAppChrome ? "route-scene-ai-immersive" : ""}`}
             >
             <React.Suspense fallback={<RouteLoadingFallback />}>
             <Routes>

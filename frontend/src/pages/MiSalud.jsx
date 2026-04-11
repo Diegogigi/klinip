@@ -1,136 +1,72 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const heroHighlights = [
-  {
-    label: "Historia clínica",
-    text: "Tu evolución en una vista.",
-  },
-  {
-    label: "Documentos",
-    text: "Exámenes y recetas a mano.",
-  },
-  {
-    label: "Seguimiento",
-    text: "Citas y recordatorios visibles.",
-  },
-];
-
-const healthSections = [
-  {
-    to: "/timeline",
-    eyebrow: "Panel clínico",
-    badge: "Prioridad",
-    title: "Historia clínica",
-    text: "Eventos, diagnósticos y tratamientos clave.",
-    meta: "Ver evolución",
-    tone: "blue",
-    icon: "history",
-  },
-  {
-    to: "/documents",
-    eyebrow: "Archivos médicos",
-    badge: "Exámenes",
-    title: "Documentos",
-    text: "Exámenes, recetas y archivos en un solo lugar.",
-    meta: "Acceso rápido",
-    tone: "teal",
-    icon: "documents",
-  },
-  {
-    to: "/medications",
-    eyebrow: "Tratamientos activos",
-    badge: "Alertas",
-    title: "Medicamentos",
-    text: "Dosis y recordatorios del tratamiento activo.",
-    meta: "Evita olvidos",
-    tone: "rose",
-    icon: "medications",
-  },
-  {
-    to: "/clinical-reports",
-    eyebrow: "Vista resumida",
-    badge: "IA clínica",
-    title: "Reportes",
-    text: "Resúmenes clínicos listos para compartir.",
-    meta: "Útiles en control",
-    tone: "amber",
-    icon: "reports",
-  },
-];
-
-const supportSections = [
+const healthQuickCards = [
   {
     to: "/appointments",
-    eyebrow: "Próximos pasos",
-    badge: "Agenda",
     title: "Citas",
-    text: "Tus próximos controles y exámenes.",
-    meta: "Fechas a la vista",
+    highlight: "AGENDA ACTIVA",
+    subtitle: "Proximos controles",
     tone: "blue",
     icon: "appointments",
   },
   {
-    to: "/calendar",
-    eyebrow: "Vista temporal",
-    badge: "Planificación",
-    title: "Calendario",
-    text: "Ordena tu salud por día o por mes.",
-    meta: "Organiza seguimientos",
+    to: "/documents",
+    title: "Documentos",
+    highlight: "ARCHIVO CLINICO",
+    subtitle: "Examenes y recetas",
     tone: "teal",
+    icon: "documents",
+  },
+  {
+    to: "/timeline",
+    title: "Historia clinica",
+    highlight: "LINEA DE TIEMPO",
+    subtitle: "Eventos y diagnosticos",
+    tone: "sky",
+    icon: "history",
+  },
+  {
+    to: "/medications",
+    title: "Medicamentos",
+    highlight: "TRATAMIENTO",
+    subtitle: "Dosis y alertas",
+    tone: "amber",
+    icon: "medications",
+  },
+  {
+    to: "/clinical-reports",
+    title: "Reportes",
+    highlight: "IA CLINICA",
+    subtitle: "Resumen para control",
+    tone: "violet",
+    icon: "reports",
+  },
+  {
+    to: "/calendar",
+    title: "Calendario",
+    highlight: "PLAN DEL MES",
+    subtitle: "Orden diario",
+    tone: "green",
     icon: "calendar",
   },
   {
     to: "/stats",
-    eyebrow: "Lectura rápida",
-    badge: "Indicadores",
-    title: "Estadísticas",
-    text: "Métricas simples para seguir tu progreso.",
-    meta: "Lectura rápida",
-    tone: "lavender",
+    title: "Indicadores",
+    highlight: "SEGUIMIENTO",
+    subtitle: "Metricas clave",
+    tone: "blue",
     icon: "stats",
   },
 ];
 
-function HealthHubCard({ item, compact = false }) {
-  const className = [
-    "health-hub-card",
-    "health-hub-card-voice",
-    compact ? "health-hub-card-compact" : "",
-    item.tone ? `health-hub-card-${item.tone}` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
+function HealthQuickCard({ item }) {
   return (
-    <Link className={className} to={item.to} aria-label={`${item.title}. ${item.text}`}>
-      <span className="health-hub-card-left-bar" aria-hidden="true" />
-      {item.icon ? <span className="health-hub-card-visual">{renderHealthIcon(item.icon)}</span> : null}
-
-      <span className="health-hub-card-body">
-        <span className="health-hub-card-top">
-          {item.eyebrow ? <span className="health-hub-card-eyebrow">{item.eyebrow}</span> : null}
-          {item.badge ? <span className="health-hub-card-badge">{item.badge}</span> : null}
-        </span>
-
-        <span className="health-hub-card-copy">
-          <strong>{item.title}</strong>
-          <span>{item.text}</span>
-        </span>
-
-        <span className="health-hub-card-footer">
-          <span className="health-hub-card-meta">{item.meta}</span>
-          <span className="health-hub-card-action" aria-hidden="true">
-            Abrir
-            <span className="health-hub-card-arrow">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-            </span>
-          </span>
-        </span>
-      </span>
+    <Link className={`health-hub-quick-card tone-${item.tone}`} to={item.to} aria-label={`${item.title}. ${item.subtitle}`}>
+      <span className="health-hub-quick-icon">{renderHealthIcon(item.icon)}</span>
+      <strong className="health-hub-quick-title">{item.title}</strong>
+      <span className="health-hub-quick-highlight">{item.highlight}</span>
+      <span className="health-hub-quick-subtitle">{item.subtitle}</span>
     </Link>
   );
 }
@@ -228,7 +164,7 @@ function renderHealthIcon(icon) {
 
 export default function MiSalud() {
   return (
-    <div className="health-hub-page health-hub-page-voice">
+    <div className="health-hub-page health-hub-page-quick">
       <header className="health-hub-native-header" aria-label="Encabezado de Mi salud">
         <Link className="health-hub-native-icon" to="/" aria-label="Volver a Inicio">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -251,58 +187,18 @@ export default function MiSalud() {
         </Link>
       </header>
 
-      <section className="health-hub-hero" aria-labelledby="health-hub-title">
-        <div className="health-hub-hero-copy">
-          <span className="health-hub-kicker">Tu panel clínico personal</span>
-          <h1 id="health-hub-title">Toda tu información de salud, clara y fácil de recorrer</h1>
-          <p>Encuentra historia clínica, documentos, medicamentos y reportes en tarjetas rápidas.</p>
-        </div>
-
-        <div className="health-hub-hero-highlights" aria-label="Resumen de Mi salud">
-          {heroHighlights.map((item) => (
-            <div key={item.label} className="health-hub-highlight">
-              <strong>{item.label}</strong>
-              <span>{item.text}</span>
-            </div>
-          ))}
-        </div>
-
-        <div className="health-hub-hero-actions">
-          <Link className="health-hub-hero-action" to="/timeline">
-            Ver historia clínica
-          </Link>
-          <Link className="health-hub-hero-secondary" to="/documents">
-            Abrir documentos
-          </Link>
-        </div>
-      </section>
-
-      <section className="health-hub-section" aria-labelledby="health-hub-main-title">
-        <div className="health-hub-section-head">
+      <section className="health-hub-quick-shell" aria-labelledby="health-hub-quick-title">
+        <div className="health-hub-quick-head">
           <div>
-            <h2 id="health-hub-main-title">Información principal</h2>
-            <p>Los módulos esenciales para entender tu salud.</p>
+            <span className="health-hub-quick-kicker">Mi salud</span>
+            <h2 id="health-hub-quick-title">Acceso rapido</h2>
           </div>
-          <span className="health-hub-section-chip">4 módulos centrales</span>
+          <span className="health-hub-quick-count">{healthQuickCards.length} modulos</span>
         </div>
-        <div className="health-hub-grid">
-          {healthSections.map((item) => (
-            <HealthHubCard key={item.to} item={item} />
-          ))}
-        </div>
-      </section>
 
-      <section className="health-hub-section" aria-labelledby="health-hub-support-title">
-        <div className="health-hub-section-head">
-          <div>
-            <h2 id="health-hub-support-title">Agenda y seguimiento</h2>
-            <p>Accesos rápidos para revisar agenda e indicadores.</p>
-          </div>
-          <span className="health-hub-section-chip">Seguimiento diario</span>
-        </div>
-        <div className="health-hub-support-grid">
-          {supportSections.map((item) => (
-            <HealthHubCard key={item.to} item={item} compact />
+        <div className="health-hub-quick-grid" role="list" aria-label="Accesos rapidos de salud">
+          {healthQuickCards.map((item) => (
+            <HealthQuickCard key={item.to} item={item} />
           ))}
         </div>
       </section>
