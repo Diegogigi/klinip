@@ -1,36 +1,59 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
+const heroHighlights = [
+  {
+    label: "Historia clínica",
+    text: "Diagnósticos, síntomas y tratamientos en orden.",
+  },
+  {
+    label: "Documentos",
+    text: "Exámenes, órdenes y archivos importantes.",
+  },
+  {
+    label: "Seguimiento",
+    text: "Medicamentos, citas y controles sin perder contexto.",
+  },
+];
+
 const healthSections = [
   {
     to: "/timeline",
-    eyebrow: "Historia clínica",
+    eyebrow: "Panel clínico",
+    badge: "Prioridad",
     title: "Historia clínica",
-    text: "Eventos, diagnósticos y tratamientos",
+    text: "Revisa eventos, diagnósticos y tratamientos en una sola línea de tiempo.",
+    meta: "Ideal para entender tu evolución",
     tone: "blue",
     icon: "history",
   },
   {
     to: "/documents",
-    eyebrow: "Documentos médicos",
+    eyebrow: "Archivos médicos",
+    badge: "Exámenes",
     title: "Documentos",
-    text: "Tus exámenes y archivos importantes",
+    text: "Encuentra exámenes, recetas y archivos importantes cuando los necesites.",
+    meta: "Centraliza tus respaldos clínicos",
     tone: "teal",
     icon: "documents",
   },
   {
     to: "/medications",
-    eyebrow: "Tratamientos",
+    eyebrow: "Tratamientos activos",
+    badge: "Alertas",
     title: "Medicamentos",
-    text: "Dosis, horarios y alertas",
-    tone: "lavender",
+    text: "Mantén dosis, horarios y recordatorios visibles para cada tratamiento.",
+    meta: "Reduce olvidos y duplicaciones",
+    tone: "rose",
     icon: "medications",
   },
   {
     to: "/clinical-reports",
-    eyebrow: "Resumen clínico",
+    eyebrow: "Vista resumida",
+    badge: "IA clínica",
     title: "Reportes",
-    text: "Resúmenes clínicos claros",
+    text: "Consulta resúmenes claros para compartir tu estado de salud más rápido.",
+    meta: "Útil para controles y derivaciones",
     tone: "amber",
     icon: "reports",
   },
@@ -39,18 +62,33 @@ const healthSections = [
 const supportSections = [
   {
     to: "/appointments",
+    eyebrow: "Próximos pasos",
+    badge: "Agenda",
     title: "Citas",
-    text: "Controles y exámenes próximos.",
+    text: "Controles, atenciones y exámenes próximos.",
+    meta: "Mantén tus fechas a la vista",
+    tone: "blue",
+    icon: "appointments",
   },
   {
     to: "/calendar",
+    eyebrow: "Vista temporal",
+    badge: "Planificación",
     title: "Calendario",
-    text: "Tu salud por día y por mes.",
+    text: "Ordena tu salud por día, semana o mes.",
+    meta: "Úsalo para organizar seguimientos",
+    tone: "teal",
+    icon: "calendar",
   },
   {
     to: "/stats",
+    eyebrow: "Lectura rápida",
+    badge: "Indicadores",
     title: "Estadísticas",
-    text: "Indicadores generales de seguimiento.",
+    text: "Observa patrones y métricas generales de seguimiento.",
+    meta: "Resume tu progreso reciente",
+    tone: "lavender",
+    icon: "stats",
   },
 ];
 
@@ -64,12 +102,26 @@ function HealthHubCard({ item, compact = false }) {
     .join(" ");
 
   return (
-    <Link className={className} to={item.to}>
-      {item.icon ? <span className="health-hub-card-visual">{renderHealthIcon(item.icon)}</span> : null}
+    <Link className={className} to={item.to} aria-label={`${item.title}. ${item.text}`}>
+      <span className="health-hub-card-top">
+        {item.icon ? <span className="health-hub-card-visual">{renderHealthIcon(item.icon)}</span> : null}
+        {item.badge ? <span className="health-hub-card-badge">{item.badge}</span> : null}
+      </span>
+
       <span className="health-hub-card-copy">
         {item.eyebrow ? <span className="health-hub-card-eyebrow">{item.eyebrow}</span> : null}
         <strong>{item.title}</strong>
         <span>{item.text}</span>
+      </span>
+
+      <span className="health-hub-card-footer">
+        <span className="health-hub-card-meta">{item.meta}</span>
+        <span className="health-hub-card-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </span>
       </span>
     </Link>
   );
@@ -117,6 +169,44 @@ function renderHealthIcon(icon) {
     );
   }
 
+  if (icon === "appointments") {
+    return (
+      <svg {...commonProps}>
+        <rect x="11" y="14" width="42" height="38" rx="8" fill="currentColor" opacity="0.16" />
+        <rect x="11" y="14" width="42" height="38" rx="8" stroke="currentColor" strokeWidth="4" />
+        <path d="M21 10v10M43 10v10M11 26h42" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        <path d="M24 36h8M32 36h8M24 44h20" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "calendar") {
+    return (
+      <svg {...commonProps}>
+        <rect x="12" y="14" width="40" height="38" rx="8" fill="currentColor" opacity="0.16" />
+        <rect x="12" y="14" width="40" height="38" rx="8" stroke="currentColor" strokeWidth="4" />
+        <path d="M20 10v8M44 10v8M12 24h40" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        <path d="M24 32h8v8h-8z" fill="currentColor" opacity="0.26" />
+        <path d="M24 32h8v8h-8z" stroke="currentColor" strokeWidth="3.2" strokeLinejoin="round" />
+        <path d="M38 34h6M38 42h6M18 42h6" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    );
+  }
+
+  if (icon === "stats") {
+    return (
+      <svg {...commonProps}>
+        <path d="M14 50h36" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        <path d="M18 44V30" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+        <path d="M32 44V22" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+        <path d="M46 44V16" stroke="currentColor" strokeWidth="8" strokeLinecap="round" />
+        <circle cx="18" cy="24" r="4" fill="currentColor" opacity="0.18" />
+        <circle cx="32" cy="18" r="4" fill="currentColor" opacity="0.24" />
+        <circle cx="46" cy="12" r="4" fill="currentColor" opacity="0.28" />
+      </svg>
+    );
+  }
+
   return (
     <svg {...commonProps}>
       <path d="M16 12h26l8 8v32H16V12Z" fill="currentColor" opacity="0.16" />
@@ -138,30 +228,54 @@ export default function MiSalud() {
           </svg>
         </Link>
         <h1>Mi salud</h1>
-        <Link className="health-hub-native-icon" to="/settings" aria-label="Abrir notificaciones">
+        <Link className="health-hub-native-icon" to="/settings" aria-label="Abrir ajustes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            <path d="M12 3v3" />
+            <path d="M12 18v3" />
+            <path d="M3 12h3" />
+            <path d="M18 12h3" />
+            <path d="m5.64 5.64 2.12 2.12" />
+            <path d="m16.24 16.24 2.12 2.12" />
+            <path d="m5.64 18.36 2.12-2.12" />
+            <path d="m16.24 7.76 2.12-2.12" />
+            <circle cx="12" cy="12" r="3.2" />
           </svg>
         </Link>
       </header>
 
       <section className="health-hub-hero" aria-labelledby="health-hub-title">
-        <div>
-          <h1 id="health-hub-title">Toda tu información de salud, ordenada</h1>
-          <p>
-            Encuentra tu historia clínica, documentos, medicamentos y reportes en un solo lugar.
-          </p>
+        <div className="health-hub-hero-copy">
+          <span className="health-hub-kicker">Tu panel clínico personal</span>
+          <h1 id="health-hub-title">Toda tu información de salud, ordenada y fácil de recorrer</h1>
+          <p>Encuentra historia clínica, documentos, medicamentos y reportes con accesos más claros y mejor contexto para cada tarea.</p>
         </div>
-        <Link className="health-hub-hero-action" to="/timeline">
-          Ver historia clínica
-        </Link>
+
+        <div className="health-hub-hero-highlights" aria-label="Resumen de Mi salud">
+          {heroHighlights.map((item) => (
+            <div key={item.label} className="health-hub-highlight">
+              <strong>{item.label}</strong>
+              <span>{item.text}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="health-hub-hero-actions">
+          <Link className="health-hub-hero-action" to="/timeline">
+            Ver historia clínica
+          </Link>
+          <Link className="health-hub-hero-secondary" to="/documents">
+            Abrir documentos
+          </Link>
+        </div>
       </section>
 
       <section className="health-hub-section" aria-labelledby="health-hub-main-title">
         <div className="health-hub-section-head">
-          <h2 id="health-hub-main-title">Información principal</h2>
-          <p>Lo que ayuda a entender tu salud y tus cuidados.</p>
+          <div>
+            <h2 id="health-hub-main-title">Información principal</h2>
+            <p>Los módulos clave para comprender tu estado de salud y compartirlo con mejor contexto.</p>
+          </div>
+          <span className="health-hub-section-chip">4 módulos centrales</span>
         </div>
         <div className="health-hub-grid">
           {healthSections.map((item) => (
@@ -172,8 +286,11 @@ export default function MiSalud() {
 
       <section className="health-hub-section" aria-labelledby="health-hub-support-title">
         <div className="health-hub-section-head">
-          <h2 id="health-hub-support-title">Agenda y seguimiento</h2>
-          <p>Accesos secundarios que siguen disponibles sin saturar la navegación principal.</p>
+          <div>
+            <h2 id="health-hub-support-title">Agenda y seguimiento</h2>
+            <p>Accesos rápidos para organizar próximos controles, revisar tu calendario y seguir indicadores.</p>
+          </div>
+          <span className="health-hub-section-chip">Seguimiento diario</span>
         </div>
         <div className="health-hub-support-grid">
           {supportSections.map((item) => (
