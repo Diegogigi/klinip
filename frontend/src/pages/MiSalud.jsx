@@ -4,15 +4,15 @@ import { Link } from "react-router-dom";
 const heroHighlights = [
   {
     label: "Historia clínica",
-    text: "Diagnósticos, síntomas y tratamientos en orden.",
+    text: "Todo en un solo recorrido.",
   },
   {
     label: "Documentos",
-    text: "Exámenes, órdenes y archivos importantes.",
+    text: "Exámenes y archivos a mano.",
   },
   {
     label: "Seguimiento",
-    text: "Medicamentos, citas y controles sin perder contexto.",
+    text: "Citas y medicamentos visibles.",
   },
 ];
 
@@ -22,8 +22,8 @@ const healthSections = [
     eyebrow: "Panel clínico",
     badge: "Prioridad",
     title: "Historia clínica",
-    text: "Revisa eventos, diagnósticos y tratamientos en una sola línea de tiempo.",
-    meta: "Ideal para entender tu evolución",
+    text: "Eventos, diagnósticos y tratamientos clave.",
+    meta: "Ve tu evolución",
     tone: "blue",
     icon: "history",
   },
@@ -32,8 +32,8 @@ const healthSections = [
     eyebrow: "Archivos médicos",
     badge: "Exámenes",
     title: "Documentos",
-    text: "Encuentra exámenes, recetas y archivos importantes cuando los necesites.",
-    meta: "Centraliza tus respaldos clínicos",
+    text: "Exámenes, recetas y archivos en un solo lugar.",
+    meta: "Acceso rápido",
     tone: "teal",
     icon: "documents",
   },
@@ -42,8 +42,8 @@ const healthSections = [
     eyebrow: "Tratamientos activos",
     badge: "Alertas",
     title: "Medicamentos",
-    text: "Mantén dosis, horarios y recordatorios visibles para cada tratamiento.",
-    meta: "Reduce olvidos y duplicaciones",
+    text: "Dosis y recordatorios del tratamiento activo.",
+    meta: "Evita olvidos",
     tone: "rose",
     icon: "medications",
   },
@@ -52,8 +52,8 @@ const healthSections = [
     eyebrow: "Vista resumida",
     badge: "IA clínica",
     title: "Reportes",
-    text: "Consulta resúmenes claros para compartir tu estado de salud más rápido.",
-    meta: "Útil para controles y derivaciones",
+    text: "Resúmenes clínicos listos para compartir.",
+    meta: "Útiles en control",
     tone: "amber",
     icon: "reports",
   },
@@ -65,8 +65,8 @@ const supportSections = [
     eyebrow: "Próximos pasos",
     badge: "Agenda",
     title: "Citas",
-    text: "Controles, atenciones y exámenes próximos.",
-    meta: "Mantén tus fechas a la vista",
+    text: "Tus próximos controles y exámenes.",
+    meta: "Fechas a la vista",
     tone: "blue",
     icon: "appointments",
   },
@@ -75,8 +75,8 @@ const supportSections = [
     eyebrow: "Vista temporal",
     badge: "Planificación",
     title: "Calendario",
-    text: "Ordena tu salud por día, semana o mes.",
-    meta: "Úsalo para organizar seguimientos",
+    text: "Ordena tu salud por día o por mes.",
+    meta: "Organiza seguimientos",
     tone: "teal",
     icon: "calendar",
   },
@@ -85,8 +85,8 @@ const supportSections = [
     eyebrow: "Lectura rápida",
     badge: "Indicadores",
     title: "Estadísticas",
-    text: "Observa patrones y métricas generales de seguimiento.",
-    meta: "Resume tu progreso reciente",
+    text: "Métricas simples para seguir tu progreso.",
+    meta: "Lectura rápida",
     tone: "lavender",
     icon: "stats",
   },
@@ -246,8 +246,8 @@ export default function MiSalud() {
       <section className="health-hub-hero" aria-labelledby="health-hub-title">
         <div className="health-hub-hero-copy">
           <span className="health-hub-kicker">Tu panel clínico personal</span>
-          <h1 id="health-hub-title">Toda tu información de salud, ordenada y fácil de recorrer</h1>
-          <p>Encuentra historia clínica, documentos, medicamentos y reportes con accesos más claros y mejor contexto para cada tarea.</p>
+          <h1 id="health-hub-title">Toda tu información de salud, clara y fácil de recorrer</h1>
+          <p>Encuentra historia clínica, documentos, medicamentos y reportes sin perderte en textos largos.</p>
         </div>
 
         <div className="health-hub-hero-highlights" aria-label="Resumen de Mi salud">
@@ -273,7 +273,7 @@ export default function MiSalud() {
         <div className="health-hub-section-head">
           <div>
             <h2 id="health-hub-main-title">Información principal</h2>
-            <p>Los módulos clave para comprender tu estado de salud y compartirlo con mejor contexto.</p>
+            <p>Los módulos esenciales para entender tu salud.</p>
           </div>
           <span className="health-hub-section-chip">4 módulos centrales</span>
         </div>
@@ -288,7 +288,7 @@ export default function MiSalud() {
         <div className="health-hub-section-head">
           <div>
             <h2 id="health-hub-support-title">Agenda y seguimiento</h2>
-            <p>Accesos rápidos para organizar próximos controles, revisar tu calendario y seguir indicadores.</p>
+            <p>Accesos rápidos para revisar agenda e indicadores.</p>
           </div>
           <span className="health-hub-section-chip">Seguimiento diario</span>
         </div>

@@ -25,6 +25,7 @@ import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 import { ensureArray } from "../utils/arrays";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -307,6 +308,8 @@ export default function AiKlinip() {
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const voiceStopTimerRef = useRef(null);
+
+  useMobileOverlayLock(mobilePanelOpen);
 
   const clearVoiceTimer = () => {
     if (voiceStopTimerRef.current) {

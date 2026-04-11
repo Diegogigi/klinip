@@ -41626,3 +41626,376 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
   }
 }
 
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .main-area,
+  .main-content,
+  .route-scene-mobile,
+  .ai-page.ai-copilot-page,
+  .kfeed-layout-wrapper,
+  .health-hub-page {
+    overflow-x: clip !important;
+    overscroll-behavior-x: none;
+  }
+
+  .main-content.main-content-ai {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    padding-bottom: calc(4.95rem + env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  .main-area:has(.main-content.main-content-ai) {
+    min-height: calc(100dvh - 74px - env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  .ai-page.ai-copilot-page,
+  .ai-copilot-shell,
+  .ai-copilot-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .ai-copilot-shell {
+    gap: 0.55rem;
+    margin-top: 0;
+  }
+
+  .ai-copilot-stage {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden !important;
+    overscroll-behavior: none;
+  }
+
+  .ai-landing,
+  .ai-chat {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior-y: contain;
+    overscroll-behavior-x: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ai-chat-inner {
+    padding: 0.9rem 0.82rem 0.9rem;
+  }
+
+  .ai-input-zone {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    flex: 0 0 auto;
+    margin-top: 0;
+    padding: 0.55rem 0.8rem calc(0.82rem + env(safe-area-inset-bottom));
+    border-top: 1px solid #e2e8f0;
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.2) 0%, rgba(248, 250, 252, 0.98) 34%, #f8fafc 100%);
+  }
+
+  .ai-input-shell {
+    border-radius: 18px;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.08);
+  }
+
+  .ai-input-footer {
+    margin-top: 0.42rem;
+  }
+
+  .ai-mobile-panel-backdrop {
+    z-index: 5100;
+  }
+
+  .ai-right-panel {
+    top: max(0.55rem, env(safe-area-inset-top));
+    right: 0.55rem;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    width: min(320px, calc(100vw - 1.1rem));
+    max-height: calc(100dvh - max(0.55rem, env(safe-area-inset-top)) - 0.55rem - 70px - env(safe-area-inset-bottom));
+    overflow: hidden;
+    z-index: 5200;
+  }
+
+  .ai-right-body {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kfeed-layout-wrapper {
+    gap: 0;
+    padding: 0;
+  }
+
+  .kfeed-page {
+    padding: 0.85rem 0.6rem calc(5.2rem + env(safe-area-inset-bottom));
+    gap: 0.62rem;
+  }
+
+  .kfeed-page-header {
+    padding: 0.92rem !important;
+  }
+
+  .kfeed-page-subtitle {
+    margin-top: 0.18rem !important;
+    font-size: 0.84rem !important;
+    line-height: 1.45;
+    color: #64748b !important;
+  }
+
+  .kfeed-manage-link {
+    align-self: flex-start;
+    min-height: 34px;
+    padding: 0.38rem 0.78rem;
+    font-size: 0.78rem;
+  }
+
+  .kfeed-composer-card {
+    gap: 0.65rem;
+    padding: 0.78rem 0.82rem !important;
+    border-radius: 18px !important;
+  }
+
+  .kfeed-composer-trigger {
+    min-height: 44px;
+    font-size: 0.9rem;
+  }
+
+  .kfeed-post-card {
+    border-radius: 18px !important;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05) !important;
+  }
+
+  .kfeed-post-header {
+    padding: 0.84rem 0.84rem 0.55rem;
+  }
+
+  .kfeed-post-author {
+    font-size: 0.95rem;
+  }
+
+  .kfeed-post-type-pill {
+    padding: 0.24rem 0.5rem;
+    font-size: 0.64rem;
+  }
+
+  .kfeed-post-profile,
+  .kfeed-post-time {
+    font-size: 0.72rem;
+  }
+
+  .kfeed-post-content-wrap {
+    padding: 0 0.84rem 0.42rem;
+  }
+
+  .kfeed-post-content {
+    font-size: 0.92rem;
+    line-height: 1.52;
+    color: #243244;
+  }
+
+  .kfeed-post-card:not(.is-expanded) .kfeed-post-content {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .kfeed-expand-btn {
+    font-size: 0.8rem;
+  }
+
+  .kfeed-post-mentions,
+  .kfeed-stats-row,
+  .kfeed-comment-emoji-bar,
+  .kfeed-comments-list,
+  .kfeed-comment-composer {
+    padding-left: 0.84rem;
+    padding-right: 0.84rem;
+  }
+
+  .kfeed-actions-row {
+    padding: 0.12rem 0.22rem;
+  }
+
+  .kfeed-action-btn {
+    padding: 0.54rem 0.2rem;
+    font-size: 0.78rem;
+  }
+
+  .kfeed-sidebar {
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .health-hub-page {
+    padding-bottom: calc(5.2rem + env(safe-area-inset-bottom));
+  }
+
+  .health-hub-hero {
+    padding: 0.95rem !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06) !important;
+  }
+
+  .health-hub-highlight {
+    gap: 0.24rem;
+  }
+
+  .health-hub-highlight span {
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .health-hub-card {
+    gap: 0.72rem;
+    min-height: 0;
+    padding: 0.9rem !important;
+    border-radius: 18px !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05) !important;
+  }
+
+  .health-hub-card-badge {
+    background: rgba(255, 255, 255, 0.84);
+  }
+
+  .health-hub-card strong {
+    font-size: 1.02rem;
+  }
+
+  .health-hub-card-copy > span:last-child {
+    font-size: 0.84rem;
+    line-height: 1.38;
+  }
+
+  .health-hub-card-meta {
+    display: none;
+  }
+}
+
+.health-hub-card,
+.health-hub-card.health-hub-card-blue,
+.health-hub-card.health-hub-card-teal,
+.health-hub-card.health-hub-card-lavender,
+.health-hub-card.health-hub-card-rose,
+.health-hub-card.health-hub-card-amber,
+.health-hub-card.health-hub-card-compact {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06) !important;
+}
+
+.health-hub-card {
+  min-height: 212px;
+  border-color: rgba(226, 232, 240, 0.95) !important;
+}
+
+.health-hub-card::before {
+  background:
+    radial-gradient(circle at top right, var(--health-card-soft), transparent 32%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.72) 0%, transparent 58%) !important;
+}
+
+.health-hub-card::after {
+  left: 1rem;
+  right: auto;
+  width: 76px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--health-card-accent);
+}
+
+.health-hub-card-visual {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.health-hub-card-badge {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.health-hub-card-copy > span:last-child,
+.health-hub-card-meta {
+  color: #526277;
+}
+
+.health-hub-card.health-hub-card-blue {
+  --health-card-border: rgba(96, 165, 250, 0.24);
+}
+
+.health-hub-card.health-hub-card-teal {
+  --health-card-border: rgba(45, 212, 191, 0.22);
+}
+
+.health-hub-card.health-hub-card-lavender {
+  --health-card-border: rgba(129, 140, 248, 0.24);
+}
+
+.health-hub-card.health-hub-card-rose {
+  --health-card-border: rgba(251, 113, 133, 0.22);
+}
+
+.health-hub-card.health-hub-card-amber {
+  --health-card-border: rgba(245, 158, 11, 0.24);
+}
+
+body.theme-dark .ai-input-zone {
+  border-top-color: #1e293b;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.14) 0%, rgba(15, 23, 42, 0.98) 34%, #0f172a 100%);
+}
+
+body.theme-dark .ai-input-shell {
+  box-shadow: none;
+}
+
+body.theme-dark .kfeed-page-subtitle {
+  color: #94a3b8 !important;
+}
+
+body.theme-dark .kfeed-post-card,
+body.theme-dark .kfeed-composer-card {
+  box-shadow: none !important;
+}
+
+body.theme-dark .kfeed-post-content {
+  color: #dbe5f3;
+}
+
+body.theme-dark .health-hub-card,
+body.theme-dark .health-hub-card.health-hub-card-blue,
+body.theme-dark .health-hub-card.health-hub-card-teal,
+body.theme-dark .health-hub-card.health-hub-card-lavender,
+body.theme-dark .health-hub-card.health-hub-card-rose,
+body.theme-dark .health-hub-card.health-hub-card-amber,
+body.theme-dark .health-hub-card.health-hub-card-compact {
+  background: linear-gradient(180deg, #0f172a 0%, #132033 100%) !important;
+  box-shadow: none !important;
+}
+
+body.theme-dark .health-hub-card {
+  border-color: rgba(51, 65, 85, 0.96) !important;
+}
+
+body.theme-dark .health-hub-card-badge {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+body.theme-dark .health-hub-card-visual {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+body.theme-dark .health-hub-card-copy > span:last-child,
+body.theme-dark .health-hub-card-meta {
+  color: #94a3b8;
+}
+

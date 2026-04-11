@@ -19,6 +19,7 @@ import {
   uploadHealthProfileAvatar,
 } from "../api";
 import StepUpModal from "../components/StepUpModal";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const API_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.PROD ? "" : "http://localhost:8000");
@@ -782,12 +783,12 @@ function PostCard({
     .map((id) => profiles.find((p) => p.id === id)?.full_name)
     .filter(Boolean);
 
-  const LIMIT = 280;
+  const LIMIT = 180;
   const isLong = (post.content || "").length > LIMIT;
   const displayContent = isLong && !expanded ? post.content.slice(0, LIMIT) + "…" : post.content;
 
   return (
-    <article className="kfeed-post-card">
+    <article className={`kfeed-post-card${expanded ? " is-expanded" : ""}`}>
       {/* Header */}
       <div className="kfeed-post-header">
         <Avatar name={post.user_name} size={46} avatarUrl={post.user_avatar_url || null} />
@@ -1431,6 +1432,8 @@ export default function KlinipFeed({ user }) {
   const skipRef = useRef(0);
   const LIMIT = 20;
 
+  useMobileOverlayLock(familySidebarOpen);
+
   async function handleAvatarUpload(profileId, file) {
     const result = await uploadHealthProfileAvatar(profileId, file);
     if (result?.avatar_url) {
@@ -1658,7 +1661,7 @@ export default function KlinipFeed({ user }) {
               </button>
             )}
           </div>
-          <p className="kfeed-page-subtitle">Comparte tu salud con tu familia</p>
+          <p className="kfeed-page-subtitle">Comparte actualizaciones privadas sin saturar la pantalla.</p>
           <Link className="kfeed-manage-link" to="/settings/familia">
             Gestionar familia
           </Link>
@@ -1668,7 +1671,7 @@ export default function KlinipFeed({ user }) {
         <div className="kfeed-composer-card">
           <Avatar name={user?.name || ""} size={44} avatarUrl={userAvatarUrl} />
           <button type="button" className="kfeed-composer-trigger" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-            ¿Qué quieres compartir con tu familia?
+            Compartir con tu familia
           </button>
         </div>
 
@@ -1695,7 +1698,7 @@ export default function KlinipFeed({ user }) {
             </svg>
           </div>
           <h3 className="kfeed-empty-title">Tu familia aún no ha publicado nada</h3>
-          <p className="kfeed-empty-sub">Sé el primero en compartir una actualización de salud.</p>
+          <p className="kfeed-empty-sub">Haz la primera publicación.</p>
           <button type="button" className="kfeed-publish-btn" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
             + Crear publicación
           </button>
