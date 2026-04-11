@@ -4,15 +4,15 @@ import { Link } from "react-router-dom";
 const heroHighlights = [
   {
     label: "Historia clínica",
-    text: "Todo en un solo recorrido.",
+    text: "Tu evolución en una vista.",
   },
   {
     label: "Documentos",
-    text: "Exámenes y archivos a mano.",
+    text: "Exámenes y recetas a mano.",
   },
   {
     label: "Seguimiento",
-    text: "Citas y medicamentos visibles.",
+    text: "Citas y recordatorios visibles.",
   },
 ];
 
@@ -23,7 +23,7 @@ const healthSections = [
     badge: "Prioridad",
     title: "Historia clínica",
     text: "Eventos, diagnósticos y tratamientos clave.",
-    meta: "Ve tu evolución",
+    meta: "Ver evolución",
     tone: "blue",
     icon: "history",
   },
@@ -95,6 +95,7 @@ const supportSections = [
 function HealthHubCard({ item, compact = false }) {
   const className = [
     "health-hub-card",
+    "health-hub-card-voice",
     compact ? "health-hub-card-compact" : "",
     item.tone ? `health-hub-card-${item.tone}` : "",
   ]
@@ -103,24 +104,31 @@ function HealthHubCard({ item, compact = false }) {
 
   return (
     <Link className={className} to={item.to} aria-label={`${item.title}. ${item.text}`}>
-      <span className="health-hub-card-top">
-        {item.icon ? <span className="health-hub-card-visual">{renderHealthIcon(item.icon)}</span> : null}
-        {item.badge ? <span className="health-hub-card-badge">{item.badge}</span> : null}
-      </span>
+      <span className="health-hub-card-left-bar" aria-hidden="true" />
+      {item.icon ? <span className="health-hub-card-visual">{renderHealthIcon(item.icon)}</span> : null}
 
-      <span className="health-hub-card-copy">
-        {item.eyebrow ? <span className="health-hub-card-eyebrow">{item.eyebrow}</span> : null}
-        <strong>{item.title}</strong>
-        <span>{item.text}</span>
-      </span>
+      <span className="health-hub-card-body">
+        <span className="health-hub-card-top">
+          {item.eyebrow ? <span className="health-hub-card-eyebrow">{item.eyebrow}</span> : null}
+          {item.badge ? <span className="health-hub-card-badge">{item.badge}</span> : null}
+        </span>
 
-      <span className="health-hub-card-footer">
-        <span className="health-hub-card-meta">{item.meta}</span>
-        <span className="health-hub-card-arrow" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="m12 5 7 7-7 7" />
-          </svg>
+        <span className="health-hub-card-copy">
+          <strong>{item.title}</strong>
+          <span>{item.text}</span>
+        </span>
+
+        <span className="health-hub-card-footer">
+          <span className="health-hub-card-meta">{item.meta}</span>
+          <span className="health-hub-card-action" aria-hidden="true">
+            Abrir
+            <span className="health-hub-card-arrow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14" />
+                <path d="m12 5 7 7-7 7" />
+              </svg>
+            </span>
+          </span>
         </span>
       </span>
     </Link>
@@ -220,7 +228,7 @@ function renderHealthIcon(icon) {
 
 export default function MiSalud() {
   return (
-    <div className="health-hub-page">
+    <div className="health-hub-page health-hub-page-voice">
       <header className="health-hub-native-header" aria-label="Encabezado de Mi salud">
         <Link className="health-hub-native-icon" to="/" aria-label="Volver a Inicio">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -247,7 +255,7 @@ export default function MiSalud() {
         <div className="health-hub-hero-copy">
           <span className="health-hub-kicker">Tu panel clínico personal</span>
           <h1 id="health-hub-title">Toda tu información de salud, clara y fácil de recorrer</h1>
-          <p>Encuentra historia clínica, documentos, medicamentos y reportes sin perderte en textos largos.</p>
+          <p>Encuentra historia clínica, documentos, medicamentos y reportes en tarjetas rápidas.</p>
         </div>
 
         <div className="health-hub-hero-highlights" aria-label="Resumen de Mi salud">

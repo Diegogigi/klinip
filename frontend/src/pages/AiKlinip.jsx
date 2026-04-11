@@ -25,7 +25,6 @@ import { parseDate } from "../utils/dates";
 import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 import { ensureArray } from "../utils/arrays";
-import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -309,8 +308,6 @@ export default function AiKlinip() {
   const voiceChunksRef = useRef([]);
   const voiceStopTimerRef = useRef(null);
 
-  useMobileOverlayLock(mobilePanelOpen);
-
   const clearVoiceTimer = () => {
     if (voiceStopTimerRef.current) {
       clearTimeout(voiceStopTimerRef.current);
@@ -588,6 +585,29 @@ export default function AiKlinip() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  useEffect(() => {
+    if (!mobilePanelOpen || typeof document === "undefined") return undefined;
+
+    const body = document.body;
+    const root = document.documentElement;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyTouchAction = body.style.touchAction;
+    const prevRootOverflow = root.style.overflow;
+    const prevRootOverscroll = root.style.overscrollBehavior;
+
+    body.style.overflow = "hidden";
+    body.style.touchAction = "none";
+    root.style.overflow = "hidden";
+    root.style.overscrollBehavior = "none";
+
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      body.style.touchAction = prevBodyTouchAction;
+      root.style.overflow = prevRootOverflow;
+      root.style.overscrollBehavior = prevRootOverscroll;
+    };
+  }, [mobilePanelOpen]);
 
   useEffect(() => {
     const storageKey = getPinnedConversationStorageKey(resources.profile?.id);
