@@ -42542,11 +42542,22 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   }
 }
 
+.app-shell:has(.main-area.main-area-ai-immersive) {
+  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-shell:has(.main-area.main-area-ai-immersive) .layout {
+  min-height: 100%;
+  height: 100%;
+}
+
 .main-area.main-area-ai-immersive {
   margin-left: 0;
   margin-bottom: 0;
-  min-height: 100dvh;
-  height: 100dvh;
+  min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
@@ -42556,9 +42567,9 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 .main-content.main-content-ai.main-content-ai-immersive {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 100dvh;
-  height: 100dvh;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   padding: 0 !important;
   overflow: hidden;
 }
@@ -42567,7 +42578,7 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-height: 100%;
+  min-height: 0;
   height: 100%;
   overflow: hidden;
 }
@@ -42575,33 +42586,42 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 .route-scene.route-scene-ai-immersive > * {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-page.ai-copilot-page {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
-  min-height: 100dvh;
-  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
   margin-top: 0;
+  gap: 0;
   overflow: hidden;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-main {
   display: flex;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  flex: 1 1 auto;
   min-height: 0;
   height: 100%;
   border-radius: 0;
@@ -42712,6 +42732,7 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {
+  position: fixed;
   top: max(0.75rem, env(safe-area-inset-top));
   right: 0.75rem;
   bottom: max(0.75rem, env(safe-area-inset-bottom));
@@ -42758,11 +42779,13 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
 }
 
 @media (max-width: 980px) {
+  .app-shell:has(.main-area.main-area-ai-immersive),
+  .app-shell:has(.main-area.main-area-ai-immersive) .layout,
   .main-area.main-area-ai-immersive,
   .main-content.main-content-ai.main-content-ai-immersive,
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: 100%;
+    height: 100%;
   }
 
   .main-area.main-area-ai-immersive {
@@ -42792,11 +42815,13 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
 }
 
 @media (max-width: 640px) {
+  .app-shell:has(.main-area.main-area-ai-immersive),
+  .app-shell:has(.main-area.main-area-ai-immersive) .layout,
   .main-area.main-area-ai-immersive,
   .main-content.main-content-ai.main-content-ai-immersive,
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: 100%;
+    height: 100%;
   }
 
   .main-content.main-content-ai.main-content-ai-immersive {
@@ -42808,8 +42833,8 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: 100%;
+    height: 100%;
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
