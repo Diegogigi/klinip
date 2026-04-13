@@ -2447,7 +2447,7 @@ def _send_profile_access_removed_email_safe(
 
 
 
-SCHEDULE_WINDOW_SECONDS = 90   # wider than interval to absorb scheduler drift
+SCHEDULE_WINDOW_SECONDS = 90   # legacy minimum grace window for due reminders
 SCHEDULE_INTERVAL_SECONDS = 60
 MEDICATION_LEAD_MINUTES = 5
 AI_REFRESH_INTERVAL_SECONDS = 600
@@ -2459,6 +2459,16 @@ WORKER_JOB_TIMEOUT_SECONDS = max(
 WORKER_JOB_RETRIES = max(
     0,
     int(os.getenv("WORKER_JOB_RETRIES", "1") or "1"),
+)
+SCHEDULE_GRACE_SECONDS = max(
+    SCHEDULE_WINDOW_SECONDS,
+    int(
+        os.getenv(
+            "SCHEDULE_GRACE_SECONDS",
+            str((SCHEDULE_INTERVAL_SECONDS * 2) + 30),
+        )
+        or SCHEDULE_WINDOW_SECONDS
+    ),
 )
 APPOINTMENT_REMINDER_BATCH_SIZE = max(
     1,
@@ -2551,6 +2561,7 @@ def _appointment_offsets():
         {"label": "2 horas antes", "delta": timedelta(hours=2), "priority": "urgent"},
         {"label": "30 minutos antes", "delta": timedelta(minutes=30), "priority": "urgent"},
         {"label": "5 minutos antes", "delta": timedelta(minutes=5), "priority": "urgent"},
+        {"label": "En este momento", "delta": timedelta(0), "priority": "urgent"},
     ]
 
 
@@ -2564,6 +2575,7 @@ _DEFAULT_NOTIFICATION_SETTINGS = {
         "hours2": True,
         "minutes30": True,
         "minutes5": True,
+        "atTime": True,
     },
 }
 
@@ -2590,6 +2602,7 @@ def _user_notification_settings(user: models.User) -> dict:
             "hours2": bool(custom.get("hours2", defaults_custom["hours2"])),
             "minutes30": bool(custom.get("minutes30", defaults_custom["minutes30"])),
             "minutes5": bool(custom.get("minutes5", defaults_custom["minutes5"])),
+            "atTime": bool(custom.get("atTime", defaults_custom["atTime"])),
         },
     }
 
@@ -2605,6 +2618,7 @@ def _appointment_offsets_for_user(user: models.User):
         "2 horas antes": "hours2",
         "30 minutos antes": "minutes30",
         "5 minutos antes": "minutes5",
+        "En este momento": "atTime",
     }
     selected = []
     for item in all_offsets:
@@ -3887,7 +3901,7 @@ def _attach_medication_adherence(
 
 
 def _is_due(now: datetime, trigger_at: datetime) -> bool:
-    return trigger_at <= now <= (trigger_at + timedelta(seconds=SCHEDULE_WINDOW_SECONDS))
+    return trigger_at <= now <= (trigger_at + timedelta(seconds=SCHEDULE_GRACE_SECONDS))
 
 
 def _notification_already_sent(db: Session, tag: str) -> bool:
@@ -4387,7 +4401,7 @@ def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
         # reminder_at is stored as UTC naive (frontend sends UTC ISO with Z).
         # Compare against utcnow() to match regardless of server TZ.
         now = datetime.utcnow()
-        window_start = now - timedelta(seconds=SCHEDULE_WINDOW_SECONDS)
+        window_start = now - timedelta(seconds=SCHEDULE_GRACE_SECONDS)
         due_notes = (
             db.query(models.ProfileNote)
             .filter(

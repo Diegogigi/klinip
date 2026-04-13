@@ -11,6 +11,7 @@ def start_embedded_scheduler(
 ):
     def _scheduler_loop():
         while True:
+            cycle_started = time.time()
             try:
                 summaries = run_once()
                 print(
@@ -19,7 +20,9 @@ def start_embedded_scheduler(
                 )
             except Exception as exc:
                 print(f"WARNING scheduler: {exc}")
-            time.sleep(max(1, int(interval_seconds or 1)))
+            elapsed = time.time() - cycle_started
+            sleep_seconds = max(1, int(interval_seconds or 1) - int(elapsed))
+            time.sleep(sleep_seconds)
 
     thread = threading.Thread(
         target=_scheduler_loop,
