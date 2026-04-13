@@ -42685,9 +42685,9 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-chat-inner {
-  flex: 1 0 auto;
-  min-height: 100%;
-  justify-content: flex-end;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: auto;
   padding-bottom: 0.8rem;
 }
 
