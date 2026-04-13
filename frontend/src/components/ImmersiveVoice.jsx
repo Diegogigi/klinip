@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   processVoiceSession,
   voiceShareLink,
@@ -557,6 +558,16 @@ export default function ImmersiveVoice({
   const timerRef = useRef(null);
   const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
 
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    document.documentElement.classList.add("voice-immersive-active", "klinip-overlay-open");
+    document.body.classList.add("voice-immersive-active", "klinip-overlay-open");
+    return () => {
+      document.documentElement.classList.remove("voice-immersive-active", "klinip-overlay-open");
+      document.body.classList.remove("voice-immersive-active", "klinip-overlay-open");
+    };
+  }, []);
+
   const stopStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -825,8 +836,12 @@ export default function ImmersiveVoice({
     },
   }[stage] || { title: "Error", subtitle: error };
 
+  const renderOverlay = (content) => (
+    typeof document !== "undefined" ? createPortal(content, document.body) : content
+  );
+
   if (stage === "done" && result) {
-    return (
+    return renderOverlay(
       <div className={`iv-overlay iv-overlay-done ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
         <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -903,7 +918,7 @@ export default function ImmersiveVoice({
     );
   }
 
-  return (
+  return renderOverlay(
     <div className={`iv-overlay ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
       <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
