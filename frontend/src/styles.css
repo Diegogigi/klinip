@@ -42619,6 +42619,7 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
   position: relative;
+  --ai-input-zone-height: 0px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   flex: 1 1 auto;
@@ -42713,6 +42714,10 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   padding-bottom: 0.8rem;
 }
 
+.main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
+  bottom: calc(var(--ai-input-zone-height, 0px) + 0.5rem);
+}
+
 .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
   position: relative;
   bottom: auto;
@@ -42801,8 +42806,23 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
     border: 0;
   }
 
+  .main-content.main-content-ai.main-content-ai-immersive .ai-landing,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat {
+    padding-bottom: var(--ai-input-zone-height, 0px);
+  }
+
   .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar {
     padding-top: max(0.75rem, env(safe-area-inset-top));
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    margin: 0;
+    z-index: 8;
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {
@@ -42854,11 +42874,11 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
-    position: relative;
-    left: auto;
-    right: auto;
-    bottom: auto;
-    margin-top: 0;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin: 0;
     padding: 0.62rem 0.8rem calc(0.45rem + env(safe-area-inset-bottom));
   }
 

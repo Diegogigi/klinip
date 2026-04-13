@@ -297,6 +297,7 @@ export default function AiKlinip() {
   const location = useLocation();
   const autoPromptFiredRef = useRef(false);
   const scrollRef = useRef(null);
+  const stageRef = useRef(null);
   const inputZoneRef = useRef(null);
   const inputFieldRef = useRef(null);
   const fileTimerRef = useRef(null);
@@ -585,6 +586,39 @@ export default function AiKlinip() {
 
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const stageElement = stageRef.current;
+    const inputElement = inputZoneRef.current;
+    if (!stageElement || !inputElement || typeof window === "undefined") return undefined;
+
+    const updateInputZoneHeight = () => {
+      const nextHeight = Math.ceil(inputElement.getBoundingClientRect().height);
+      stageElement.style.setProperty("--ai-input-zone-height", `${nextHeight}px`);
+    };
+
+    updateInputZoneHeight();
+
+    let frameId = window.requestAnimationFrame(updateInputZoneHeight);
+    let observer;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        window.cancelAnimationFrame(frameId);
+        frameId = window.requestAnimationFrame(updateInputZoneHeight);
+      });
+      observer.observe(inputElement);
+    }
+
+    window.addEventListener("resize", updateInputZoneHeight);
+    window.addEventListener("orientationchange", updateInputZoneHeight);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer?.disconnect();
+      window.removeEventListener("resize", updateInputZoneHeight);
+      window.removeEventListener("orientationchange", updateInputZoneHeight);
+    };
   }, []);
 
   useEffect(() => {
@@ -1209,7 +1243,7 @@ export default function AiKlinip() {
     <div className="ai-page ai-copilot-page">
       <section className="ai-copilot-shell">
         <div className="ai-copilot-main">
-          <div className="ai-copilot-stage">
+          <div className="ai-copilot-stage" ref={stageRef}>
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-main">
                 <button
