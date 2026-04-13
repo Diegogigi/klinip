@@ -42679,7 +42679,15 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   padding-bottom: 0;
 }
 
+.main-content.main-content-ai.main-content-ai-immersive .ai-chat {
+  display: flex;
+  flex-direction: column;
+}
+
 .main-content.main-content-ai.main-content-ai-immersive .ai-chat-inner {
+  flex: 1 0 auto;
+  min-height: 100%;
+  justify-content: flex-end;
   padding-bottom: 0.8rem;
 }
 
