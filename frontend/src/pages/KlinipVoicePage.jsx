@@ -227,25 +227,49 @@ function AutomationPanel({
   onSave,
 }) {
   const profileName = profileLabel(activeProfile);
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="vp2-panel-card vp2-automation-card">
+    <div className={`vp2-panel-card vp2-automation-card ${expanded ? "is-open" : "is-collapsed"}`}>
       <div className="vp2-panel-head">
         <div>
           <span className="vp2-panel-label">AUTOMATIZACIÓN</span>
           <h3 className="vp2-panel-title">Compartido automático</h3>
         </div>
-        <span className={`vp2-pill ${draft.voice_auto_share_enabled ? "is-active" : ""}`}>
-          {draft.voice_auto_share_enabled ? "Activo" : "Manual"}
-        </span>
+        <div className="vp2-panel-head-actions">
+          <span className={`vp2-pill ${draft.voice_auto_share_enabled ? "is-active" : ""}`}>
+            {draft.voice_auto_share_enabled ? "Activo" : "Manual"}
+          </span>
+          <button
+            type="button"
+            className={`vp2-panel-toggle ${expanded ? "is-open" : ""}`}
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+            aria-controls="voice-automation-panel-body"
+          >
+            {expanded ? "Ocultar" : "Ver"}
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M4.25 6.25 8 10l3.75-3.75"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.6"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <p className="vp2-panel-copy">
-        Envía automáticamente el resumen simple de cada nueva atención a los familiares seleccionados de {profileName}.
-      </p>
-      <p className="vp2-panel-note">
-        Opcional: incluir audio. La transcripción técnica no se comparte.
-      </p>
+      {expanded ? (
+        <div id="voice-automation-panel-body" className="vp2-panel-body">
+          <p className="vp2-panel-copy">
+            Envía automáticamente el resumen simple de cada nueva atención a los familiares seleccionados de {profileName}.
+          </p>
+          <p className="vp2-panel-note">
+            Opcional: incluir audio. La transcripción técnica no se comparte.
+          </p>
 
       {!canEdit ? (
         <div className="vp2-inline-note">
@@ -328,16 +352,18 @@ function AutomationPanel({
       {error ? <p className="vp2-feedback vp2-feedback-error">{error}</p> : null}
       {status ? <p className="vp2-feedback vp2-feedback-ok">{status}</p> : null}
 
-      <div className="vp2-panel-actions">
-        <button
-          type="button"
-          className="vp2-empty-btn"
-          onClick={onSave}
-          disabled={!canEdit || loading || saving}
-        >
-          {saving ? "Guardando..." : "Guardar automatización"}
-        </button>
-      </div>
+          <div className="vp2-panel-actions">
+            <button
+              type="button"
+              className="vp2-empty-btn"
+              onClick={onSave}
+              disabled={!canEdit || loading || saving}
+            >
+              {saving ? "Guardando..." : "Guardar automatización"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
