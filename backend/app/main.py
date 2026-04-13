@@ -37,6 +37,7 @@ import unicodedata
 import threading
 import collections
 import math
+import textwrap
 from difflib import SequenceMatcher
 import time
 
@@ -11375,6 +11376,618 @@ def _generate_simple_pdf_bytes(report_payload: dict) -> bytes:
     return pdf
 
 
+def _pdf_wrap_text(value: str, max_chars: int) -> list[str]:
+    normalized = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    paragraphs = normalized.split("\n")
+    lines: list[str] = []
+    width = max(12, int(max_chars or 12))
+    for paragraph in paragraphs:
+        compact = " ".join(paragraph.strip().split())
+        if not compact:
+            if lines and lines[-1] != "":
+                lines.append("")
+            continue
+        wrapped = textwrap.wrap(
+            compact,
+            width=width,
+            break_long_words=True,
+            break_on_hyphens=False,
+        )
+        lines.extend(wrapped or [""])
+    return lines or [""]
+
+
+def _pdf_rgb(color: tuple[int, int, int]) -> tuple[float, float, float]:
+    return tuple(max(0, min(255, int(channel))) / 255 for channel in color)
+
+
+def _pdf_rect_command(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    *,
+    fill: tuple[int, int, int] | None = None,
+    stroke: tuple[int, int, int] | None = None,
+    line_width: float = 1,
+) -> str:
+    commands: list[str] = []
+    if line_width:
+        commands.append(f"{line_width:.2f} w")
+    if stroke:
+        r, g, b = _pdf_rgb(stroke)
+        commands.append(f"{r:.3f} {g:.3f} {b:.3f} RG")
+    if fill:
+        r, g, b = _pdf_rgb(fill)
+        commands.append(f"{r:.3f} {g:.3f} {b:.3f} rg")
+    paint = "B" if fill and stroke else "f" if fill else "S"
+    commands.append(f"{x:.2f} {y:.2f} {width:.2f} {height:.2f} re {paint}")
+    return "\n".join(commands)
+
+
+def _pdf_text_block_command(
+    lines: list[str],
+    *,
+    x: float,
+    top_y: float,
+    font: str = "F1",
+    size: float = 12,
+    leading: float = 14,
+    color: tuple[int, int, int] = (15, 23, 42),
+) -> str:
+    if not lines:
+        return ""
+    r, g, b = _pdf_rgb(color)
+    baseline = top_y - size
+    commands = [
+        "BT",
+        f"/{font} {size:.2f} Tf",
+        f"{r:.3f} {g:.3f} {b:.3f} rg",
+        f"1 0 0 1 {x:.2f} {baseline:.2f} Tm",
+    ]
+    first = True
+    for line in lines:
+        escaped = _pdf_escape(line)
+        if first:
+            commands.append(f"({escaped}) Tj")
+            first = False
+        else:
+            commands.append(f"0 {-leading:.2f} Td ({escaped}) Tj")
+    commands.append("ET")
+    return "\n".join(commands)
+
+
+def _render_pdf_document(page_streams: list[str]) -> bytes:
+    encoded_streams = [(stream or "").encode("latin-1", "replace") for stream in page_streams]
+    objects: list[bytes] = []
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    page_ids: list[int] = []
+    next_object_id = 3
+    for _stream in encoded_streams:
+        page_ids.append(next_object_id)
+        next_object_id += 2
+    kids = " ".join(f"{page_id} 0 R" for page_id in page_ids)
+    objects.append(f"<< /Type /Pages /Count {len(page_ids)} /Kids [{kids}] >>".encode("latin-1"))
+
+    for index, stream in enumerate(encoded_streams):
+        page_id = page_ids[index]
+        content_id = page_id + 1
+        page_obj = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            f"/Resources << /Font << /F1 {next_object_id} 0 R /F2 {next_object_id + 1} 0 R /F3 {next_object_id + 2} 0 R >> >> "
+            f"/Contents {content_id} 0 R >>"
+        ).encode("latin-1")
+        content_obj = (
+            f"<< /Length {len(stream)} >> stream\n".encode("latin-1")
+            + stream
+            + b"\nendstream"
+        )
+        objects.append(page_obj)
+        objects.append(content_obj)
+
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>")
+
+    pdf = b"%PDF-1.4\n"
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf += f"{index} 0 obj\n".encode("latin-1") + obj + b"\nendobj\n"
+    xref_offset = len(pdf)
+    pdf += f"xref\n0 {len(offsets)}\n".encode("latin-1")
+    pdf += b"0000000000 65535 f \n"
+    for offset in offsets[1:]:
+        pdf += f"{offset:010d} 00000 n \n".encode("latin-1")
+    pdf += f"trailer << /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode("latin-1")
+    return pdf
+
+
+def _voice_pdf_normalize_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFD", str(value or ""))
+    return "".join(char for char in normalized if unicodedata.category(char) != "Mn").lower().strip()
+
+
+def _voice_pdf_section_tone(normalized_title: str) -> tuple[str, tuple[int, int, int], tuple[int, int, int]]:
+    if (
+        "motivo referido" in normalized_title
+        or "antecedente referido" in normalized_title
+        or "relato del paciente" in normalized_title
+        or "motivo de consulta" in normalized_title
+        or "anamnesis" in normalized_title
+        or "antecedentes" in normalized_title
+    ):
+        return ("Paciente/usuario", (37, 99, 235), (219, 234, 254))
+
+    if (
+        "hallazgo observado" in normalized_title
+        or ("hallazgos" in normalized_title and "impresion" not in normalized_title)
+        or "examen fisico" in normalized_title
+        or "signos" in normalized_title
+        or "observacion objetiva" in normalized_title
+    ):
+        return ("Hallazgo observado", (0, 179, 119), (220, 252, 231))
+
+    if (
+        "evaluacion" in normalized_title
+        or "intervencion" in normalized_title
+        or "impresion" in normalized_title
+        or "hallazgos e impresion" in normalized_title
+        or "plan de manejo" in normalized_title
+        or "plan terapeutico" in normalized_title
+        or "proximos pasos" in normalized_title
+        or "indicaciones del profesional" in normalized_title
+        or "diagnostico" in normalized_title
+    ):
+        return ("Profesional", (108, 71, 255), (233, 227, 255))
+
+    return ("Resumen técnico", (100, 116, 139), (226, 232, 240))
+
+
+def _voice_pdf_relabel_section_title(title: str, metadata: dict | None = None) -> str:
+    metadata = metadata or {}
+    normalized_title = _voice_pdf_normalize_text(title)
+    can_diagnose = metadata.get("puede_diagnosticar_medicamente") is not False
+
+    if "tipo de consulta" in normalized_title:
+        return "Tipo de consulta" if can_diagnose else "Tipo de atención"
+    if normalized_title == "anamnesis" or "antecedentes" in normalized_title or "historia relatada" in normalized_title:
+        return "Antecedente referido por el paciente/usuario"
+    if "motivo de consulta" in normalized_title:
+        return "Motivo referido por el paciente/usuario"
+    if (
+        "examen fisico" in normalized_title
+        or ("hallazgos" in normalized_title and "impresion" not in normalized_title)
+        or "signos" in normalized_title
+        or "hallazgos objetivos" in normalized_title
+    ):
+        return "Hallazgo observado"
+    if normalized_title == "evaluacion":
+        return "Evaluación del profesional"
+    if not can_diagnose and "diagnostico" in normalized_title:
+        return "Evaluación e impresión del profesional"
+    if can_diagnose and "diagnostico" in normalized_title:
+        return "Diagnóstico o impresión registrada"
+    if not can_diagnose and "impresion" in normalized_title:
+        return "Evaluación e impresión del profesional"
+    if "indicaciones" in normalized_title:
+        return "Indicaciones del profesional"
+    return title
+
+
+def _parse_voice_pdf_technical_sections(technical_text: str, metadata: dict | None = None) -> list[dict[str, object]]:
+    source = str(technical_text or "").replace("\r", "").strip()
+    if not source:
+        return []
+
+    chunks = [chunk.strip() for chunk in re.split(r"\n(?=##\s+)", source) if chunk.strip()]
+    if not any(chunk.startswith("## ") for chunk in chunks):
+        title = "Resumen técnico"
+        tone_label, tone_color, tone_fill = _voice_pdf_section_tone(_voice_pdf_normalize_text(title))
+        return [
+            {
+                "title": title,
+                "tone_label": tone_label,
+                "tone_color": tone_color,
+                "tone_fill": tone_fill,
+                "lines": _pdf_wrap_text(source, 82),
+            }
+        ]
+
+    sections: list[dict[str, object]] = []
+    for index, chunk in enumerate(chunks, start=1):
+        lines = chunk.split("\n")
+        raw_title = re.sub(r"^##\s+", "", lines.pop(0)).strip() or f"Sección {index}"
+        title = _voice_pdf_relabel_section_title(raw_title, metadata)
+        tone_label, tone_color, tone_fill = _voice_pdf_section_tone(_voice_pdf_normalize_text(title))
+        body = "\n".join(lines).strip()
+        sections.append(
+            {
+                "title": title,
+                "tone_label": tone_label,
+                "tone_color": tone_color,
+                "tone_fill": tone_fill,
+                "lines": _pdf_wrap_text(body, 82) if body else ["Sin contenido disponible."],
+            }
+        )
+    return sections
+
+
+def _generate_voice_session_pdf_bytes(
+    session: models.VoiceSession,
+    profile: models.HealthProfile | None,
+    timezone_name: str,
+) -> bytes:
+    page_width = 595.0
+    page_height = 842.0
+    margin_x = 34.0
+    bottom_margin = 42.0
+    section_gap = 18.0
+    current_page: list[str] = []
+    pages: list[str] = []
+    current_top = 0.0
+
+    created_label = _safe_iso_local(getattr(session, "created_at", None), timezone_name) or "Sin fecha"
+    consent_label = created_label
+    patient_name = getattr(profile, "full_name", None) or getattr(profile, "nombre", None) or "Paciente"
+    meta = getattr(session, "metadata_clinica", None) or {}
+    role_label = (
+        meta.get("profesional_confirmado")
+        or meta.get("especialidad_inferida")
+        or meta.get("profesional_detectado")
+        or "No informado"
+    )
+    summary_text = getattr(session, "version_simple", None) or "Sin resumen disponible."
+    transcript_text = getattr(session, "transcripcion_tecnica", None) or "Sin transcripción disponible."
+    integrity_hash = getattr(session, "audio_session_hash", None) or "No disponible"
+    indications = list(getattr(session, "indicaciones", None) or [])
+    technical_sections = _parse_voice_pdf_technical_sections(transcript_text, meta)
+    has_audio = bool(getattr(session, "audio_session", None))
+    disclaimer = (
+        "Documento generado por Klinip Voice a partir del audio original y la transcripción clínica. "
+        "El audio de la consulta sigue siendo la fuente primaria de respaldo."
+    )
+    footer_disclaimer = (
+        "Este documento fue generado automáticamente por inteligencia artificial a partir de una grabación de consulta. "
+        "La transcripción IA puede contener imprecisiones. El audio original es la fuente de verdad."
+    )
+
+    def start_page(*, compact: bool = False) -> None:
+        nonlocal current_page, current_top
+        current_page = []
+        current_page.append(_pdf_rect_command(0, 0, page_width, page_height, fill=(238, 243, 248)))
+        if compact:
+            header_height = 54.0
+            header_top = page_height - 24.0
+            current_page.append(
+                _pdf_rect_command(
+                    margin_x,
+                    header_top - header_height,
+                    page_width - (margin_x * 2),
+                    header_height,
+                    fill=(76, 29, 149),
+                )
+            )
+            current_page.append(
+                _pdf_text_block_command(
+                    ["Klinip Voice"],
+                    x=margin_x + 18,
+                    top_y=header_top - 14,
+                    font="F2",
+                    size=18,
+                    leading=18,
+                    color=(255, 255, 255),
+                )
+            )
+            current_top = header_top - header_height - 18
+            return
+
+        header_height = 104.0
+        header_top = page_height - 26.0
+        header_y = header_top - header_height
+        current_page.append(
+            _pdf_rect_command(
+                margin_x,
+                header_y,
+                page_width - (margin_x * 2),
+                header_height,
+                fill=(76, 29, 149),
+            )
+        )
+        current_page.append(
+            _pdf_text_block_command(
+                ["Klinip", "Klinip Voice", "Registro de consulta"],
+                x=margin_x + 22,
+                top_y=header_top - 18,
+                font="F2",
+                size=20,
+                leading=18,
+                color=(255, 255, 255),
+            )
+        )
+        badge_x = page_width - margin_x - 180
+        badge_y = header_top - 24
+        current_page.append(
+            _pdf_rect_command(
+                badge_x,
+                badge_y - 28,
+                156,
+                28,
+                fill=(232, 252, 239),
+                stroke=(134, 239, 172),
+                line_width=1,
+            )
+        )
+        current_page.append(
+            _pdf_text_block_command(
+                ["Vista segura - acceso temporal"],
+                x=badge_x + 12,
+                top_y=badge_y - 7,
+                font="F2",
+                size=9,
+                leading=10,
+                color=(22, 163, 74),
+            )
+        )
+        current_top = header_y - 20
+
+    def flush_page() -> None:
+        nonlocal current_page
+        footer_top = bottom_margin - 2
+        current_page.append(
+            _pdf_text_block_command(
+                ["Generado por Klinip Voice · klinip.cl"],
+                x=margin_x,
+                top_y=footer_top + 10,
+                font="F2",
+                size=9,
+                leading=10,
+                color=(100, 116, 139),
+            )
+        )
+        pages.append("\n".join(current_page))
+
+    def ensure_space(height_needed: float) -> None:
+        nonlocal current_top
+        if current_top - height_needed < bottom_margin:
+            flush_page()
+            start_page(compact=True)
+
+    def add_meta_card() -> None:
+        nonlocal current_top
+        card_width = page_width - (margin_x * 2)
+        raw_rows = [
+            ("Fecha de consulta", created_label),
+            ("Paciente", patient_name),
+            ("Consentimiento verbal", f"Registrado el {consent_label}"),
+            ("Rol confirmado", role_label),
+            ("Hash de integridad", integrity_hash),
+        ]
+        rows: list[dict[str, object]] = []
+        total_rows_height = 0.0
+        for label, value in raw_rows:
+            is_hash = label == "Hash de integridad"
+            value_lines = _pdf_wrap_text(value, 58 if is_hash else 42)
+            line_height = 11 if is_hash else 13
+            row_height = max(26.0, 10.0 + (len(value_lines) * line_height))
+            rows.append(
+                {
+                    "label": label,
+                    "value": value,
+                    "value_lines": value_lines,
+                    "is_hash": is_hash,
+                    "line_height": line_height,
+                    "row_height": row_height,
+                }
+            )
+            total_rows_height += row_height
+        card_height = 24 + total_rows_height + 18
+        ensure_space(card_height)
+        card_bottom = current_top - card_height
+        current_page.append(
+            _pdf_rect_command(
+                margin_x,
+                card_bottom,
+                card_width,
+                card_height,
+                fill=(255, 255, 255),
+                stroke=(217, 226, 236),
+                line_width=1,
+            )
+        )
+        row_top = current_top - 18
+        label_x = margin_x + 18
+        value_x = margin_x + 160
+        for row in rows:
+            label = str(row["label"])
+            current_page.append(
+                _pdf_text_block_command(
+                    [label],
+                    x=label_x,
+                    top_y=row_top,
+                    font="F2",
+                    size=10,
+                    leading=11,
+                    color=(100, 116, 139),
+                )
+            )
+            is_hash = bool(row["is_hash"])
+            font = "F3" if is_hash else "F1"
+            size = 9 if is_hash else 11
+            current_page.append(
+                _pdf_text_block_command(
+                    [str(line) for line in row["value_lines"]],
+                    x=value_x,
+                    top_y=row_top,
+                    font=font,
+                    size=size,
+                    leading=float(row["line_height"]),
+                    color=(22, 163, 74) if label == "Consentimiento verbal" else (15, 23, 42),
+                )
+            )
+            row_top -= float(row["row_height"])
+        current_top = card_bottom - section_gap
+
+    def add_section_title(title: str) -> None:
+        nonlocal current_top
+        ensure_space(22)
+        current_page.append(
+            _pdf_text_block_command(
+                [title.upper()],
+                x=margin_x,
+                top_y=current_top,
+                font="F2",
+                size=11,
+                leading=12,
+                color=(31, 41, 55),
+            )
+        )
+        current_top -= 24
+
+    def add_boxed_lines(
+        title: str | None,
+        lines: list[str],
+        *,
+        title_color: tuple[int, int, int] = (108, 71, 255),
+        fill: tuple[int, int, int] = (255, 255, 255),
+        stroke: tuple[int, int, int] = (226, 232, 240),
+        text_color: tuple[int, int, int] = (51, 65, 85),
+        font: str = "F1",
+        size: float = 10.5,
+        leading: float = 13.0,
+    ) -> None:
+        nonlocal current_top
+        idx = 0
+        title_lines = [title] if title else []
+        title_block_height = (14 if title_lines else 0) + (10 if title_lines else 0)
+        while idx < len(lines):
+            available_height = current_top - bottom_margin
+            max_lines = max(2, int((available_height - title_block_height - 28) // leading))
+            chunk = lines[idx: idx + max_lines]
+            box_height = 18 + title_block_height + (len(chunk) * leading) + 16
+            ensure_space(box_height)
+            available_height = current_top - bottom_margin
+            max_lines = max(2, int((available_height - title_block_height - 28) // leading))
+            chunk = lines[idx: idx + max_lines]
+            box_height = 18 + title_block_height + (len(chunk) * leading) + 16
+            box_bottom = current_top - box_height
+            current_page.append(
+                _pdf_rect_command(
+                    margin_x,
+                    box_bottom,
+                    page_width - (margin_x * 2),
+                    box_height,
+                    fill=fill,
+                    stroke=stroke,
+                    line_width=1,
+                )
+            )
+            inner_top = current_top - 14
+            if title_lines:
+                current_page.append(
+                    _pdf_text_block_command(
+                        title_lines,
+                        x=margin_x + 18,
+                        top_y=inner_top,
+                        font="F2",
+                        size=11,
+                        leading=12,
+                        color=title_color,
+                    )
+                )
+                inner_top -= 20
+            current_page.append(
+                _pdf_text_block_command(
+                    chunk,
+                    x=margin_x + 18,
+                    top_y=inner_top,
+                    font=font,
+                    size=size,
+                    leading=leading,
+                    color=text_color,
+                )
+            )
+            current_top = box_bottom - 14
+            idx += len(chunk)
+
+    start_page()
+    add_meta_card()
+    add_section_title("Resumen de la consulta")
+    add_boxed_lines(
+        "RESUMEN SIMPLE",
+        _pdf_wrap_text(summary_text, 78),
+        fill=(248, 251, 255),
+        stroke=(219, 234, 254),
+        text_color=(30, 41, 59),
+    )
+    add_section_title("Audio de la consulta")
+    audio_lines = [
+        "El audio original forma parte del registro clínico compartido mediante la vista segura de Klinip Voice.",
+        "Esta exportación PDF conserva el contexto y el hash de integridad, pero no incrusta el reproductor de audio.",
+    ]
+    audio_lines.append(
+        "Audio disponible en la vista segura compartida."
+        if has_audio
+        else "No hay un archivo de audio adjunto para esta sesión."
+    )
+    audio_lines += ["", f"Hash de integridad: {integrity_hash}"]
+    add_boxed_lines(
+        "REGISTRO DE AUDIO",
+        _pdf_wrap_text("\n".join(audio_lines), 82),
+        fill=(255, 255, 255),
+        stroke=(226, 232, 240),
+        text_color=(51, 65, 85),
+    )
+    add_section_title("Transcripción clínica")
+    add_boxed_lines(
+        "CONTEXTO CLÍNICO",
+        _pdf_wrap_text(f"Rol confirmado: {role_label}", 78) + [""] + _pdf_wrap_text(disclaimer, 82),
+        fill=(250, 250, 255),
+        stroke=(221, 214, 254),
+        text_color=(31, 41, 55),
+    )
+    for section in technical_sections:
+        add_boxed_lines(
+            str(section.get("title") or "TRANSCRIPCIÓN"),
+            [f"Clasificación: {section.get('tone_label')}", ""]
+            + [str(line) for line in (section.get("lines") or ["Sin contenido disponible."])],
+            title_color=tuple(section.get("tone_color") or (79, 70, 229)),
+            fill=(255, 255, 255),
+            stroke=tuple(section.get("tone_fill") or (226, 232, 240)),
+            text_color=(51, 65, 85),
+        )
+
+    if indications:
+        add_section_title(f"Indicaciones extraídas ({len(indications)})")
+        for item in indications:
+            item_type = str(item.get("tipo") or "otro").upper()
+            detail = item.get("detalle_recordatorio")
+            lines = _pdf_wrap_text(str(item.get("texto") or "Sin detalle"), 82)
+            if detail:
+                lines += [""] + _pdf_wrap_text(str(detail), 82)
+            add_boxed_lines(
+                item_type,
+                lines,
+                fill=(248, 250, 252),
+                stroke=(226, 232, 240),
+                text_color=(51, 65, 85),
+            )
+
+    add_section_title("Nota de respaldo")
+    add_boxed_lines(
+        None,
+        _pdf_wrap_text(footer_disclaimer, 84),
+        fill=(248, 250, 252),
+        stroke=(226, 232, 240),
+        text_color=(71, 85, 105),
+        size=10,
+        leading=12,
+    )
+
+    flush_page()
+    return _render_pdf_document(pages)
+
+
 def _persist_clinical_report(
     db: Session,
     profile: models.HealthProfile,
@@ -17145,6 +17758,18 @@ def _voice_share_sender_name(user: models.User | None) -> str:
     )
 
 
+def _voice_session_timezone_name(
+    db: Session,
+    session: models.VoiceSession,
+    profile: models.HealthProfile | None = None,
+) -> str:
+    owner_user_id = getattr(profile, "owner_user_id", None) or getattr(session, "user_id", None)
+    if not owner_user_id:
+        return DEFAULT_TZ_NAME
+    owner = db.query(models.User).filter(models.User.id == int(owner_user_id)).first()
+    return _resolve_user_tz_name(owner)
+
+
 def _voice_session_title(session: models.VoiceSession) -> str:
     created = getattr(session, "created_at", None)
     if created:
@@ -18011,7 +18636,8 @@ async def voice_share_email(
     share_url = session.link_seguro
     profile_obj = db.query(models.HealthProfile).filter(models.HealthProfile.id == session.profile_id).first()
     patient_name = getattr(profile_obj, "full_name", None) or getattr(profile_obj, "nombre", None) or "Paciente"
-    created_date = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else "—"
+    timezone_name = _voice_session_timezone_name(db, session, profile=profile_obj)
+    created_date = _safe_iso_local(session.created_at, timezone_name) if session.created_at else "—"
 
     try:
         _send_templated_email(
@@ -18043,41 +18669,10 @@ async def voice_download_pdf(
     if not can_manage and not active_share:
         raise HTTPException(status_code=404, detail="Sesion de voz no encontrada.")
 
-    # Build plain-text PDF content
-    created = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else "—"
-    lines = [
-        "KLINIP VOICE — Registro de Consulta",
-        "=" * 42,
-        "",
-        f"Fecha:       {created}",
-        f"Perfil ID:   {session.profile_id}",
-        f"Sesión ID:   {session.id}",
-        f"Hash audio:  {session.audio_session_hash or '—'}",
-        "",
-        "-" * 42,
-        "TRANSCRIPCIÓN TÉCNICA",
-        "-" * 42,
-        "",
-        session.transcripcion_tecnica or "(sin transcripción)",
-        "",
-        "-" * 42,
-        "INDICACIONES EXTRAÍDAS",
-        "-" * 42,
-        "",
-    ]
-    for ind in (session.indicaciones or []):
-        tipo = ind.get("tipo", "otro")
-        texto = ind.get("texto", "")
-        lines.append(f"  [{tipo.upper()}] {texto}")
-    if not session.indicaciones:
-        lines.append("  (sin indicaciones)")
-    lines.append("")
-    lines.append("-" * 42)
-    lines.append("Generado por Klinip Voice · klinip.cl")
-
-    content = "\n".join(lines)
+    timezone_name = _voice_session_timezone_name(db, session, profile=profile)
+    pdf_bytes = _generate_voice_session_pdf_bytes(session, profile, timezone_name)
     return Response(
-        content=content.encode("utf-8"),
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="klinip-voice-{session.id}.pdf"',
@@ -18100,14 +18695,18 @@ async def voice_shared_view(token: str, db: Session = Depends(auth.get_db)):
 
     profile = db.query(models.HealthProfile).filter(models.HealthProfile.id == session.profile_id).first()
     profile_name = getattr(profile, "full_name", None) or getattr(profile, "nombre", None) or "Paciente"
-    created = session.created_at.strftime("%d/%m/%Y %H:%M") if session.created_at else None
-    consent_ts = session.created_at.strftime("%Y-%m-%dT%H:%M:%S") if session.created_at else None
+    timezone_name = _voice_session_timezone_name(db, session, profile=profile)
+    created = _safe_iso_local(session.created_at, timezone_name) if session.created_at else None
+    consent_ts = _safe_iso_client(session.created_at, timezone_name) if session.created_at else None
+    consent_ts_display = _safe_iso_local(session.created_at, timezone_name) if session.created_at else None
 
     return {
         "id": session.id,
         "profile_name": profile_name,
         "created_at": created,
         "consent_timestamp": consent_ts,
+        "consent_timestamp_display": consent_ts_display,
+        "timezone_name": timezone_name,
         "transcripcion_tecnica": session.transcripcion_tecnica,
         "indicaciones": session.indicaciones or [],
         "metadata_clinica": session.metadata_clinica or {},

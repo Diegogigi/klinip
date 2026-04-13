@@ -10,7 +10,9 @@ import {
 
 function formatDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
+  const raw = String(iso).trim();
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return raw;
   return d.toLocaleDateString("es-CL", {
     day: "numeric",
     month: "long",
@@ -234,7 +236,7 @@ export default function SharedVoicePage() {
             <div className="sv-meta-row">
               <span className="sv-meta-label">Consentimiento verbal</span>
               <span className="sv-meta-value sv-meta-consent">
-                <ShieldIcon /> Registrado el {formatDate(data.consent_timestamp)}
+                <ShieldIcon /> Registrado el {data.consent_timestamp_display || formatDate(data.consent_timestamp)}
               </span>
             </div>
           )}
