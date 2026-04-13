@@ -42546,13 +42546,12 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   min-height: 100dvh;
   height: 100dvh;
   overflow: hidden;
+  background: #f6f7f9;
 }
 
 html.ai-immersive-active,
 body.ai-immersive-active {
-  height: 100dvh;
-  overflow: hidden;
-  overscroll-behavior: none;
+  background: #f6f7f9;
 }
 
 .app-shell:has(.main-area.main-area-ai-immersive) .layout {
@@ -42561,6 +42560,9 @@ body.ai-immersive-active {
 }
 
 .main-area.main-area-ai-immersive {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   margin-left: 0;
   margin-bottom: 0;
   min-height: 100%;
@@ -42592,6 +42594,7 @@ body.ai-immersive-active {
   will-change: auto;
   transform: none !important;
   opacity: 1 !important;
+  background: inherit;
 }
 
 .route-scene.route-scene-ai-immersive > * {
@@ -42702,12 +42705,14 @@ body.ai-immersive-active {
 .main-content.main-content-ai.main-content-ai-immersive .ai-landing,
 .main-content.main-content-ai.main-content-ai-immersive .ai-chat {
   min-height: 0;
-  height: auto;
-  overflow-y: auto;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow-y: scroll;
   overflow-x: hidden;
   overscroll-behavior-y: contain;
   overscroll-behavior-x: none;
   -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
   padding-bottom: 0;
 }
 
@@ -42767,6 +42772,12 @@ body.ai-immersive-active {
 
 body.theme-dark .main-area.main-area-ai-immersive {
   background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+}
+
+body.theme-dark .app-shell:has(.main-area.main-area-ai-immersive),
+body.theme-dark html.ai-immersive-active,
+body.theme-dark.ai-immersive-active {
+  background: #0f172a;
 }
 
 body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-back-btn {
