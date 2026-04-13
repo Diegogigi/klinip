@@ -778,43 +778,32 @@ export default function KlinipVoicePage() {
         />
       )}
 
-      <div className="vp2-header">
-        <div className="vp2-header-copy">
-          <span className="vp2-eyebrow">
-            <span className="vp2-eyebrow-dot" />
-            AI-powered · Clinical Voice
-          </span>
-          <h1 className="vp2-title">Klinip Voice</h1>
-          <p className="vp2-subtitle">Consultas grabadas · {profileName}</p>
-        </div>
-
-        <div className="vp2-header-actions">
-          <label className="vp2-profile-picker">
-            <span>Perfil activo</span>
-            <select
-              className="vp2-profile-select"
-              value={activeProfile?.id || ""}
-              onChange={handleProfileChange}
-              disabled={profileBusy}
-            >
-              {(profiles || []).map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profileLabel(profile)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button
-            type="button"
-            className="vp2-new-btn"
-            disabled={!canEdit || profileBusy}
-            onClick={() => setShowRecorder(true)}
+      <div className="vp2-actions-row">
+        <label className="vp2-profile-picker">
+          <span>Perfil activo</span>
+          <select
+            className="vp2-profile-select"
+            value={activeProfile?.id || ""}
+            onChange={handleProfileChange}
+            disabled={profileBusy}
           >
-            <MicIcon className="vp2-new-btn-icon" />
-            Nueva grabación
-          </button>
-        </div>
+            {(profiles || []).map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profileLabel(profile)}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          className="vp2-new-btn"
+          disabled={!canEdit || profileBusy}
+          onClick={() => setShowRecorder(true)}
+        >
+          <MicIcon className="vp2-new-btn-icon" />
+          Nueva grabación
+        </button>
       </div>
 
       <div className="vp2-trust-row" aria-label="Seguridad de Klinip Voice">

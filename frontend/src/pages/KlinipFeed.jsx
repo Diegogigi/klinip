@@ -1642,13 +1642,10 @@ export default function KlinipFeed({ user }) {
   return (
     <div className="kfeed-layout-wrapper">
       <div className="kfeed-page">
-        {/* Header */}
-        <div className="kfeed-page-header">
-          <div className="kfeed-brand-row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" style={{ color: "#2563eb" }}>
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-            </svg>
-            <h1 className="kfeed-page-title">Familia</h1>
+        {/* Sub-header actions */}
+        <div className="kfeed-actions-row">
+          <p className="kfeed-page-subtitle">Comparte actualizaciones privadas sin saturar la pantalla.</p>
+          <div className="kfeed-actions-right">
             {profiles.length > 0 && (
               <button
                 type="button"
@@ -1660,11 +1657,10 @@ export default function KlinipFeed({ user }) {
                 <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
               </button>
             )}
+            <Link className="kfeed-manage-link" to="/settings/familia">
+              Gestionar familia
+            </Link>
           </div>
-          <p className="kfeed-page-subtitle">Comparte actualizaciones privadas sin saturar la pantalla.</p>
-          <Link className="kfeed-manage-link" to="/settings/familia">
-            Gestionar familia
-          </Link>
         </div>
 
         {/* Composer */}
