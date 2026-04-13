@@ -26768,6 +26768,12 @@ body.theme-dark .records-mobile-link {
   font-weight: 700;
 }
 
+.ai-mobile-topbar-copy small {
+  color: #60636e;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .ai-mobile-panel-btn,
 .ai-right-close {
   width: 36px;
@@ -27401,6 +27407,10 @@ body.theme-dark .ai-mobile-topbar-copy strong {
 }
 
 body.theme-dark .ai-mobile-topbar-copy span {
+  color: #94a3b8;
+}
+
+body.theme-dark .ai-mobile-topbar-copy small {
   color: #94a3b8;
 }
 
@@ -42594,9 +42604,12 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   gap: 0.8rem;
   flex-shrink: 0;
   padding: max(0.9rem, env(safe-area-inset-top)) 1.8rem 0.55rem;
-  background: inherit;
-  position: relative;
-  z-index: 2;
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(246, 247, 249, 0.98) 0%, rgba(246, 247, 249, 0.94) 100%);
+  backdrop-filter: blur(16px);
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-main {
@@ -42631,6 +42644,15 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-back-btn svg {
   width: 17px;
   height: 17px;
+}
+
+.main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-copy {
+  min-width: 0;
+}
+
+.main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-copy strong,
+.main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-copy small {
+  display: block;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-landing,
@@ -42700,6 +42722,11 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-mobi
   border-color: rgba(96, 165, 250, 0.36);
   color: #bfdbfe;
   transform: translateY(-1px);
+}
+
+body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar {
+  border-bottom-color: rgba(36, 50, 68, 0.92);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.94) 100%);
 }
 
 body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
@@ -42781,10 +42808,12 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
     gap: 0.6rem;
   }
 
-  .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-back-btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 8px;
+  .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-copy strong {
+    font-size: 0.88rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar-copy small {
+    font-size: 0.72rem;
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {

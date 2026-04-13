@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getActiveHealthProfile,
   generateAiClinicalReport,
@@ -258,6 +258,7 @@ function Ring({ value }) {
 }
 
 export default function AiKlinip() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState("");
@@ -1194,6 +1195,16 @@ export default function AiKlinip() {
     setTimeout(() => inputFieldRef.current?.focus(), 50);
   };
 
+  const handleBackNavigation = () => {
+    setMobilePanelOpen(false);
+    setOpenConversationMenuId("");
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
+
   return (
     <div className="ai-page ai-copilot-page">
       <section className="ai-copilot-shell">
@@ -1201,9 +1212,20 @@ export default function AiKlinip() {
           <div className="ai-copilot-stage">
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-main">
+                <button
+                  type="button"
+                  className="klinip-back-btn ai-mobile-back-btn"
+                  onClick={handleBackNavigation}
+                  aria-label="Volver a la vista anterior"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m15 18-6-6 6-6" />
+                  </svg>
+                </button>
                 <div className="ai-mobile-topbar-copy">
-                  <span>Perfil activo</span>
-                  <strong>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</strong>
+                  <span>Asistente</span>
+                  <strong>Klinip IA</strong>
+                  <small>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</small>
                 </div>
               </div>
               <button
