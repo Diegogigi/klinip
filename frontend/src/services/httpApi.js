@@ -1091,6 +1091,10 @@ export function voiceAudioUrl(sessionId) {
   return `${API_URL}/voice/${sessionId}/audio`;
 }
 
+export function voiceConsentAudioUrl(sessionId) {
+  return `${API_URL}/voice/${sessionId}/consent-audio`;
+}
+
 export async function getSharedVoiceSession(token) {
   const res = await axios.get(`${API_URL}/api/voice/shared/${token}`);
   return res.data;
@@ -1098,4 +1102,8 @@ export async function getSharedVoiceSession(token) {
 
 export function sharedVoiceAudioUrl(token) {
   return `${API_URL}/api/voice/shared/${token}/audio`;
+}
+
+export function sharedVoiceConsentAudioUrl(token) {
+  return `${API_URL}/api/voice/shared/${token}/consent-audio`;
 }

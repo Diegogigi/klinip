@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "react-router-dom";
-import { getSharedVoiceSession, sharedVoiceAudioUrl } from "../api";
+import { getSharedVoiceSession, sharedVoiceAudioUrl, sharedVoiceConsentAudioUrl } from "../api";
 import {
   getVoiceProfessionalMeta,
   parseVoiceTechnicalSections,
@@ -195,6 +195,7 @@ export default function SharedVoicePage() {
   }
 
   const audioSrc = data.has_audio ? sharedVoiceAudioUrl(token) : null;
+  const consentAudioSrc = data.has_consent_audio ? sharedVoiceConsentAudioUrl(token) : null;
   const indicaciones = data.indicaciones || [];
   const meta = data.metadata_clinica || {};
   const professionalMeta = getVoiceProfessionalMeta(meta);
@@ -261,6 +262,13 @@ export default function SharedVoicePage() {
           <div className="sv-section">
             <h3 className="sv-section-title">Audio de la consulta</h3>
             <AudioPlayer src={audioSrc} />
+          </div>
+        )}
+
+        {consentAudioSrc && (
+          <div className="sv-section">
+            <h3 className="sv-section-title">Consentimiento verbal</h3>
+            <AudioPlayer src={consentAudioSrc} />
           </div>
         )}
 

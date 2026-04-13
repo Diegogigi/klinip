@@ -6,6 +6,7 @@ import {
   voiceShareEmail,
   voiceDownloadPdf,
   voiceAudioUrl,
+  voiceConsentAudioUrl,
   shareVoiceWithFamily,
   revokeVoiceFamilyShare,
 } from "../api";
@@ -21,13 +22,13 @@ import {
 
 /* ── Audio Player ─────────────────────────────────────────────────────────── */
 
-function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true }) {
+function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl }) {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const token = localStorage.getItem("token");
-  const src = voiceAudioUrl(sessionId);
+  const src = remoteUrl || voiceAudioUrl(sessionId);
   const [localAudioSrc, setLocalAudioSrc] = useState(null);
   const [remoteAudioSrc, setRemoteAudioSrc] = useState(null);
 
@@ -535,20 +536,23 @@ export default function ImmersiveVoice({
   onClose,
   initialSession,
   shareTargets = [],
+  initialTab = "parati",
 }) {
   const [stage, setStage] = useState(initialSession ? "done" : "consent");
   const [error, setError] = useState("");
   const [timer, setTimer] = useState(0);
   const [closing, setClosing] = useState(false);
   const [result, setResult] = useState(initialSession || null);
-  const [activeTab, setActiveTab] = useState("parati");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [sheetHeight, setSheetHeight] = useState(null);
   const [professionalRole, setProfessionalRole] = useState(
     initialSession?.metadata_clinica?.profesional_clave || ""
   );
   const [sessionPreviewBlob, setSessionPreviewBlob] = useState(null);
+  const [consentPreviewBlob, setConsentPreviewBlob] = useState(null);
   const [micReady, setMicReady] = useState(false);
   const [wakeLockState, setWakeLockState] = useState("idle");
+  const [audioLevels, setAudioLevels] = useState(() => DEFAULT_WAVE_LEVELS);
 
   const sheetRef = useRef(null);
   const dragRef = useRef({ active: false, startY: 0, startH: 0 });
@@ -559,6 +563,10 @@ export default function ImmersiveVoice({
   const timerRef = useRef(null);
   const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
   const wakeLockRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const sourceNodeRef = useRef(null);
+  const analyserFrameRef = useRef(0);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -569,6 +577,10 @@ export default function ImmersiveVoice({
       document.body.classList.remove("voice-immersive-active", "klinip-overlay-open");
     };
   }, []);
+
+  useEffect(() => {
+    setActiveTab(initialTab || "parati");
+  }, [initialSession?.id, initialTab]);
 
   const releaseWakeLock = useCallback(async () => {
     const sentinel = wakeLockRef.current;
@@ -612,7 +624,92 @@ export default function ImmersiveVoice({
     }
   }, []);
 
+  const stopAudioMeter = useCallback(() => {
+    if (analyserFrameRef.current) {
+      cancelAnimationFrame(analyserFrameRef.current);
+      analyserFrameRef.current = 0;
+    }
+    if (sourceNodeRef.current) {
+      try {
+        sourceNodeRef.current.disconnect();
+      } catch {
+        // ignore
+      }
+      sourceNodeRef.current = null;
+    }
+    if (audioContextRef.current) {
+      try {
+        audioContextRef.current.close();
+      } catch {
+        // ignore
+      }
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioLevels(DEFAULT_WAVE_LEVELS);
+  }, []);
+
+  const startAudioMeter = useCallback(async (stream) => {
+    if (typeof window === "undefined") return;
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      setAudioLevels(DEFAULT_WAVE_LEVELS);
+      return;
+    }
+
+    stopAudioMeter();
+
+    try {
+      const audioContext = new AudioContextCtor();
+      if (audioContext.state === "suspended") {
+        await audioContext.resume().catch(() => {});
+      }
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.82;
+      source.connect(analyser);
+
+      const timeDomain = new Uint8Array(analyser.fftSize);
+      let smoothedLevel = 0;
+      audioContextRef.current = audioContext;
+      sourceNodeRef.current = source;
+      analyserRef.current = analyser;
+
+      const tick = () => {
+        const currentAnalyser = analyserRef.current;
+        if (!currentAnalyser) return;
+
+        currentAnalyser.getByteTimeDomainData(timeDomain);
+        let sumSquares = 0;
+        for (let index = 0; index < timeDomain.length; index += 1) {
+          const normalized = (timeDomain[index] - 128) / 128;
+          sumSquares += normalized * normalized;
+        }
+        const rms = Math.sqrt(sumSquares / timeDomain.length);
+        smoothedLevel = smoothedLevel * 0.72 + rms * 0.28;
+        const emphasis = Math.min(1, smoothedLevel * 3.6);
+
+        setAudioLevels((prev) => prev.map((_, index) => {
+          const centerDistance = Math.abs(index - (DEFAULT_WAVE_LEVELS.length - 1) / 2);
+          const shape = 1 - Math.min(0.8, centerDistance * 0.14);
+          const floor = 8 + shape * 10;
+          const peak = floor + emphasis * (34 + shape * 28);
+          const next = Math.max(8, Math.round(peak));
+          return Math.round(prev[index] * 0.35 + next * 0.65);
+        }));
+
+        analyserFrameRef.current = requestAnimationFrame(tick);
+      };
+
+      analyserFrameRef.current = requestAnimationFrame(tick);
+    } catch {
+      stopAudioMeter();
+    }
+  }, [stopAudioMeter]);
+
   const stopStream = useCallback(() => {
+    stopAudioMeter();
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -621,7 +718,7 @@ export default function ImmersiveVoice({
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  }, []);
+  }, [stopAudioMeter]);
 
   useEffect(() => () => {
     stopStream();
@@ -685,6 +782,7 @@ export default function ImmersiveVoice({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       chunksRef.current = [];
+      setAudioLevels(DEFAULT_WAVE_LEVELS);
       const preferredOption = getPreferredVoiceRecorderOption();
       let recorder;
       try {
@@ -708,6 +806,7 @@ export default function ImmersiveVoice({
         }
       };
       mediaRecorderRef.current = recorder;
+      await startAudioMeter(stream);
       recorder.start(500);
       return true;
     } catch {
@@ -758,6 +857,7 @@ export default function ImmersiveVoice({
       return;
     }
     consentBlobRef.current = blob;
+    setConsentPreviewBlob(blob);
     stopStream();
     setMicReady(false);
     setStage("recording_session");
@@ -828,6 +928,7 @@ export default function ImmersiveVoice({
     setTimer(0);
     setMicReady(false);
     consentBlobRef.current = null;
+    setConsentPreviewBlob(null);
     setSessionPreviewBlob(null);
     setWakeLockState("idle");
     setStage("consent");
@@ -836,6 +937,7 @@ export default function ImmersiveVoice({
   function handleCancel() {
     stopStream();
     releaseWakeLock();
+    setConsentPreviewBlob(null);
     setSessionPreviewBlob(null);
     animateClose(() => {
       if (stage === "done" && result && onDone) onDone(result);
@@ -968,6 +1070,17 @@ export default function ImmersiveVoice({
               allowRemote={result.audio_available !== false}
             />
           )}
+          {(consentPreviewBlob || result?.consent_audio_available) && result?.access_scope !== "shared" ? (
+            <div className="iv-consent-audio">
+              <span className="iv-consent-audio-label">Consentimiento verbal</span>
+              <IvAudioPlayer
+                sessionId={result.id}
+                fallbackBlob={consentPreviewBlob}
+                allowRemote={result?.consent_audio_available !== false}
+                remoteUrl={result?.id ? voiceConsentAudioUrl(result.id) : null}
+              />
+            </div>
+          ) : null}
         </div>
 
         <div
@@ -1045,7 +1158,7 @@ export default function ImmersiveVoice({
 
         {wakeLockCopy ? <p className={`iv-wake-lock-note is-${wakeLockState}`}>{wakeLockCopy}</p> : null}
 
-        {showWaves ? <AudioWaves active tone="recording" /> : null}
+        {showWaves ? <AudioWaves levels={audioLevels} tone="recording" /> : null}
         {stage === "recording_session" && <div className="iv-timer">{formatTimer(timer)}</div>}
 
         <div className="iv-text">
@@ -1257,23 +1370,9 @@ function SecurityBadges() {
   );
 }
 
-function AudioWaves({ active = false, tone = "recording" }) {
-  const [levels, setLevels] = useState(() => [18, 30, 22, 36, 26, 34, 22, 28, 16]);
+const DEFAULT_WAVE_LEVELS = [10, 14, 18, 24, 30, 24, 18, 14, 10];
 
-  useEffect(() => {
-    if (!active) return undefined;
-    const interval = window.setInterval(() => {
-      setLevels((prev) =>
-        prev.map((value, index) => {
-          const base = index === 4 ? 30 : index % 2 === 0 ? 22 : 28;
-          const variance = Math.floor(Math.random() * 22);
-          return Math.max(10, base + variance - Math.floor(value / 8));
-        })
-      );
-    }, 140);
-    return () => window.clearInterval(interval);
-  }, [active]);
-
+function AudioWaves({ levels = DEFAULT_WAVE_LEVELS, tone = "recording" }) {
   return (
     <div className={`iv-waves is-${tone}`}>
       {levels.map((height, index) => (

@@ -174,17 +174,38 @@ function TrashIcon() {
   );
 }
 
-function VoiceSessionCard({ session, onOpen, isSharedView = false, canDelete = false, deleting = false, onDelete }) {
+function DotsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 16, height: 16 }}>
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function VoiceSessionCard({
+  session,
+  onView,
+  onShare,
+  isSharedView = false,
+  canDelete = false,
+  deleting = false,
+  onDelete,
+  menuOpen = false,
+  onToggleMenu,
+}) {
   const statusKey = isSharedView ? "received" : getSessionStatus(session);
   const status = STATUS_CONFIG[statusKey];
   const indicaciones = Array.isArray(session?.indicaciones) ? session.indicaciones : [];
   const dateValue = isSharedView ? session?.shared_at || session?.created_at : session?.created_at;
   const audioLabel = isSharedView ? (session?.audio_available ? "Con audio" : "Solo resumen") : null;
+  const showMenu = canDelete || !isSharedView;
 
   return (
-    <article className={`vp2-card ${canDelete ? "is-manageable" : ""}`}>
+    <article className={`vp2-card ${showMenu ? "is-manageable" : ""}`}>
       <div className="vp2-card-left-bar" />
-      <button type="button" className="vp2-card-open" onClick={() => onOpen(session)}>
+      <button type="button" className="vp2-card-open" onClick={() => onView(session)}>
         <div className="vp2-card-icon-wrap">
           <MicIcon className="vp2-card-icon" />
         </div>
@@ -214,25 +235,67 @@ function VoiceSessionCard({ session, onOpen, isSharedView = false, canDelete = f
         </div>
         <div className="vp2-card-right">
           <span className={`vp2-card-badge ${status.className}`}>{status.label}</span>
-          <div className="vp2-card-actions">
-            <span className="vp2-card-action"><EyeIcon /> Ver</span>
-            {!isSharedView ? (
-              <span className="vp2-card-action"><ShareSmallIcon /> Compartir</span>
-            ) : null}
-          </div>
         </div>
       </button>
-      {canDelete ? (
+      {showMenu ? (
+        <>
         <button
           type="button"
-          className="vp2-card-delete"
-          onClick={() => onDelete?.(session)}
-          disabled={deleting}
+          className="vp2-card-menu-trigger"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleMenu?.(session);
+          }}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
           aria-label="Eliminar grabación"
           title="Eliminar grabación"
         >
-          <TrashIcon />
+          <DotsIcon />
         </button>
+        {menuOpen ? (
+          <div className="vp2-card-menu" role="menu" aria-label={`Acciones para ${sessionTitle(session, isSharedView)}`}>
+            <button
+              type="button"
+              className="vp2-card-menu-item"
+              role="menuitem"
+              onClick={(event) => {
+                event.stopPropagation();
+                onView(session);
+              }}
+            >
+              <EyeIcon /> Ver
+            </button>
+            {!isSharedView ? (
+              <button
+                type="button"
+                className="vp2-card-menu-item"
+                role="menuitem"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onShare?.(session);
+                }}
+              >
+                <ShareSmallIcon /> Compartir
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                className="vp2-card-menu-item is-danger"
+                role="menuitem"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete?.(session);
+                }}
+                disabled={deleting}
+              >
+                <TrashIcon /> {deleting ? "Eliminando..." : "Eliminar"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        </>
       ) : null}
     </article>
   );
@@ -415,6 +478,8 @@ export default function KlinipVoicePage() {
   const [automationStatus, setAutomationStatus] = useState("");
   const [deleteBusyId, setDeleteBusyId] = useState(null);
   const [sessionsError, setSessionsError] = useState("");
+  const [immersiveInitialTab, setImmersiveInitialTab] = useState("parati");
+  const [openMenuSessionId, setOpenMenuSessionId] = useState(null);
 
   const canEdit = canWriteProfile(activeProfile);
   const readOnlyProfile = isViewerProfile(activeProfile);
@@ -546,12 +611,27 @@ export default function KlinipVoicePage() {
     const matched = receivedSessions.find((item) => Number(item.received_share_id) === requestedShareId);
     if (!matched) return;
     setLibraryTab("shared");
+    setImmersiveInitialTab("parati");
     setImmersiveSession(matched);
     replaceSearchParam((next) => {
       next.delete("share_id");
       next.set("view", "shared");
     });
   }, [receivedSessions, replaceSearchParam, requestedShareId]);
+
+  useEffect(() => {
+    if (!openMenuSessionId || typeof document === "undefined") return undefined;
+    const handlePointerDown = (event) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(".vp2-card-menu-trigger") && !target?.closest(".vp2-card-menu")) {
+        setOpenMenuSessionId(null);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [openMenuSessionId]);
 
   const filteredSessions = useMemo(() => {
     if (filter === "todas") return sessions;
@@ -611,6 +691,7 @@ export default function KlinipVoicePage() {
   function handleRecordingDone() {
     setShowRecorder(false);
     setImmersiveSession(null);
+    setImmersiveInitialTab("parati");
     if (activeProfile?.id) loadVoiceData(activeProfile);
   }
 
@@ -618,6 +699,7 @@ export default function KlinipVoicePage() {
     if (!session?.id || deleteBusyId) return;
     if (!window.confirm("¿Eliminar esta grabación de Klinip Voice?")) return;
 
+    setOpenMenuSessionId(null);
     setDeleteBusyId(session.id);
     setSessionsError("");
     try {
@@ -642,6 +724,27 @@ export default function KlinipVoicePage() {
     }));
   }
 
+  function sessionMenuKey(session, isSharedView = false) {
+    return isSharedView ? `shared-${session?.id}-${session?.received_share_id || "item"}` : `mine-${session?.id}`;
+  }
+
+  function handleViewSession(session) {
+    setOpenMenuSessionId(null);
+    setImmersiveInitialTab("parati");
+    setImmersiveSession(session);
+  }
+
+  function handleShareSession(session) {
+    setOpenMenuSessionId(null);
+    setImmersiveInitialTab("compartir");
+    setImmersiveSession(session);
+  }
+
+  function handleToggleSessionMenu(session, isSharedView = false) {
+    const nextKey = sessionMenuKey(session, isSharedView);
+    setOpenMenuSessionId((current) => (current === nextKey ? null : nextKey));
+  }
+
   if (loading) {
     return <div className="vp2-page"><div className="vp2-loading">Cargando Klinip Voice...</div></div>;
   }
@@ -652,8 +755,12 @@ export default function KlinipVoicePage() {
         <ImmersiveVoice
           profileId={activeProfile?.id}
           shareTargets={shareTargets}
+          initialTab={immersiveInitialTab}
           onDone={handleRecordingDone}
-          onClose={() => setShowRecorder(false)}
+          onClose={() => {
+            setShowRecorder(false);
+            setImmersiveInitialTab("parati");
+          }}
         />
       )}
 
@@ -661,9 +768,13 @@ export default function KlinipVoicePage() {
         <ImmersiveVoice
           profileId={activeProfile?.id}
           initialSession={immersiveSession}
+          initialTab={immersiveInitialTab}
           shareTargets={shareTargets}
           onDone={handleRecordingDone}
-          onClose={() => setImmersiveSession(null)}
+          onClose={() => {
+            setImmersiveSession(null);
+            setImmersiveInitialTab("parati");
+          }}
         />
       )}
 
@@ -818,10 +929,13 @@ export default function KlinipVoicePage() {
                 <VoiceSessionCard
                   key={session.id}
                   session={session}
-                  onOpen={setImmersiveSession}
+                  onView={handleViewSession}
+                  onShare={handleShareSession}
                   canDelete
                   deleting={deleteBusyId === session.id}
                   onDelete={handleDeleteSession}
+                  menuOpen={openMenuSessionId === sessionMenuKey(session)}
+                  onToggleMenu={(targetSession) => handleToggleSessionMenu(targetSession)}
                 />
               ))}
             </div>
@@ -833,8 +947,10 @@ export default function KlinipVoicePage() {
                 <VoiceSessionCard
                   key={`${session.id}-${session.received_share_id || "shared"}`}
                   session={session}
-                  onOpen={setImmersiveSession}
+                  onView={handleViewSession}
                   isSharedView
+                  menuOpen={openMenuSessionId === sessionMenuKey(session, true)}
+                  onToggleMenu={(targetSession) => handleToggleSessionMenu(targetSession, true)}
                 />
               ))}
             </div>

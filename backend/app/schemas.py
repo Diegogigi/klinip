@@ -1185,6 +1185,7 @@ class VoiceSessionOut(BaseModel):
     profile_id: int
     created_at: datetime
     audio_session_hash: str = ""
+    consent_audio_available: bool = False
     transcripcion_tecnica: Optional[str] = None
     version_simple: Optional[str] = None
     indicaciones: list = []

@@ -17879,6 +17879,7 @@ def _voice_session_out(
         shared_rows = (family_shares_map or {}).get(int(session.id), [])
     relationship_map = relationship_map or {}
     audio_file_exists = bool(getattr(session, "audio_session", None) and os.path.isfile(session.audio_session))
+    consent_audio_exists = bool(getattr(session, "audio_consent", None) and os.path.isfile(session.audio_consent))
 
     if active_share and not is_manager:
         sender_name = (
@@ -17890,6 +17891,7 @@ def _voice_session_out(
             profile_id=session.profile_id,
             created_at=session.created_at,
             audio_session_hash=session.audio_session_hash or "",
+            consent_audio_available=False,
             transcripcion_tecnica=None,
             version_simple=(active_share.shared_summary or session.version_simple or ""),
             indicaciones=active_share.shared_indicaciones or session.indicaciones or [],
@@ -17920,6 +17922,7 @@ def _voice_session_out(
         profile_id=session.profile_id,
         created_at=session.created_at,
         audio_session_hash=session.audio_session_hash or "",
+        consent_audio_available=consent_audio_exists,
         transcripcion_tecnica=session.transcripcion_tecnica,
         version_simple=session.version_simple,
         indicaciones=session.indicaciones or [],
@@ -18753,6 +18756,7 @@ async def voice_shared_view(token: str, db: Session = Depends(auth.get_db)):
         "metadata_clinica": session.metadata_clinica or {},
         "audio_session_hash": session.audio_session_hash or "",
         "has_audio": bool(session.audio_session and os.path.isfile(session.audio_session)),
+        "has_consent_audio": bool(session.audio_consent and os.path.isfile(session.audio_consent)),
         "expires_at": session.link_expira_en.isoformat() if session.link_expira_en else None,
     }
 
@@ -18780,6 +18784,29 @@ async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
     )
 
 
+@app.get("/api/voice/shared/{token}/consent-audio")
+async def voice_shared_consent_audio(token: str, db: Session = Depends(auth.get_db)):
+    """Public endpoint — streams the consent audio for a valid shared link."""
+    session = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.link_seguro.contains(token))
+        .first()
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Enlace no encontrado.")
+    if session.link_expira_en and session.link_expira_en < datetime.now():
+        raise HTTPException(status_code=410, detail="Este enlace ha expirado.")
+    if not session.audio_consent or not os.path.isfile(session.audio_consent):
+        raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
+
+    media_type, download_name = _voice_audio_response_meta(session.audio_consent, f"consentimiento-{session.id}")
+    return FileResponse(
+        session.audio_consent,
+        media_type=media_type,
+        filename=download_name,
+    )
+
+
 @app.get("/voice/{session_id}/audio")
 async def voice_session_audio(
     session_id: int,
@@ -18802,6 +18829,33 @@ async def voice_session_audio(
     media_type, download_name = _voice_audio_response_meta(session.audio_session, f"consulta-{session.id}")
     return FileResponse(
         session.audio_session,
+        media_type=media_type,
+        filename=download_name,
+    )
+
+
+@app.get("/voice/{session_id}/consent-audio")
+async def voice_session_consent_audio(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Authenticated endpoint — streams consent audio for the session owner/manager."""
+    session, profile, _, active_share, can_manage = _voice_session_access_context(
+        db,
+        current_user,
+        session_id,
+    )
+    if not can_manage:
+        raise HTTPException(status_code=404, detail="Sesión de voz no encontrada.")
+    if active_share and not can_manage:
+        raise HTTPException(status_code=403, detail="El consentimiento no está disponible para este compartido.")
+    if not session.audio_consent or not os.path.isfile(session.audio_consent):
+        raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
+
+    media_type, download_name = _voice_audio_response_meta(session.audio_consent, f"consentimiento-{session.id}")
+    return FileResponse(
+        session.audio_consent,
         media_type=media_type,
         filename=download_name,
     )
