@@ -42772,6 +42772,26 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
     padding-top: max(0.75rem, env(safe-area-inset-top));
   }
 
+  .main-content.main-content-ai.main-content-ai-immersive .ai-landing,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat {
+    padding-bottom: calc(8.4rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(8.4rem + env(safe-area-inset-bottom));
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin-top: 0;
+    padding: 0.72rem 1.8rem calc(0.55rem + env(safe-area-inset-bottom));
+    z-index: 8;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
+    bottom: calc(7.6rem + env(safe-area-inset-bottom));
+  }
+
   .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {
     top: max(0.6rem, env(safe-area-inset-top));
     right: 0.6rem;
@@ -42819,6 +42839,9 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
+    left: 0;
+    right: 0;
+    bottom: 0;
     padding: 0.62rem 0.8rem calc(0.45rem + env(safe-area-inset-bottom));
   }
 
@@ -42873,6 +42896,16 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
   .main-content.main-content-ai.main-content-ai-immersive .ai-right-body {
     padding: 0.74rem;
     padding-bottom: calc(0.84rem + env(safe-area-inset-bottom));
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-landing,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat {
+    padding-bottom: calc(8rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(8rem + env(safe-area-inset-bottom));
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
+    bottom: calc(7.1rem + env(safe-area-inset-bottom));
   }
 
   body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
