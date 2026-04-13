@@ -36,6 +36,7 @@ import {
   parseDurationDays,
 } from "../utils/medicationSchedule";
 import RowActionsMenu from "../components/RowActionsMenu";
+import { scheduleMedicationNotifications } from "../services/notificationManager";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
@@ -198,6 +199,7 @@ export default function Medications() {
         (a, b) => getNewestMedicationRank(b) - getNewestMedicationRank(a)
       );
       setMeds(sortedData);
+      scheduleMedicationNotifications(sortedData);
       const missing = sortedData.find(
         (m) => !m.frequency || m.frequency.trim() === ""
       );

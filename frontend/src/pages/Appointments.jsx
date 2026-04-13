@@ -16,6 +16,7 @@ import {
   toLocalInputValue,
 } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
+import { scheduleReminderNotifications } from "../services/notificationManager";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { cleanUiText } from "../utils/textEncoding";
@@ -89,9 +90,9 @@ export default function Appointments() {
         getActiveHealthProfile().catch(() => null),
       ]);
       setActiveProfile(profile || null);
-      setAppointments(
-        [...data].sort((a, b) => getNewestAppointmentRank(b) - getNewestAppointmentRank(a))
-      );
+      const sorted = [...data].sort((a, b) => getNewestAppointmentRank(b) - getNewestAppointmentRank(a));
+      setAppointments(sorted);
+      scheduleReminderNotifications(sorted);
     } catch (error) {
       if (!isAuthSessionError(error)) {
         console.error("No se pudieron cargar las citas", error);

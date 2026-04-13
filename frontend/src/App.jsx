@@ -2,6 +2,7 @@
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import {
   getMe,
+  getAppointments,
   getMedications,
   updateMe,
   logout as apiLogout,
@@ -12,7 +13,11 @@ import {
   isAuthSessionError,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
-import { clearScheduledNotifications } from "./services/notificationManager";
+import {
+  clearScheduledNotifications,
+  scheduleReminderNotifications,
+  scheduleMedicationNotifications,
+} from "./services/notificationManager";
 import { isHandheldViewport } from "./utils/mobileViewport";
 import {
   getMedicationScheduleTimes,
@@ -1066,7 +1071,23 @@ export default function App() {
 
   useEffect(() => {
     clearScheduledNotifications();
-  }, []);
+    if (!user) return;
+    let active = true;
+    (async () => {
+      try {
+        const [appointments, medications] = await Promise.all([
+          getAppointments().catch(() => []),
+          getMedications().catch(() => []),
+        ]);
+        if (!active) return;
+        scheduleReminderNotifications(appointments || []);
+        scheduleMedicationNotifications(medications || []);
+      } catch (err) {
+        console.warn("No se pudieron programar notificaciones", err);
+      }
+    })();
+    return () => { active = false; };
+  }, [user]);
 
   useEffect(() => {
     if (!notifConsentOpen || !user) {
