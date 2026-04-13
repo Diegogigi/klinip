@@ -559,7 +559,13 @@ function Topbar({
             aria-haspopup="menu"
             onClick={() => setProfileMenuOpen((prev) => !prev)}
           >
-            <span className="topbar-avatar">{initials}</span>
+            <span className="topbar-avatar" aria-hidden="true">
+              <svg className="topbar-avatar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <circle cx="12" cy="8" r="4"/>
+                <path d="M6 20a6 6 0 0 1 12 0"/>
+              </svg>
+              <span className="topbar-avatar-initial">{initials}</span>
+            </span>
             <span className="topbar-name">{user?.name || "Invitado"}</span>
           </button>
           {profileMenuOpen && (

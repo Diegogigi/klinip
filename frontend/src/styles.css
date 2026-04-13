@@ -12826,6 +12826,16 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   font-weight: 700;
 }
 
+.topbar-avatar-icon {
+  display: none;
+  width: 18px;
+  height: 18px;
+}
+
+.topbar-avatar-initial {
+  display: block;
+}
+
 .topbar-name {
   font-weight: 700;
   color: #0f172a;
@@ -34002,7 +34012,7 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
 @media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   :root {
     --mobile-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-    --mobile-bg: #f4f7fb;
+    --mobile-bg: #ffffff;
     --mobile-surface: #ffffff;
     --mobile-surface-muted: #f8fbff;
     --mobile-border: #dfe8f3;
@@ -34186,6 +34196,58 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     font-size: 1.02rem;
     font-weight: 800;
     letter-spacing: -0.02em;
+  }
+
+  /* Botones del header compact = mismo estilo que mobile-hero-action-btn */
+  .topbar.topbar-mobile-compact .topbar-quick {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #dfe8f3;
+    color: var(--mobile-blue, #2563eb);
+    box-shadow: 0 8px 18px rgba(15, 35, 70, 0.06);
+    display: grid;
+    place-items: center;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-quick svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-user {
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #dfe8f3;
+    color: var(--mobile-blue, #2563eb);
+    box-shadow: 0 8px 18px rgba(15, 35, 70, 0.06);
+    display: grid;
+    place-items: center;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--mobile-blue, #2563eb);
+  }
+
+  .topbar.topbar-mobile-compact .topbar-avatar-icon {
+    display: block;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-avatar-initial {
+    display: none;
+  }
+
+  .topbar.topbar-mobile-compact .topbar-name {
+    display: none;
   }
 
   .mobile-hero {
@@ -34755,6 +34817,13 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
     background: transparent !important;
     border: 0 !important;
     box-shadow: none !important;
+  }
+
+  body.theme-dark .topbar.topbar-mobile-compact .topbar-quick,
+  body.theme-dark .topbar.topbar-mobile-compact .topbar-user {
+    background: rgba(15, 23, 39, 0.92) !important;
+    border-color: rgba(148, 163, 184, 0.16) !important;
+    color: #8fb9ff !important;
   }
 
   body.theme-dark .mobile-hero-avatar,
