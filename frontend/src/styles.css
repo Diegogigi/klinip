@@ -42544,6 +42544,7 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 
 .main-area.main-area-ai-immersive {
   margin-left: 0;
+  margin-bottom: 0;
   min-height: 100dvh;
   height: 100dvh;
   display: flex;
@@ -42556,10 +42557,13 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   flex: 1;
   min-height: 100dvh;
   height: 100dvh;
+  padding: 0 !important;
   overflow: hidden;
 }
 
 .route-scene.route-scene-ai-immersive {
+  display: flex;
+  flex-direction: column;
   min-height: 100%;
   height: 100%;
   overflow: hidden;
@@ -42743,6 +42747,14 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
     height: 100dvh;
   }
 
+  .main-area.main-area-ai-immersive {
+    margin-bottom: 0 !important;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive {
+    padding: 0 !important;
+  }
+
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
     border-radius: 0;
     border: 0;
@@ -42771,6 +42783,10 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
 
   .main-content.main-content-ai.main-content-ai-immersive {
     padding: 0;
+  }
+
+  .main-area.main-area-ai-immersive {
+    margin-bottom: 0 !important;
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
