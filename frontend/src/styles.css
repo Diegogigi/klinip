@@ -42554,6 +42554,8 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 }
 
 .main-content.main-content-ai.main-content-ai-immersive {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 100dvh;
   height: 100dvh;
@@ -42564,9 +42566,15 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
 .route-scene.route-scene-ai-immersive {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 100%;
   height: 100%;
   overflow: hidden;
+}
+
+.route-scene.route-scene-ai-immersive > * {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-page.ai-copilot-page {
