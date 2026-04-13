@@ -42549,6 +42549,12 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   background: #f6f7f9;
 }
 
+html:has(.main-area.main-area-ai-immersive),
+body:has(.main-area.main-area-ai-immersive),
+.layout:has(.main-area.main-area-ai-immersive) {
+  background: #f6f7f9;
+}
+
 html.ai-immersive-active,
 body.ai-immersive-active {
   background: #f6f7f9;
@@ -42642,6 +42648,14 @@ body.ai-immersive-active {
   border-radius: 0;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+.main-content.main-content-ai.main-content-ai-immersive .ai-chat,
+.main-content.main-content-ai.main-content-ai-immersive .ai-chat-inner {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar {
@@ -42743,7 +42757,7 @@ body.ai-immersive-active {
   flex: 0 0 auto;
   padding: 0.72rem 1.8rem calc(0.55rem + env(safe-area-inset-bottom));
   border-top: 1px solid rgba(226, 232, 240, 0.92);
-  background: linear-gradient(to top, #f6f7f9 76%, rgba(246, 247, 249, 0));
+  background: #f6f7f9;
   box-shadow: 0 -10px 24px rgba(15, 23, 42, 0.04);
   z-index: 3;
 }
@@ -42774,6 +42788,9 @@ body.theme-dark .main-area.main-area-ai-immersive {
   background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
 }
 
+body.theme-dark html:has(.main-area.main-area-ai-immersive),
+body.theme-dark:has(.main-area.main-area-ai-immersive),
+body.theme-dark .layout:has(.main-area.main-area-ai-immersive),
 body.theme-dark .app-shell:has(.main-area.main-area-ai-immersive),
 body.theme-dark html.ai-immersive-active,
 body.theme-dark.ai-immersive-active {
@@ -42800,7 +42817,7 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-mobi
 }
 
 body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
-  background: linear-gradient(to top, #0f172a 76%, rgba(15, 23, 42, 0));
+  background: #0f172a;
   border-top-color: rgba(36, 50, 68, 0.92);
   box-shadow: 0 -12px 28px rgba(2, 6, 23, 0.32);
 }
