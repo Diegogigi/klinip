@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v18";
+const CACHE_NAME = "klinip-cache-v19";
 const ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -446,10 +446,6 @@ self.addEventListener("push", (event) => {
     (data.medicationId ? `medication-${data.medicationId}` : null) ||
     `push-${Date.now()}`;
 
-  if (!shouldShowNotification(tag)) {
-    return;
-  }
-
   let requireInteraction = true;
   let vibrate = [200, 100, 200];
 
@@ -461,46 +457,57 @@ self.addEventListener("push", (event) => {
     requireInteraction = false;
   }
 
+  const notificationOptions = {
+    body,
+    icon,
+    badge: "/icons/android-chrome-192x192.png",
+    vibrate,
+    requireInteraction,
+    silent: false,
+    tag,
+    actions: data.kind === "feed"
+      ? [{ action: "open", title: "Ver en el feed", icon: "/icons/android-chrome-192x192.png" }]
+      : data.kind === "note"
+      ? [{ action: "open", title: "Ver nota", icon: "/icons/android-chrome-192x192.png" }]
+      : [
+        {
+          action: "done",
+          title: data.medicationId ? "Realizado" : "Realizada",
+          icon: "/icons/android-chrome-192x192.png"
+        },
+        { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
+      ],
+    data: {
+      url,
+      timestamp: Date.now(),
+      sound,
+      priority,
+      ...data
+    }
+  };
+
+  // CRITICAL: siempre llamar event.waitUntil con showNotification.
+  // Chrome revoca permisos push si un push event no muestra notificación.
+  // showNotification va PRIMERO e independiente de recordReceivedNotification.
   event.waitUntil(
-    Promise.all([
-      recordReceivedNotification({
-        id: tag,
-        title,
-        body,
-        url,
-        tag,
-        timestamp: Date.now(),
-        source: "push",
-        userId: data.userId || null
-      }),
-      self.registration.showNotification(title, {
-        body,
-        icon,
-        badge: "/icons/android-chrome-192x192.png",
-        vibrate,
-        requireInteraction,
-        tag,
-        actions: data.kind === "feed"
-          ? [{ action: "open", title: "Ver en el feed", icon: "/icons/android-chrome-192x192.png" }]
-          : data.kind === "note"
-          ? [{ action: "open", title: "Ver nota", icon: "/icons/android-chrome-192x192.png" }]
-          : [
-            {
-              action: "done",
-              title: data.medicationId ? "Realizado" : "Realizada",
-              icon: "/icons/android-chrome-192x192.png"
-            },
-            { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
-          ],
-        data: {
-          url,
-          timestamp: Date.now(),
-          sound,
-          priority,
-          ...data
-        }
+    self.registration.showNotification(title, notificationOptions)
+      .catch((err) => {
+        console.error("ERROR showNotification:", err);
       })
-    ])
+      .then(() =>
+        recordReceivedNotification({
+          id: tag,
+          title,
+          body,
+          url,
+          tag,
+          timestamp: Date.now(),
+          source: "push",
+          userId: data.userId || null
+        }).catch((err) => {
+          console.error("ERROR recordReceivedNotification:", err);
+        })
+      )
   );
 });
 

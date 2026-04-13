@@ -19362,6 +19362,22 @@ async def create_appointment(
                 "notes": appt.notes or "",
             },
         )
+    # Push inmediato: confirmar que la cita fue agendada
+    try:
+        category = _appointment_type_label(appt.type)
+        when_text = appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente"
+        _send_push_to_user(db, target_user_id, {
+            "title": f"{category} agendada",
+            "body": f"{appt.specialty or appt.type.value} en {appt.center or 'Centro médico'}\n{when_text}",
+            "url": "/appointments",
+            "priority": "normal",
+            "sound": "appointment",
+            "appointmentId": appt.id,
+            "userId": target_user_id,
+            "tag": f"appointment-created-{appt.id}",
+        })
+    except Exception as exc:
+        print(f"WARNING push appointment created {appt.id}: {exc}")
     return appt
 
 
@@ -19390,6 +19406,22 @@ async def update_appointment(
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
+    # Push inmediato: confirmar que la cita fue actualizada
+    try:
+        category = _appointment_type_label(appt.type)
+        when_text = appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente"
+        _send_push_to_user(db, target_user_id, {
+            "title": f"{category} actualizada",
+            "body": f"{appt.specialty or appt.type.value} en {appt.center or 'Centro médico'}\n{when_text}",
+            "url": "/appointments",
+            "priority": "normal",
+            "sound": "appointment",
+            "appointmentId": appt.id,
+            "userId": target_user_id,
+            "tag": f"appointment-updated-{appt.id}-{int(datetime.now().timestamp())}",
+        })
+    except Exception as exc:
+        print(f"WARNING push appointment updated {appt.id}: {exc}")
     return appt
 
 
@@ -19508,6 +19540,21 @@ async def create_medication(
                 )
             except Exception as notify_exc:
                 print(f"WARNING medication programmed notifications {med.id}: {notify_exc}")
+        # Push inmediato: confirmar que el medicamento fue programado
+        try:
+            body_parts = [f"Dosis: {med.dose}" if med.dose else "", f"Frecuencia: {med.frequency}" if med.frequency else ""]
+            _send_push_to_user(db, target_user_id, {
+                "title": f"Medicamento programado: {med.name}",
+                "body": "\n".join(p for p in body_parts if p) or "Tratamiento registrado",
+                "url": "/medications",
+                "priority": "normal",
+                "sound": "medication",
+                "medicationId": med.id,
+                "userId": target_user_id,
+                "tag": f"medication-created-{med.id}",
+            })
+        except Exception as exc:
+            print(f"WARNING push medication created {med.id}: {exc}")
         return med
     except Exception as e:
         db.rollback()
@@ -19602,6 +19649,22 @@ async def update_medication(
             )
         except Exception as notify_exc:
             print(f"WARNING medication programmed notifications {med.id}: {notify_exc}")
+    # Push inmediato: confirmar que el medicamento fue actualizado
+    if not bool(getattr(med, "completed", False)):
+        try:
+            body_parts = [f"Dosis: {med.dose}" if med.dose else "", f"Frecuencia: {med.frequency}" if med.frequency else ""]
+            _send_push_to_user(db, target_user_id, {
+                "title": f"Medicamento actualizado: {med.name}",
+                "body": "\n".join(p for p in body_parts if p) or "Tratamiento actualizado",
+                "url": "/medications",
+                "priority": "normal",
+                "sound": "medication",
+                "medicationId": med.id,
+                "userId": target_user_id,
+                "tag": f"medication-updated-{med.id}-{int(datetime.now().timestamp())}",
+            })
+        except Exception as exc:
+            print(f"WARNING push medication updated {med.id}: {exc}")
     return med
 
 
