@@ -232,8 +232,8 @@ function AutomationPanel({
     <div className="vp2-panel-card vp2-automation-card">
       <div className="vp2-panel-head">
         <div>
-          <span className="vp2-panel-label">AUTOMATIZACIÓN POR PERFIL</span>
-          <h3 className="vp2-panel-title">Compartido familiar automático</h3>
+          <span className="vp2-panel-label">AUTOMATIZACIÓN</span>
+          <h3 className="vp2-panel-title">Compartido automático</h3>
         </div>
         <span className={`vp2-pill ${draft.voice_auto_share_enabled ? "is-active" : ""}`}>
           {draft.voice_auto_share_enabled ? "Activo" : "Manual"}
@@ -241,10 +241,10 @@ function AutomationPanel({
       </div>
 
       <p className="vp2-panel-copy">
-        Configura qué integrantes autorizados reciben automáticamente el resumen simple, las indicaciones y, si lo decides, el audio de cada nueva atención de {profileName}.
+        Envía automáticamente el resumen simple de cada nueva atención a los familiares seleccionados de {profileName}.
       </p>
       <p className="vp2-panel-note">
-        La familia ve el resumen simple. La transcripción técnica no se comparte en esta bandeja.
+        Opcional: incluir audio. La transcripción técnica no se comparte.
       </p>
 
       {!canEdit ? (
@@ -595,7 +595,7 @@ export default function KlinipVoicePage() {
       )}
 
       <div className="vp2-header">
-        <div>
+        <div className="vp2-header-copy">
           <span className="vp2-eyebrow">
             <span className="vp2-eyebrow-dot" />
             AI-powered · Clinical Voice

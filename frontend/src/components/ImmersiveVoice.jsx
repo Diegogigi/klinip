@@ -839,7 +839,7 @@ export default function ImmersiveVoice({
           <div className="iv-orb iv-orb-green-solid">
             <CheckSvg />
           </div>
-          <h2 className="iv-title" style={{ marginTop: "1rem" }}>
+          <h2 className="iv-title iv-done-title">
             {result.access_scope === "shared" ? "Atención compartida" : "Consulta procesada"}
           </h2>
           <p className="iv-subtitle">
@@ -1776,7 +1776,7 @@ function LegacyImmersiveVoice({
           <div className="iv-orb iv-orb-green-solid">
             <CheckSvg />
           </div>
-          <h2 className="iv-title" style={{ marginTop: "1rem" }}>Consulta procesada</h2>
+          <h2 className="iv-title iv-done-title">Consulta procesada</h2>
           <p className="iv-subtitle">Klinip IA analizó tu consulta</p>
           {(result.id || sessionPreviewBlob) && (
             <IvAudioPlayer sessionId={result.id} fallbackBlob={sessionPreviewBlob} />
