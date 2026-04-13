@@ -778,6 +778,14 @@ export default function KlinipVoicePage() {
         />
       )}
 
+      <div className="vp2-section-intro">
+        <span className="vp2-eyebrow">
+          <span className="vp2-eyebrow-dot" />
+          AI-powered · Clinical Voice
+        </span>
+        <p className="vp2-section-sub">Consultas grabadas · {profileName}</p>
+      </div>
+
       <div className="vp2-actions-row">
         <label className="vp2-profile-picker">
           <span>Perfil activo</span>
