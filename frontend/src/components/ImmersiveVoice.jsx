@@ -548,6 +548,7 @@ export default function ImmersiveVoice({
   );
   const [sessionPreviewBlob, setSessionPreviewBlob] = useState(null);
   const [micReady, setMicReady] = useState(false);
+  const [wakeLockState, setWakeLockState] = useState("idle");
 
   const sheetRef = useRef(null);
   const dragRef = useRef({ active: false, startY: 0, startH: 0 });
@@ -557,6 +558,7 @@ export default function ImmersiveVoice({
   const consentBlobRef = useRef(null);
   const timerRef = useRef(null);
   const recorderOptionRef = useRef(getPreferredVoiceRecorderOption());
+  const wakeLockRef = useRef(null);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -566,6 +568,48 @@ export default function ImmersiveVoice({
       document.documentElement.classList.remove("voice-immersive-active", "klinip-overlay-open");
       document.body.classList.remove("voice-immersive-active", "klinip-overlay-open");
     };
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current;
+    wakeLockRef.current = null;
+    if (sentinel) {
+      try {
+        await sentinel.release();
+      } catch {
+        // ignore
+      }
+    }
+    setWakeLockState("idle");
+  }, []);
+
+  const requestWakeLock = useCallback(async () => {
+    if (typeof document === "undefined") return false;
+    if (document.visibilityState === "hidden") return false;
+    if (!navigator?.wakeLock?.request) {
+      setWakeLockState("unsupported");
+      return false;
+    }
+    if (wakeLockRef.current) {
+      setWakeLockState("active");
+      return true;
+    }
+
+    try {
+      const sentinel = await navigator.wakeLock.request("screen");
+      wakeLockRef.current = sentinel;
+      setWakeLockState("active");
+      sentinel.addEventListener?.("release", () => {
+        if (wakeLockRef.current === sentinel) {
+          wakeLockRef.current = null;
+        }
+        setWakeLockState(document.visibilityState === "visible" ? "released" : "idle");
+      });
+      return true;
+    } catch {
+      setWakeLockState("error");
+      return false;
+    }
   }, []);
 
   const stopStream = useCallback(() => {
@@ -579,7 +623,36 @@ export default function ImmersiveVoice({
     }
   }, []);
 
-  useEffect(() => () => stopStream(), [stopStream]);
+  useEffect(() => () => {
+    stopStream();
+    releaseWakeLock();
+  }, [releaseWakeLock, stopStream]);
+
+  const shouldKeepScreenAwake =
+    stage === "recording_consent" ||
+    stage === "recording_session" ||
+    stage === "processing";
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    if (!shouldKeepScreenAwake) {
+      releaseWakeLock();
+      return undefined;
+    }
+
+    requestWakeLock();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && shouldKeepScreenAwake) {
+        requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [releaseWakeLock, requestWakeLock, shouldKeepScreenAwake]);
 
   useEffect(() => {
     if (result?.access_scope === "shared") {
@@ -664,6 +737,7 @@ export default function ImmersiveVoice({
   async function handleStartConsent() {
     setMicReady(false);
     setStage("recording_consent");
+    await requestWakeLock();
     await startMic();
   }
 
@@ -688,6 +762,7 @@ export default function ImmersiveVoice({
     setMicReady(false);
     setStage("recording_session");
     setTimer(0);
+    await requestWakeLock();
     const ok = await startMic();
     if (ok) {
       timerRef.current = setInterval(() => setTimer((value) => value + 1), 1000);
@@ -705,6 +780,7 @@ export default function ImmersiveVoice({
     }
     const sessionBlob = await stopRecording();
     stopStream();
+    await releaseWakeLock();
 
     if (!sessionBlob || sessionBlob.size === 0) {
       setError("No se capturó audio de la consulta. Intenta de nuevo.");
@@ -753,11 +829,13 @@ export default function ImmersiveVoice({
     setMicReady(false);
     consentBlobRef.current = null;
     setSessionPreviewBlob(null);
+    setWakeLockState("idle");
     setStage("consent");
   }
 
   function handleCancel() {
     stopStream();
+    releaseWakeLock();
     setSessionPreviewBlob(null);
     animateClose(() => {
       if (stage === "done" && result && onDone) onDone(result);
@@ -843,6 +921,17 @@ export default function ImmersiveVoice({
     error: { label: "Error", tone: "error" },
     done: { label: "Listo", tone: "ready" },
   }[stage] || { label: "Preparación", tone: "idle" };
+  const wakeLockCopy = shouldKeepScreenAwake
+    ? wakeLockState === "active"
+      ? "Pantalla activa durante la grabación."
+      : wakeLockState === "unsupported"
+        ? "Tu navegador no permite bloquear el reposo. Mantén la pantalla desbloqueada."
+        : wakeLockState === "released"
+          ? "La protección de pantalla se liberó. Mantén el teléfono activo."
+          : wakeLockState === "error"
+            ? "No pudimos sostener la pantalla activa. Evita bloquear el teléfono."
+            : "Activando protección de pantalla..."
+    : "";
 
   const renderOverlay = (content) => (
     typeof document !== "undefined" ? createPortal(content, document.body) : content
@@ -953,6 +1042,8 @@ export default function ImmersiveVoice({
           <StagePill label={stageStatus.label} tone={stageStatus.tone} />
           {showWaves ? <span className="iv-stage-live">Entrada en tiempo real</span> : null}
         </div>
+
+        {wakeLockCopy ? <p className={`iv-wake-lock-note is-${wakeLockState}`}>{wakeLockCopy}</p> : null}
 
         {showWaves ? <AudioWaves active tone="recording" /> : null}
         {stage === "recording_session" && <div className="iv-timer">{formatTimer(timer)}</div>}
