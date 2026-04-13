@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
+  deleteVoiceSession,
   getActiveHealthProfile,
   getHealthProfiles,
   getProfileAutomation,
@@ -50,18 +51,18 @@ const IND_COLORS = {
   otro: { bg: "rgba(107,114,128,0.08)", color: "#6b7280" },
 };
 
-const STEPS = [
+const VOICE_STEPS = [
   { n: "01", text: "Pide autorización verbal al profesional" },
   { n: "02", text: "Klinip registra el consentimiento" },
   { n: "03", text: "La IA resume la atención en lenguaje simple" },
   { n: "04", text: "Comparte con profesionales o familia autorizada" },
 ];
 
-const FEATURE_TAGS = [
+const VOICE_FEATURE_TAGS = [
   "Transcripción IA",
   "Lenguaje simple",
-  "Compartido familiar",
   "Audio protegido",
+  "Solo tú y tu familia",
 ];
 
 function normalizeAutomation(data) {
@@ -162,7 +163,18 @@ function EyeIcon() {
   );
 }
 
-function SessionCard({ session, onOpen, isSharedView = false }) {
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+function VoiceSessionCard({ session, onOpen, isSharedView = false, canDelete = false, deleting = false, onDelete }) {
   const statusKey = isSharedView ? "received" : getSessionStatus(session);
   const status = STATUS_CONFIG[statusKey];
   const indicaciones = Array.isArray(session?.indicaciones) ? session.indicaciones : [];
@@ -170,45 +182,59 @@ function SessionCard({ session, onOpen, isSharedView = false }) {
   const audioLabel = isSharedView ? (session?.audio_available ? "Con audio" : "Solo resumen") : null;
 
   return (
-    <button type="button" className="vp2-card" onClick={() => onOpen(session)}>
+    <article className={`vp2-card ${canDelete ? "is-manageable" : ""}`}>
       <div className="vp2-card-left-bar" />
-      <div className="vp2-card-icon-wrap">
-        <MicIcon className="vp2-card-icon" />
-      </div>
-      <div className="vp2-card-body">
-        <span className="vp2-card-name">{sessionTitle(session, isSharedView)}</span>
-        <span className="vp2-card-meta">
-          <span className="vp2-card-date">{formatDateMono(dateValue)}</span>
-          {audioLabel ? <span className="vp2-card-inline-chip">{audioLabel}</span> : null}
-        </span>
-        <p className="vp2-card-copy">{sessionMetaLine(session, isSharedView)}</p>
-        {indicaciones.length > 0 && (
-          <div className="vp2-card-chips">
-            {indicaciones.slice(0, 3).map((ind, index) => {
-              const color = IND_COLORS[ind?.tipo] || IND_COLORS.otro;
-              const label = ind?.tipo || "otro";
-              return (
-                <span key={`${label}-${index}`} className="vp2-card-chip" style={{ background: color.bg, color: color.color }}>
-                  {label}
-                </span>
-              );
-            })}
-            {indicaciones.length > 3 && (
-              <span className="vp2-card-chip vp2-card-chip-more">+{indicaciones.length - 3}</span>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="vp2-card-right">
-        <span className={`vp2-card-badge ${status.className}`}>{status.label}</span>
-        <div className="vp2-card-actions">
-          <span className="vp2-card-action"><EyeIcon /> Ver</span>
-          {!isSharedView && (
-            <span className="vp2-card-action"><ShareSmallIcon /> Compartir</span>
-          )}
+      <button type="button" className="vp2-card-open" onClick={() => onOpen(session)}>
+        <div className="vp2-card-icon-wrap">
+          <MicIcon className="vp2-card-icon" />
         </div>
-      </div>
-    </button>
+        <div className="vp2-card-body">
+          <span className="vp2-card-name">{sessionTitle(session, isSharedView)}</span>
+          <span className="vp2-card-meta">
+            <span className="vp2-card-date">{formatDateMono(dateValue)}</span>
+            {audioLabel ? <span className="vp2-card-inline-chip">{audioLabel}</span> : null}
+          </span>
+          <p className="vp2-card-copy">{sessionMetaLine(session, isSharedView)}</p>
+          {indicaciones.length > 0 ? (
+            <div className="vp2-card-chips">
+              {indicaciones.slice(0, 3).map((ind, index) => {
+                const color = IND_COLORS[ind?.tipo] || IND_COLORS.otro;
+                const label = ind?.tipo || "otro";
+                return (
+                  <span key={`${label}-${index}`} className="vp2-card-chip" style={{ background: color.bg, color: color.color }}>
+                    {label}
+                  </span>
+                );
+              })}
+              {indicaciones.length > 3 ? (
+                <span className="vp2-card-chip vp2-card-chip-more">+{indicaciones.length - 3}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="vp2-card-right">
+          <span className={`vp2-card-badge ${status.className}`}>{status.label}</span>
+          <div className="vp2-card-actions">
+            <span className="vp2-card-action"><EyeIcon /> Ver</span>
+            {!isSharedView ? (
+              <span className="vp2-card-action"><ShareSmallIcon /> Compartir</span>
+            ) : null}
+          </div>
+        </div>
+      </button>
+      {canDelete ? (
+        <button
+          type="button"
+          className="vp2-card-delete"
+          onClick={() => onDelete?.(session)}
+          disabled={deleting}
+          aria-label="Eliminar grabación"
+          title="Eliminar grabación"
+        >
+          <TrashIcon />
+        </button>
+      ) : null}
+    </article>
   );
 }
 
@@ -387,6 +413,8 @@ export default function KlinipVoicePage() {
   const [automationSaving, setAutomationSaving] = useState(false);
   const [automationError, setAutomationError] = useState("");
   const [automationStatus, setAutomationStatus] = useState("");
+  const [deleteBusyId, setDeleteBusyId] = useState(null);
+  const [sessionsError, setSessionsError] = useState("");
 
   const canEdit = canWriteProfile(activeProfile);
   const readOnlyProfile = isViewerProfile(activeProfile);
@@ -586,6 +614,25 @@ export default function KlinipVoicePage() {
     if (activeProfile?.id) loadVoiceData(activeProfile);
   }
 
+  async function handleDeleteSession(session) {
+    if (!session?.id || deleteBusyId) return;
+    if (!window.confirm("¿Eliminar esta grabación de Klinip Voice?")) return;
+
+    setDeleteBusyId(session.id);
+    setSessionsError("");
+    try {
+      await deleteVoiceSession(session.id);
+      setSessions((prev) => prev.filter((item) => Number(item.id) !== Number(session.id)));
+      if (Number(immersiveSession?.id) === Number(session.id)) {
+        setImmersiveSession(null);
+      }
+    } catch (err) {
+      setSessionsError(err?.response?.data?.detail || "No se pudo eliminar la grabación.");
+    } finally {
+      setDeleteBusyId(null);
+    }
+  }
+
   function handleToggleRecipient(userId) {
     setAutomationDraft((prev) => ({
       ...prev,
@@ -659,6 +706,11 @@ export default function KlinipVoicePage() {
         </div>
       </div>
 
+      <div className="vp2-trust-row" aria-label="Seguridad de Klinip Voice">
+        <span className="vp2-trust-chip">Audio protegido</span>
+        <span className="vp2-trust-chip">Solo tú y tu familia</span>
+      </div>
+
       <div className="vp2-view-tabs" role="tablist" aria-label="Vistas de Klinip Voice">
         {OWN_VIEW_OPTIONS.map((option) => (
           <button
@@ -689,17 +741,8 @@ export default function KlinipVoicePage() {
                   ? "Aquí verás los audios y resúmenes simples que tu grupo familiar comparta contigo para este perfil."
                   : "Convierte la voz del profesional en un resumen claro, indicaciones útiles y opciones seguras de compartido."}
               </p>
-              <button
-                type="button"
-                className="vp2-hero-btn"
-                disabled={!canEdit || profileBusy}
-                onClick={() => setShowRecorder(true)}
-              >
-                <MicIcon className="vp2-hero-btn-mic" />
-                Iniciar grabación
-              </button>
               <div className="vp2-hero-tags">
-                {FEATURE_TAGS.map((tag) => (
+                {VOICE_FEATURE_TAGS.map((tag) => (
                   <span key={tag} className="vp2-hero-tag">{tag}</span>
                 ))}
               </div>
@@ -709,7 +752,7 @@ export default function KlinipVoicePage() {
           <div className="vp2-how">
             <span className="vp2-how-label">CÓMO FUNCIONA</span>
             <div className="vp2-how-steps">
-              {STEPS.map((step) => (
+                {VOICE_STEPS.map((step) => (
                 <div key={step.n} className="vp2-how-step">
                   <span className="vp2-how-num">{step.n}</span>
                   <span className="vp2-how-text">{step.text}</span>
@@ -767,10 +810,19 @@ export default function KlinipVoicePage() {
             </div>
           )}
 
+          {sessionsError ? <p className="vp2-feedback vp2-feedback-error">{sessionsError}</p> : null}
+
           {!sessionsLoading && libraryTab === "mine" && filteredSessions.length > 0 && (
             <div className="vp2-sessions">
               {filteredSessions.map((session) => (
-                <SessionCard key={session.id} session={session} onOpen={setImmersiveSession} />
+                <VoiceSessionCard
+                  key={session.id}
+                  session={session}
+                  onOpen={setImmersiveSession}
+                  canDelete
+                  deleting={deleteBusyId === session.id}
+                  onDelete={handleDeleteSession}
+                />
               ))}
             </div>
           )}
@@ -778,7 +830,7 @@ export default function KlinipVoicePage() {
           {!sessionsLoading && libraryTab === "shared" && receivedSessions.length > 0 && (
             <div className="vp2-sessions">
               {receivedSessions.map((session) => (
-                <SessionCard
+                <VoiceSessionCard
                   key={`${session.id}-${session.received_share_id || "shared"}`}
                   session={session}
                   onOpen={setImmersiveSession}
@@ -801,14 +853,7 @@ export default function KlinipVoicePage() {
                   ? "Graba tu primera consulta y Klinip Voice la procesará para guardar un resumen simple y las indicaciones."
                   : "Cambia el filtro o graba una nueva sesión para este perfil."}
               </p>
-              <button
-                type="button"
-                className="vp2-empty-btn"
-                disabled={!canEdit || profileBusy}
-                onClick={() => setShowRecorder(true)}
-              >
-                Iniciar primera grabación
-              </button>
+              {canEdit ? <div className="vp2-inline-note">Usa el botón Nueva grabación para comenzar.</div> : null}
             </div>
           )}
 

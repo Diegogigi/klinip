@@ -136,6 +136,7 @@ export const uploadHealthProfileAvatar = api.uploadHealthProfileAvatar;
 export const processVoiceSession = api.processVoiceSession;
 export const getVoiceSessions = api.getVoiceSessions;
 export const getVoiceSession = api.getVoiceSession;
+export const deleteVoiceSession = api.deleteVoiceSession;
 export const getVoiceShareTargets = api.getVoiceShareTargets;
 export const getVoiceReceivedSessions = api.getVoiceReceivedSessions;
 export const shareVoiceWithFamily = api.shareVoiceWithFamily;

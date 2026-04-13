@@ -835,6 +835,14 @@ export default function ImmersiveVoice({
       subtitle: error,
     },
   }[stage] || { title: "Error", subtitle: error };
+  const stageStatus = {
+    consent: { label: "Preparación", tone: "idle" },
+    recording_consent: { label: "Grabando", tone: "recording" },
+    recording_session: { label: "Grabando", tone: "recording" },
+    processing: { label: "Procesando", tone: "processing" },
+    error: { label: "Error", tone: "error" },
+    done: { label: "Listo", tone: "ready" },
+  }[stage] || { label: "Preparación", tone: "idle" };
 
   const renderOverlay = (content) => (
     typeof document !== "undefined" ? createPortal(content, document.body) : content
@@ -854,6 +862,7 @@ export default function ImmersiveVoice({
           <div className="iv-orb iv-orb-green-solid">
             <CheckSvg />
           </div>
+          <StagePill label="Listo" tone="ready" />
           <h2 className="iv-title iv-done-title">
             {result.access_scope === "shared" ? "Atención compartida" : "Consulta procesada"}
           </h2>
@@ -862,6 +871,7 @@ export default function ImmersiveVoice({
               ? "Tu familia te compartió este resumen de Klinip Voice."
               : "Klinip IA analizó tu consulta."}
           </p>
+          <SecurityBadges />
           {(result.id || sessionPreviewBlob) && (
             <IvAudioPlayer
               sessionId={result.id}
@@ -939,13 +949,20 @@ export default function ImmersiveVoice({
           {stage === "processing" ? <span className="iv-orb-spinner" /> : <MicSvg />}
         </div>
 
-        {showWaves && <AudioWaves />}
+        <div className="iv-stage-meta">
+          <StagePill label={stageStatus.label} tone={stageStatus.tone} />
+          {showWaves ? <span className="iv-stage-live">Entrada en tiempo real</span> : null}
+        </div>
+
+        {showWaves ? <AudioWaves active tone="recording" /> : null}
         {stage === "recording_session" && <div className="iv-timer">{formatTimer(timer)}</div>}
 
         <div className="iv-text">
           <h2 className="iv-title">{stageCopy.title}</h2>
           <p className="iv-subtitle">{stageCopy.subtitle}</p>
         </div>
+
+        <SecurityBadges />
 
         {stage !== "processing" && stage !== "error" && <StepDots current={stepIndex} total={3} />}
 
@@ -1121,11 +1138,55 @@ function StepDots({ current, total }) {
   );
 }
 
-function AudioWaves() {
+function ShieldMiniIcon() {
   return (
-    <div className="iv-waves">
-      {Array.from({ length: 9 }, (_, i) => (
-        <span key={i} className="iv-wave-bar" style={{ animationDelay: `${i * 0.12}s` }} />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  );
+}
+
+function StagePill({ label, tone }) {
+  return <span className={`iv-stage-pill is-${tone}`}>{label}</span>;
+}
+
+function SecurityBadges() {
+  return (
+    <div className="iv-security-row">
+      <span className="iv-security-chip">
+        <ShieldMiniIcon />
+        Audio protegido
+      </span>
+      <span className="iv-security-chip">
+        <ShieldMiniIcon />
+        Solo tú y tu familia
+      </span>
+    </div>
+  );
+}
+
+function AudioWaves({ active = false, tone = "recording" }) {
+  const [levels, setLevels] = useState(() => [18, 30, 22, 36, 26, 34, 22, 28, 16]);
+
+  useEffect(() => {
+    if (!active) return undefined;
+    const interval = window.setInterval(() => {
+      setLevels((prev) =>
+        prev.map((value, index) => {
+          const base = index === 4 ? 30 : index % 2 === 0 ? 22 : 28;
+          const variance = Math.floor(Math.random() * 22);
+          return Math.max(10, base + variance - Math.floor(value / 8));
+        })
+      );
+    }, 140);
+    return () => window.clearInterval(interval);
+  }, [active]);
+
+  return (
+    <div className={`iv-waves is-${tone}`}>
+      {levels.map((height, index) => (
+        <span key={index} className="iv-wave-bar" style={{ height: `${height}px` }} />
       ))}
     </div>
   );

@@ -1042,6 +1042,11 @@ export async function getVoiceSession(sessionId) {
   return res.data;
 }
 
+export async function deleteVoiceSession(sessionId) {
+  const res = await api.delete(`/voice/sessions/${sessionId}`);
+  return res.data;
+}
+
 export async function getVoiceShareTargets(profileId) {
   const res = await api.get(`/health-profiles/${profileId}/voice-share-targets`);
   return ensureArray(res.data);

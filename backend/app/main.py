@@ -18426,6 +18426,47 @@ async def get_voice_session(
     )
 
 
+@app.delete("/voice/sessions/{session_id}")
+async def delete_voice_session(
+    session_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    session, profile, _, _, can_manage = _voice_session_access_context(
+        db,
+        current_user,
+        session_id,
+    )
+    if not can_manage:
+        raise HTTPException(status_code=403, detail="No tienes permisos para eliminar esta grabación.")
+
+    for path in [getattr(session, "audio_consent", None), getattr(session, "audio_session", None)]:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    db.query(models.VoiceFamilyShare).filter(
+        models.VoiceFamilyShare.voice_session_id == int(session.id)
+    ).delete(synchronize_session=False)
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="voice_session_deleted",
+        description=f"{current_user.name or current_user.email} eliminó una grabación de Klinip Voice",
+        metadata_json={
+            "voice_session_id": int(session.id),
+            "profile_id": int(profile.id),
+        },
+    )
+    db.delete(session)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    return {"ok": True, "id": int(session_id)}
+
+
 @app.get("/health-profiles/{profile_id}/voice-share-targets", response_model=List[schemas.VoiceShareTargetOut])
 async def get_voice_share_targets(
     profile_id: int,
