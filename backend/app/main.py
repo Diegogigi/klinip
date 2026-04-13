@@ -1372,11 +1372,11 @@ def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
     )
     if not subscriptions:
         return 0
-    # iOS acumula muchas suscripciones caducadas. Enviamos solo a las 3 más
-    # recientes para evitar que un usuario de iPhone reciba decenas de
-    # notificaciones duplicadas. Las demás se eliminan como limpieza proactiva.
-    active_subs = subscriptions[:3]
-    stale_subs = subscriptions[3:]
+    # En producción hemos visto que iOS puede regenerar endpoints y dejar varias
+    # suscripciones válidas para el mismo usuario/dispositivo. Para evitar pushes
+    # duplicados conservamos solo la suscripción más reciente.
+    active_subs = subscriptions[:1]
+    stale_subs = subscriptions[1:]
     for sub in stale_subs:
         db.delete(sub)
     if stale_subs:
@@ -20173,7 +20173,7 @@ async def subscribe_push(
         try:
             db.commit()
             db.refresh(existing)
-            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
+            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
             return existing
         except Exception as exc:
             db.rollback()
@@ -20190,7 +20190,7 @@ async def subscribe_push(
     try:
         db.commit()
         db.refresh(sub)
-        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
+        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
         return sub
     except IntegrityError:
         db.rollback()
@@ -20207,7 +20207,7 @@ async def subscribe_push(
             try:
                 db.commit()
                 db.refresh(recovered)
-                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=5)
+                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
                 return recovered
             except Exception as exc:
                 db.rollback()
