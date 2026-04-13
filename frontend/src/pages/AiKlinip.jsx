@@ -622,6 +622,20 @@ export default function AiKlinip() {
   }, []);
 
   useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const body = document.body;
+    const root = document.documentElement;
+    body.classList.add("ai-immersive-active");
+    root.classList.add("ai-immersive-active");
+
+    return () => {
+      body.classList.remove("ai-immersive-active");
+      root.classList.remove("ai-immersive-active");
+    };
+  }, []);
+
+  useEffect(() => {
     if (!mobilePanelOpen || typeof document === "undefined") return undefined;
 
     const body = document.body;

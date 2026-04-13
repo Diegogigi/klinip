@@ -42548,6 +42548,13 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   overflow: hidden;
 }
 
+html.ai-immersive-active,
+body.ai-immersive-active {
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .app-shell:has(.main-area.main-area-ai-immersive) .layout {
   min-height: 100%;
   height: 100%;
@@ -42581,6 +42588,10 @@ body.theme-dark .health-hub-page-voice .health-hub-card-badge {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  animation: none !important;
+  will-change: auto;
+  transform: none !important;
+  opacity: 1 !important;
 }
 
 .route-scene.route-scene-ai-immersive > * {
