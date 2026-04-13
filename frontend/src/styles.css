@@ -42936,12 +42936,12 @@ body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-inpu
     right: 0;
     bottom: 0;
     margin: 0;
-    padding: 0.62rem 0.8rem calc(0.45rem + env(safe-area-inset-bottom));
+    padding: 0.56rem 0.8rem calc(0.14rem + env(safe-area-inset-bottom));
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
     right: 0.8rem;
-    bottom: calc(var(--ai-input-zone-height, 0px) + 0.62rem);
+    bottom: calc(var(--ai-input-zone-height, 0px) + 0.42rem);
   }
 
   .main-content.main-content-ai.main-content-ai-immersive .ai-jump-composer-btn {
