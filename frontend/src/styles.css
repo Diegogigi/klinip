@@ -19894,6 +19894,10 @@ body.voice-immersive-active .main-area {
 /* ── Immersive mobile ──────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
+  .iv-overlay-done {
+    align-items: center;
+  }
+
   body.voice-immersive-active .sidebar {
     transform: translateY(calc(100% + env(safe-area-inset-bottom))) !important;
   }
@@ -19912,13 +19916,21 @@ body.voice-immersive-active .main-area {
     right: 1rem;
   }
   .iv-done-top {
+    width: min(100%, 360px);
+    margin: 0 auto;
+    align-items: center;
     padding-top: calc(env(safe-area-inset-top, 0px) + 1rem);
     padding-bottom: 0.85rem;
     padding-left: 1rem;
     padding-right: 1rem;
+    text-align: center;
   }
   .iv-done-title { margin-top: 0.52rem; }
-  .iv-audio-player { max-width: 100%; }
+  .iv-audio-player {
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
   .iv-family-share-head,
   .iv-family-current-item {
     flex-direction: column;
