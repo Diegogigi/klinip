@@ -15,6 +15,11 @@ import {
   uploadPostAttachment,
   getHealthProfiles,
   getProfileCaregivers,
+  getFamilyAlerts,
+  getFamilyReportSummary,
+  getAiFamilyContext,
+  getProfileAutomation,
+  getMyPendingProfileInvitations,
   getPostAttachmentUrl,
   uploadHealthProfileAvatar,
 } from "../api";
@@ -192,6 +197,84 @@ function timeAgo(dateStr) {
   if (diff < 86400) return `${Math.floor(diff / 3600)} h`;
   if (diff < 604800) return `${Math.floor(diff / 86400)} d`;
   return new Date(dateStr).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+}
+
+function truncateText(value = "", max = 120) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
+}
+
+function formatUnitLabel(count, singular, plural) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
+  const events = [];
+
+  (alerts || []).slice(0, 4).forEach((alert) => {
+    const tone = alert.severity === "high" ? "red" : "amber";
+    events.push({
+      key: `alert-${alert.id || `${alert.profile_name}-${alert.title}`}`,
+      tone,
+      badge: tone === "red" ? "Alerta crítica" : "Seguimiento",
+      title: `${alert.profile_name || "Perfil"} requiere atención`,
+      body: truncateText(alert.title || alert.message || "Hay una novedad clínica para revisar.", 130),
+      meta: alert.suggested_action || "Revisa el radar familiar y define el siguiente paso.",
+      route: "/settings/familia",
+    });
+  });
+
+  (aiContext?.profiles || []).forEach((item) => {
+    if (item.low_adherence) {
+      events.push({
+        key: `adherence-${item.profile_id}`,
+        tone: "amber",
+        badge: "Adherencia",
+        title: `${item.profile_name || "Perfil"} necesita apoyo con su tratamiento`,
+        body: `${item.relation_with_owner || "Perfil familiar"} con adherencia baja detectada.`,
+        meta: item.upcoming_appointments
+          ? `${formatUnitLabel(item.upcoming_appointments, "cita próxima", "citas próximas")}.`
+          : "Conviene revisar tomas pendientes y próximos controles.",
+        route: "/medications",
+      });
+    } else if (Number(item.upcoming_appointments || 0) > 0) {
+      events.push({
+        key: `appointment-${item.profile_id}`,
+        tone: "blue",
+        badge: "Próxima cita",
+        title: `${item.profile_name || "Perfil"} tiene ${formatUnitLabel(Number(item.upcoming_appointments || 0), "cita próxima", "citas próximas")}`,
+        body: `${item.relation_with_owner || "Perfil familiar"} con agenda activa.`,
+        meta: Number(item.active_alerts || 0) > 0
+          ? `${formatUnitLabel(Number(item.active_alerts || 0), "alerta activa", "alertas activas")}.`
+          : "Revisa la preparación previa y la confirmación de la cita.",
+        route: "/appointments",
+      });
+    }
+  });
+
+  (posts || [])
+    .filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type))
+    .slice(0, 4)
+    .forEach((post) => {
+      const postTypeInfo = getPostTypeInfo(post.type);
+      events.push({
+        key: `post-${post.id}`,
+        tone:
+          post.type === "medication"
+            ? "green"
+            : post.type === "doctor_visit"
+            ? "blue"
+            : "violet",
+        badge: postTypeInfo.label,
+        title: `${post.profile_name || "Perfil"} registró una actualización clínica`,
+        body: truncateText(post.content || `Nueva actualización de tipo ${postTypeInfo.label}.`, 135),
+        meta: `${post.user_name || "Familiar"} · ${timeAgo(post.created_at)}`,
+        route: "/family",
+      });
+    });
+
+  return events.slice(0, 6);
 }
 
 function getPostTypeInfo(type) {
@@ -1371,6 +1454,33 @@ function CaregiverRow({ caregiver }) {
   );
 }
 
+function PermissionSummaryCard({ title, tone = "blue", names = [], emptyText, detail }) {
+  return (
+    <article className={`kfeed-permission-card tone-${tone}`}>
+      <span className="kfeed-permission-card-label">{title}</span>
+      <strong>{names.length ? names.join(", ") : emptyText}</strong>
+      <p>{detail}</p>
+    </article>
+  );
+}
+
+function ClinicalEventCard({ item }) {
+  return (
+    <article className={`kfeed-clinical-event tone-${item.tone || "blue"}`}>
+      <div className="kfeed-clinical-event-top">
+        <span className={`kfeed-clinical-badge tone-${item.tone || "blue"}`}>{item.badge}</span>
+        <span className="kfeed-clinical-arrow">→</span>
+      </div>
+      <strong>{item.title}</strong>
+      <p>{item.body}</p>
+      <small>{item.meta}</small>
+      <Link to={item.route || "/settings/familia"} className="kfeed-clinical-link">
+        Ver detalle
+      </Link>
+    </article>
+  );
+}
+
 function FamilyMemberRow({ profile, onAvatarUpload }) {
   const inputRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -1424,6 +1534,11 @@ export default function KlinipFeed({ user }) {
   const [error, setError] = useState("");
   const [profiles, setProfiles] = useState([]);
   const [groupCaregivers, setGroupCaregivers] = useState({});
+  const [familyAlerts, setFamilyAlerts] = useState([]);
+  const [familyReport, setFamilyReport] = useState(null);
+  const [familyAiContext, setFamilyAiContext] = useState(null);
+  const [primaryAutomation, setPrimaryAutomation] = useState(null);
+  const [pendingInvitations, setPendingInvitations] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1449,30 +1564,48 @@ export default function KlinipFeed({ user }) {
     setLoading(true);
     setError("");
     try {
-      const [feed, profs] = await Promise.all([
+      const [feed, profs, alerts, report, aiContext, myInvitations] = await Promise.all([
         getFamilyFeed({ skip: 0, limit: LIMIT }),
         getHealthProfiles(),
+        getFamilyAlerts().catch(() => []),
+        getFamilyReportSummary(30).catch(() => null),
+        getAiFamilyContext(30).catch(() => null),
+        getMyPendingProfileInvitations().catch(() => []),
       ]);
       setPosts(feed);
       setProfiles(profs);
+      setFamilyAlerts(alerts || []);
+      setFamilyReport(report || null);
+      setFamilyAiContext(aiContext || null);
+      setPendingInvitations(myInvitations || []);
       skipRef.current = feed.length;
       setHasMore(feed.length === LIMIT);
-      // Cargar caregivers de todos los perfiles primarios para el sidebar
+
+      const ownPrimary =
+        (profs || []).find((p) => p.is_primary_profile && p.owner_user_id === user?.id) ||
+        (profs || []).find((p) => p.owner_user_id === user?.id) ||
+        null;
+
       const primaryProfiles = profs.filter((p) => p.is_primary_profile);
-      if (primaryProfiles.length > 0) {
-        const results = await Promise.allSettled(
-          primaryProfiles.map((p) =>
-            getProfileCaregivers(p.id).then((list) => ({ profileId: p.id, list: list || [] }))
-          )
-        );
-        const map = {};
-        results.forEach((r) => {
-          if (r.status === "fulfilled" && r.value) {
-            map[r.value.profileId] = r.value.list;
-          }
-        });
-        setGroupCaregivers(map);
-      }
+      const [caregiverResults, automation] = await Promise.all([
+        primaryProfiles.length > 0
+          ? Promise.allSettled(
+              primaryProfiles.map((p) =>
+                getProfileCaregivers(p.id).then((list) => ({ profileId: p.id, list: list || [] }))
+              )
+            )
+          : Promise.resolve([]),
+        ownPrimary ? getProfileAutomation(ownPrimary.id).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      const map = {};
+      caregiverResults.forEach((r) => {
+        if (r.status === "fulfilled" && r.value) {
+          map[r.value.profileId] = r.value.list;
+        }
+      });
+      setGroupCaregivers(map);
+      setPrimaryAutomation(automation || null);
     } catch {
       setError("No se pudieron cargar las actualizaciones.");
     } finally {
@@ -1638,43 +1771,214 @@ export default function KlinipFeed({ user }) {
     groupCaregivers,
     posts,
   });
+  const ownCaregivers = primaryProfile
+    ? (groupCaregivers[primaryProfile.id] || []).filter(
+        (item) =>
+          item.status === "accepted" &&
+          item.user_id !== user?.id &&
+          String(item.relationship_type || "").toLowerCase() !== "self"
+      )
+    : [];
+  const viewerCaregivers = ownCaregivers.filter((item) => item.role === "viewer");
+  const editingCaregivers = ownCaregivers.filter((item) => item.role === "caregiver" || item.role === "admin");
+  const alertsEnabled = Boolean(
+    primaryAutomation?.smart_alerts_enabled ||
+    primaryAutomation?.medication_overdue_alerts ||
+    primaryAutomation?.upcoming_appointment_alerts ||
+    primaryAutomation?.inactivity_alerts
+  );
+  const alertRecipients = primaryProfile
+    ? [
+        primaryProfile.full_name || user?.name || "Titular",
+        ...(
+          primaryAutomation?.auto_email_caregivers
+            ? ownCaregivers
+            : editingCaregivers
+        ).map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
+      ]
+    : [];
+  const permissionViewNames = primaryProfile
+    ? [
+        primaryProfile.full_name || user?.name || "Titular",
+        ...ownCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
+      ]
+    : [];
+  const permissionEditNames = primaryProfile
+    ? [
+        primaryProfile.full_name || user?.name || "Titular",
+        ...editingCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
+      ]
+    : [];
+  const upcomingAppointments = (familyAiContext?.profiles || []).reduce(
+    (acc, item) => acc + Number(item.upcoming_appointments || 0),
+    0
+  );
+  const activeAlertsTotal = Number(familyAiContext?.active_alerts_total || familyAlerts.length || 0);
+  const lowAdherenceProfiles = Number(familyAiContext?.low_adherence_profiles || 0);
+  const collaborativeProfiles = Number(familyReport?.totals?.profiles || profiles.length || 0);
+  const careTeamTotal = ownCaregivers.length + (primaryProfile ? 1 : 0);
+  const importantEvents = buildClinicalFeedEvents({
+    alerts: familyAlerts,
+    aiContext: familyAiContext,
+    posts,
+  });
+  const feedClinicalPosts = posts.filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type));
 
   return (
     <div className="kfeed-layout-wrapper">
       <div className="kfeed-page">
-        {/* Sub-header actions */}
-        <div className="kfeed-actions-row">
-          <p className="kfeed-page-subtitle">Comparte actualizaciones privadas sin saturar la pantalla.</p>
+        <div className="kfeed-page-header">
+          <div className="kfeed-brand-row">
+            <div>
+              <h1 className="kfeed-page-title">Cuidado colaborativo</h1>
+              <p className="kfeed-page-subtitle">
+                Coordina medicamentos, citas y alertas familiares desde una sola vista clínica.
+              </p>
+            </div>
+          </div>
+          <div className="kfeed-hero-chip-row">
+            <span className="kfeed-hero-chip">Perfiles activos: {collaborativeProfiles}</span>
+            <span className="kfeed-hero-chip">Equipo de cuidado: {careTeamTotal}</span>
+            <span className="kfeed-hero-chip">Invitaciones pendientes: {pendingInvitations.length}</span>
+          </div>
+        </div>
+
+        <div className="kfeed-actions-row kfeed-actions-row-care">
+          <div className="kfeed-actions-copy">
+            <p className="kfeed-section-kicker">Panel del día</p>
+            <p className="kfeed-section-subtitle">
+              Primero lo importante: alertas, próximas citas y claridad de acceso para cada colaborador.
+            </p>
+          </div>
           <div className="kfeed-actions-right">
             {profiles.length > 0 && (
               <button
                 type="button"
                 className="kfeed-family-panel-btn"
                 onClick={() => setFamilySidebarOpen(true)}
-                title="Ver familia"
-                aria-label="Abrir panel de familia"
+                title="Ver equipo"
+                aria-label="Abrir panel del equipo de cuidado"
               >
                 <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
               </button>
             )}
             <Link className="kfeed-manage-link" to="/settings/familia">
-              Gestionar familia
+              Gestionar cuidado
             </Link>
           </div>
         </div>
 
-        {/* Composer */}
+        <section className="kfeed-care-grid">
+          <article className="kfeed-care-kpi tone-red">
+            <span>Alertas activas</span>
+            <strong>{activeAlertsTotal}</strong>
+            <small>Casos que necesitan revisión clínica o coordinación familiar.</small>
+          </article>
+          <article className="kfeed-care-kpi tone-blue">
+            <span>Próximas citas</span>
+            <strong>{upcomingAppointments}</strong>
+            <small>Controles cercanos detectados en los perfiles compartidos.</small>
+          </article>
+          <article className="kfeed-care-kpi tone-amber">
+            <span>Adherencia en riesgo</span>
+            <strong>{lowAdherenceProfiles}</strong>
+            <small>Perfiles donde conviene reforzar el seguimiento de medicamentos.</small>
+          </article>
+          <article className="kfeed-care-kpi tone-teal">
+            <span>Colaboradores</span>
+            <strong>{careTeamTotal}</strong>
+            <small>Personas involucradas actualmente en el cuidado compartido.</small>
+          </article>
+        </section>
+
+        <div className="kfeed-care-layout">
+          <section className="kfeed-care-panel">
+            <div className="kfeed-care-panel-head">
+              <div>
+                <p className="kfeed-section-kicker">Eventos clínicos importantes</p>
+                <h2 className="kfeed-section-title">Qué requiere atención hoy</h2>
+              </div>
+              <Link className="kfeed-inline-link" to="/settings/familia">
+                Ver panel completo
+              </Link>
+            </div>
+            {importantEvents.length ? (
+              <div className="kfeed-clinical-event-list">
+                {importantEvents.map((item) => (
+                  <ClinicalEventCard key={item.key} item={item} />
+                ))}
+              </div>
+            ) : (
+              <div className="kfeed-care-empty">
+                <strong>No hay señales críticas por ahora.</strong>
+                <span>Cuando aparezcan alertas, baja adherencia o citas próximas, las verás aquí.</span>
+              </div>
+            )}
+          </section>
+
+          <section className="kfeed-care-panel">
+            <div className="kfeed-care-panel-head">
+              <div>
+                <p className="kfeed-section-kicker">Permisos claros</p>
+                <h2 className="kfeed-section-title">Quién ve, quién edita y quién recibe alertas</h2>
+              </div>
+              <Link className="kfeed-inline-link" to="/settings/familia">
+                Ajustar permisos
+              </Link>
+            </div>
+            <div className="kfeed-permission-grid">
+              <PermissionSummaryCard
+                title="Puede ver"
+                tone="blue"
+                names={permissionViewNames}
+                emptyText="Solo tú"
+                detail="Incluye a quienes pueden revisar el perfil y seguir eventos clínicos relevantes."
+              />
+              <PermissionSummaryCard
+                title="Puede editar"
+                tone="teal"
+                names={permissionEditNames}
+                emptyText="Solo tú"
+                detail="Solo colaboradores con rol editor o administrador pueden modificar datos."
+              />
+              <PermissionSummaryCard
+                title="Recibe alertas"
+                tone={alertsEnabled ? "amber" : "slate"}
+                names={alertsEnabled ? alertRecipients : []}
+                emptyText={alertsEnabled ? "Solo tú" : "Alertas automáticas desactivadas"}
+                detail={
+                  alertsEnabled
+                    ? "Se calcula usando automatizaciones activas y el equipo con acceso operativo."
+                    : "Activa automatizaciones familiares para avisar a más colaboradores."
+                }
+              />
+            </div>
+            <div className="kfeed-permission-note">
+              {editingCaregivers.length ? (
+                <p>
+                  {formatUnitLabel(editingCaregivers.length, "editor activo", "editores activos")} listos para ayudar.{" "}
+                  {viewerCaregivers.length
+                    ? `${formatUnitLabel(viewerCaregivers.length, "lector con acceso", "lectores con acceso")} para seguimiento.`
+                    : "No hay lectores configurados."}
+                </p>
+              ) : (
+                <p>No hay colaboradores con permisos de edición en este momento.</p>
+              )}
+            </div>
+          </section>
+        </div>
+
         <div className="kfeed-composer-card">
           <Avatar name={user?.name || ""} size={44} avatarUrl={userAvatarUrl} />
           <button type="button" className="kfeed-composer-trigger" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-            Compartir con tu familia
+            Registrar actualización clínica para el equipo
           </button>
         </div>
 
       {loading && (
         <div className="kfeed-state-center">
           <div className="kfeed-spinner" />
-          <p>Cargando publicaciones…</p>
+          <p>Cargando publicaciones...</p>
         </div>
       )}
       {!loading && error && (
@@ -1693,11 +1997,23 @@ export default function KlinipFeed({ user }) {
               <path d="M28 54a14 14 0 0 1 24 0" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round"/>
             </svg>
           </div>
-          <h3 className="kfeed-empty-title">Tu familia aún no ha publicado nada</h3>
-          <p className="kfeed-empty-sub">Haz la primera publicación.</p>
+          <h3 className="kfeed-empty-title">Aún no hay bitácora de cuidado compartida</h3>
+          <p className="kfeed-empty-sub">Registra la primera actualización clínica para tu equipo familiar.</p>
           <button type="button" className="kfeed-publish-btn" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-            + Crear publicación
+            + Registrar actualización
           </button>
+        </div>
+      )}
+
+      {!loading && !error && posts.length > 0 && (
+        <div className="kfeed-feed-head">
+          <div>
+            <p className="kfeed-section-kicker">Bitácora compartida</p>
+            <h2 className="kfeed-section-title">Actividad reciente del cuidado</h2>
+          </div>
+          <p className="kfeed-feed-head-note">
+            {formatUnitLabel(feedClinicalPosts.length, "evento clínico", "eventos clínicos")} registrados recientemente.
+          </p>
         </div>
       )}
 
@@ -1723,7 +2039,7 @@ export default function KlinipFeed({ user }) {
       {hasMore && !loading && posts.length > 0 && (
         <div className="kfeed-load-more">
           <button type="button" className="secondary-btn" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? "Cargando…" : "Ver más publicaciones"}
+            {loadingMore ? "Cargando..." : "Ver más publicaciones"}
           </button>
         </div>
       )}
