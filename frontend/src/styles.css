@@ -44154,262 +44154,84 @@ body.theme-dark .health-hub-quick-card.tone-green {
    ================================================================ */
 
 .clp-page {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0 auto;
   padding: 0.25rem 0 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
-/* ── KPI row ── */
-.clp-kpi-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.6rem;
-}
-
-.clp-kpi-card {
+/* ── Loading ── */
+.clp-loading {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
-  padding: 0.9rem 0.85rem 0.85rem;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 14px;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.05);
-  text-decoration: none;
-  transition: box-shadow 0.15s, border-color 0.15s;
-}
-
-.clp-kpi-card:hover {
-  border-color: #bfdbfe;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
-}
-
-.clp-kpi-eyebrow {
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-}
-
-.clp-kpi-value {
-  font-size: 1.32rem;
-  font-weight: 800;
-  color: #0f172a;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-}
-
-.clp-kpi-meta {
-  font-size: 0.7rem;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ── Status bar ── */
-.clp-status-bar {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  padding: 0.72rem 0.9rem;
-  border-radius: 12px;
-  border: 1px solid;
-}
-
-.clp-status-bar.is-ok {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-  color: #166534;
-}
-
-.clp-status-bar.is-warn {
-  background: #fffbeb;
-  border-color: #fde68a;
-  color: #92400e;
-}
-
-.clp-status-icon {
-  flex-shrink: 0;
-  margin-top: 1px;
-  display: flex;
-}
-
-.clp-status-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.clp-status-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.75rem;
-}
-
-.clp-status-item {
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-/* ── Section ── */
-.clp-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.clp-section-heading {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #94a3b8;
-  margin: 0;
-}
-
-/* ── Alert items (Para hoy) ── */
-.clp-alert-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.clp-alert-item {
-  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.75rem;
-  padding: 0.85rem 0.9rem;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 14px;
-  text-decoration: none;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
-  transition: box-shadow 0.15s, border-color 0.15s;
-}
-
-.clp-alert-item:hover {
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
-}
-
-.clp-alert-item.tone-blue .clp-alert-icon { color: #2563eb; background: #eff6ff; }
-.clp-alert-item.tone-green .clp-alert-icon { color: #16a34a; background: #f0fdf4; }
-
-.clp-alert-icon {
-  flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-}
-
-.clp-alert-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.clp-alert-copy {
-  flex: 1;
-  min-width: 0;
-}
-
-.clp-alert-tag {
-  font-size: 0.66rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #94a3b8;
-  display: block;
-  margin-bottom: 2px;
-}
-
-.clp-alert-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: #0f172a;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.clp-alert-detail {
-  font-size: 0.78rem;
+  padding: 3rem 1rem;
   color: #64748b;
-  margin: 0;
+  font-size: 0.85rem;
 }
 
-.clp-alert-chevron {
-  flex-shrink: 0;
-  color: #cbd5e1;
-  display: flex;
+.clp-loading-pulse {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid #e2e8f0;
+  border-top-color: #2563eb;
+  animation: clp-spin 0.8s linear infinite;
 }
 
-.clp-alert-chevron svg {
-  width: 16px;
-  height: 16px;
+@keyframes clp-spin {
+  to { transform: rotate(360deg); }
 }
 
-/* ── Module list ── */
-.clp-module-list {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
-}
-
-.clp-module-item {
+/* ── Patient header ── */
+.clp-patient {
   display: flex;
   align-items: center;
   gap: 0.85rem;
-  padding: 0.9rem 1rem;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  transition: background 0.12s;
+  padding: 1rem 1.1rem;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
 }
 
-.clp-module-item:last-child {
-  border-bottom: none;
-}
-
-.clp-module-item:hover {
-  background: #f8fafc;
-}
-
-.clp-module-icon {
+.clp-patient-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  background: #f1f5f9;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #2563eb;
   display: grid;
   place-items: center;
-  color: #475569;
 }
 
-.clp-module-icon svg {
-  width: 18px;
-  height: 18px;
+.clp-patient-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
-.clp-module-copy {
+.clp-patient-copy {
   flex: 1;
   min-width: 0;
 }
 
-.clp-module-label {
-  font-size: 0.88rem;
-  font-weight: 600;
+.clp-patient-name {
+  font-size: 1rem;
+  font-weight: 700;
   color: #0f172a;
-  margin: 0 0 0.1rem;
+  margin: 0 0 0.15rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.clp-module-sub {
+.clp-patient-meta {
   font-size: 0.76rem;
   color: #64748b;
   margin: 0;
@@ -44418,143 +44240,629 @@ body.theme-dark .health-hub-quick-card.tone-green {
   text-overflow: ellipsis;
 }
 
-.clp-module-badge {
+.clp-patient-warn {
   flex-shrink: 0;
-  min-width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 0.68rem;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-  padding: 0 6px;
-}
-
-.clp-module-chevron {
-  flex-shrink: 0;
-  color: #cbd5e1;
+  color: #d97706;
   display: flex;
 }
 
-.clp-module-chevron svg {
+.clp-patient-warn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Warning strip ── */
+.clp-warn-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 0.95rem;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  color: #92400e;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.clp-warn-strip svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+/* ── Card ── */
+.clp-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 16px;
+  padding: 1rem 1.1rem 1.1rem;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.clp-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.clp-card-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+}
+
+.clp-card-icon svg {
   width: 16px;
   height: 16px;
 }
 
+.clp-card-icon.tone-blue   { background: #eff6ff; color: #2563eb; }
+.clp-card-icon.tone-green  { background: #f0fdf4; color: #16a34a; }
+.clp-card-icon.tone-slate  { background: #f1f5f9; color: #475569; }
+.clp-card-icon.tone-indigo { background: #eef2ff; color: #4f46e5; }
+
+.clp-card-title {
+  flex: 1;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.clp-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.clp-card-link svg {
+  width: 13px;
+  height: 13px;
+}
+
+.clp-card-link:hover { text-decoration: underline; }
+
+/* ── Appointment body ── */
+.clp-appt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.clp-appt-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.clp-appt-tag {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 0.18rem 0.5rem;
+  border-radius: 6px;
+  margin-bottom: 0.25rem;
+}
+
+.clp-appt-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
+}
+
+.clp-appt-when {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+  text-transform: capitalize;
+}
+
+.clp-appt-note {
+  font-size: 0.78rem;
+  color: #475569;
+  margin: 0.3rem 0 0;
+  padding: 0.5rem 0.7rem;
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  border-radius: 4px;
+}
+
+.clp-appt-stats {
+  display: flex;
+  gap: 0.6rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.7);
+}
+
+.clp-appt-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.clp-appt-stat strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.clp-appt-stat span {
+  font-size: 0.7rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ── Medication tracker ── */
+.clp-med-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.clp-med-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  transition: opacity 0.2s;
+}
+
+.clp-med-row:last-child {
+  border-bottom: none;
+}
+
+.clp-med-row.is-done {
+  opacity: 0.55;
+}
+
+.clp-med-row.is-done .clp-med-name {
+  text-decoration: line-through;
+}
+
+.clp-med-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.clp-med-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clp-med-detail {
+  font-size: 0.74rem;
+  color: #64748b;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clp-med-check {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+  background: transparent;
+  color: transparent;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.clp-med-check:hover:not(:disabled) {
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.clp-med-check.is-done {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
+  cursor: default;
+}
+
+.clp-med-check svg {
+  width: 15px;
+  height: 15px;
+}
+
+.clp-med-check:disabled {
+  cursor: default;
+}
+
+.clp-med-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  border-top-color: #475569;
+  animation: clp-spin 0.7s linear infinite;
+}
+
+/* ── Documents ── */
+.clp-doc-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.clp-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  transition: background 0.12s;
+}
+
+.clp-doc-row:last-of-type {
+  border-bottom: none;
+}
+
+.clp-doc-row:hover {
+  background: #f8fafc;
+}
+
+.clp-doc-row > svg {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  color: #94a3b8;
+}
+
+.clp-doc-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.clp-doc-name {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clp-doc-meta {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Activity feed ── */
+.clp-activity-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.clp-activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.clp-activity-row:last-child {
+  border-bottom: none;
+}
+
+.clp-activity-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+}
+
+.clp-activity-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.clp-activity-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.clp-activity-text {
+  font-size: 0.82rem;
+  color: #0f172a;
+  margin: 0 0 0.1rem;
+  line-height: 1.3;
+}
+
+.clp-activity-time {
+  font-size: 0.7rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* ── Quick nav (secondary) ── */
+.clp-quick-nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.clp-quick-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.85rem 0.4rem;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  color: #475569;
+  text-decoration: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+
+.clp-quick-item:hover {
+  border-color: #bfdbfe;
+  background: #f8fafc;
+  color: #2563eb;
+}
+
+.clp-quick-icon {
+  display: grid;
+  place-items: center;
+  color: #64748b;
+}
+
+.clp-quick-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.clp-quick-item:hover .clp-quick-icon {
+  color: #2563eb;
+}
+
+/* ── More link ── */
+.clp-more-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.clp-more-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Empty states ── */
+.clp-empty {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  padding: 0.5rem 0;
+  font-style: italic;
+}
+
 /* ── Dark mode ── */
-body.theme-dark .clp-kpi-card,
-body.theme-dark .clp-alert-item,
-body.theme-dark .clp-module-list {
+body.theme-dark .clp-patient,
+body.theme-dark .clp-card,
+body.theme-dark .clp-quick-item {
   background: #111827;
   border-color: rgba(30, 41, 59, 0.6);
   box-shadow: none;
 }
 
-body.theme-dark .clp-kpi-card:hover {
-  border-color: rgba(37, 99, 235, 0.4);
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
+body.theme-dark .clp-patient-icon {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(37, 99, 235, 0.2) 100%);
+  color: #60a5fa;
 }
 
-body.theme-dark .clp-kpi-eyebrow,
-body.theme-dark .clp-kpi-meta {
-  color: #94a3b8;
-}
-
-body.theme-dark .clp-kpi-value {
+body.theme-dark .clp-patient-name,
+body.theme-dark .clp-card-title,
+body.theme-dark .clp-appt-title,
+body.theme-dark .clp-med-name,
+body.theme-dark .clp-doc-name,
+body.theme-dark .clp-activity-text,
+body.theme-dark .clp-appt-stat strong {
   color: #e2e8f0;
 }
 
-body.theme-dark .clp-section-heading {
-  color: #475569;
+body.theme-dark .clp-patient-meta,
+body.theme-dark .clp-appt-when,
+body.theme-dark .clp-med-detail,
+body.theme-dark .clp-doc-meta,
+body.theme-dark .clp-appt-stat span {
+  color: #94a3b8;
 }
 
-body.theme-dark .clp-status-bar.is-ok {
-  background: rgba(22, 101, 52, 0.18);
-  border-color: rgba(74, 222, 128, 0.2);
-  color: #86efac;
+body.theme-dark .clp-activity-time,
+body.theme-dark .clp-empty {
+  color: #64748b;
 }
 
-body.theme-dark .clp-status-bar.is-warn {
+body.theme-dark .clp-warn-strip {
   background: rgba(120, 53, 15, 0.18);
   border-color: rgba(253, 224, 71, 0.2);
   color: #fde68a;
 }
 
-body.theme-dark .clp-alert-name {
-  color: #e2e8f0;
+body.theme-dark .clp-card-icon.tone-blue   { background: rgba(37, 99, 235, 0.15); color: #60a5fa; }
+body.theme-dark .clp-card-icon.tone-green  { background: rgba(22, 163, 74, 0.15); color: #4ade80; }
+body.theme-dark .clp-card-icon.tone-slate  { background: rgba(71, 85, 105, 0.2); color: #94a3b8; }
+body.theme-dark .clp-card-icon.tone-indigo { background: rgba(79, 70, 229, 0.18); color: #a5b4fc; }
+
+body.theme-dark .clp-card-link,
+body.theme-dark .clp-more-link {
+  color: #60a5fa;
 }
 
-body.theme-dark .clp-alert-detail,
-body.theme-dark .clp-alert-tag {
-  color: #64748b;
-}
-
-body.theme-dark .clp-alert-item.tone-blue .clp-alert-icon {
+body.theme-dark .clp-appt-tag {
   background: rgba(37, 99, 235, 0.15);
+  color: #60a5fa;
 }
 
-body.theme-dark .clp-alert-item.tone-green .clp-alert-icon {
-  background: rgba(22, 163, 74, 0.15);
+body.theme-dark .clp-appt-note {
+  background: rgba(30, 41, 59, 0.5);
+  border-left-color: #475569;
+  color: #cbd5e1;
 }
 
-body.theme-dark .clp-module-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+body.theme-dark .clp-appt-stats {
+  border-top-color: rgba(30, 41, 59, 0.7);
 }
 
-body.theme-dark .clp-module-item {
+body.theme-dark .clp-med-row,
+body.theme-dark .clp-doc-row,
+body.theme-dark .clp-activity-row {
   border-bottom-color: rgba(30, 41, 59, 0.5);
 }
 
-body.theme-dark .clp-module-icon {
-  background: #1e293b;
-  color: #94a3b8;
+body.theme-dark .clp-doc-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
-body.theme-dark .clp-module-label {
-  color: #e2e8f0;
-}
-
-body.theme-dark .clp-module-sub {
+body.theme-dark .clp-doc-row > svg,
+body.theme-dark .clp-quick-icon {
   color: #64748b;
 }
 
-body.theme-dark .clp-module-chevron,
-body.theme-dark .clp-alert-chevron {
-  color: #334155;
+body.theme-dark .clp-activity-icon {
+  background: rgba(71, 85, 105, 0.2);
+  color: #94a3b8;
+}
+
+body.theme-dark .clp-med-check {
+  border-color: #334155;
+}
+
+body.theme-dark .clp-med-check:hover:not(:disabled) {
+  background: rgba(22, 163, 74, 0.12);
+  border-color: #16a34a;
+  color: #4ade80;
+}
+
+body.theme-dark .clp-quick-item {
+  color: #94a3b8;
+}
+
+body.theme-dark .clp-quick-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(37, 99, 235, 0.4);
+  color: #60a5fa;
+}
+
+body.theme-dark .clp-quick-item:hover .clp-quick-icon {
+  color: #60a5fa;
+}
+
+body.theme-dark .clp-loading {
+  color: #64748b;
+}
+
+body.theme-dark .clp-loading-pulse {
+  border-color: #334155;
+  border-top-color: #60a5fa;
 }
 
 /* ── Mobile ── */
 @media (max-width: 768px) {
   .clp-page {
     padding: 0 0 2rem;
-    gap: 1rem;
+    gap: 0.85rem;
   }
 
-  .clp-kpi-row {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.45rem;
+  .clp-patient {
+    padding: 0.85rem 0.95rem;
+    border-radius: 14px;
   }
 
-  .clp-kpi-card {
-    padding: 0.75rem 0.6rem 0.7rem;
-    border-radius: 12px;
+  .clp-patient-icon {
+    width: 38px;
+    height: 38px;
   }
 
-  .clp-kpi-value {
-    font-size: 1.15rem;
+  .clp-patient-name {
+    font-size: 0.95rem;
   }
 
-  .clp-kpi-meta {
-    font-size: 0.65rem;
+  .clp-patient-meta {
+    font-size: 0.72rem;
   }
 
-  .clp-alert-item {
-    padding: 0.8rem 0.85rem;
+  .clp-card {
+    padding: 0.9rem 0.95rem 1rem;
+    border-radius: 14px;
+    gap: 0.75rem;
   }
 
-  .clp-module-item {
-    padding: 0.85rem 0.9rem;
+  .clp-card-title {
+    font-size: 0.88rem;
+  }
+
+  .clp-appt-title {
+    font-size: 1rem;
+  }
+
+  .clp-appt-stat strong {
+    font-size: 1.05rem;
+  }
+
+  .clp-quick-nav {
+    gap: 0.4rem;
+  }
+
+  .clp-quick-item {
+    padding: 0.75rem 0.25rem;
+    font-size: 0.68rem;
+    border-radius: 10px;
+  }
+
+  .clp-med-check {
+    width: 32px;
+    height: 32px;
   }
 }

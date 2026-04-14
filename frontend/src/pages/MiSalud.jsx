@@ -1,6 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { getAppointments, getMedications, getDocuments } from "../services/httpApi";
+import {
+  getAppointments,
+  getMedications,
+  getDocuments,
+  getActiveHealthProfile,
+  getAiLifeTimeline,
+  recordMedicationIntake,
+} from "../services/httpApi";
+import { ensureArray } from "../utils/arrays";
 
 /* ── helpers ───────────────────────────────────────────────── */
 function parseDate(str) {
@@ -9,355 +17,334 @@ function parseDate(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-function relativeDateLabel(date) {
-  if (!date) return null;
+function relativeDay(date) {
+  if (!date) return "—";
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const target = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const diff = Math.round((target - today) / (1000 * 60 * 60 * 24));
+  const diff = Math.round((target - today) / 86400000);
   if (diff < 0) return "Vencida";
   if (diff === 0) return "Hoy";
   if (diff === 1) return "Mañana";
   if (diff < 7) return `En ${diff} días`;
-  return date.toLocaleDateString("es", { day: "numeric", month: "short" });
+  return date.toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" });
 }
 
-function formatTime12h(timeStr) {
-  if (!timeStr) return "";
-  const [h, m] = timeStr.split(":").map(Number);
-  const ampm = h >= 12 ? "pm" : "am";
-  const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+function fmtDateTime(str) {
+  const d = parseDate(str);
+  if (!d) return "Sin fecha";
+  return d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 }
 
-/* ── icons (24px, stroke) ──────────────────────────────────── */
-function IcoCalendar() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18" />
-    </svg>
-  );
-}
-function IcoPill() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m10.5 20.5-7-7a5 5 0 1 1 7-7l7 7a5 5 0 0 1-7 7Z" />
-      <path d="m8.5 8.5 7 7" />
-    </svg>
-  );
-}
-function IcoDocument() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
-    </svg>
-  );
-}
-function IcoTimeline() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 20V10" />
-      <path d="M18 20V4" />
-      <path d="M6 20v-4" />
-    </svg>
-  );
-}
-function IcoReport() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M9 11 12 14l4-4" />
-      <path d="M20 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2Z" />
-      <path d="M8 6V4a2 2 0 0 1 4 0v2" />
-    </svg>
-  );
-}
-function IcoGridCalendar() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
-    </svg>
-  );
-}
-function IcoStats() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 3v18h18" />
-      <path d="m19 9-5 5-4-4-3 3" />
-    </svg>
-  );
-}
-function IcoChevron() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m9 18 6-6-6-6" />
-    </svg>
-  );
-}
-function IcoAlertCircle() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 8v4M12 16h.01" />
-    </svg>
-  );
-}
-function IcoCheck() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
+function fmtTime12(str) {
+  if (!str) return "";
+  const [h, m] = str.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`;
 }
 
-function clpIcon(key) {
-  switch (key) {
-    case "calendar":   return <IcoCalendar />;
-    case "pill":       return <IcoPill />;
-    case "document":   return <IcoDocument />;
-    case "timeline":   return <IcoTimeline />;
-    case "report":     return <IcoReport />;
-    case "calendar2":  return <IcoGridCalendar />;
-    case "stats":      return <IcoStats />;
-    default:           return <IcoDocument />;
-  }
+function timeAgo(str) {
+  const d = parseDate(str);
+  if (!d) return "";
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `hace ${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `hace ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "ayer";
+  if (days < 7) return `hace ${days} días`;
+  return d.toLocaleDateString("es", { day: "numeric", month: "short" });
 }
+
+/* ── icons ─────────────────────────────────────────────────── */
+const sp = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+
+function IcoHeart() { return <svg {...sp}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>; }
+function IcoCal() { return <svg {...sp}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>; }
+function IcoPill() { return <svg {...sp}><path d="m10.5 20.5-7-7a5 5 0 1 1 7-7l7 7a5 5 0 0 1-7 7Z"/><path d="m8.5 8.5 7 7"/></svg>; }
+function IcoDoc() { return <svg {...sp}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>; }
+function IcoActivity() { return <svg {...sp}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>; }
+function IcoTimeline() { return <svg {...sp}><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>; }
+function IcoReport() { return <svg {...sp}><path d="M9 11l3 3 4-4"/><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M8 6V4a2 2 0 0 1 4 0v2"/></svg>; }
+function IcoChart() { return <svg {...sp}><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>; }
+function IcoCalGrid() { return <svg {...sp}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg>; }
+function IcoChevron() { return <svg {...sp} strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>; }
+function IcoCheck() { return <svg {...sp} strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>; }
+function IcoAlert() { return <svg {...sp}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>; }
+function IcoShield() { return <svg {...sp}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>; }
+
+const TIMELINE_ICONS = {
+  appointment: <IcoCal />,
+  document: <IcoDoc />,
+  medication: <IcoPill />,
+  treatment: <IcoPill />,
+  diagnostic_result: <IcoActivity />,
+  health_alert: <IcoAlert />,
+};
 
 /* ── component ─────────────────────────────────────────────── */
 export default function MiSalud() {
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState(null);
   const [appointments, setAppointments] = useState([]);
   const [medications, setMedications] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [timeline, setTimeline] = useState([]);
+  const [intakeBusy, setIntakeBusy] = useState(null);
+  const [intakeDone, setIntakeDone] = useState({});
 
   useEffect(() => {
     Promise.allSettled([
+      getActiveHealthProfile(),
       getAppointments(),
       getMedications(),
       getDocuments(),
-    ]).then(([apptRes, medRes, docRes]) => {
-      if (apptRes.status === "fulfilled") setAppointments(apptRes.value || []);
-      if (medRes.status === "fulfilled") setMedications(medRes.value || []);
-      if (docRes.status === "fulfilled") setDocuments(docRes.value || []);
+      getAiLifeTimeline(),
+    ]).then(([profRes, apptRes, medRes, docRes, tlRes]) => {
+      if (profRes.status === "fulfilled") setProfile(profRes.value || null);
+      if (apptRes.status === "fulfilled") setAppointments(ensureArray(apptRes.value));
+      if (medRes.status === "fulfilled") setMedications(ensureArray(medRes.value));
+      if (docRes.status === "fulfilled") setDocuments(ensureArray(docRes.value));
+      if (tlRes.status === "fulfilled") setTimeline(ensureArray(tlRes.value?.events));
       setLoading(false);
     });
   }, []);
 
+  const markIntake = useCallback(async (medId) => {
+    if (intakeBusy) return;
+    setIntakeBusy(medId);
+    try {
+      await recordMedicationIntake(medId, { status: "taken", source: "manual" });
+      setIntakeDone((prev) => ({ ...prev, [medId]: true }));
+    } catch { /* silently fail */ }
+    setIntakeBusy(null);
+  }, [intakeBusy]);
+
+  /* ── derived data ── */
   const now = new Date();
 
-  /* — derived — */
   const upcomingAppts = appointments
     .filter((a) => a.status !== "realizada" && a.date_time && parseDate(a.date_time) > now)
     .sort((a, b) => parseDate(a.date_time) - parseDate(b.date_time));
   const nextAppt = upcomingAppts[0] || null;
-  const pendingAppts = appointments.filter((a) => a.status !== "realizada");
+  const pendingCount = appointments.filter((a) => a.status !== "realizada").length;
+  const doneCount = appointments.filter((a) => a.status === "realizada").length;
 
   const activeMeds = medications.filter((m) => !m.completed);
-  const medsScheduled = activeMeds.filter((m) => m.schedule_time);
 
-  /* — today alerts (within 2 days or med with schedule) — */
-  const alerts = [];
-  const urgentAppts = upcomingAppts.filter((a) => {
-    const d = parseDate(a.date_time);
-    return d && d - now < 2 * 24 * 60 * 60 * 1000;
-  });
-  if (urgentAppts.length > 0) {
-    alerts.push({
-      icon: "calendar",
-      name: urgentAppts[0].specialty || urgentAppts[0].title || "Cita médica",
-      detail: relativeDateLabel(parseDate(urgentAppts[0].date_time)),
-      tag: "Cita próxima",
-      link: "/appointments",
-      tone: "blue",
-    });
-  }
-  if (medsScheduled.length > 0) {
-    alerts.push({
-      icon: "pill",
-      name: medsScheduled[0].name,
-      detail: `${formatTime12h(medsScheduled[0].schedule_time)}${medsScheduled[0].dose ? " · " + medsScheduled[0].dose : ""}`,
-      tag: "Medicamento",
-      link: "/medications",
-      tone: "green",
-    });
-  }
+  const recentEvents = timeline
+    .filter((e) => e && e.event_type)
+    .slice(0, 5);
 
-  /* — health status — */
-  const statusItems = [];
+  /* status */
+  const totalItems = appointments.length + medications.length + documents.length;
+  const hasData = totalItems > 0;
+  const pendingApptNoDate = appointments.filter((a) => a.status !== "realizada" && !a.date_time).length;
+
+  const warnings = [];
   if (!loading) {
-    if (nextAppt) {
-      statusItems.push({ ok: true, text: `Próxima cita: ${relativeDateLabel(parseDate(nextAppt.date_time))}` });
-    } else if (pendingAppts.length > 0) {
-      statusItems.push({ ok: false, text: `${pendingAppts.length} cita${pendingAppts.length > 1 ? "s" : ""} sin fecha` });
-    }
-    if (activeMeds.length > 0) {
-      statusItems.push({ ok: true, text: `${activeMeds.length} tratamiento${activeMeds.length > 1 ? "s" : ""} activo${activeMeds.length > 1 ? "s" : ""}` });
-    }
-    if (documents.length > 0) {
-      statusItems.push({ ok: true, text: `${documents.length} documento${documents.length > 1 ? "s" : ""} en archivo` });
-    }
+    if (pendingApptNoDate > 0)
+      warnings.push(`${pendingApptNoDate} cita${pendingApptNoDate > 1 ? "s" : ""} sin agendar`);
+    if (activeMeds.length === 0 && medications.length > 0)
+      warnings.push("Todos los tratamientos finalizados");
   }
-  const hasAlerts = !loading && alerts.length > 0;
-  const overallOk = statusItems.length > 0 && statusItems.every((s) => s.ok);
 
-  /* — modules — */
-  const modules = [
-    {
-      to: "/appointments",
-      icon: "calendar",
-      label: "Citas y exámenes",
-      sub: loading
-        ? "Cargando…"
-        : nextAppt
-        ? `Próxima: ${nextAppt.specialty || nextAppt.title || "Consulta"} · ${relativeDateLabel(parseDate(nextAppt.date_time))}`
-        : pendingAppts.length > 0
-        ? `${pendingAppts.length} pendiente${pendingAppts.length > 1 ? "s" : ""} por agendar`
-        : "Sin citas próximas",
-      badge: pendingAppts.length > 0 ? pendingAppts.length : null,
-    },
-    {
-      to: "/medications",
-      icon: "pill",
-      label: "Medicamentos",
-      sub: loading
-        ? "Cargando…"
-        : activeMeds.length > 0
-        ? `${activeMeds.length} activo${activeMeds.length > 1 ? "s" : ""}${medsScheduled.length > 0 ? " · Hoy " + formatTime12h(medsScheduled[0].schedule_time) : ""}`
-        : "Sin tratamientos activos",
-      badge: activeMeds.length > 0 ? activeMeds.length : null,
-    },
-    {
-      to: "/documents",
-      icon: "document",
-      label: "Documentos",
-      sub: loading
-        ? "Cargando…"
-        : documents.length > 0
-        ? `${documents.length} archivo${documents.length > 1 ? "s" : ""} · Exámenes y recetas`
-        : "Sin documentos",
-      badge: null,
-    },
-    {
-      to: "/timeline",
-      icon: "timeline",
-      label: "Historia clínica",
-      sub: "Línea de tiempo de eventos y diagnósticos",
-      badge: null,
-    },
-    {
-      to: "/clinical-reports",
-      icon: "report",
-      label: "Reportes IA",
-      sub: "Resumen clínico para tu próximo control",
-      badge: null,
-    },
-    {
-      to: "/calendar",
-      icon: "calendar2",
-      label: "Calendario",
-      sub: "Plan mensual de salud",
-      badge: null,
-    },
-    {
-      to: "/stats",
-      icon: "stats",
-      label: "Indicadores",
-      sub: "Métricas de citas, documentos y medicamentos",
-      badge: null,
-    },
-  ];
+  /* ── render ── */
+  if (loading) {
+    return (
+      <div className="clp-page">
+        <div className="clp-loading">
+          <div className="clp-loading-pulse" />
+          <span>Cargando panel clínico…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="clp-page">
 
-      {/* ── KPI row ── */}
-      <div className="clp-kpi-row" aria-label="Resumen de salud">
-        <Link to="/appointments" className="clp-kpi-card">
-          <span className="clp-kpi-eyebrow">Próxima cita</span>
-          <strong className="clp-kpi-value">
-            {loading ? "—" : nextAppt ? relativeDateLabel(parseDate(nextAppt.date_time)) : "—"}
-          </strong>
-          <span className="clp-kpi-meta">
-            {loading ? "" : nextAppt ? (nextAppt.specialty || nextAppt.title || "Consulta") : "Sin agendar"}
+      {/* ═══ PATIENT HEADER ═══ */}
+      <header className="clp-patient">
+        <div className="clp-patient-icon"><IcoShield /></div>
+        <div className="clp-patient-copy">
+          <p className="clp-patient-name">{profile?.full_name || "Mi perfil de salud"}</p>
+          <p className="clp-patient-meta">
+            {hasData
+              ? `${appointments.length} citas · ${activeMeds.length} tratamientos · ${documents.length} docs`
+              : "Sin registros aún"}
+          </p>
+        </div>
+        {warnings.length > 0 && (
+          <span className="clp-patient-warn" title={warnings.join(". ")}>
+            <IcoAlert />
           </span>
-        </Link>
+        )}
+      </header>
 
-        <Link to="/medications" className="clp-kpi-card">
-          <span className="clp-kpi-eyebrow">Tratamientos</span>
-          <strong className="clp-kpi-value">
-            {loading ? "—" : `${activeMeds.length}`}
-          </strong>
-          <span className="clp-kpi-meta">
-            {loading ? "" : activeMeds.length > 0 ? `activo${activeMeds.length > 1 ? "s" : ""}` : "ninguno"}
-          </span>
-        </Link>
-
-        <Link to="/documents" className="clp-kpi-card">
-          <span className="clp-kpi-eyebrow">Documentos</span>
-          <strong className="clp-kpi-value">
-            {loading ? "—" : `${documents.length}`}
-          </strong>
-          <span className="clp-kpi-meta">
-            {loading ? "" : documents.length === 1 ? "archivo" : "archivos"}
-          </span>
-        </Link>
-      </div>
-
-      {/* ── Status bar ── */}
-      {!loading && statusItems.length > 0 && (
-        <div className={`clp-status-bar ${overallOk ? "is-ok" : "is-warn"}`} aria-label="Estado general">
-          <span className="clp-status-icon">
-            {overallOk ? <IcoCheck /> : <IcoAlertCircle />}
-          </span>
-          <div className="clp-status-list">
-            {statusItems.map((s, i) => (
-              <span key={i} className={`clp-status-item ${s.ok ? "ok" : "warn"}`}>{s.text}</span>
-            ))}
-          </div>
+      {/* ═══ STATUS STRIP ═══ */}
+      {warnings.length > 0 && (
+        <div className="clp-warn-strip" role="alert">
+          <IcoAlert />
+          <span>{warnings.join(" · ")}</span>
         </div>
       )}
 
-      {/* ── Para hoy ── */}
-      {hasAlerts && (
-        <section className="clp-section" aria-labelledby="clp-today-title">
-          <h2 className="clp-section-heading" id="clp-today-title">Para hoy</h2>
-          <div className="clp-alert-list">
-            {alerts.map((alert, i) => (
-              <Link key={i} to={alert.link} className={`clp-alert-item tone-${alert.tone}`}>
-                <span className="clp-alert-icon">{clpIcon(alert.icon)}</span>
-                <div className="clp-alert-copy">
-                  <span className="clp-alert-tag">{alert.tag}</span>
-                  <p className="clp-alert-name">{alert.name}</p>
-                  <p className="clp-alert-detail">{alert.detail}</p>
+      {/* ═══ NEXT APPOINTMENT ═══ */}
+      <section className="clp-card" aria-labelledby="clp-appt-h">
+        <div className="clp-card-head">
+          <span className="clp-card-icon tone-blue"><IcoCal /></span>
+          <h2 className="clp-card-title" id="clp-appt-h">Próxima cita</h2>
+          <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+        </div>
+        {nextAppt ? (
+          <div className="clp-appt-body">
+            <div className="clp-appt-main">
+              <span className="clp-appt-tag">{relativeDay(parseDate(nextAppt.date_time))}</span>
+              <p className="clp-appt-title">{nextAppt.specialty || nextAppt.title || "Consulta médica"}</p>
+              <p className="clp-appt-when">{fmtDateTime(nextAppt.date_time)}</p>
+              {nextAppt.notes && <p className="clp-appt-note">{nextAppt.notes}</p>}
+            </div>
+            <div className="clp-appt-stats">
+              <div className="clp-appt-stat">
+                <strong>{pendingCount}</strong>
+                <span>pendiente{pendingCount !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="clp-appt-stat">
+                <strong>{doneCount}</strong>
+                <span>realizada{doneCount !== 1 ? "s" : ""}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="clp-empty">
+            {pendingCount > 0
+              ? `${pendingCount} cita${pendingCount > 1 ? "s" : ""} pendiente${pendingCount > 1 ? "s" : ""} de agendar`
+              : "Sin citas registradas"}
+          </div>
+        )}
+      </section>
+
+      {/* ═══ MEDICATION TRACKER ═══ */}
+      <section className="clp-card" aria-labelledby="clp-med-h">
+        <div className="clp-card-head">
+          <span className="clp-card-icon tone-green"><IcoPill /></span>
+          <h2 className="clp-card-title" id="clp-med-h">Medicamentos</h2>
+          <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+        </div>
+        {activeMeds.length > 0 ? (
+          <div className="clp-med-list" role="list">
+            {activeMeds.slice(0, 5).map((med) => {
+              const done = intakeDone[med.id];
+              const busy = intakeBusy === med.id;
+              return (
+                <div key={med.id} className={`clp-med-row ${done ? "is-done" : ""}`} role="listitem">
+                  <div className="clp-med-info">
+                    <p className="clp-med-name">{med.name}</p>
+                    <p className="clp-med-detail">
+                      {med.dose || ""}
+                      {med.frequency ? ` · ${med.frequency}` : ""}
+                      {med.schedule_time ? ` · ${fmtTime12(med.schedule_time)}` : ""}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`clp-med-check ${done ? "is-done" : ""}`}
+                    disabled={done || busy}
+                    onClick={() => markIntake(med.id)}
+                    aria-label={`Registrar toma de ${med.name}`}
+                    title={done ? "Registrada" : "Registrar toma"}
+                  >
+                    {done ? <IcoCheck /> : busy ? <span className="clp-med-spin" /> : <IcoCheck />}
+                  </button>
                 </div>
-                <span className="clp-alert-chevron"><IcoChevron /></span>
+              );
+            })}
+            {activeMeds.length > 5 && (
+              <Link to="/medications" className="clp-more-link">
+                +{activeMeds.length - 5} más
               </Link>
+            )}
+          </div>
+        ) : (
+          <div className="clp-empty">
+            {medications.length > 0 ? "Todos los tratamientos finalizados" : "Sin medicamentos registrados"}
+          </div>
+        )}
+      </section>
+
+      {/* ═══ RECENT DOCUMENTS ═══ */}
+      <section className="clp-card" aria-labelledby="clp-doc-h">
+        <div className="clp-card-head">
+          <span className="clp-card-icon tone-slate"><IcoDoc /></span>
+          <h2 className="clp-card-title" id="clp-doc-h">Documentos</h2>
+          <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+        </div>
+        {documents.length > 0 ? (
+          <div className="clp-doc-list" role="list">
+            {documents.slice(0, 3).map((doc) => (
+              <Link key={doc.id} to="/documents" className="clp-doc-row" role="listitem">
+                <IcoDoc />
+                <div className="clp-doc-info">
+                  <p className="clp-doc-name">{doc.title || doc.original_filename || "Documento"}</p>
+                  <p className="clp-doc-meta">{doc.category || "Archivo"}{doc.created_at ? ` · ${timeAgo(doc.created_at)}` : ""}</p>
+                </div>
+              </Link>
+            ))}
+            {documents.length > 3 && (
+              <Link to="/documents" className="clp-more-link">
+                +{documents.length - 3} más
+              </Link>
+            )}
+          </div>
+        ) : (
+          <div className="clp-empty">Sin documentos en tu archivo</div>
+        )}
+      </section>
+
+      {/* ═══ ACTIVITY FEED ═══ */}
+      {recentEvents.length > 0 && (
+        <section className="clp-card" aria-labelledby="clp-activity-h">
+          <div className="clp-card-head">
+            <span className="clp-card-icon tone-indigo"><IcoActivity /></span>
+            <h2 className="clp-card-title" id="clp-activity-h">Actividad reciente</h2>
+            <Link to="/timeline" className="clp-card-link">Historia <IcoChevron /></Link>
+          </div>
+          <div className="clp-activity-list" role="list">
+            {recentEvents.map((ev, i) => (
+              <div key={ev.id || i} className="clp-activity-row" role="listitem">
+                <span className="clp-activity-icon">
+                  {TIMELINE_ICONS[ev.event_type] || <IcoDoc />}
+                </span>
+                <div className="clp-activity-copy">
+                  <p className="clp-activity-text">{ev.title || ev.description || ev.event_type}</p>
+                  <p className="clp-activity-time">{timeAgo(ev.date || ev.created_at)}</p>
+                </div>
+              </div>
             ))}
           </div>
         </section>
       )}
 
-      {/* ── Module list ── */}
-      <section className="clp-section" aria-labelledby="clp-modules-title">
-        <h2 className="clp-section-heading" id="clp-modules-title">Tu sistema clínico</h2>
-        <div className="clp-module-list" role="list">
-          {modules.map((mod) => (
-            <Link key={mod.to} to={mod.to} className="clp-module-item" role="listitem">
-              <span className="clp-module-icon">{clpIcon(mod.icon)}</span>
-              <div className="clp-module-copy">
-                <p className="clp-module-label">{mod.label}</p>
-                <p className="clp-module-sub">{mod.sub}</p>
-              </div>
-              {mod.badge ? (
-                <span className="clp-module-badge">{mod.badge}</span>
-              ) : null}
-              <span className="clp-module-chevron"><IcoChevron /></span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {/* ═══ QUICK ACCESS (secondary, compact) ═══ */}
+      <nav className="clp-quick-nav" aria-label="Herramientas clínicas">
+        <Link to="/clinical-reports" className="clp-quick-item">
+          <span className="clp-quick-icon"><IcoReport /></span>
+          <span>Reportes IA</span>
+        </Link>
+        <Link to="/calendar" className="clp-quick-item">
+          <span className="clp-quick-icon"><IcoCalGrid /></span>
+          <span>Calendario</span>
+        </Link>
+        <Link to="/stats" className="clp-quick-item">
+          <span className="clp-quick-icon"><IcoChart /></span>
+          <span>Indicadores</span>
+        </Link>
+        <Link to="/timeline" className="clp-quick-item">
+          <span className="clp-quick-icon"><IcoTimeline /></span>
+          <span>Historia</span>
+        </Link>
+      </nav>
 
     </div>
   );
