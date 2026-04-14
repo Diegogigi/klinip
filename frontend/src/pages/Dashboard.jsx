@@ -147,6 +147,24 @@ function getAlertDetail(alert) {
   return alertDetailMap[alert.alert_type] || alert.recommended_action || "";
 }
 
+const TYPE_LABELS_SAFE = {
+  cita: "Cita",
+  examen: "Examen",
+  tramite: "Trámite",
+};
+
+function toRelativeDayLabelSafe(date) {
+  if (!date) return "";
+  const now = new Date();
+  const startNow = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round((startDate - startNow) / 86400000);
+  if (diffDays === 0) return "Hoy";
+  if (diffDays === 1) return "Mañana";
+  if (diffDays > 1) return `En ${diffDays} días`;
+  return "Reciente";
+}
+
 function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications) {
   const highAlerts = activeHealthAlerts.filter((a) => a.severity === "high");
   if (highAlerts.length > 0 || (activeMedications.length > 0 && adherence < 45)) {
@@ -381,6 +399,7 @@ export default function Dashboard({
   const [noteColor, setNoteColor] = useState("yellow");
   const [noteReminder, setNoteReminder] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
+  const [notesHubOpen, setNotesHubOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteSubmitting, setNoteSubmitting] = useState(false);
@@ -718,10 +737,11 @@ export default function Dashboard({
   const upcomingEvents = [
     ...futureAppointments.slice(0, 4).map((item) => ({
       id: `appointment-${item.id}`,
+      itemId: item.id,
       date: parseDate(item.date_time),
       kind: item.type === "examen" ? "exam" : "appointment",
-      tag: cleanUiText(typeLabels[item.type] || "Cita"),
-      title: cleanUiText(item.specialty, typeLabels[item.type] || "Actividad"),
+      tag: cleanUiText(TYPE_LABELS_SAFE[item.type] || "Cita"),
+      title: cleanUiText(item.specialty, TYPE_LABELS_SAFE[item.type] || "Actividad"),
       meta: cleanUiText([item.center, item.notes].filter(Boolean).join(" \u00B7 "), "Sin detalle adicional"),
       urgent:
         parseDate(item.date_time) &&
@@ -733,6 +753,7 @@ export default function Dashboard({
         if (!date) return null;
         return {
           id: `medication-${item.id}`,
+          itemId: item.id,
           date,
           kind: "medication",
           tag: "Med.",
@@ -771,7 +792,7 @@ export default function Dashboard({
       kind: "appointment",
       title: "Actividad agendada",
       subtitle:
-        cleanUiText(`${typeLabels[item.type] || "Actividad"}${item.specialty ? ` - ${item.specialty}` : ""}`) ||
+        cleanUiText(`${TYPE_LABELS_SAFE[item.type] || "Actividad"}${item.specialty ? ` - ${item.specialty}` : ""}`) ||
         "Actividad",
       time: item.date_time,
     })),
@@ -779,6 +800,267 @@ export default function Dashboard({
     .filter((item) => item.date)
     .sort((a, b) => b.date - a.date)
     .slice(0, 4);
+
+  const nextMedicationEvent = upcomingEvents.find((item) => item.kind === "medication") || null;
+  const nextAppointmentEvent =
+    upcomingEvents.find((item) => item.kind === "appointment" || item.kind === "exam") || null;
+
+  const openNotesHub = useCallback(() => {
+    setNotificationsOpen(false);
+    setProfileMenuOpen(false);
+    setNotesHubOpen(true);
+  }, []);
+
+  const closeNotesHub = useCallback(() => {
+    setNotesHubOpen(false);
+    setNoteMenuOpenId(null);
+  }, []);
+
+  const openMedicationFocus = useCallback(() => {
+    if (nextMedicationEvent?.itemId) {
+      navigate(
+        `/medications?notify=1&medicationId=${nextMedicationEvent.itemId}&trigger=${
+          nextMedicationEvent.date?.getTime?.() || Date.now()
+        }`
+      );
+      return;
+    }
+    navigate("/medications");
+  }, [navigate, nextMedicationEvent]);
+
+  const openAppointmentFocus = useCallback(() => {
+    navigate(nextAppointmentEvent ? "/appointments" : "/calendar");
+  }, [navigate, nextAppointmentEvent]);
+
+  const openDocumentsFocus = useCallback(() => {
+    navigate("/documents");
+  }, [navigate]);
+
+  const openAlertAssistant = useCallback(
+    (alert) => {
+      if (!alert) {
+        navigate("/ai", {
+          state: {
+            autoPrompt: "Ayúdame a revisar mis alertas y pendientes de salud de hoy.",
+          },
+        });
+        return;
+      }
+      navigate("/ai", {
+        state: {
+          autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(
+            getFriendlyAlertTitle(alert)
+          )}". ${cleanUiText(alert.description)} ¿Qué debo hacer hoy paso a paso?`,
+        },
+      });
+    },
+    [navigate]
+  );
+
+  const topHighAlert = activeHealthAlerts.find((item) => item.severity === "high") || null;
+  const topAlert = topHighAlert || activeHealthAlerts[0] || null;
+  const topLowAdherenceItem = lowAdherenceItems[0] || null;
+
+  const heroState = topHighAlert
+    ? {
+        tone: "alert",
+        badge: "Urgente",
+        title: cleanUiText(getFriendlyAlertTitle(topHighAlert)),
+        message: cleanUiText(
+          topHighAlert.description,
+          "Tienes una alerta clínica que conviene revisar hoy."
+        ),
+        actionLabel: "Revisar alerta",
+        onAction: () => openAlertAssistant(topHighAlert),
+      }
+    : nextMedicationEvent?.urgent || topLowAdherenceItem
+    ? {
+        tone: "warn",
+        badge: "Pendiente",
+        title: nextMedicationEvent?.urgent
+          ? "Tienes una toma pendiente hoy"
+          : "Conviene revisar tu adherencia",
+        message: nextMedicationEvent?.urgent
+          ? cleanUiText(
+              `${nextMedicationEvent.title}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
+              "Revisa tu dosis pendiente."
+            )
+          : cleanUiText(
+              `${topLowAdherenceItem?.name || "Un medicamento"} necesita más constancia esta semana.`,
+              "Revisa tus recordatorios."
+            ),
+        actionLabel: "Tomar medicamento",
+        onAction: openMedicationFocus,
+      }
+    : nextAppointment
+    ? {
+        tone: "warn",
+        badge: "Próxima cita",
+        title: "Tu siguiente cita ya está en agenda",
+        message: cleanUiText(
+          `${nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad"} · ${
+            toRelativeDayLabelSafe(parseDate(nextAppointment.date_time)) || "Próximamente"
+          }`,
+          "Revisa el detalle de tu próxima cita."
+        ),
+        actionLabel: "Ver próxima cita",
+        onAction: openAppointmentFocus,
+      }
+    : pendingDocuments > 0
+    ? {
+        tone: "warn",
+        badge: "Documentos",
+        title: "Tienes documentos por revisar",
+        message: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} necesita${
+          pendingDocuments > 1 ? "n" : ""
+        } tu atención.`,
+        actionLabel: "Subir documento",
+        onAction: openDocumentsFocus,
+      }
+    : {
+        tone: "ok",
+        badge: "Todo en orden",
+        title: "Tu control diario está al día",
+        message: activeMedications.length
+          ? "No hay alertas críticas. Klinip dejó listos tus próximos pasos."
+          : "Activa tu seguimiento para empezar a ver recordatorios y prioridades clínicas.",
+        actionLabel: activeMedications.length ? "Ver medicamentos" : "Agregar medicamento",
+        onAction: openMedicationFocus,
+      };
+
+  const heroHighlights = [
+    {
+      id: "status",
+      label: "Estado de hoy",
+      value: heroState.badge,
+      tone: heroState.tone,
+    },
+    {
+      id: "adherence",
+      label: "Adherencia",
+      value: activeMedications.length ? `${adherence}%` : "Sin datos",
+      tone:
+        activeMedications.length > 0
+          ? getRadarToneFromAdherence(adherence)
+          : pendingDocuments > 0
+          ? "warn"
+          : "ok",
+    },
+    {
+      id: "next",
+      label: nextAppointmentEvent ? "Próximo paso" : "Documentos",
+      value: nextAppointmentEvent
+        ? toRelativeDayLabelSafe(nextAppointmentEvent.date) || "En agenda"
+        : pendingDocuments > 0
+        ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""}`
+        : "Sin pendientes",
+      tone:
+        nextAppointmentEvent?.urgent || pendingDocuments > 0
+          ? "warn"
+          : nextAppointmentEvent
+          ? "ok"
+          : "ok",
+    },
+  ];
+
+  const attentionItems = [
+    topAlert
+      ? {
+          id: `alert-${topAlert.id}`,
+          tone: getAlertTone(topAlert.severity),
+          eyebrow: "Radar de salud",
+          title: cleanUiText(getFriendlyAlertTitle(topAlert)),
+          detail: cleanUiText(
+            topAlert.description,
+            "Toca para ver qué hacer con Klinip IA."
+          ),
+          actionLabel: "Abrir IA",
+          onClick: () => openAlertAssistant(topAlert),
+        }
+      : null,
+    nextMedicationEvent
+      ? {
+          id: nextMedicationEvent.id,
+          tone: nextMedicationEvent.urgent ? "alert" : "warn",
+          eyebrow: nextMedicationEvent.urgent ? "Dosis de hoy" : "Medicamento",
+          title: cleanUiText(nextMedicationEvent.title),
+          detail: cleanUiText(
+            `${toRelativeDayLabelSafe(nextMedicationEvent.date)}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
+            "Revisa tu recordatorio."
+          ),
+          actionLabel: "Tomar medicamento",
+          onClick: openMedicationFocus,
+        }
+      : null,
+    nextAppointmentEvent
+      ? {
+          id: nextAppointmentEvent.id,
+          tone: nextAppointmentEvent.urgent ? "alert" : "warn",
+          eyebrow: "Agenda",
+          title: cleanUiText(nextAppointmentEvent.title),
+          detail: cleanUiText(
+            `${toRelativeDayLabelSafe(nextAppointmentEvent.date)}${nextAppointmentEvent.meta ? ` · ${nextAppointmentEvent.meta}` : ""}`,
+            "Revisa el detalle de tu agenda."
+          ),
+          actionLabel: "Ver cita",
+          onClick: openAppointmentFocus,
+        }
+      : null,
+    pendingDocuments > 0
+      ? {
+          id: "documents-pending",
+          tone: pendingDocuments > 1 ? "warn" : "ok",
+          eyebrow: "Documentos",
+          title: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${
+            pendingDocuments > 1 ? "s" : ""
+          }`,
+          detail: "Sube resultados, recetas o informes para mantener tu historial completo.",
+          actionLabel: "Subir ahora",
+          onClick: openDocumentsFocus,
+        }
+      : null,
+  ].filter(Boolean);
+
+  const quickActions = [
+    {
+      id: "medication",
+      icon: "medication",
+      label: "Tomar medicamento",
+      subtitle: nextMedicationEvent
+        ? cleanUiText(nextMedicationEvent.title, "Revisa tus tomas activas")
+        : activeMedications.length
+        ? "Revisa tus tomas activas"
+        : "Activa un tratamiento",
+      hint: nextMedicationEvent?.urgent ? "Ahora" : activeMedications.length ? "Pendiente" : "Ver",
+      tone: "amber",
+      onClick: openMedicationFocus,
+    },
+    {
+      id: "appointment",
+      icon: "appointment",
+      label: "Ver próxima cita",
+      subtitle: nextAppointmentEvent
+        ? cleanUiText(nextAppointmentEvent.title, "Revisa tu agenda")
+        : "Agenda tu próximo control",
+      hint: nextAppointmentEvent ? toRelativeDayLabelSafe(nextAppointmentEvent.date) : "Sin cita",
+      tone: "blue",
+      onClick: openAppointmentFocus,
+    },
+    {
+      id: "document",
+      icon: "upload",
+      label: "Subir documento",
+      subtitle:
+        pendingDocuments > 0
+          ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""} por revisar`
+          : "Guarda exámenes e informes",
+      hint: pendingDocuments > 0 ? "Pendiente" : "Nuevo",
+      tone: "teal",
+      onClick: openDocumentsFocus,
+    },
+  ];
+
+  const mobileQuickActions = quickActions;
 
   const suggestionItems = [];
   if (!futureAppointments.length) {
@@ -806,46 +1088,7 @@ export default function Dashboard({
     });
   }
 
-  const quickActions = [
-    {
-      id: "medication",
-      icon: "medication",
-      label: "Agregar medicamento",
-      tone: "amber",
-      onClick: () => navigate("/medications"),
-    },
-    {
-      id: "document",
-      icon: "upload",
-      label: "Subir documento",
-      tone: "teal",
-      onClick: () => navigate("/documents"),
-    },
-    {
-      id: "appointment",
-      icon: "appointment",
-      label: "Crear cita",
-      tone: "blue",
-      onClick: () => navigate("/appointments"),
-    },
-    {
-      id: "family",
-      icon: "family",
-      label: "Agregar familiar",
-      tone: "violet",
-      onClick: () => navigate("/family"),
-    },
-    {
-      id: "ai",
-      icon: "ai",
-      label: "Preguntar a IA",
-      tone: "green",
-      onClick: () => navigate("/ai"),
-    },
-  ];
-  const visibleQuickActions = canEditActiveProfile
-    ? quickActions
-    : quickActions.filter((item) => item.id === "ai");
+  const visibleQuickActions = quickActions;
 
   useEffect(() => {
     if (!noteMenuOpenId) return;
@@ -957,60 +1200,6 @@ export default function Dashboard({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
-  const mobileQuickActions = [
-    {
-      id: "appointments",
-      icon: "appointment",
-      label: "Citas",
-      highlight: "Agenda activa",
-      subtitle:
-        futureAppointments.length > 0
-          ? `${futureAppointments.length} pr\u00f3xima${futureAppointments.length > 1 ? "s" : ""}`
-          : "Sin citas",
-      tone: "blue",
-      featured: true,
-      onClick: () => navigate("/appointments"),
-    },
-    {
-      id: "documents",
-      icon: "document",
-      label: "Documentos",
-      subtitle: `${documents.length} registro${documents.length === 1 ? "" : "s"}`,
-      tone: "teal",
-      spotlight: true,
-      onClick: () => navigate("/documents"),
-    },
-    {
-      id: "voice",
-      icon: "microphone",
-      label: "Voz",
-      subtitle: "Grabar consulta",
-      tone: "sky",
-      onClick: () => navigate("/voice"),
-    },
-    {
-      id: "family",
-      icon: "family",
-      label: "Familia",
-      subtitle:
-        linkedProfiles > 0
-          ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
-          : "Gestionar perfiles",
-      tone: "violet",
-      onClick: () => navigate("/family"),
-    },
-    {
-      id: "ai",
-      icon: "ai",
-      label: "Asistente",
-      subtitle:
-        activeHealthAlerts.length > 0
-          ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
-          : "Abrir asistente",
-      tone: "green",
-      onClick: () => navigate("/ai"),
-    },
-  ];
   const quickNotesActionLabel = canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura";
   const openQuickNotesPanel = () => {
     if (composerOpen) {
@@ -1196,6 +1385,420 @@ export default function Dashboard({
       </div>
     </article>
   );
+  useEffect(() => {
+    if (!notesHubOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeNotesHub();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [notesHubOpen, closeNotesHub]);
+
+  const notesHubPortal = notesHubOpen
+    ? createPortal(
+        <div className="home-notes-dialog-backdrop" onClick={closeNotesHub}>
+          <div
+            className={`home-notes-dialog${isMobile ? " is-mobile" : ""}`}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Notas rápidas"
+          >
+            <button
+              type="button"
+              className="home-notes-dialog-close"
+              onClick={closeNotesHub}
+              aria-label="Cerrar notas rápidas"
+            >
+              ×
+            </button>
+            {renderQuickNotesPanel("home-notes-dialog-card")}
+          </div>
+        </div>,
+        document.getElementById("overlay-root") || document.body
+      )
+    : null;
+  const planLabelSafe =
+    normalizedPlan === "familiar"
+      ? "Plan Familiar"
+      : normalizedPlan === "plus"
+      ? "Plan Plus"
+      : "Plan Básico";
+
+  const renderAttentionContent = (itemClassName, tagClassName = "") =>
+    attentionItems.length ? (
+      attentionItems.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`${itemClassName} tone-${item.tone}`.trim()}
+          onClick={item.onClick}
+        >
+          <span className={`home-attention-icon tone-${item.tone}`}>
+            {renderIcon(
+              item.eyebrow === "Documentos"
+                ? "document"
+                : item.eyebrow === "Agenda"
+                ? "appointment"
+                : item.eyebrow === "Medicamento" || item.eyebrow === "Dosis de hoy"
+                ? "medication"
+                : "ai"
+            )}
+          </span>
+          <span className="home-attention-copy">
+            <small className="home-attention-eyebrow">{item.eyebrow}</small>
+            <strong>{item.title}</strong>
+            <span>{item.detail}</span>
+          </span>
+          <span className={`home-attention-action ${tagClassName}`.trim()}>{item.actionLabel}</span>
+        </button>
+      ))
+    ) : (
+      <div className="home-empty-state">
+        Tu día está ordenado. Usa las acciones rápidas para registrar nuevos movimientos.
+      </div>
+    );
+
+  const renderQuickActionsContent = (itemClassName, hintClassName = "") =>
+    visibleQuickActions.map((item) => (
+      <button
+        key={item.id}
+        type="button"
+        className={`${itemClassName} tone-${item.tone}`.trim()}
+        onClick={item.onClick}
+      >
+        <span className="home-action-icon">{renderIcon(item.icon)}</span>
+        <span className="home-action-copy">
+          <strong>{item.label}</strong>
+          <small>{item.subtitle}</small>
+        </span>
+        <span className={`home-action-hint ${hintClassName}`.trim()}>{item.hint}</span>
+      </button>
+    ));
+
+  const newMobileHome = (() => {
+    const greetingIntro =
+      new Date().getHours() < 12
+        ? "Buenos días"
+        : new Date().getHours() < 18
+        ? "Buenas tardes"
+        : "Buenas noches";
+    const adherencePercentLabel = activeMedications.length ? `${adherence}%` : "--";
+    const adherenceRingProgress = activeMedications.length ? Math.max(0, Math.min(adherence, 100)) : 0;
+    const mobileProfileMenu = profileMenuOpen
+      ? createPortal(
+          <div
+            ref={profileMenuOverlayRef}
+            className="topbar-user-menu mobile-hero-profile-overlay"
+            role="menu"
+            style={{
+              position: "fixed",
+              top: `${profileMenuStyle.top}px`,
+              left: `${profileMenuStyle.left}px`,
+              right: "auto",
+              width: `${profileMenuStyle.width}px`,
+            }}
+          >
+            <div className="topbar-user-menu-head">
+              <span className="topbar-user-menu-avatar">{userInitial}</span>
+              <div>
+                <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
+                <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
+              </div>
+            </div>
+            <div className="topbar-user-menu-profile-card">
+              <div className="topbar-user-menu-profile-head">
+                <span className="topbar-user-menu-profile-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="12" cy="8" r="3.2" />
+                    <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                  </svg>
+                </span>
+                <span className="topbar-user-menu-plan">{planLabelSafe}</span>
+              </div>
+              <p className="topbar-user-menu-profile-name">
+                {activeMenuProfile
+                  ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
+                  : user?.name || "Perfil personal"}
+              </p>
+              {canSwitchProfiles ? (
+                <select
+                  className="topbar-user-menu-profile-select"
+                  value={activeProfileId || ""}
+                  onChange={(event) => onSwitchProfile?.(event.target.value)}
+                  disabled={!!switchingProfile}
+                >
+                  {menuHealthProfiles.map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.full_name}
+                      {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+            <div className="topbar-user-menu-actions">
+              <button
+                type="button"
+                className="topbar-user-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setProfileMenuOpen(false);
+                  navigate("/settings");
+                }}
+              >
+                <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="12" cy="8" r="3.2" />
+                    <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+                  </svg>
+                </span>
+                <span>Mi perfil</span>
+              </button>
+              <button type="button" className="topbar-user-menu-item" role="menuitem">
+                <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
+                  </svg>
+                </span>
+                <span className="topbar-user-theme-text">
+                  {theme === "dark" ? "Modo oscuro" : "Modo claro"}
+                </span>
+                <label className="switch topbar-user-theme-switch">
+                  <input type="checkbox" checked={theme === "dark"} onChange={() => onToggleTheme?.()} />
+                  <span className="switch-slider" />
+                </label>
+              </button>
+            </div>
+            <div className="topbar-user-menu-divider" />
+            <button
+              type="button"
+              className="topbar-user-menu-item is-danger"
+              role="menuitem"
+              onClick={() => {
+                setProfileMenuOpen(false);
+                onLogout?.();
+              }}
+            >
+              <span className="topbar-user-menu-item-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <path d="M16 17l5-5-5-5" />
+                  <path d="M21 12H9" />
+                </svg>
+              </span>
+              <span>Cerrar sesión</span>
+            </button>
+          </div>,
+          document.getElementById("overlay-root") || document.body
+        )
+      : null;
+
+    return (
+      <>
+        <div className="mobile-dashboard native-mobile-scene">
+          <div className="mobile-hero native-surface native-surface-hero">
+            <div className="mobile-hero-topbar">
+              <div className="mobile-hero-user">
+                <div className="topbar-user-wrap mobile-hero-avatar-wrap" ref={profileMenuRef}>
+                  <button
+                    type="button"
+                    className="mobile-hero-avatar"
+                    aria-label="Abrir menú de usuario"
+                    aria-expanded={profileMenuOpen}
+                    aria-haspopup="menu"
+                    onClick={() => {
+                      setNotificationsOpen(false);
+                      setProfileMenuOpen((prev) => !prev);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <circle cx="12" cy="8" r="4" />
+                      <path d="M6 20a6 6 0 0 1 12 0" />
+                    </svg>
+                  </button>
+                  {mobileProfileMenu}
+                </div>
+                <div className="mobile-hero-user-info">
+                  <p className="mobile-hero-greeting-sub">{greetingIntro}</p>
+                  <h1 className="mobile-hero-greeting-name">
+                    Hola, <em>{firstName}</em>
+                  </h1>
+                </div>
+              </div>
+              <div className="mobile-hero-tools">
+                <div className="mobile-hero-notifications" ref={notificationsRef}>
+                  <button
+                    type="button"
+                    className="mobile-hero-action-btn"
+                    aria-label="Ver notificaciones"
+                    aria-expanded={notificationsOpen}
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      setNotificationsOpen((prev) => !prev);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                    {notifications.length > 0 ? (
+                      <span className="notification-badge">{notifications.length}</span>
+                    ) : null}
+                  </button>
+                  {notificationsOpen ? (
+                    <div className="notifications-dropdown">
+                      <div className="notifications-header">
+                        <span className="notifications-heading">Notificaciones</span>
+                        {notifications.length > 0 ? (
+                          <button
+                            className="secondary-btn notifications-clear-btn"
+                            type="button"
+                            onClick={() => {
+                              onClearNotifications?.();
+                              setNotificationsOpen(false);
+                            }}
+                          >
+                            Limpiar
+                          </button>
+                        ) : null}
+                      </div>
+                      {notifications.length ? (
+                        <ul className="notifications-list">
+                          {notifications.slice(0, 6).map((item) => (
+                            <li
+                              key={item.id}
+                              className="notifications-item"
+                              onClick={() => {
+                                onOpenNotification?.(item);
+                                setNotificationsOpen(false);
+                              }}
+                            >
+                              <div className="notifications-title">{item.title || "Recordatorio"}</div>
+                              <div className="notifications-body">{item.body || ""}</div>
+                              <div className="notifications-meta">
+                                {item.timestamp ? new Date(item.timestamp).toLocaleString() : ""}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="notifications-empty">Sin notificaciones recientes</div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className={`mobile-hero-health-card home-mobile-clinical-card tone-${heroState.tone}`}>
+              <div className="mobile-hero-stat-label">
+                <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  {heroState.tone === "ok" ? (
+                    <polyline points="20 6 9 17 4 12" />
+                  ) : (
+                    <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z" />
+                  )}
+                </svg>
+                Centro de control diario
+              </div>
+              <div className="mobile-hero-health-main">
+                <div>
+                  <div className="mobile-hero-stat-row">
+                    <span className="mobile-hero-stat-value">{heroState.badge}</span>
+                    <span className={`mobile-hero-stat-badge is-${heroState.tone}`}>{heroHighlights[1].value}</span>
+                  </div>
+                  <p className="home-mobile-clinical-title">{heroState.title}</p>
+                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{heroState.message}</p>
+                </div>
+                <div
+                  className="mobile-hero-progress"
+                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                  aria-label={`Adherencia ${adherencePercentLabel}`}
+                >
+                  <span>{adherencePercentLabel}</span>
+                </div>
+              </div>
+              <div className="mobile-hero-badges home-mobile-badges">
+                <span className="mobile-hero-profile-badge">
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="8" r="3" />
+                    <path d="M6 19.5a6 6 0 0 1 12 0" />
+                  </svg>
+                  {activeProfileName}
+                </span>
+                {nextAppointmentEvent ? (
+                  <span className="mobile-hero-profile-badge">
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="3" y="4" width="18" height="18" rx="2" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    {toRelativeDayLabelSafe(nextAppointmentEvent.date)}
+                  </span>
+                ) : null}
+              </div>
+              <div className="home-mobile-hero-actions">
+                <button type="button" className="mobile-hero-recommendation-btn" onClick={heroState.onAction}>
+                  {heroState.actionLabel}
+                </button>
+                <button type="button" className="home-mobile-notes-btn" onClick={openNotesHub}>
+                  Notas rápidas
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mobile-sheet">
+            <div className="mobile-sheet-handle" />
+
+            {isReadOnlyProfile ? (
+              <div className="mobile-section native-section native-section-delay-1">
+                <div className="card home-readonly-card">
+                  <div className="alert-info">
+                    <p>
+                      <strong>Perfil en modo lectura.</strong> Puedes revisar prioridades y registros, pero no editar
+                      desde Inicio.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mobile-section native-section native-section-delay-1">
+              <div className="mobile-section-header">
+                <h2 className="mobile-section-title">Atención de hoy</h2>
+                <button type="button" className="mobile-section-link" onClick={() => openAlertAssistant(topAlert)}>
+                  Abrir IA
+                </button>
+              </div>
+              <div className="home-mobile-attention-list">
+                {renderAttentionContent("mobile-activity-item home-mobile-focus-item", "is-mobile")}
+              </div>
+            </div>
+
+            <div className="mobile-section native-section native-section-delay-2">
+              <div className="mobile-section-header">
+                <h2 className="mobile-section-title">Acciones rápidas</h2>
+                <button type="button" className="mobile-section-link" onClick={openNotesHub}>
+                  Notas
+                </button>
+              </div>
+              <div className="home-mobile-action-stack">
+                {renderQuickActionsContent("home-mobile-action-item", "is-mobile")}
+              </div>
+            </div>
+          </div>
+        </div>
+        {notesHubPortal}
+      </>
+    );
+  })();
+  if (isMobile) {
+    return newMobileHome;
+  }
   const greetText = greetStarted ? `Hola, ${firstName}` : "";
   const contextMessages = useMemo(
     () =>
@@ -1943,6 +2546,113 @@ export default function Dashboard({
       </div>
     );
   }
+
+  return (
+    <>
+      <section className="home-editorial">
+        <div className="home-editorial-layout home-editorial-layout-clinical">
+          <div className="home-editorial-top">
+            <article className={`home-greeting-card home-summary-card home-clinical-hero tone-${heroState.tone}`}>
+              <div className="home-greeting-copy home-clinical-copy-wrap">
+                <div className="home-clinical-status-row">
+                  <span className={`home-clinical-pill tone-${heroState.tone}`}>{heroState.badge}</span>
+                  <span className="status-badge status-badge-green">
+                    <span className="status-badge-label">Perfil activo</span>
+                    <span className="status-badge-value">{activeProfileName}</span>
+                  </span>
+                </div>
+                <h1 className="home-greeting-title">
+                  Hola, <em>{userName}</em>
+                </h1>
+                <p className="home-clinical-headline">{heroState.title}</p>
+                <p className="home-greeting-subtitle home-clinical-summary">{heroState.message}</p>
+                <div className="home-clinical-actions">
+                  <button type="button" className="home-note-primary home-clinical-primary" onClick={heroState.onAction}>
+                    {heroState.actionLabel}
+                  </button>
+                  <button type="button" className="home-panel-link home-clinical-secondary" onClick={openNotesHub}>
+                    Notas rápidas
+                  </button>
+                </div>
+              </div>
+              <div className="home-greeting-side home-clinical-side">
+                <div className="home-greeting-date">
+                  <strong>{new Date().toLocaleDateString("es-CL", { day: "2-digit" })}</strong>
+                  <span>
+                    {new Date().toLocaleDateString("es-CL", {
+                      month: "short",
+                      year: "numeric",
+                      weekday: "long",
+                    })}
+                  </span>
+                </div>
+                <div className="home-clinical-meta">
+                  {heroHighlights.map((item) => (
+                    <div key={item.id} className={`home-clinical-metric tone-${item.tone}`}>
+                      <small>{item.label}</small>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" className="home-greeting-profile" onClick={() => navigate("/settings")}>
+                  <span className="home-greeting-profile-dot">{profileInitials(activeProfileName)}</span>
+                  {planLabelSafe}
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div className="home-editorial-left">
+            {isReadOnlyProfile ? (
+              <div className="card home-readonly-card">
+                <div className="alert-info">
+                  <p>
+                    <strong>Perfil en modo lectura.</strong> Puedes revisar prioridades y registros, pero no editar
+                    desde Inicio.
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <article className="home-panel-card home-attention-card">
+              <div className="home-panel-head">
+                <div>
+                  <h2 className="home-panel-title">Atención de hoy</h2>
+                  <p className="home-panel-subtitle">Lo que realmente importa resolver primero.</p>
+                </div>
+                <button type="button" className="home-panel-link" onClick={() => openAlertAssistant(topAlert)}>
+                  Abrir IA
+                </button>
+              </div>
+              <div className="home-attention-list">
+                {renderAttentionContent("home-attention-item")}
+              </div>
+            </article>
+          </div>
+
+          <div className="home-editorial-right">
+            <article className="home-panel-card home-actions-card home-actions-card-compact">
+              <div className="home-panel-head">
+                <div>
+                  <h2 className="home-panel-title">Acciones rápidas</h2>
+                  <p className="home-panel-subtitle">Tres atajos para resolver tu día de salud.</p>
+                </div>
+                <button type="button" className="home-panel-link home-notes-trigger" onClick={openNotesHub}>
+                  Abrir notas
+                </button>
+              </div>
+              <div className="home-actions-grid home-actions-grid-compact">
+                {renderQuickActionsContent("home-action-item home-action-item-rich")}
+              </div>
+            </article>
+          </div>
+        </div>
+
+        {loading ? <div className="home-loading">Actualizando tu resumen de salud...</div> : null}
+      </section>
+      {notesHubPortal}
+    </>
+  );
 
   return (
     <section className="home-editorial">
