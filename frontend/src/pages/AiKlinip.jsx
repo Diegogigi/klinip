@@ -16,15 +16,18 @@ import {
   getDocuments,
   getHealthProfiles,
   getMedications,
+  recordMedicationIntake,
   renameAiConversation,
   runAiHealthRadar,
   sendAiChat,
   transcribeAiChatAudio,
+  updateAppointment,
 } from "../api";
 import { parseDate } from "../utils/dates";
-import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
+import { notifyClinicalDataChanged, subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 import { ensureArray } from "../utils/arrays";
+import { getNextMedicationDose } from "../utils/medicationSchedule";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -35,6 +38,7 @@ const QUICK_ACTIONS = [
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
 const APPOINTMENT_TYPE_LABELS = { cita: "Cita", examen: "Examen", tramite: "Trámite" };
+const APPOINTMENT_STATUS_LABELS = { pendiente: "Pendiente", agendada: "Confirmada", realizada: "Realizada" };
 const RADAR_PERIOD_OPTIONS = [
   { value: "7", label: "7 días" },
   { value: "30", label: "30 días" },
@@ -54,7 +58,7 @@ const RECORDER_MIME_OPTIONS = [
 const INITIAL_MESSAGE = {
   id: "welcome",
   role: "assistant",
-  content: "Hola, soy Klinip IA. Puedo revisar contigo documentos, medicamentos, citas e historial del perfil activo. Hazme una pregunta y partimos.",
+  content: "Hola, soy Klinip IA. Ya tengo a mano tu próxima cita, medicamentos activos y alertas del perfil para ayudarte con contexto clínico real.",
   references: [],
   createdAt: null,
 };
@@ -231,6 +235,26 @@ function getActiveMedications(items) {
   return [...(items || [])].filter((item) => !item.completed);
 }
 
+function getLatestAppointment(items) {
+  const sortedItems = [...(items || [])]
+    .filter((item) => parseDate(item?.date_time))
+    .sort((left, right) => parseDate(right.date_time) - parseDate(left.date_time));
+  const now = Date.now();
+  const historical = sortedItems.find((item) => {
+    const stamp = parseDate(item.date_time)?.getTime() || 0;
+    return item.status === "realizada" || stamp <= now;
+  });
+  return historical || sortedItems[0] || null;
+}
+
+function getMedicationNextDoseItem(items) {
+  const now = new Date();
+  return [...(items || [])]
+    .map((item) => ({ medication: item, nextDose: getNextMedicationDose(item, now) }))
+    .filter((item) => item.nextDose)
+    .sort((left, right) => left.nextDose - right.nextDose)[0] || null;
+}
+
 function Ring({ value }) {
   const safeValue = Math.max(0, Math.min(100, value));
   const radius = 26;
@@ -287,6 +311,7 @@ export default function AiKlinip() {
   const [voiceState, setVoiceState] = useState("idle");
   const [voiceStatus, setVoiceStatus] = useState("");
   const [voiceError, setVoiceError] = useState("");
+  const [clinicalActionState, setClinicalActionState] = useState({ tone: "", message: "" });
   const [meta, setMeta] = useState({
     disclaimer: "Klinip IA entrega información orientativa y no reemplaza la evaluación de un profesional de salud.",
     model: "context-fallback",
@@ -309,6 +334,10 @@ export default function AiKlinip() {
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const voiceStopTimerRef = useRef(null);
+
+  const setClinicalActionMessage = (tone, message) => {
+    setClinicalActionState({ tone, message });
+  };
 
   const clearVoiceTimer = () => {
     if (voiceStopTimerRef.current) {
@@ -404,45 +433,67 @@ export default function AiKlinip() {
     }
   };
 
+  const refreshAssistantResources = async (options = {}) => {
+    const {
+      includePlan = false,
+      includeProfiles = false,
+      mountedRef = () => true,
+    } = options;
+
+    const [profile, appointments, documents, medications, plan, profiles] = await Promise.all([
+      getActiveHealthProfile().catch(() => null),
+      getAppointments().catch(() => []),
+      getDocuments().catch(() => []),
+      getMedications().catch(() => []),
+      includePlan ? getMyPlan().catch(() => null) : Promise.resolve(null),
+      includeProfiles ? getHealthProfiles().catch(() => []) : Promise.resolve([]),
+    ]);
+
+    if (!mountedRef()) return null;
+
+    setResources({
+      profile,
+      appointments: ensureArray(appointments),
+      documents: ensureArray(documents),
+      medications: ensureArray(medications),
+    });
+
+    if (includePlan) {
+      setPlanInfo(plan || null);
+    }
+
+    if (includeProfiles) {
+      setRadarProfiles(ensureArray(profiles));
+    }
+
+    if (profile?.full_name) {
+      setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
+    }
+
+    const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
+    await loadInsights(resolvedRadarProfileId, mountedRef);
+
+    return {
+      profile,
+      appointments: ensureArray(appointments),
+      documents: ensureArray(documents),
+      medications: ensureArray(medications),
+    };
+  };
+
   useEffect(() => {
     let mounted = true;
     const loadResources = async () => {
       if (resourcesRequestRef.current) {
         return resourcesRequestRef.current;
       }
-      resourcesRequestRef.current = (async () => {
-        const [profile, profiles, plan] = await Promise.all([
-          getActiveHealthProfile().catch(() => null),
-          getHealthProfiles().catch(() => []),
-          getMyPlan().catch(() => null),
-        ]);
-        const [appointments, documents, medications] = await Promise.all([
-          getAppointments().catch(() => []),
-          getDocuments().catch(() => []),
-          getMedications().catch(() => []),
-        ]);
-        if (!mounted) return;
-
-        setResources({
-          profile,
-          appointments: ensureArray(appointments),
-          documents: ensureArray(documents),
-          medications: ensureArray(medications),
-        });
-        setPlanInfo(plan || null);
-        setRadarProfiles(ensureArray(profiles));
-
-        if (profile?.full_name) {
-          setMeta((prev) => ({ ...prev, activeProfileName: profile.full_name }));
-        }
-
-        const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
-        window.setTimeout(() => {
-          loadInsights(resolvedRadarProfileId, () => mounted).catch((error) => {
-            console.error("No se pudieron cargar insights IA", error);
-          });
-        }, 150);
-      })();
+      resourcesRequestRef.current = refreshAssistantResources({
+        includePlan: true,
+        includeProfiles: true,
+        mountedRef: () => mounted,
+      }).catch((error) => {
+        console.error("No se pudieron cargar recursos IA", error);
+      });
 
       try {
         await resourcesRequestRef.current;
@@ -663,6 +714,14 @@ export default function AiKlinip() {
   }, [input, voiceState]);
 
   useEffect(() => {
+    if (!clinicalActionState.message) return undefined;
+    const timer = window.setTimeout(() => {
+      setClinicalActionState({ tone: "", message: "" });
+    }, 3200);
+    return () => window.clearTimeout(timer);
+  }, [clinicalActionState.message]);
+
+  useEffect(() => {
     if (!openConversationMenuId) return undefined;
     const handlePointerDown = (event) => {
       if (conversationMenuRef.current?.contains(event.target)) return;
@@ -734,6 +793,50 @@ export default function AiKlinip() {
     ],
     [inferredSources]
   );
+  const latestAppointment = useMemo(() => getLatestAppointment(resources.appointments), [resources.appointments]);
+  const nextMedicationDoseItem = useMemo(() => getMedicationNextDoseItem(activeMedications), [activeMedications]);
+  const latestAssistantMessageId = useMemo(
+    () => [...messages].reverse().find((item) => item.role === "assistant" && String(item.id) !== "welcome")?.id || "",
+    [messages]
+  );
+  const memoryHighlights = useMemo(() => {
+    const totalClinicalRecords =
+      resources.appointments.length + resources.documents.length + resources.medications.length;
+    return [
+      {
+        key: "history",
+        label: "Basado en tu historial",
+        value: totalClinicalRecords
+          ? `${totalClinicalRecords} registros clínicos activos`
+          : "Sin registros clínicos suficientes todavía",
+        tone: "blue",
+      },
+      {
+        key: "consultation",
+        label: "Última consulta detectada",
+        value: latestAppointment
+          ? cleanUiText(
+              `${latestAppointment.specialty || APPOINTMENT_TYPE_LABELS[latestAppointment.type] || "Atención"} · ${formatDateTime(latestAppointment.date_time)}`
+            )
+          : "Sin consulta registrada",
+        tone: "violet",
+      },
+      {
+        key: "document",
+        label: "Último documento detectado",
+        value: topDocumentInsights[0]
+          ? cleanUiText(DOC_LABELS[topDocumentInsights[0].document_type_inferred] || "Documento clínico")
+          : "Sin documento procesado por IA",
+        tone: "teal",
+      },
+    ];
+  }, [
+    latestAppointment,
+    resources.appointments.length,
+    resources.documents.length,
+    resources.medications.length,
+    topDocumentInsights,
+  ]);
 
   const scoreData = useMemo(() => {
     const medicationScore = overallAdherenceRate ?? (activeMedications.length ? 100 : 35);
@@ -850,22 +953,7 @@ export default function AiKlinip() {
       ]);
       const nextConversations = await getAiConversations().catch(() => []);
       setConversations(ensureArray(nextConversations));
-      const profile = await getActiveHealthProfile().catch(() => null);
-      const [appointments, documents, medications] = await Promise.all([
-        getAppointments().catch(() => []),
-        getDocuments().catch(() => []),
-        getMedications().catch(() => []),
-      ]);
-      setResources({
-        profile,
-        appointments: ensureArray(appointments),
-        documents: ensureArray(documents),
-        medications: ensureArray(medications),
-      });
-      const resolvedRadarProfileId = radarProfileId === "active" ? profile?.id : Number(radarProfileId);
-      loadInsights(resolvedRadarProfileId).catch((refreshError) => {
-        console.error("No se pudieron refrescar insights IA", refreshError);
-      });
+      await refreshAssistantResources();
     } catch (error) {
       console.error("No se pudo consultar Klinip IA", error);
       setMessages((prev) => [
@@ -1092,6 +1180,96 @@ export default function AiKlinip() {
     }
   };
 
+  const handleConfirmAppointmentFromAssistant = async (appointment) => {
+    if (!appointment) return;
+    if (appointment.status === "agendada") {
+      navigate("/appointments");
+      return;
+    }
+
+    setClinicalActionMessage("info", "Confirmando cita desde Klinip IA...");
+    try {
+      await updateAppointment(appointment.id, {
+        type: appointment.type,
+        specialty: appointment.specialty || "",
+        center: appointment.center || "",
+        date_time: appointment.date_time || null,
+        status: "agendada",
+        notes: appointment.notes || "",
+        checklist: appointment.checklist || [],
+      });
+      notifyClinicalDataChanged({
+        profileId: resources.profile?.id,
+        sources: ["appointments", "health-radar"],
+      });
+      await refreshAssistantResources();
+      setClinicalActionMessage(
+        "success",
+        cleanUiText(`Cita confirmada: ${appointment.specialty || APPOINTMENT_TYPE_LABELS[appointment.type] || "Atención"}.`)
+      );
+    } catch (error) {
+      console.error("No se pudo confirmar la cita desde Klinip IA", error);
+      setClinicalActionMessage(
+        "error",
+        cleanUiText(error?.response?.data?.detail || "No pude confirmar la cita en este momento.")
+      );
+    }
+  };
+
+  const handleMarkMedicationTakenFromAssistant = async (medication) => {
+    if (!medication) return;
+
+    const scheduledAt =
+      getNextMedicationDose(medication)?.toISOString() || new Date().toISOString();
+
+    setClinicalActionMessage("info", `Registrando toma de ${cleanUiText(medication.name || "medicamento")}...`);
+    try {
+      await recordMedicationIntake(medication.id, {
+        status: "taken",
+        source: "ai_chat",
+        scheduled_at: scheduledAt,
+      });
+      notifyClinicalDataChanged({
+        profileId: resources.profile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
+      await refreshAssistantResources();
+      setClinicalActionMessage(
+        "success",
+        cleanUiText(`Toma registrada: ${medication.name || "medicamento"}.`)
+      );
+    } catch (error) {
+      console.error("No se pudo registrar la toma desde Klinip IA", error);
+      try {
+        await recordMedicationIntake(medication.id, {
+          status: "taken",
+          source: "ai_chat_fallback",
+          taken_at: new Date().toISOString(),
+          notes: "Registro manual desde Klinip IA.",
+        });
+        notifyClinicalDataChanged({
+          profileId: resources.profile?.id,
+          sources: ["medications", "health-radar", "adherence"],
+        });
+        await refreshAssistantResources();
+        setClinicalActionMessage(
+          "success",
+          cleanUiText(`Toma registrada: ${medication.name || "medicamento"}.`)
+        );
+      } catch (fallbackError) {
+        console.error("No se pudo registrar la toma fallback desde Klinip IA", fallbackError);
+        setClinicalActionMessage(
+          "error",
+          cleanUiText(
+            fallbackError?.response?.data?.detail ||
+              error?.response?.data?.detail ||
+              "No pude marcar el medicamento como tomado."
+          )
+        );
+      }
+    }
+  };
+
   const handleSelectConversation = async (targetConversationId) => {
     if (!targetConversationId || loading || historyLoading) return;
     setOpenConversationMenuId("");
@@ -1239,6 +1417,201 @@ export default function AiKlinip() {
     navigate("/");
   };
 
+  const renderClinicalSnapshot = (compact = false) => (
+    <section className={`ai-clinical-summary ${compact ? "is-compact" : ""}`}>
+      <div className="ai-clinical-summary-head">
+        <div className="ai-clinical-summary-copy">
+          <span>Contexto clínico actual</span>
+          <strong>Asistente conectado al perfil</strong>
+          <small>Próxima cita, tratamientos activos, alertas y memoria clínica antes de escribir.</small>
+        </div>
+        {clinicalActionState.message ? (
+          <div className={`ai-clinical-toast is-${clinicalActionState.tone || "info"}`}>
+            {clinicalActionState.message}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="ai-clinical-grid">
+        <article className="ai-clinical-card tone-violet">
+          <div className="ai-clinical-card-head">
+            <span className="ai-clinical-badge">Próxima cita</span>
+            {nextAppointment ? (
+              <strong>{Math.max(daysUntil(nextAppointment.date_time) || 0, 0)} d</strong>
+            ) : null}
+          </div>
+          <h3>
+            {nextAppointment
+              ? cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")
+              : "Sin cita próxima"}
+          </h3>
+          <p>
+            {nextAppointment
+              ? cleanUiText(nextAppointment.center, "Centro por confirmar")
+              : "Klinip IA puede ayudarte a revisar o preparar tu agenda clínica."}
+          </p>
+          <div className="ai-clinical-meta">
+            <span>{nextAppointment ? formatDateTime(nextAppointment.date_time) : "Agenda clínica disponible"}</span>
+            {nextAppointment ? (
+              <span>{APPOINTMENT_STATUS_LABELS[nextAppointment.status] || cleanUiText(nextAppointment.status, "Pendiente")}</span>
+            ) : null}
+          </div>
+          <div className="ai-clinical-actions">
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => (
+                nextAppointment?.status === "pendiente"
+                  ? handleConfirmAppointmentFromAssistant(nextAppointment)
+                  : nextAppointment
+                  ? submitPrompt(nextAppointmentPrompt)
+                  : navigate("/appointments")
+              )}
+            >
+              {nextAppointment?.status === "pendiente" ? "Confirmar cita" : nextAppointment ? "Ver con IA" : "Ir a citas"}
+            </button>
+          </div>
+        </article>
+
+        <article className="ai-clinical-card tone-teal">
+          <div className="ai-clinical-card-head">
+            <span className="ai-clinical-badge">Medicamentos activos</span>
+            <strong>{activeMedications.length}</strong>
+          </div>
+          <h3>{activeMedications.length ? `${activeMedications.length} en seguimiento` : "Sin tratamientos activos"}</h3>
+          <p>
+            {nextMedicationDoseItem
+              ? cleanUiText(`${nextMedicationDoseItem.medication.name} · próxima toma ${formatDateTime(nextMedicationDoseItem.nextDose)}`)
+              : "No hay una próxima toma detectada en este momento."}
+          </p>
+          <div className="ai-clinical-meta">
+            <span>
+              {nextMedicationDoseItem?.medication?.dose || "Sin dosis visible"}
+            </span>
+            <span>
+              {nextMedicationDoseItem?.medication?.frequency || "Plan activo"}
+            </span>
+          </div>
+          <div className="ai-clinical-actions">
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => (
+                nextMedicationDoseItem
+                  ? handleMarkMedicationTakenFromAssistant(nextMedicationDoseItem.medication)
+                  : navigate("/medications")
+              )}
+            >
+              {nextMedicationDoseItem ? "Marcar medicamento como tomado" : "Ver medicamentos"}
+            </button>
+          </div>
+        </article>
+
+        <article className="ai-clinical-card tone-amber">
+          <div className="ai-clinical-card-head">
+            <span className="ai-clinical-badge">Alertas</span>
+            <strong>{activeRadarAlerts.length}</strong>
+          </div>
+          <h3>{activeRadarAlerts.length ? cleanUiText(activeRadarAlerts[0]?.title, "Radar activo") : "Sin alertas activas"}</h3>
+          <p>
+            {activeRadarAlerts.length
+              ? cleanUiText(activeRadarAlerts[0]?.description, "Hay una alerta activa para revisar.")
+              : "El radar no detecta alertas activas para este perfil."}
+          </p>
+          <div className="ai-clinical-meta">
+            <span>{activeRadarAlerts.length ? getSeverityLabel(activeRadarAlerts[0]?.severity) : "Estable"}</span>
+            <span>{activeRadarAlerts.length ? formatConversationStamp(activeRadarAlerts[0]?.detected_at || activeRadarAlerts[0]?.updated_at) : "Sin novedades"}</span>
+          </div>
+          <div className="ai-clinical-actions">
+            <button type="button" className="secondary-btn" onClick={() => submitPrompt("Explícame mis alertas clínicas activas")}>
+              {activeRadarAlerts.length ? "Revisar alertas" : "Preguntar al asistente"}
+            </button>
+          </div>
+        </article>
+      </div>
+
+      <div className="ai-memory-strip">
+        {memoryHighlights.map((item) => (
+          <article key={item.key} className={`ai-memory-card tone-${item.tone}`}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+
+  const renderAssistantVisualResponse = (message) => {
+    if (message.role !== "assistant" || message.id !== latestAssistantMessageId) return null;
+
+    return (
+      <div className="ai-response-visual">
+        <div className="ai-response-badges">
+          <span className="ai-response-badge tone-blue">Basado en tu historial</span>
+          {latestAppointment ? (
+            <span className="ai-response-badge tone-violet">
+              Última consulta: {formatShortDate(latestAppointment.date_time)}
+            </span>
+          ) : null}
+          {activeRadarAlerts.length ? (
+            <span className="ai-response-badge tone-amber">
+              {activeRadarAlerts.length} alerta{activeRadarAlerts.length === 1 ? "" : "s"} activa{activeRadarAlerts.length === 1 ? "" : "s"}
+            </span>
+          ) : null}
+        </div>
+
+        <div className="ai-response-grid">
+          {nextAppointment ? (
+            <article className="ai-response-card tone-violet">
+              <span className="ai-response-card-label">Timeline clínica</span>
+              <strong>{cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")}</strong>
+              <p>{formatDateTime(nextAppointment.date_time)}</p>
+            </article>
+          ) : null}
+          {nextMedicationDoseItem ? (
+            <article className="ai-response-card tone-teal">
+              <span className="ai-response-card-label">Próxima toma</span>
+              <strong>{cleanUiText(nextMedicationDoseItem.medication.name, "Medicamento activo")}</strong>
+              <p>{formatDateTime(nextMedicationDoseItem.nextDose)}</p>
+            </article>
+          ) : null}
+          {activeRadarAlerts[0] ? (
+            <article className="ai-response-card tone-amber">
+              <span className="ai-response-card-label">Alerta principal</span>
+              <strong>{cleanUiText(activeRadarAlerts[0].title, "Alerta clínica")}</strong>
+              <p>{getSeverityLabel(activeRadarAlerts[0].severity)}</p>
+            </article>
+          ) : null}
+        </div>
+
+        <div className="ai-response-actions">
+          {nextAppointment ? (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => (
+                nextAppointment.status === "pendiente"
+                  ? handleConfirmAppointmentFromAssistant(nextAppointment)
+                  : submitPrompt(nextAppointmentPrompt)
+              )}
+            >
+              {nextAppointment.status === "pendiente" ? "Confirmar cita" : "Ver próxima cita"}
+            </button>
+          ) : null}
+          {nextMedicationDoseItem ? (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => handleMarkMedicationTakenFromAssistant(nextMedicationDoseItem.medication)}
+            >
+              Marcar medicamento como tomado
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="ai-page ai-copilot-page">
       <section className="ai-copilot-shell">
@@ -1276,15 +1649,17 @@ export default function AiKlinip() {
             {!hasConversation ? (
               <div className="ai-landing">
                 <div className="ai-landing-center">
-                  <h2 className="ai-landing-title">¿En qué te ayudo hoy?</h2>
+                  <h2 className="ai-landing-title">Tu asistente clínico del día</h2>
                   <p className="ai-landing-subtitle">
-                    Consulta sobre tus medicamentos, documentos, citas o historial. Soy tu copiloto de salud.
+                    Antes de escribir ya tengo contexto de tu agenda, tratamientos, alertas y memoria clínica para responder mejor.
                   </p>
                   <div className="ai-landing-safe">
                     <span className="ai-safe-dot" />
                     <span>{cleanUiText(meta.disclaimer)}</span>
                   </div>
                 </div>
+
+                {renderClinicalSnapshot()}
 
                 <div className="ai-context-strip">
                   {contextTags.map((tag) => (
@@ -1348,6 +1723,7 @@ export default function AiKlinip() {
             ) : (
               <div className="ai-chat" ref={scrollRef}>
                 <div className="ai-chat-inner">
+                  {renderClinicalSnapshot(true)}
                   {messages.map((message) => (
                     <article key={message.id} className={`ai-message ${message.role === "user" ? "is-user" : "is-assistant"}`}>
                       <div className={`ai-message-avatar ${message.role === "user" ? "is-user" : "is-ai"}`}>{message.role === "user" ? "TU" : "KI"}</div>
@@ -1355,6 +1731,7 @@ export default function AiKlinip() {
                         <div className={`ai-message-bubble ${message.role === "user" ? "is-user" : "is-ai"}`}>
                           <p>{message.role === "assistant" ? cleanAssistantText(message.content) : cleanUiText(message.content)}</p>
                           {message.attachmentName ? <div className="ai-inline-attachment">{message.attachmentName}</div> : null}
+                          {renderAssistantVisualResponse(message)}
                           {message.role === "assistant" && Array.isArray(message.references) && message.references.length > 0 ? (
                             <div className="ai-reference-list">
                               {message.references.map((reference, index) => (
@@ -1392,8 +1769,8 @@ export default function AiKlinip() {
                       type="button"
                       className="ai-jump-composer-btn"
                       onClick={jumpToComposer}
-                      aria-label="Bajar a la parte mas reciente del chat"
-                      title="Bajar a la parte mas reciente del chat"
+                      aria-label="Bajar a la parte más reciente del chat"
+                      title="Bajar a la parte más reciente del chat"
                     >
                       <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -1539,7 +1916,7 @@ export default function AiKlinip() {
                   </div>
                 </div>
                 <div className="ai-progress-list">
-                  <div className="ai-progress-row"><span>Medicacion</span><div className="ai-progress-track"><div className="ai-progress-fill tone-teal" style={{ width: `${scoreData.medicationScore}%` }} /></div><strong>{scoreData.medicationScore}%</strong></div>
+                  <div className="ai-progress-row"><span>Medicación</span><div className="ai-progress-track"><div className="ai-progress-fill tone-teal" style={{ width: `${scoreData.medicationScore}%` }} /></div><strong>{scoreData.medicationScore}%</strong></div>
                   <div className="ai-progress-row"><span>Documentos</span><div className="ai-progress-track"><div className="ai-progress-fill tone-blue" style={{ width: `${scoreData.documentScore}%` }} /></div><strong>{scoreData.documentScore}%</strong></div>
                   <div className="ai-progress-row"><span>Citas</span><div className="ai-progress-track"><div className="ai-progress-fill tone-violet" style={{ width: `${scoreData.appointmentScore}%` }} /></div><strong>{scoreData.appointmentScore}%</strong></div>
                 </div>
