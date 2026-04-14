@@ -188,6 +188,7 @@ async function recordReceivedNotification(notification) {
     const received = tx.objectStore(RECEIVED_STORE);
     const badge = tx.objectStore(BADGE_STORE);
     const id = notification.id || notification.tag || `received-${Date.now()}-${Math.random()}`;
+    const existing = await requestToPromise(received.get(id));
     await requestToPromise(received.put({
       id,
       title: notification.title,
@@ -199,7 +200,8 @@ async function recordReceivedNotification(notification) {
       userId
     }));
     const current = await requestToPromise(badge.get("count"));
-    const nextCount = (current && current.value ? current.value : 0) + 1;
+    const baseCount = current && current.value ? current.value : 0;
+    const nextCount = existing ? baseCount : baseCount + 1;
     await requestToPromise(badge.put({ key: "count", value: nextCount }));
     await updateAppBadge(nextCount);
     await broadcastMessage({
@@ -217,6 +219,27 @@ async function recordReceivedNotification(notification) {
     });
   } catch (err) {
     console.error("Error recording notification:", err);
+  }
+}
+
+async function hasReceivedNotification(id, tag) {
+  if (!id && !tag) return false;
+  try {
+    const db = await openNotificationsDB();
+    const tx = db.transaction(RECEIVED_STORE, "readonly");
+    const store = tx.objectStore(RECEIVED_STORE);
+    const byId = id ? await requestToPromise(store.get(id)) : null;
+    if (byId) return true;
+    const allNotifications = await requestToPromise(store.getAll());
+    return (allNotifications || []).some((item) => {
+      if (!item) return false;
+      if (id && item.id === id) return true;
+      if (tag && item.tag === tag) return true;
+      return false;
+    });
+  } catch (err) {
+    console.warn("Unable to verify duplicated notification:", err);
+    return false;
   }
 }
 
@@ -296,7 +319,18 @@ async function checkAndShowPendingNotifications() {
     );
 
     for (const notification of toShow) {
+      const wasAlreadyReceived = await hasReceivedNotification(notification.id, notification.tag);
+      if (wasAlreadyReceived) {
+        const deleteTx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
+        const deleteStore = deleteTx.objectStore(NOTIFICATIONS_STORE);
+        await requestToPromise(deleteStore.delete(notification.id));
+        continue;
+      }
+
       if (!shouldShowNotification(notification.tag)) {
+        const deleteTx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
+        const deleteStore = deleteTx.objectStore(NOTIFICATIONS_STORE);
+        await requestToPromise(deleteStore.delete(notification.id));
         continue;
       }
 
@@ -452,10 +486,6 @@ self.addEventListener("push", (event) => {
     (data.medicationId ? `medication-${data.medicationId}` : null) ||
     `push-${Date.now()}`;
 
-  if (!shouldShowNotification(tag)) {
-    return;
-  }
-
   let requireInteraction = true;
   let vibrate = [200, 100, 200];
 
@@ -499,26 +529,30 @@ self.addEventListener("push", (event) => {
   // CRITICAL: siempre llamar event.waitUntil con showNotification.
   // Chrome revoca permisos push si un push event no muestra notificación.
   // showNotification va PRIMERO e independiente de recordReceivedNotification.
-  event.waitUntil(
-    self.registration.showNotification(title, notificationOptions)
+  event.waitUntil((async () => {
+    const wasAlreadyReceived = await hasReceivedNotification(tag, tag);
+    if (wasAlreadyReceived || !shouldShowNotification(tag)) {
+      return;
+    }
+
+    await self.registration.showNotification(title, notificationOptions)
       .catch((err) => {
         console.error("ERROR showNotification:", err);
-      })
-      .then(() =>
-        recordReceivedNotification({
-          id: tag,
-          title,
-          body,
-          url,
-          tag,
-          timestamp: Date.now(),
-          source: "push",
-          userId: data.userId || null
-        }).catch((err) => {
-          console.error("ERROR recordReceivedNotification:", err);
-        })
-      )
-  );
+      });
+
+    await recordReceivedNotification({
+      id: tag,
+      title,
+      body,
+      url,
+      tag,
+      timestamp: Date.now(),
+      source: "push",
+      userId: data.userId || null
+    }).catch((err) => {
+      console.error("ERROR recordReceivedNotification:", err);
+    });
+  })());
 });
 
 function toAbsoluteAppUrl(url) {

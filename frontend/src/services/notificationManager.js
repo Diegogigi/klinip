@@ -12,8 +12,8 @@ const SOUND_URLS = {
 };
 
 // Estado global
-let appointmentTimers = [];
-let medicationTimers = [];
+let appointmentRuntimeTimer = null;
+let medicationRuntimeTimer = null;
 let audioContext = null;
 const APPOINTMENT_TYPE_LABELS = [
   { match: "examen", label: "Examen" },
@@ -56,6 +56,27 @@ function clearServiceWorkerSchedule() {
 
 function recordNotificationInServiceWorker(notification) {
   postMessageToServiceWorker({ type: "RECORD_NOTIFICATION", notification });
+}
+
+function clearRuntimeTimer(type) {
+  if (type === "appointment" && appointmentRuntimeTimer) {
+    clearTimeout(appointmentRuntimeTimer);
+    appointmentRuntimeTimer = null;
+  }
+  if (type === "medication" && medicationRuntimeTimer) {
+    clearTimeout(medicationRuntimeTimer);
+    medicationRuntimeTimer = null;
+  }
+}
+
+function setRuntimeTimer(type, timerId) {
+  clearRuntimeTimer(type);
+  if (type === "appointment") {
+    appointmentRuntimeTimer = timerId;
+  }
+  if (type === "medication") {
+    medicationRuntimeTimer = timerId;
+  }
 }
 
 function inferNotificationType(notification = {}) {
@@ -218,6 +239,17 @@ class NotificationManager {
     return this.scheduledNotifications.filter(n => n.triggerAt > Date.now());
   }
 
+  getNextScheduledNotificationByType(type) {
+    const now = Date.now();
+    return this.scheduledNotifications
+      .filter(
+        (notification) =>
+          inferNotificationType(notification) === type &&
+          Number(notification?.triggerAt || 0) > now
+      )
+      .sort((a, b) => Number(a.triggerAt || 0) - Number(b.triggerAt || 0))[0] || null;
+  }
+
   /**
    * Reproducir sonido de notificación
    */
@@ -237,6 +269,51 @@ class NotificationManager {
 
 // Instancia global
 const notificationManager = new NotificationManager();
+const RUNTIME_SCHEDULER_WINDOW_MS = 60 * 60 * 1000;
+
+function armRuntimeScheduler(type) {
+  clearRuntimeTimer(type);
+
+  const nextNotification = notificationManager.getNextScheduledNotificationByType(type);
+  if (!nextNotification) return;
+
+  const now = Date.now();
+  const delay = Number(nextNotification.triggerAt || 0) - now;
+  const wakeDelay = Math.min(Math.max(delay, 0), RUNTIME_SCHEDULER_WINDOW_MS);
+  const shouldDispatchOnWake = delay <= RUNTIME_SCHEDULER_WINDOW_MS;
+
+  const timerId = setTimeout(async () => {
+    try {
+      if (!shouldDispatchOnWake) {
+        armRuntimeScheduler(type);
+        return;
+      }
+
+      const latestNotification = notificationManager.scheduledNotifications.find(
+        (item) => item.id === nextNotification.id
+      );
+      if (!latestNotification) {
+        armRuntimeScheduler(type);
+        return;
+      }
+
+      notificationManager.removeScheduledNotification(latestNotification.id);
+      await showNotification(latestNotification.title, latestNotification.body, {
+        id: latestNotification.id,
+        sound: latestNotification.sound,
+        url: latestNotification.url,
+        tag: latestNotification.tag,
+        requireInteraction: inferNotificationType(latestNotification) === "medication",
+        actions: latestNotification.actions,
+        data: latestNotification.data || {},
+      });
+    } finally {
+      armRuntimeScheduler(type);
+    }
+  }, wakeDelay);
+
+  setRuntimeTimer(type, timerId);
+}
 
 /**
  * Solicitar permiso de notificaciones
@@ -262,6 +339,7 @@ async function showNotification(title, body, options = {}) {
   if (Notification.permission !== "granted") return;
 
   const {
+    id = "",
     icon = "/icons/android-chrome-192x192.png",
     badge = "/icons/android-chrome-192x192.png",
     tag = "",
@@ -304,6 +382,16 @@ async function showNotification(title, body, options = {}) {
         }
       });
       console.log(`✅ Notificación enviada: ${title}`);
+      recordNotificationInServiceWorker({
+        id: id || tag || buildScheduledNotificationId({ title, triggerAt: Date.now(), data }),
+        title,
+        body,
+        url,
+        tag,
+        timestamp: Date.now(),
+        source: "local",
+        data
+      });
       return;
     } catch (err) {
       console.warn("No se pudo usar service worker:", err);
@@ -319,6 +407,7 @@ async function showNotification(title, body, options = {}) {
   });
 
   recordNotificationInServiceWorker({
+    id: id || tag || buildScheduledNotificationId({ title, triggerAt: Date.now(), data }),
     title,
     body,
     url,
@@ -338,10 +427,8 @@ async function showNotification(title, body, options = {}) {
  * Limpiar todas las notificaciones programadas
  */
 export function clearScheduledNotifications() {
-  appointmentTimers.forEach(clearTimeout);
-  medicationTimers.forEach(clearTimeout);
-  appointmentTimers = [];
-  medicationTimers = [];
+  clearRuntimeTimer("appointment");
+  clearRuntimeTimer("medication");
   notificationManager.clearAllScheduledNotifications();
   clearServiceWorkerSchedule();
 }
@@ -350,8 +437,7 @@ export function clearScheduledNotifications() {
  * Programar recordatorios de citas con opciones mejoradas
  */
 export function scheduleReminderNotifications(reminders, customOffsets = null) {
-  appointmentTimers.forEach(clearTimeout);
-  appointmentTimers = [];
+  clearRuntimeTimer("appointment");
   notificationManager.removeScheduledNotificationsByType("appointment");
 
   if (!reminders?.length) {
@@ -410,7 +496,7 @@ ${rem.notes}` : ""}`;
       // Solo programar notificaciones futuras (proximos 30 dias)
       if (delay > 0 && delay < 30 * dayMs) {
         // Guardar en persistencia
-        const created = notificationManager.addScheduledNotification({
+        notificationManager.addScheduledNotification({
           triggerAt,
           title,
           body,
@@ -424,28 +510,13 @@ ${rem.notes}` : ""}`;
           data: notificationData
         });
 
-        // Programar timeout
-        const timer = setTimeout(() => {
-          notificationManager.removeScheduledNotification(created.id);
-          showNotification(title, body, {
-            sound,
-            url: "/appointments",
-            tag: `appointment-${rem.id}-${label}`,
-            actions: [
-              { action: "done", title: "Realizada" },
-              { action: "open", title: "Ver detalles" }
-            ],
-            data: notificationData
-          });
-        }, delay);
-
-        appointmentTimers.push(timer);
       }
     });
   });
 
   notificationManager.cleanOldNotifications();
-  console.log(`Notificaciones de citas programadas: ${appointmentTimers.length}`);
+  armRuntimeScheduler("appointment");
+  console.log("Notificaciones de citas reprogramadas");
 }
 
 /**
@@ -576,8 +647,7 @@ function buildMedicationScheduleEventsBetween(med, windowStart, windowEnd) {
  * Programar recordatorios de medicación mejorados
  */
 export function scheduleMedicationNotifications(medications) {
-  medicationTimers.forEach(clearTimeout);
-  medicationTimers = [];
+  clearRuntimeTimer("medication");
   notificationManager.removeScheduledNotificationsByType("medication");
 
   if (!medications?.length) {
@@ -621,7 +691,7 @@ ${med.dose ? `Dosis: ${med.dose}
             ? `/medications?notify=1&medicationId=${med.id}&trigger=${triggerExact}`
             : "/medications";
 
-        const created = notificationManager.addScheduledNotification({
+        notificationManager.addScheduledNotification({
           triggerAt,
           title,
           body,
@@ -635,28 +705,13 @@ ${med.dose ? `Dosis: ${med.dose}
           data: notificationData
         });
 
-        const timer = setTimeout(() => {
-          notificationManager.removeScheduledNotification(created.id);
-          showNotification(title, body, {
-            sound: "medication",
-            url: targetUrl,
-            tag: `medication-${med.id}-${triggerExact}-lead-${offsetMinutes}`,
-            requireInteraction: true,
-            actions: [
-              { action: "done", title: "Realizado" },
-              { action: "open", title: "Ver detalles" }
-            ],
-            data: notificationData
-          });
-        }, delay);
-
-        medicationTimers.push(timer);
       });
     });
   });
 
   notificationManager.cleanOldNotifications();
-  console.log(`Recordatorios de medicacion programados: ${medicationTimers.length}`);
+  armRuntimeScheduler("medication");
+  console.log("Recordatorios de medicacion reprogramados");
 }
 
 /**
