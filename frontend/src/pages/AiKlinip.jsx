@@ -1417,194 +1417,145 @@ export default function AiKlinip() {
     navigate("/");
   };
 
-  const renderClinicalSnapshot = (compact = false) => (
-    <section className={`ai-clinical-summary ${compact ? "is-compact" : ""}`}>
-      <div className="ai-clinical-summary-head">
-        <div className="ai-clinical-summary-copy">
-          <span>Contexto clínico actual</span>
-          <strong>Asistente conectado al perfil</strong>
-          <small>Próxima cita, tratamientos activos, alertas y memoria clínica antes de escribir.</small>
-        </div>
+  const renderClinicalSnapshot = (compact = false) => {
+    const apptAction = nextAppointment?.status === "pendiente"
+      ? { label: "Confirmar", onClick: () => handleConfirmAppointmentFromAssistant(nextAppointment) }
+      : nextAppointment
+      ? { label: "Ver", onClick: () => submitPrompt(nextAppointmentPrompt) }
+      : { label: "Ir", onClick: () => navigate("/appointments") };
+
+    const medAction = nextMedicationDoseItem
+      ? { label: "Marcar", onClick: () => handleMarkMedicationTakenFromAssistant(nextMedicationDoseItem.medication) }
+      : { label: "Ver", onClick: () => navigate("/medications") };
+
+    return (
+      <section className={`ai-ctx ${compact ? "is-compact" : ""}`}>
         {clinicalActionState.message ? (
-          <div className={`ai-clinical-toast is-${clinicalActionState.tone || "info"}`}>
+          <div className={`ai-ctx-toast is-${clinicalActionState.tone || "info"}`}>
             {clinicalActionState.message}
           </div>
         ) : null}
-      </div>
 
-      <div className="ai-clinical-grid">
-        <article className="ai-clinical-card tone-violet">
-          <div className="ai-clinical-card-head">
-            <span className="ai-clinical-badge">Próxima cita</span>
-            {nextAppointment ? (
-              <strong>{Math.max(daysUntil(nextAppointment.date_time) || 0, 0)} d</strong>
-            ) : null}
-          </div>
-          <h3>
-            {nextAppointment
-              ? cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")
-              : "Sin cita próxima"}
-          </h3>
-          <p>
-            {nextAppointment
-              ? cleanUiText(nextAppointment.center, "Centro por confirmar")
-              : "Klinip IA puede ayudarte a revisar o preparar tu agenda clínica."}
-          </p>
-          <div className="ai-clinical-meta">
-            <span>{nextAppointment ? formatDateTime(nextAppointment.date_time) : "Agenda clínica disponible"}</span>
-            {nextAppointment ? (
-              <span>{APPOINTMENT_STATUS_LABELS[nextAppointment.status] || cleanUiText(nextAppointment.status, "Pendiente")}</span>
-            ) : null}
-          </div>
-          <div className="ai-clinical-actions">
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => (
-                nextAppointment?.status === "pendiente"
-                  ? handleConfirmAppointmentFromAssistant(nextAppointment)
-                  : nextAppointment
-                  ? submitPrompt(nextAppointmentPrompt)
-                  : navigate("/appointments")
-              )}
-            >
-              {nextAppointment?.status === "pendiente" ? "Confirmar cita" : nextAppointment ? "Ver con IA" : "Ir a citas"}
-            </button>
-          </div>
-        </article>
-
-        <article className="ai-clinical-card tone-teal">
-          <div className="ai-clinical-card-head">
-            <span className="ai-clinical-badge">Medicamentos activos</span>
-            <strong>{activeMedications.length}</strong>
-          </div>
-          <h3>{activeMedications.length ? `${activeMedications.length} en seguimiento` : "Sin tratamientos activos"}</h3>
-          <p>
-            {nextMedicationDoseItem
-              ? cleanUiText(`${nextMedicationDoseItem.medication.name} · próxima toma ${formatDateTime(nextMedicationDoseItem.nextDose)}`)
-              : "No hay una próxima toma detectada en este momento."}
-          </p>
-          <div className="ai-clinical-meta">
-            <span>
-              {nextMedicationDoseItem?.medication?.dose || "Sin dosis visible"}
+        <div className="ai-ctx-rail">
+          <article className="ai-ctx-tile tone-violet">
+            <span className="ai-ctx-tile-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
             </span>
-            <span>
-              {nextMedicationDoseItem?.medication?.frequency || "Plan activo"}
-            </span>
-          </div>
-          <div className="ai-clinical-actions">
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => (
-                nextMedicationDoseItem
-                  ? handleMarkMedicationTakenFromAssistant(nextMedicationDoseItem.medication)
-                  : navigate("/medications")
-              )}
-            >
-              {nextMedicationDoseItem ? "Marcar medicamento como tomado" : "Ver medicamentos"}
+            <div className="ai-ctx-tile-body">
+              <span className="ai-ctx-tile-label">Próxima cita</span>
+              <strong className="ai-ctx-tile-value">
+                {nextAppointment
+                  ? cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")
+                  : "Sin cita próxima"}
+              </strong>
+              <span className="ai-ctx-tile-sub">
+                {nextAppointment ? formatDateTime(nextAppointment.date_time) : "Agenda disponible"}
+              </span>
+            </div>
+            <button type="button" className="ai-ctx-tile-cta" onClick={apptAction.onClick} aria-label={`${apptAction.label} próxima cita`}>
+              {apptAction.label}
             </button>
-          </div>
-        </article>
-
-        <article className="ai-clinical-card tone-amber">
-          <div className="ai-clinical-card-head">
-            <span className="ai-clinical-badge">Alertas</span>
-            <strong>{activeRadarAlerts.length}</strong>
-          </div>
-          <h3>{activeRadarAlerts.length ? cleanUiText(activeRadarAlerts[0]?.title, "Radar activo") : "Sin alertas activas"}</h3>
-          <p>
-            {activeRadarAlerts.length
-              ? cleanUiText(activeRadarAlerts[0]?.description, "Hay una alerta activa para revisar.")
-              : "El radar no detecta alertas activas para este perfil."}
-          </p>
-          <div className="ai-clinical-meta">
-            <span>{activeRadarAlerts.length ? getSeverityLabel(activeRadarAlerts[0]?.severity) : "Estable"}</span>
-            <span>{activeRadarAlerts.length ? formatConversationStamp(activeRadarAlerts[0]?.detected_at || activeRadarAlerts[0]?.updated_at) : "Sin novedades"}</span>
-          </div>
-          <div className="ai-clinical-actions">
-            <button type="button" className="secondary-btn" onClick={() => submitPrompt("Explícame mis alertas clínicas activas")}>
-              {activeRadarAlerts.length ? "Revisar alertas" : "Preguntar al asistente"}
-            </button>
-          </div>
-        </article>
-      </div>
-
-      <div className="ai-memory-strip">
-        {memoryHighlights.map((item) => (
-          <article key={item.key} className={`ai-memory-card tone-${item.tone}`}>
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
           </article>
-        ))}
-      </div>
-    </section>
-  );
+
+          <article className="ai-ctx-tile tone-teal">
+            <span className="ai-ctx-tile-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m10.5 20.5-7-7a5 5 0 1 1 7-7l7 7a5 5 0 0 1-7 7Z"/><path d="m8.5 8.5 7 7"/>
+              </svg>
+            </span>
+            <div className="ai-ctx-tile-body">
+              <span className="ai-ctx-tile-label">Medicamentos</span>
+              <strong className="ai-ctx-tile-value">
+                {activeMedications.length ? `${activeMedications.length} activo${activeMedications.length === 1 ? "" : "s"}` : "Sin tratamientos"}
+              </strong>
+              <span className="ai-ctx-tile-sub">
+                {nextMedicationDoseItem
+                  ? `Próxima ${formatDateTime(nextMedicationDoseItem.nextDose)}`
+                  : "Sin toma pendiente"}
+              </span>
+            </div>
+            <button type="button" className="ai-ctx-tile-cta" onClick={medAction.onClick} aria-label={`${medAction.label} medicamento`}>
+              {medAction.label}
+            </button>
+          </article>
+
+          <article className={`ai-ctx-tile tone-amber ${activeRadarAlerts.length ? "is-alerting" : ""}`}>
+            <span className="ai-ctx-tile-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+              </svg>
+            </span>
+            <div className="ai-ctx-tile-body">
+              <span className="ai-ctx-tile-label">Alertas</span>
+              <strong className="ai-ctx-tile-value">
+                {activeRadarAlerts.length
+                  ? cleanUiText(activeRadarAlerts[0]?.title, "Radar activo")
+                  : "Sin alertas"}
+              </strong>
+              <span className="ai-ctx-tile-sub">
+                {activeRadarAlerts.length ? getSeverityLabel(activeRadarAlerts[0]?.severity) : "Estado estable"}
+              </span>
+            </div>
+            <button type="button" className="ai-ctx-tile-cta" onClick={() => submitPrompt("Explícame mis alertas clínicas activas")} aria-label="Revisar alertas">
+              {activeRadarAlerts.length ? "Revisar" : "Ver"}
+            </button>
+          </article>
+        </div>
+
+        {memoryHighlights.length > 0 ? (
+          <p className="ai-ctx-memory">
+            {memoryHighlights.map((item, idx) => (
+              <span key={item.key} className={`ai-ctx-memory-chip tone-${item.tone}`}>
+                <em>{item.label}</em>
+                <span>·</span>
+                <b>{item.value}</b>
+                {idx < memoryHighlights.length - 1 ? <i aria-hidden="true" /> : null}
+              </span>
+            ))}
+          </p>
+        ) : null}
+      </section>
+    );
+  };
 
   const renderAssistantVisualResponse = (message) => {
     if (message.role !== "assistant" || message.id !== latestAssistantMessageId) return null;
 
+    const hasActions = Boolean(nextAppointment) || Boolean(nextMedicationDoseItem);
+    if (!hasActions) return null;
+
     return (
       <div className="ai-response-visual">
-        <div className="ai-response-badges">
-          <span className="ai-response-badge tone-blue">Basado en tu historial</span>
-          {latestAppointment ? (
-            <span className="ai-response-badge tone-violet">
-              Última consulta: {formatShortDate(latestAppointment.date_time)}
-            </span>
-          ) : null}
-          {activeRadarAlerts.length ? (
-            <span className="ai-response-badge tone-amber">
-              {activeRadarAlerts.length} alerta{activeRadarAlerts.length === 1 ? "" : "s"} activa{activeRadarAlerts.length === 1 ? "" : "s"}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="ai-response-grid">
-          {nextAppointment ? (
-            <article className="ai-response-card tone-violet">
-              <span className="ai-response-card-label">Timeline clínica</span>
-              <strong>{cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")}</strong>
-              <p>{formatDateTime(nextAppointment.date_time)}</p>
-            </article>
-          ) : null}
-          {nextMedicationDoseItem ? (
-            <article className="ai-response-card tone-teal">
-              <span className="ai-response-card-label">Próxima toma</span>
-              <strong>{cleanUiText(nextMedicationDoseItem.medication.name, "Medicamento activo")}</strong>
-              <p>{formatDateTime(nextMedicationDoseItem.nextDose)}</p>
-            </article>
-          ) : null}
-          {activeRadarAlerts[0] ? (
-            <article className="ai-response-card tone-amber">
-              <span className="ai-response-card-label">Alerta principal</span>
-              <strong>{cleanUiText(activeRadarAlerts[0].title, "Alerta clínica")}</strong>
-              <p>{getSeverityLabel(activeRadarAlerts[0].severity)}</p>
-            </article>
-          ) : null}
-        </div>
-
-        <div className="ai-response-actions">
+        <span className="ai-response-source">Basado en tu historial clínico</span>
+        <div className="ai-response-chips">
           {nextAppointment ? (
             <button
               type="button"
-              className="secondary-btn"
+              className="ai-response-chip tone-violet"
               onClick={() => (
                 nextAppointment.status === "pendiente"
                   ? handleConfirmAppointmentFromAssistant(nextAppointment)
                   : submitPrompt(nextAppointmentPrompt)
               )}
             >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
+              </svg>
               {nextAppointment.status === "pendiente" ? "Confirmar cita" : "Ver próxima cita"}
             </button>
           ) : null}
           {nextMedicationDoseItem ? (
             <button
               type="button"
-              className="secondary-btn"
+              className="ai-response-chip tone-teal"
               onClick={() => handleMarkMedicationTakenFromAssistant(nextMedicationDoseItem.medication)}
             >
-              Marcar medicamento como tomado
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5"/>
+              </svg>
+              Marcar medicamento tomado
             </button>
           ) : null}
         </div>
