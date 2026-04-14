@@ -17,9 +17,9 @@ let medicationTimers = [];
 let audioContext = null;
 const APPOINTMENT_TYPE_LABELS = [
   { match: "examen", label: "Examen" },
-  { match: "tramite", label: "Tramite" }
+  { match: "tramite", label: "Trámite" }
 ];
-const DEFAULT_APPOINTMENT_LABEL = "Cita medica";
+const DEFAULT_APPOINTMENT_LABEL = "Cita médica";
 const MEDICATION_LEAD_MINUTES = 5;
 
 function getAppointmentTypeLabel(reminder) {
@@ -56,6 +56,30 @@ function clearServiceWorkerSchedule() {
 
 function recordNotificationInServiceWorker(notification) {
   postMessageToServiceWorker({ type: "RECORD_NOTIFICATION", notification });
+}
+
+function inferNotificationType(notification = {}) {
+  if (notification?.data?.type) return notification.data.type;
+  const tag = String(notification?.tag || "");
+  if (tag.startsWith("appointment-")) return "appointment";
+  if (tag.startsWith("medication-")) return "medication";
+  return "";
+}
+
+function buildScheduledNotificationId(notification = {}) {
+  if (notification?.id) return String(notification.id);
+  if (notification?.tag) return String(notification.tag);
+
+  const type = inferNotificationType(notification) || "notification";
+  const entityId =
+    notification?.data?.appointmentId ||
+    notification?.data?.medicationId ||
+    notification?.appointmentId ||
+    notification?.medicationId ||
+    "generic";
+  const triggerAt = notification?.triggerAt || notification?.data?.triggerAt || "now";
+
+  return `${type}-${entityId}-${triggerAt}`;
 }
 
 // Rate limiter para evitar muchas notificaciones simultáneas al iniciar sesión
@@ -130,12 +154,18 @@ class NotificationManager {
    * Agregar una notificación programada
    */
   addScheduledNotification(notification) {
+    const id = buildScheduledNotificationId(notification);
     const created = {
-      id: `${Date.now()}-${Math.random()}`,
+      id,
       ...notification,
       createdAt: Date.now()
     };
-    this.scheduledNotifications.push(created);
+    const existingIndex = this.scheduledNotifications.findIndex((item) => item.id === id);
+    if (existingIndex >= 0) {
+      this.scheduledNotifications[existingIndex] = created;
+    } else {
+      this.scheduledNotifications.push(created);
+    }
     this.saveScheduledNotifications();
     scheduleInServiceWorker(created);
     return created;
@@ -153,6 +183,21 @@ class NotificationManager {
     this.scheduledNotifications = this.scheduledNotifications.filter(n => n.id !== id);
     this.saveScheduledNotifications();
     removeScheduledInServiceWorker(id);
+  }
+
+  removeScheduledNotificationsByType(type) {
+    if (!type) return;
+    const toRemove = this.scheduledNotifications.filter(
+      (notification) => inferNotificationType(notification) === type
+    );
+    if (!toRemove.length) return;
+    this.scheduledNotifications = this.scheduledNotifications.filter(
+      (notification) => inferNotificationType(notification) !== type
+    );
+    this.saveScheduledNotifications();
+    toRemove.forEach((notification) => {
+      removeScheduledInServiceWorker(notification.id);
+    });
   }
 
   /**
@@ -307,8 +352,12 @@ export function clearScheduledNotifications() {
 export function scheduleReminderNotifications(reminders, customOffsets = null) {
   appointmentTimers.forEach(clearTimeout);
   appointmentTimers = [];
+  notificationManager.removeScheduledNotificationsByType("appointment");
 
-  if (!reminders?.length) return;
+  if (!reminders?.length) {
+    notificationManager.cleanOldNotifications();
+    return;
+  }
 
   // Offsets personalizables
   const offsets = customOffsets || [
@@ -529,8 +578,12 @@ function buildMedicationScheduleEventsBetween(med, windowStart, windowEnd) {
 export function scheduleMedicationNotifications(medications) {
   medicationTimers.forEach(clearTimeout);
   medicationTimers = [];
+  notificationManager.removeScheduledNotificationsByType("medication");
 
-  if (!medications?.length) return;
+  if (!medications?.length) {
+    notificationManager.cleanOldNotifications();
+    return;
+  }
 
   const leadOffsets = [MEDICATION_LEAD_MINUTES, 0];
   const now = new Date();

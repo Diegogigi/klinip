@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v19";
+const CACHE_NAME = "klinip-cache-v20";
 const ASSETS = [
   "/",
   "/manifest.webmanifest",
@@ -173,7 +173,7 @@ async function scheduleNotification(notification) {
     const db = await openNotificationsDB();
     const tx = db.transaction(NOTIFICATIONS_STORE, "readwrite");
     const store = tx.objectStore(NOTIFICATIONS_STORE);
-    await requestToPromise(store.add(notification));
+    await requestToPromise(store.put(notification));
   } catch (err) {
     console.error("Error saving scheduled notification:", err);
   }
@@ -330,7 +330,13 @@ async function checkAndShowPendingNotifications() {
         icon: notification.icon || "/icons/android-chrome-192x192.png",
         badge: "/icons/android-chrome-192x192.png",
         tag: notification.tag,
-        data: notification.data || { url: notification.url || "/" },
+        data: {
+          ...(notification.data || {}),
+          url:
+            (notification.data && notification.data.url) ||
+            notification.url ||
+            "/",
+        },
         requireInteraction: true,
         vibrate: [200, 100, 200],
         actions
@@ -446,6 +452,10 @@ self.addEventListener("push", (event) => {
     (data.medicationId ? `medication-${data.medicationId}` : null) ||
     `push-${Date.now()}`;
 
+  if (!shouldShowNotification(tag)) {
+    return;
+  }
+
   let requireInteraction = true;
   let vibrate = [200, 100, 200];
 
@@ -511,15 +521,59 @@ self.addEventListener("push", (event) => {
   );
 });
 
+function toAbsoluteAppUrl(url) {
+  const raw = String(url || "/").trim();
+  if (!raw) {
+    return `${self.location.origin}/#/`;
+  }
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  if (raw.startsWith("/#")) {
+    return `${self.location.origin}${raw}`;
+  }
+  if (raw.startsWith("/")) {
+    return `${self.location.origin}/#${raw}`;
+  }
+  if (raw.startsWith("#")) {
+    return `${self.location.origin}/${raw}`;
+  }
+  return `${self.location.origin}/#/${raw}`;
+}
+
+async function openNotificationTarget(targetUrl) {
+  const absoluteTargetUrl = toAbsoluteAppUrl(targetUrl);
+  const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
+  const exactClient = clientList.find((client) => client.url === absoluteTargetUrl);
+
+  if (exactClient && "focus" in exactClient) {
+    return exactClient.focus();
+  }
+
+  if (clients.openWindow) {
+    const openedClient = await clients.openWindow(absoluteTargetUrl);
+    if (openedClient && "focus" in openedClient) {
+      return openedClient.focus();
+    }
+    return openedClient;
+  }
+
+  for (const client of clientList) {
+    if ("focus" in client) {
+      await client.focus();
+      if (client.navigate) {
+        return client.navigate(absoluteTargetUrl);
+      }
+      return client;
+    }
+  }
+
+  return null;
+}
+
 self.addEventListener("notificationclick", (event) => {
   const notificationData = event.notification.data || {};
   event.notification.close();
-  const normalizeUrl = (url) => {
-    if (!url) return "/#/";
-    if (url.startsWith("/#")) return url;
-    if (url.startsWith("/")) return `/#${url}`;
-    return `/#/${url}`;
-  };
 
   if (event.action === "close") {
     return;
@@ -528,31 +582,13 @@ self.addEventListener("notificationclick", (event) => {
   if (event.action === "done") {
     const appointmentId = notificationData.appointmentId;
     const medicationId = notificationData.medicationId;
-    const targetUrl = normalizeUrl(
+    const targetUrl =
       appointmentId
         ? `/appointments?complete=${appointmentId}`
         : medicationId
         ? `/medications?intake=${medicationId}`
-        : notificationData.url || "/"
-    );
-    event.waitUntil(
-      clients
-        .matchAll({ type: "window", includeUncontrolled: true })
-        .then((clientList) => {
-          for (const client of clientList) {
-            if ("focus" in client) {
-              return client.focus().then(() => {
-                if (client.navigate) {
-                  return client.navigate(targetUrl);
-                }
-              });
-            }
-          }
-          if (clients.openWindow) {
-            return clients.openWindow(targetUrl);
-          }
-        })
-    );
+        : notificationData.url || "/";
+    event.waitUntil(openNotificationTarget(targetUrl));
     return;
   }
 
@@ -560,34 +596,16 @@ self.addEventListener("notificationclick", (event) => {
   let targetUrl = notificationData.url || "/";
 
   if (isDefaultClick || event.action === "open") {
-    if (notificationData.appointmentId) {
+    if (!notificationData.url && notificationData.appointmentId) {
       targetUrl = `/appointments?notify=1&appointmentId=${notificationData.appointmentId}`;
-    } else if (notificationData.medicationId) {
+    } else if (!notificationData.url && notificationData.medicationId) {
       targetUrl = `/medications?notify=1&medicationId=${notificationData.medicationId}`;
-    } else if (notificationData.kind === "note") {
+    } else if (!notificationData.url && notificationData.kind === "note") {
       targetUrl = "/";
     }
   }
-  targetUrl = normalizeUrl(targetUrl);
 
-  event.waitUntil(
-    clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
-        for (const client of clientList) {
-          if ("focus" in client) {
-            return client.focus().then(() => {
-              if (client.navigate) {
-                return client.navigate(targetUrl);
-              }
-            });
-          }
-        }
-        if (clients.openWindow) {
-          return clients.openWindow(targetUrl);
-        }
-      })
-  );
+  event.waitUntil(openNotificationTarget(targetUrl));
 });
 
 self.addEventListener("notificationclose", () => {});

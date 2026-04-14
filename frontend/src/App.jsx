@@ -18,6 +18,7 @@ import {
   scheduleReminderNotifications,
   scheduleMedicationNotifications,
 } from "./services/notificationManager";
+import { subscribeClinicalDataChanged } from "./utils/clinicalRefresh";
 import { isHandheldViewport } from "./utils/mobileViewport";
 import {
   getMedicationScheduleTimes,
@@ -1079,20 +1080,43 @@ export default function App() {
     clearScheduledNotifications();
     if (!user) return;
     let active = true;
-    (async () => {
+    let refreshSequence = 0;
+    const refreshScheduledNotifications = async (sources = []) => {
+      const currentSequence = ++refreshSequence;
+      const normalizedSources = Array.isArray(sources) ? sources : [];
+      const refreshAppointments =
+        normalizedSources.length === 0 || normalizedSources.includes("appointments");
+      const refreshMedications =
+        normalizedSources.length === 0 || normalizedSources.includes("medications");
+
+      if (!refreshAppointments && !refreshMedications) return;
+
       try {
         const [appointments, medications] = await Promise.all([
-          getAppointments().catch(() => []),
-          getMedications().catch(() => []),
+          refreshAppointments ? getAppointments().catch(() => []) : Promise.resolve(null),
+          refreshMedications ? getMedications().catch(() => []) : Promise.resolve(null),
         ]);
-        if (!active) return;
-        scheduleReminderNotifications(appointments || []);
-        scheduleMedicationNotifications(medications || []);
+        if (!active || currentSequence !== refreshSequence) return;
+        if (refreshAppointments) {
+          scheduleReminderNotifications(appointments || []);
+        }
+        if (refreshMedications) {
+          scheduleMedicationNotifications(medications || []);
+        }
       } catch (err) {
         console.warn("No se pudieron programar notificaciones", err);
       }
-    })();
-    return () => { active = false; };
+    };
+
+    refreshScheduledNotifications();
+    const unsubscribeClinicalRefresh = subscribeClinicalDataChanged((detail) => {
+      refreshScheduledNotifications(detail?.sources || []);
+    });
+
+    return () => {
+      active = false;
+      unsubscribeClinicalRefresh();
+    };
   }, [user]);
 
   useEffect(() => {
