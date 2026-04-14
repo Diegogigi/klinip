@@ -168,11 +168,12 @@ export default function MiSalud() {
       <header className="clp-patient">
         <div className="clp-patient-icon"><IcoShield /></div>
         <div className="clp-patient-copy">
-          <p className="clp-patient-name">{profile?.full_name || "Mi perfil de salud"}</p>
+          <p className="clp-patient-greet">Hola,</p>
+          <p className="clp-patient-name">{profile?.full_name || "Mi salud"}</p>
           <p className="clp-patient-meta">
             {hasData
-              ? `${appointments.length} citas · ${activeMeds.length} tratamientos · ${documents.length} docs`
-              : "Sin registros aún"}
+              ? `${appointments.length} citas · ${activeMeds.length} medicamentos · ${documents.length} documentos`
+              : "Todavía no tienes información guardada"}
           </p>
         </div>
         {warnings.length > 0 && (
@@ -191,10 +192,13 @@ export default function MiSalud() {
       )}
 
       {/* ═══ NEXT APPOINTMENT ═══ */}
-      <section className="clp-card" aria-labelledby="clp-appt-h">
+      <section className="clp-card tone-blue" aria-labelledby="clp-appt-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-blue"><IcoCal /></span>
-          <h2 className="clp-card-title" id="clp-appt-h">Próxima cita</h2>
+          <div className="clp-card-titles">
+            <h2 className="clp-card-title" id="clp-appt-h">Tu próxima cita</h2>
+            <p className="clp-card-sub">Lo siguiente en tu agenda médica</p>
+          </div>
           <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
         </div>
         {nextAppt ? (
@@ -226,10 +230,13 @@ export default function MiSalud() {
       </section>
 
       {/* ═══ MEDICATION TRACKER ═══ */}
-      <section className="clp-card" aria-labelledby="clp-med-h">
+      <section className="clp-card tone-green" aria-labelledby="clp-med-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-green"><IcoPill /></span>
-          <h2 className="clp-card-title" id="clp-med-h">Medicamentos</h2>
+          <div className="clp-card-titles">
+            <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
+            <p className="clp-card-sub">Toca el círculo verde cuando tomes tu dosis</p>
+          </div>
           <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
         </div>
         {activeMeds.length > 0 ? (
@@ -252,10 +259,11 @@ export default function MiSalud() {
                     className={`clp-med-check ${done ? "is-done" : ""}`}
                     disabled={done || busy}
                     onClick={() => markIntake(med.id)}
-                    aria-label={`Registrar toma de ${med.name}`}
-                    title={done ? "Registrada" : "Registrar toma"}
+                    aria-label={`Marcar ${med.name} como tomado`}
+                    title={done ? "Ya lo tomaste" : "Toca para marcar como tomado"}
                   >
-                    {done ? <IcoCheck /> : busy ? <span className="clp-med-spin" /> : <IcoCheck />}
+                    {busy ? <span className="clp-med-spin" /> : <IcoCheck />}
+                    <span className="clp-med-check-label">{done ? "Tomado" : "Tomé"}</span>
                   </button>
                 </div>
               );
@@ -274,10 +282,13 @@ export default function MiSalud() {
       </section>
 
       {/* ═══ RECENT DOCUMENTS ═══ */}
-      <section className="clp-card" aria-labelledby="clp-doc-h">
+      <section className="clp-card tone-slate" aria-labelledby="clp-doc-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-slate"><IcoDoc /></span>
-          <h2 className="clp-card-title" id="clp-doc-h">Documentos</h2>
+          <div className="clp-card-titles">
+            <h2 className="clp-card-title" id="clp-doc-h">Tus documentos</h2>
+            <p className="clp-card-sub">Recetas, exámenes y archivos médicos</p>
+          </div>
           <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
         </div>
         {documents.length > 0 ? (
@@ -304,10 +315,13 @@ export default function MiSalud() {
 
       {/* ═══ ACTIVITY FEED ═══ */}
       {recentEvents.length > 0 && (
-        <section className="clp-card" aria-labelledby="clp-activity-h">
+        <section className="clp-card tone-indigo" aria-labelledby="clp-activity-h">
           <div className="clp-card-head">
             <span className="clp-card-icon tone-indigo"><IcoActivity /></span>
-            <h2 className="clp-card-title" id="clp-activity-h">Actividad reciente</h2>
+            <div className="clp-card-titles">
+              <h2 className="clp-card-title" id="clp-activity-h">Lo último que pasó</h2>
+              <p className="clp-card-sub">Tu actividad de salud reciente</p>
+            </div>
             <Link to="/timeline" className="clp-card-link">Historia <IcoChevron /></Link>
           </div>
           <div className="clp-activity-list" role="list">
@@ -327,24 +341,27 @@ export default function MiSalud() {
       )}
 
       {/* ═══ QUICK ACCESS (secondary, compact) ═══ */}
-      <nav className="clp-quick-nav" aria-label="Herramientas clínicas">
-        <Link to="/clinical-reports" className="clp-quick-item">
-          <span className="clp-quick-icon"><IcoReport /></span>
-          <span>Reportes IA</span>
-        </Link>
-        <Link to="/calendar" className="clp-quick-item">
-          <span className="clp-quick-icon"><IcoCalGrid /></span>
-          <span>Calendario</span>
-        </Link>
-        <Link to="/stats" className="clp-quick-item">
-          <span className="clp-quick-icon"><IcoChart /></span>
-          <span>Indicadores</span>
-        </Link>
-        <Link to="/timeline" className="clp-quick-item">
-          <span className="clp-quick-icon"><IcoTimeline /></span>
-          <span>Historia</span>
-        </Link>
-      </nav>
+      <div className="clp-quick-wrap">
+        <p className="clp-quick-heading">Otras herramientas</p>
+        <nav className="clp-quick-nav" aria-label="Herramientas clínicas">
+          <Link to="/clinical-reports" className="clp-quick-item tone-blue">
+            <span className="clp-quick-icon"><IcoReport /></span>
+            <span>Reportes IA</span>
+          </Link>
+          <Link to="/calendar" className="clp-quick-item tone-green">
+            <span className="clp-quick-icon"><IcoCalGrid /></span>
+            <span>Calendario</span>
+          </Link>
+          <Link to="/stats" className="clp-quick-item tone-indigo">
+            <span className="clp-quick-icon"><IcoChart /></span>
+            <span>Indicadores</span>
+          </Link>
+          <Link to="/timeline" className="clp-quick-item tone-slate">
+            <span className="clp-quick-icon"><IcoTimeline /></span>
+            <span>Historia</span>
+          </Link>
+        </nav>
+      </div>
 
     </div>
   );
