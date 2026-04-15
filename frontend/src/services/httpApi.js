@@ -623,6 +623,21 @@ export async function getAiLifeTimeline(params = {}) {
   return res.data || {};
 }
 
+export async function getClinicalEpisodes(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/episodes`);
+  return ensureArray(res.data);
+}
+
+export async function getClinicalEpisodeDetail(profileId, episodeId) {
+  const res = await api.get(`/health-profiles/${profileId}/episodes/${episodeId}`);
+  return res.data || {};
+}
+
+export async function relinkClinicalEpisodeItem(profileId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/episodes/relink-item`, payload);
+  return res.data;
+}
+
 export async function getInteroperabilitySources(profileId) {
   const res = await api.get("/ai/interoperability/sources", {
     params: profileId ? { profile_id: profileId } : undefined,

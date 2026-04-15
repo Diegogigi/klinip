@@ -1,316 +1,580 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { getActiveHealthProfile, getAiLifeTimeline, getHealthProfiles } from "../api";
-import { toLocaleDateOrEmpty } from "../utils/dates";
-import { cleanUiText } from "../utils/textEncoding";
+import {
+  getActiveHealthProfile,
+  getAiLifeTimeline,
+  getClinicalEpisodeDetail,
+  getClinicalEpisodes,
+  getHealthProfiles,
+} from "../api";
 import { ensureArray } from "../utils/arrays";
+import { parseDate, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
+import { cleanUiText } from "../utils/textEncoding";
 
-const SUMMARY_TOKEN_LABELS = [
-  [/health_alerts?/gi, "alertas de salud"],
-  [/diagnostic_results?/gi, "resultados cl\u00ednicos"],
-  [/external_records?/gi, "registros externos"],
-  [/appointments?/gi, "citas"],
-  [/documents?/gi, "documentos"],
-  [/medications?/gi, "medicamentos"],
-  [/treatments?/gi, "tratamientos"],
-  [/results?/gi, "resultados"],
-];
+const EPISODE_STATUS_LABELS = {
+  active: "Activo",
+  monitoring: "En seguimiento",
+  pending: "Pendiente",
+  paused: "En pausa",
+  resolved: "Resuelto",
+  completed: "Cerrado",
+  closed: "Cerrado",
+};
 
-const typeLabels = {
+const EPISODE_TYPE_LABELS = {
+  general: "Proceso general",
+  consultation: "Consulta médica",
+  exam: "Exámenes",
+  treatment: "Tratamiento",
+  surgery: "Cirugía",
+  rehabilitation: "Rehabilitación",
+  chronic: "Control crónico",
+};
+
+const EVENT_TYPE_LABELS = {
   appointment: "Cita",
   document: "Documento",
   medication: "Medicamento",
-  treatment: "Tratamiento",
-  diagnostic_result: "Resultado",
-  external_record: "Registro externo",
-  health_alert: "Alerta",
+  medication_intake: "Dosis registrada",
+  external_record: "Resultado",
 };
 
-const filterMap = {
-  all: null,
-  appointments: "appointment",
-  documents: "document",
-  medications: "medication",
-  treatments: "treatment",
-  results: "diagnostic_result",
-};
+const STATUS_FILTERS = [
+  { id: "all", label: "Todos" },
+  { id: "active", label: "Activos" },
+  { id: "pending", label: "Con pendiente" },
+  { id: "closed", label: "Cerrados" },
+];
 
-function getTimelineIcon(eventType) {
-  if (eventType === "appointment") return "\u{1F4C5}";
-  if (eventType === "document") return "\u{1F4C4}";
-  if (eventType === "medication" || eventType === "treatment") return "\u{1F48A}";
-  if (eventType === "diagnostic_result") return "\u{1F9EA}";
-  if (eventType === "external_record") return "\u{1F517}";
-  if (eventType === "health_alert") return "\u26A0\uFE0F";
-  return "\u{1F4CC}";
+function getEpisodeStatusLabel(status) {
+  return EPISODE_STATUS_LABELS[String(status || "").toLowerCase()] || "En curso";
 }
-function humanizeTimelineSummary(summary) {
-  let text = cleanUiText(summary, "");
-  if (!text) return { lead: "", detail: "", highlights: [] };
 
-  SUMMARY_TOKEN_LABELS.forEach(([pattern, replacement]) => {
-    text = text.replace(pattern, replacement);
-  });
+function getEpisodeTypeLabel(type) {
+  return EPISODE_TYPE_LABELS[String(type || "").toLowerCase()] || "Proceso de salud";
+}
 
-  text = text
-    .replace(/\bEvolucion\b/g, "Evoluci\u00f3n")
-    .replace(/\bclinicos\b/g, "cl\u00ednicos")
-    .replace(/\bUltimos\b/g, "\u00daltimos")
-    .replace(/\bmedica\b/g, "m\u00e9dica")
-    .replace(/\bcronologico\b/g, "cronol\u00f3gico");
+function getEventTypeLabel(type) {
+  return EVENT_TYPE_LABELS[String(type || "").toLowerCase()] || "Evento";
+}
 
-  const [leadPart = "", detailPart = ""] = text.split(/\u00daltimos hitos:\s*/i);
-  const lead = leadPart.trim().replace(/\s+/g, " ");
-  const highlights = detailPart
-    .split(/\s*,\s*/)
-    .map((item) => cleanUiText(item))
+function getEpisodeTone(status) {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "completed" || normalized === "closed" || normalized === "resolved") return "closed";
+  if (normalized === "pending" || normalized === "paused") return "attention";
+  return "active";
+}
+
+function buildEpisodeSearchValue(episode) {
+  return [
+    cleanUiText(episode.title),
+    cleanUiText(episode.summary),
+    cleanUiText(episode.care_summary),
+    ensureArray(episode.tags_json).join(" "),
+    cleanUiText(episode.episode_type),
+  ]
     .filter(Boolean)
-    .slice(0, 4);
+    .join(" ")
+    .toLowerCase();
+}
 
-  const leadSentences = lead
-    .split(/(?<=\.)\s+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+function getEpisodeLead(episode) {
+  const summary = cleanUiText(episode.care_summary || episode.summary, "");
+  if (summary) return summary;
+  return "Aquí reunimos citas, documentos, resultados y tratamientos de este proceso.";
+}
 
+function getProfileLabel(selectedProfileId, profiles, activeProfile) {
+  if (selectedProfileId === "active") {
+    return cleanUiText(activeProfile?.full_name || activeProfile?.name, "perfil activo");
+  }
+  const found = ensureArray(profiles).find((item) => String(item.id) === String(selectedProfileId));
+  return cleanUiText(found?.full_name || found?.name, "perfil");
+}
+
+function getEpisodeNextStep(episode, detail) {
+  const pendingTasks = ensureArray(detail?.tasks).filter((task) => task.status !== "completed");
+  const firstPendingTask = pendingTasks[0];
+  if (firstPendingTask?.title) {
+    const dueText = firstPendingTask.due_at ? ` antes del ${toLocaleDateOrEmpty(firstPendingTask.due_at)}` : "";
+    return `${cleanUiText(firstPendingTask.title)}${dueText}`.trim();
+  }
+  if (episode.next_due_at) {
+    return `Revisar este proceso el ${toLocaleDateOrEmpty(episode.next_due_at)}.`;
+  }
+  return "No hay un próximo paso pendiente registrado.";
+}
+
+function getEpisodeCountSummary(episode) {
+  const parts = [];
+  if (episode.linked_appointments) parts.push(`${episode.linked_appointments} cita${episode.linked_appointments === 1 ? "" : "s"}`);
+  if (episode.linked_documents) parts.push(`${episode.linked_documents} documento${episode.linked_documents === 1 ? "" : "s"}`);
+  if (episode.linked_medications) parts.push(`${episode.linked_medications} medicamento${episode.linked_medications === 1 ? "" : "s"}`);
+  if (episode.linked_external_records) {
+    parts.push(`${episode.linked_external_records} resultado${episode.linked_external_records === 1 ? "" : "s"}`);
+  }
+  if (!parts.length) return "Aún no hay elementos vinculados.";
+  return `Incluye ${parts.join(", ")}.`;
+}
+
+function getTaskTone(task) {
+  if (String(task?.status || "").toLowerCase() === "completed") return "done";
+  const dueDate = parseDate(task?.due_at);
+  if (dueDate && dueDate.getTime() < Date.now()) return "overdue";
+  return "pending";
+}
+
+function getTaskStatusLabel(task) {
+  const normalized = String(task?.status || "").toLowerCase();
+  if (normalized === "completed") return "Listo";
+  if (getTaskTone(task) === "overdue") return "Atrasado";
+  return "Pendiente";
+}
+
+function getTaskDateLabel(task) {
+  if (task.completed_at) return `Completado el ${toLocaleDateOrEmpty(task.completed_at)}`;
+  if (task.due_at) return `Hacer antes del ${toLocaleDateOrEmpty(task.due_at)}`;
+  return "Sin fecha límite";
+}
+
+function getTimelineEventDate(event) {
+  return event?.event_at ? toLocaleDateTimeOrEmpty(event.event_at) : "Fecha no informada";
+}
+
+function getLegacyLeadText(item) {
+  const typeLabel = getEventTypeLabel(item.event_type);
+  const title = cleanUiText(item.title, "Evento clínico");
+  return `${typeLabel}: ${title}`;
+}
+
+function renderRelatedItem(item, kind) {
+  if (kind === "appointments") {
+    return {
+      title: cleanUiText(item.specialty || item.type, "Cita médica"),
+      detail: [cleanUiText(item.status), cleanUiText(item.center), toLocaleDateTimeOrEmpty(item.date_time)]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+  if (kind === "documents") {
+    return {
+      title: cleanUiText(item.filename, "Documento clínico"),
+      detail: [cleanUiText(item.doc_type), cleanUiText(item.center), toLocaleDateOrEmpty(item.date)]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
+  if (kind === "medications") {
+    return {
+      title: cleanUiText(item.name, "Medicamento"),
+      detail: [cleanUiText(item.dose), cleanUiText(item.frequency), item.completed ? "Finalizado" : "Activo"]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  }
   return {
-    lead: leadSentences[0] || lead,
-    detail: leadSentences.slice(1).join(" "),
-    highlights,
+    title: cleanUiText(item.title, "Resultado"),
+    detail: [cleanUiText(item.record_type), toLocaleDateTimeOrEmpty(item.event_at)].filter(Boolean).join(" · "),
   };
+}
+
+function EpisodeSection({ title, count, emptyText, items, kind }) {
+  const safeItems = ensureArray(items);
+  return (
+    <section className="history-episode-panel">
+      <div className="history-episode-panel-head">
+        <h4>{title}</h4>
+        <span>{count}</span>
+      </div>
+      {safeItems.length ? (
+        <div className="history-episode-mini-list">
+          {safeItems.slice(0, 3).map((item) => {
+            const view = renderRelatedItem(item, kind);
+            return (
+              <article key={`${kind}-${item.id}`} className="history-episode-mini-item">
+                <strong>{view.title}</strong>
+                <p>{view.detail || "Sin detalle adicional"}</p>
+              </article>
+            );
+          })}
+          {safeItems.length > 3 ? (
+            <p className="history-episode-more">+ {safeItems.length - 3} elemento(s) más dentro de este proceso.</p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="history-episode-empty">{emptyText}</p>
+      )}
+    </section>
+  );
 }
 
 export default function Timeline() {
   const [profiles, setProfiles] = useState([]);
-  const [timeline, setTimeline] = useState({ summary: "", events: [], event_count: 0 });
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [activeProfile, setActiveProfile] = useState(null);
   const [selectedProfileId, setSelectedProfileId] = useState("active");
-  const [periodDays, setPeriodDays] = useState("365");
-  const [includeFamily, setIncludeFamily] = useState(false);
+  const [resolvedProfileId, setResolvedProfileId] = useState(null);
+  const [episodes, setEpisodes] = useState([]);
+  const [episodeDetails, setEpisodeDetails] = useState({});
+  const [legacyTimeline, setLegacyTimeline] = useState({ summary: "", events: [], event_count: 0 });
+  const [loading, setLoading] = useState(true);
+  const [loadingDetailId, setLoadingDetailId] = useState(null);
+  const [expandedEpisodeId, setExpandedEpisodeId] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
       try {
-        const [activeProfile, profilesData] = await Promise.all([
+        const [activeProfileData, profilesData] = await Promise.all([
           getActiveHealthProfile().catch(() => null),
           getHealthProfiles().catch(() => []),
         ]);
         if (cancelled) return;
-        setProfiles(ensureArray(profilesData));
-        const resolvedProfileId = selectedProfileId === "active" ? activeProfile?.id : Number(selectedProfileId);
-        const response = await getAiLifeTimeline({
-          profile_id: resolvedProfileId || undefined,
-          days: Number(periodDays) || 365,
-          include_family: includeFamily,
-        }).catch(() => ({ summary: "", events: [], event_count: 0 }));
+
+        const safeProfiles = ensureArray(profilesData);
+        const fallbackProfileId = activeProfileData?.id || safeProfiles[0]?.id || null;
+        const nextResolvedProfileId =
+          selectedProfileId === "active" ? fallbackProfileId : Number(selectedProfileId) || fallbackProfileId;
+
+        setActiveProfile(activeProfileData || null);
+        setProfiles(safeProfiles);
+        setResolvedProfileId(nextResolvedProfileId || null);
+
+        const [episodesData, legacyData] = await Promise.all([
+          nextResolvedProfileId ? getClinicalEpisodes(nextResolvedProfileId).catch(() => []) : Promise.resolve([]),
+          getAiLifeTimeline({
+            profile_id: nextResolvedProfileId || undefined,
+            days: 365,
+            include_family: false,
+          }).catch(() => ({ summary: "", events: [], event_count: 0 })),
+        ]);
         if (cancelled) return;
-        setTimeline(response || { summary: "", events: [], event_count: 0 });
+
+        const safeEpisodes = ensureArray(episodesData);
+        setEpisodes(safeEpisodes);
+        setLegacyTimeline(legacyData || { summary: "", events: [], event_count: 0 });
+        setEpisodeDetails({});
+        setExpandedEpisodeId(safeEpisodes[0]?.id || null);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
+
     load();
     return () => {
       cancelled = true;
     };
-  }, [selectedProfileId, periodDays, includeFamily]);
+  }, [selectedProfileId]);
 
-  const events = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase();
-    return ensureArray(timeline.events).filter((item) => {
-      const matchesType = !filterMap[filter] || item.event_type === filterMap[filter];
-      const haystack = [
-        cleanUiText(item.title),
-        cleanUiText(item.summary),
-        cleanUiText(item.category),
-        cleanUiText(item.profile_name),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      const matchesSearch = !search || haystack.includes(search);
-      return matchesType && matchesSearch;
+  useEffect(() => {
+    let cancelled = false;
+    const loadDetail = async () => {
+      if (!resolvedProfileId || !expandedEpisodeId || episodeDetails[expandedEpisodeId]) return;
+      setLoadingDetailId(expandedEpisodeId);
+      try {
+        const detail = await getClinicalEpisodeDetail(resolvedProfileId, expandedEpisodeId).catch(() => null);
+        if (cancelled || !detail) return;
+        setEpisodeDetails((current) => ({
+          ...current,
+          [expandedEpisodeId]: detail,
+        }));
+      } finally {
+        if (!cancelled) setLoadingDetailId(null);
+      }
+    };
+    loadDetail();
+    return () => {
+      cancelled = true;
+    };
+  }, [episodeDetails, expandedEpisodeId, resolvedProfileId]);
+
+  const filteredEpisodes = useMemo(() => {
+    const searchValue = searchTerm.trim().toLowerCase();
+    return ensureArray(episodes).filter((episode) => {
+      const tone = getEpisodeTone(episode.status);
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "active" && tone === "active") ||
+        (statusFilter === "pending" && episode.pending_tasks > 0) ||
+        (statusFilter === "closed" && tone === "closed");
+      const matchesSearch = !searchValue || buildEpisodeSearchValue(episode).includes(searchValue);
+      return matchesStatus && matchesSearch;
     });
-  }, [timeline.events, filter, searchTerm]);
+  }, [episodes, searchTerm, statusFilter]);
 
   const stats = useMemo(() => {
-    const base = { appointments: 0, documents: 0, medications: 0, total: events.length };
-    events.forEach((item) => {
-      if (item.event_type === "appointment") base.appointments += 1;
-      if (item.event_type === "document" || item.event_type === "diagnostic_result") base.documents += 1;
-      if (item.event_type === "medication" || item.event_type === "treatment") base.medications += 1;
-    });
-    return base;
-  }, [events]);
+    const safeEpisodes = ensureArray(episodes);
+    return {
+      total: safeEpisodes.length,
+      active: safeEpisodes.filter((item) => getEpisodeTone(item.status) === "active").length,
+      pending: safeEpisodes.reduce((sum, item) => sum + Number(item.pending_tasks || 0), 0),
+      medications: safeEpisodes.reduce((sum, item) => sum + Number(item.linked_medications || 0), 0),
+    };
+  }, [episodes]);
 
-  const summaryView = useMemo(
-    () => humanizeTimelineSummary(timeline.summary || ""),
-    [timeline.summary]
+  const profileLabel = useMemo(
+    () => getProfileLabel(selectedProfileId, profiles, activeProfile),
+    [activeProfile, profiles, selectedProfileId]
   );
+
+  const legacyEvents = useMemo(() => ensureArray(legacyTimeline.events).slice(0, 6), [legacyTimeline.events]);
 
   return (
     <>
-      <div className="card timeline-overview-card">
-        <h2 className="card-title">{"Mi Historia Clínica"}</h2>
-        <p className="muted">
-          {
-            "Línea de vida médica construida desde tu contexto clínico real. Resume citas, documentos, tratamientos, resultados y eventos relevantes en orden cronológico."
-          }
-        </p>
-        <div className="timeline-ai-summary">
-          {summaryView.lead ? (
-            <>
-              <p className="timeline-ai-summary-lead">{summaryView.lead}</p>
-              {summaryView.detail ? <p className="timeline-ai-summary-detail">{summaryView.detail}</p> : null}
-              {summaryView.highlights.length ? (
-                <div className="timeline-ai-summary-highlights">
-                  {summaryView.highlights.map((item) => (
-                    <span key={item} className="timeline-ai-summary-pill">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <p className="timeline-ai-summary-lead">{"Cargando resumen evolutivo..."}</p>
-          )}
+      <div className="card history-episodes-hero">
+        <div className="history-episodes-hero-copy">
+          <span className="history-episodes-kicker">Historial</span>
+          <h2 className="card-title">Procesos de salud conectados</h2>
+          <p className="muted">
+            Aquí cada atención se entiende como un proceso completo: consulta, exámenes, documentos, resultados y
+            tratamiento en un mismo lugar.
+          </p>
+          <p className="history-episodes-hero-note">
+            Perfil actual: <strong>{profileLabel}</strong>
+          </p>
         </div>
-        <div className="timeline-stats">
-          <div className="timeline-stat-card is-appointments">
-            <div className="timeline-stat-number">{stats.appointments}</div>
-            <div className="timeline-stat-label">Citas</div>
-          </div>
-          <div className="timeline-stat-card is-documents">
-            <div className="timeline-stat-number">{stats.documents}</div>
-            <div className="timeline-stat-label">Documentos</div>
-          </div>
-          <div className="timeline-stat-card is-medications">
-            <div className="timeline-stat-number">{stats.medications}</div>
-            <div className="timeline-stat-label">Tratamientos</div>
-          </div>
-          <div className="timeline-stat-card is-total">
-            <div className="timeline-stat-number">{timeline.event_count || 0}</div>
-            <div className="timeline-stat-label">Total</div>
-          </div>
+
+        <div className="history-episodes-stats">
+          <article className="history-episodes-stat">
+            <strong>{stats.total}</strong>
+            <span>Procesos</span>
+          </article>
+          <article className="history-episodes-stat">
+            <strong>{stats.active}</strong>
+            <span>Activos</span>
+          </article>
+          <article className="history-episodes-stat">
+            <strong>{stats.pending}</strong>
+            <span>Pendientes</span>
+          </article>
+          <article className="history-episodes-stat">
+            <strong>{stats.medications}</strong>
+            <span>Medicamentos</span>
+          </article>
         </div>
       </div>
 
-      <div className="card timeline-filters-card">
-        <div className="timeline-filters-shell">
-          <div className="timeline-advanced-filters">
-            <div className="input-group">
-              <label className="input-label">Perfil</label>
-              <select className="input-field" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
-                <option value="active">Perfil activo</option>
-                {profiles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {cleanUiText(item.full_name, `Perfil ${item.id}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <label className="input-label">{"Período"}</label>
-              <select className="input-field" value={periodDays} onChange={(e) => setPeriodDays(e.target.value)}>
-                <option value="30">30 días</option>
-                <option value="90">90 días</option>
-                <option value="180">180 días</option>
-                <option value="365">12 meses</option>
-              </select>
-            </div>
-            <label className="timeline-family-toggle">
-              <input type="checkbox" checked={includeFamily} onChange={(e) => setIncludeFamily(e.target.checked)} />
-              <span>Incluir familia</span>
-            </label>
+      <div className="card history-episodes-controls">
+        <div className="history-episodes-controls-grid">
+          <div className="input-group">
+            <label className="input-label">Perfil</label>
+            <select className="input-field" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
+              <option value="active">Perfil activo</option>
+              {profiles.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {cleanUiText(item.full_name, `Perfil ${item.id}`)}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div>
+          <div className="input-group">
+            <label className="input-label">Buscar proceso</label>
             <input
               type="text"
-              className="input-field timeline-search-input"
-              placeholder={"Buscar en la línea de vida médica..."}
+              className="input-field"
+              placeholder="Ejemplo: traumatología, rodilla, receta"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+        </div>
 
-          <div className="timeline-filter-row">
-            <button className={`${filter === "all" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`} onClick={() => setFilter("all")}>
-              Todos ({events.length})
+        <div className="history-episodes-filter-row" role="tablist" aria-label="Filtrar procesos">
+          {STATUS_FILTERS.map((item) => (
+            <button
+              key={item.id}
+              className={`${statusFilter === item.id ? "primary-btn" : "secondary-btn"} history-episodes-filter-btn`}
+              onClick={() => setStatusFilter(item.id)}
+            >
+              {item.label}
             </button>
-            <button className={`${filter === "appointments" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`} onClick={() => setFilter("appointments")}>
-              Citas
-            </button>
-            <button className={`${filter === "documents" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`} onClick={() => setFilter("documents")}>
-              Documentos
-            </button>
-            <button className={`${filter === "medications" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`} onClick={() => setFilter("medications")}>
-              Medicamentos
-            </button>
-            <button className={`${filter === "results" ? "primary-btn" : "secondary-btn"} timeline-filter-btn`} onClick={() => setFilter("results")}>
-              Resultados
-            </button>
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="card timeline-list-card">
-        {loading ? (
-          <div className="home-empty-state">{"Cargando línea de vida médica..."}</div>
-        ) : events.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "2rem" }}>
-            <p className="muted" style={{ fontSize: "1.1rem", marginBottom: "0.5rem" }}>
-              {searchTerm ? "No se encontraron resultados" : "Aún no hay eventos en tu línea de vida médica"}
+      {loading ? (
+        <div className="card history-episodes-empty">Estamos organizando tu historial por procesos de salud...</div>
+      ) : filteredEpisodes.length ? (
+        <div className="history-episodes-stack">
+          {filteredEpisodes.map((episode) => {
+            const detail = episodeDetails[episode.id];
+            const isExpanded = expandedEpisodeId === episode.id;
+            const tone = getEpisodeTone(episode.status);
+            const pendingTasks = ensureArray(detail?.tasks).filter((task) => task.status !== "completed");
+            const recentTimeline = ensureArray(detail?.timeline).slice().reverse().slice(0, 6);
+            const tags = ensureArray(episode.tags_json).filter(Boolean).slice(0, 4);
+
+            return (
+              <article key={episode.id} className={`card history-episode-card tone-${tone}`}>
+                <div className="history-episode-card-head">
+                  <div className="history-episode-eyebrow">
+                    <span className="history-episode-type">{getEpisodeTypeLabel(episode.episode_type)}</span>
+                    <span className={`history-episode-status tone-${tone}`}>{getEpisodeStatusLabel(episode.status)}</span>
+                  </div>
+                  <button
+                    className="secondary-btn history-episode-toggle"
+                    onClick={() => setExpandedEpisodeId(isExpanded ? null : episode.id)}
+                  >
+                    {isExpanded ? "Ocultar detalle" : "Ver proceso"}
+                  </button>
+                </div>
+
+                <h3 className="history-episode-title">{cleanUiText(episode.title, "Proceso de salud")}</h3>
+                <p className="history-episode-summary">{getEpisodeLead(episode)}</p>
+
+                <div className="history-episode-highlights">
+                  <article className="history-episode-highlight">
+                    <span>Próximo paso</span>
+                    <strong>{getEpisodeNextStep(episode, detail)}</strong>
+                  </article>
+                  <article className="history-episode-highlight">
+                    <span>Qué incluye</span>
+                    <strong>{getEpisodeCountSummary(episode)}</strong>
+                  </article>
+                  <article className="history-episode-highlight">
+                    <span>Último movimiento</span>
+                    <strong>{episode.last_activity_at ? toLocaleDateOrEmpty(episode.last_activity_at) : "Sin fecha registrada"}</strong>
+                  </article>
+                </div>
+
+                {tags.length ? (
+                  <div className="history-episode-tags">
+                    {tags.map((tag) => (
+                      <span key={`${episode.id}-${tag}`} className="history-episode-tag">
+                        {cleanUiText(tag)}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {isExpanded ? (
+                  <div className="history-episode-detail">
+                    {loadingDetailId === episode.id && !detail ? (
+                      <div className="history-episode-empty">Cargando este proceso...</div>
+                    ) : (
+                      <>
+                        <div className="history-episode-detail-grid">
+                          <section className="history-episode-panel">
+                            <div className="history-episode-panel-head">
+                              <h4>Lo que falta</h4>
+                              <span>{episode.pending_tasks || 0}</span>
+                            </div>
+                            {pendingTasks.length ? (
+                              <div className="history-episode-task-list">
+                                {pendingTasks.map((task) => (
+                                  <article key={task.id} className={`history-episode-task tone-${getTaskTone(task)}`}>
+                                    <div>
+                                      <strong>{cleanUiText(task.title, "Pendiente clínico")}</strong>
+                                      <p>{cleanUiText(task.description, getTaskDateLabel(task))}</p>
+                                    </div>
+                                    <span>{getTaskStatusLabel(task)}</span>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="history-episode-empty">No hay tareas pendientes en este proceso.</p>
+                            )}
+                          </section>
+
+                          <section className="history-episode-panel">
+                            <div className="history-episode-panel-head">
+                              <h4>Qué pasó hasta ahora</h4>
+                              <span>{ensureArray(detail?.timeline).length}</span>
+                            </div>
+                            {recentTimeline.length ? (
+                              <div className="history-episode-timeline">
+                                {recentTimeline.map((event, index) => (
+                                  <article key={`${episode.id}-${event.source_record_type}-${event.source_record_id}-${index}`} className="history-episode-timeline-item">
+                                    <div className="history-episode-timeline-dot" />
+                                    <div>
+                                      <strong>{getLegacyLeadText(event)}</strong>
+                                      <p>{cleanUiText(event.summary, "Sin detalle adicional")}</p>
+                                      <span>{getTimelineEventDate(event)}</span>
+                                    </div>
+                                  </article>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="history-episode-empty">Aún no hay eventos visibles dentro de este proceso.</p>
+                            )}
+                          </section>
+                        </div>
+
+                        <div className="history-episode-related-grid">
+                          <EpisodeSection
+                            title="Citas vinculadas"
+                            count={episode.linked_appointments || 0}
+                            emptyText="No hay citas vinculadas todavía."
+                            items={detail?.related_items?.appointments}
+                            kind="appointments"
+                          />
+                          <EpisodeSection
+                            title="Documentos"
+                            count={episode.linked_documents || 0}
+                            emptyText="No hay documentos vinculados todavía."
+                            items={detail?.related_items?.documents}
+                            kind="documents"
+                          />
+                          <EpisodeSection
+                            title="Medicamentos"
+                            count={episode.linked_medications || 0}
+                            emptyText="No hay medicamentos vinculados todavía."
+                            items={detail?.related_items?.medications}
+                            kind="medications"
+                          />
+                          <EpisodeSection
+                            title="Resultados e informes"
+                            count={episode.linked_external_records || 0}
+                            emptyText="No hay resultados vinculados todavía."
+                            items={detail?.related_items?.external_records}
+                            kind="external_records"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="history-episodes-stack">
+          <div className="card history-episodes-empty history-episodes-transition">
+            <h3>No encontramos procesos agrupados para este perfil</h3>
+            <p>
+              Estamos conectando tus atenciones para que se entiendan como un solo proceso. Mientras eso termina, abajo
+              verás la actividad reciente de la forma tradicional.
             </p>
           </div>
-        ) : (
-          <ul className="timeline vertical">
-            {events.map((item) => (
-              <li key={item.id} className={`timeline-item type-${item.event_type}`}>
-                <span className="timeline-node">{getTimelineIcon(item.event_type)}</span>
-                <div className="timeline-card">
-                  <div className="timeline-main">
-                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-                      <span className={`chip ${item.event_type === "document" ? "doc" : item.event_type}`}>
-                        {typeLabels[item.event_type] || cleanUiText(item.event_type, "Evento")}
-                      </span>
-                      {includeFamily ? (
-                        <span className="timeline-related-pill">
-                          {cleanUiText(item.profile_name, "Perfil relacionado")}
-                        </span>
-                      ) : null}
-                    </div>
-                    <span className="timeline-meta">{item.event_at ? toLocaleDateOrEmpty(item.event_at) : ""}</span>
-                  </div>
-                  <p className="timeline-title">{cleanUiText(item.title, "Evento clínico")}</p>
-                  {item.summary ? (
-                    <p className="timeline-notes">{cleanUiText(item.summary)}</p>
-                  ) : null}
-                  {item.category ? (
-                    <div className="timeline-related-panel">
-                      <div className="timeline-related-title">Categoría</div>
-                      <div className="timeline-related-item is-document">{cleanUiText(item.category)}</div>
-                      {item.metadata_json?.status ? (
-                        <div className="timeline-related-item is-appointment">
-                          Estado: {cleanUiText(item.metadata_json.status)}
-                        </div>
-                      ) : null}
-                      {item.metadata_json?.filename ? (
-                        <div className="timeline-related-item is-medication">
-                          Archivo: {cleanUiText(item.metadata_json.filename)}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+
+          <div className="card history-legacy-card">
+            <div className="history-legacy-head">
+              <div>
+                <span className="history-episodes-kicker">Vista temporal</span>
+                <h3>Actividad reciente aún sin agrupar</h3>
+              </div>
+              <span>{legacyTimeline.event_count || legacyEvents.length} evento(s)</span>
+            </div>
+
+            {legacyEvents.length ? (
+              <div className="history-legacy-list">
+                {legacyEvents.map((item, index) => (
+                  <article key={`${item.id || item.source_record_id || index}-${index}`} className="history-legacy-item">
+                    <strong>{getLegacyLeadText(item)}</strong>
+                    <p>{cleanUiText(item.summary, "Sin detalle adicional")}</p>
+                    <span>{item.event_at ? toLocaleDateTimeOrEmpty(item.event_at) : "Fecha no informada"}</span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="history-episodes-empty">Todavía no hay eventos clínicos para mostrar.</div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

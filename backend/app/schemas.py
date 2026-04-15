@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, EmailStr, field_serializer
-from .models import AppointmentType, AppointmentStatus, DocumentType
+from .models import AppointmentType, AppointmentStatus, ClinicalEpisodeStatus, DocumentType
 
 
 class UserCreate(BaseModel):
@@ -424,6 +424,8 @@ class StepUpOut(BaseModel):
 
 class AppointmentBase(BaseModel):
     type: AppointmentType
+    profile_id: Optional[int] = None
+    episode_id: Optional[int] = None
     specialty: Optional[str] = ""
     center: Optional[str] = ""
     date_time: Optional[datetime] = None
@@ -458,6 +460,7 @@ class AppointmentOut(AppointmentBase):
 
 class DocumentBase(BaseModel):
     doc_type: DocumentType
+    episode_id: Optional[int] = None
     appointment_id: Optional[int] = None
     date: Optional[datetime] = None
     center: Optional[str] = ""
@@ -466,6 +469,7 @@ class DocumentBase(BaseModel):
 
 class DocumentOut(DocumentBase):
     id: int
+    profile_id: Optional[int] = None
     file_path: str
     filename: Optional[str] = None
     ocr_status: Optional[str] = None
@@ -485,6 +489,7 @@ class DocumentOut(DocumentBase):
 
 class DocumentUpdate(BaseModel):
     doc_type: Optional[DocumentType] = None
+    episode_id: Optional[int] = None
     appointment_id: Optional[int] = None
     date: Optional[datetime] = None
     center: Optional[str] = None
@@ -492,6 +497,8 @@ class DocumentUpdate(BaseModel):
 
 
 class MedicationBase(BaseModel):
+    profile_id: Optional[int] = None
+    episode_id: Optional[int] = None
     name: str
     dose: Optional[str] = ""
     frequency: Optional[str] = ""
@@ -575,6 +582,7 @@ class MedicationPurchaseOut(BaseModel):
     user_id: int
     medication_id: int
     profile_id: Optional[int] = None
+    episode_id: Optional[int] = None
     assigned_user_id: Optional[int] = None
     purchased_by_user_id: Optional[int] = None
     medication_name_snapshot: str = ""
@@ -634,6 +642,127 @@ class MedicationIntakeCreate(BaseModel):
 class MedicationIntakeListOut(BaseModel):
     medication_id: int
     items: list[MedicationIntakeOut] = []
+
+
+class ClinicalTaskBase(BaseModel):
+    task_type: str = "follow_up"
+    title: str
+    description: str = ""
+    status: str = "pending"
+    due_at: datetime | None = None
+    completed_at: datetime | None = None
+    source_module: str = ""
+    source_record_type: str = ""
+    source_record_id: int | None = None
+    metadata_json: dict | None = None
+
+
+class ClinicalTaskOut(ClinicalTaskBase):
+    id: int
+    episode_id: int
+    profile_id: int
+    owner_user_id: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer('due_at', 'completed_at', 'created_at', 'updated_at')
+    def serialize_clinical_task_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class ClinicalEpisodeBase(BaseModel):
+    title: str
+    episode_type: str = "general"
+    status: ClinicalEpisodeStatus = ClinicalEpisodeStatus.active
+    source: str = "manual"
+    started_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    closed_at: datetime | None = None
+    summary: str = ""
+    care_summary: str = ""
+    tags_json: list[str] = []
+    metadata_json: dict | None = None
+
+
+class ClinicalEpisodeOut(ClinicalEpisodeBase):
+    id: int
+    profile_id: int
+    owner_user_id: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    linked_appointments: int = 0
+    linked_documents: int = 0
+    linked_medications: int = 0
+    linked_external_records: int = 0
+    pending_tasks: int = 0
+    next_due_at: datetime | None = None
+
+    @field_serializer(
+        'started_at',
+        'last_activity_at',
+        'closed_at',
+        'created_at',
+        'updated_at',
+        'next_due_at',
+    )
+    def serialize_clinical_episode_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class EpisodeTimelineEventOut(BaseModel):
+    event_type: str
+    title: str
+    summary: str = ""
+    event_at: datetime | None = None
+    source_module: str = ""
+    source_record_type: str = ""
+    source_record_id: int | None = None
+    metadata_json: dict = {}
+
+    @field_serializer('event_at')
+    def serialize_episode_timeline_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+class EpisodeRelatedItemsOut(BaseModel):
+    appointments: list[AppointmentOut] = []
+    documents: list[DocumentOut] = []
+    medications: list[MedicationOut] = []
+    external_records: list["ExternalClinicalRecordOut"] = []
+
+
+class ClinicalEpisodeDetailOut(BaseModel):
+    episode: ClinicalEpisodeOut
+    tasks: list[ClinicalTaskOut] = []
+    timeline: list[EpisodeTimelineEventOut] = []
+    related_items: EpisodeRelatedItemsOut
+    ai_context: dict = {}
+
+
+class EpisodeLinkRequest(BaseModel):
+    item_type: str
+    item_id: int
+    episode_id: int | None = None
+
+
+class EpisodeLinkResultOut(BaseModel):
+    item_type: str
+    item_id: int
+    previous_episode_id: int | None = None
+    episode_id: int | None = None
+    episode_title: str | None = None
 
 
 class AdherenceSummaryOut(BaseModel):
@@ -877,6 +1006,7 @@ class ExternalClinicalSourceOut(BaseModel):
 
 class ExternalClinicalRecordCreate(BaseModel):
     source_id: int | None = None
+    episode_id: int | None = None
     external_id: str = ""
     record_type: str = "lab_result"
     title: str
@@ -889,6 +1019,7 @@ class ExternalClinicalRecordOut(BaseModel):
     id: int
     profile_id: int
     source_id: int | None = None
+    episode_id: int | None = None
     external_id: str = ""
     record_type: str
     title: str
@@ -1212,3 +1343,7 @@ class VoiceSessionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+EpisodeRelatedItemsOut.model_rebuild()
+ClinicalEpisodeDetailOut.model_rebuild()

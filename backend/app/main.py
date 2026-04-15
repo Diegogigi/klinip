@@ -110,6 +110,10 @@ except Exception:
 from .database import Base, engine, SessionLocal
 from . import models, schemas, auth
 from .schema_helpers import ensure_columns
+from .services.ai_context_service import build_episode_ai_context
+from .services.clinical_summary_service import refresh_episode_snapshot, serialize_episode_out
+from .services.episode_link_service import refresh_episode_links_for_record, set_record_episode
+from .services.timeline_builder_service import build_episode_timeline, get_episode_related_items
 
 try:
     from pywebpush import webpush, WebPushException
@@ -282,6 +286,7 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
 
 
 _medication_schema_ready = False
+_episode_schema_ready = False
 
 
 def ensure_medication_schema(force: bool = False):
@@ -428,8 +433,103 @@ def ensure_medication_schema(force: bool = False):
         print(f"WARNING ensure_medication_schema: no se pudo ajustar la tabla: {exc}")
 
 
+def ensure_episode_schema(force: bool = False):
+    """
+    Garantiza la base minima para episodios clinicos longitudinales.
+    """
+    global _episode_schema_ready
+    if _episode_schema_ready:
+        return
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
+    try:
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                models.ClinicalEpisode.__table__,
+                models.ClinicalTask.__table__,
+            ],
+        )
+        ensure_columns(
+            engine,
+            "appointments",
+            [
+                ("profile_id", "INTEGER NULL", "INTEGER"),
+                ("episode_id", "INTEGER NULL", "INTEGER"),
+            ],
+            label="ensure_episode_schema(appointments)",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_appointments_profile_id ON appointments (profile_id)",
+                "CREATE INDEX IF NOT EXISTS ix_appointments_episode_id ON appointments (episode_id)",
+            ],
+        )
+        ensure_columns(
+            engine,
+            "documents",
+            [
+                ("episode_id", "INTEGER NULL", "INTEGER"),
+            ],
+            label="ensure_episode_schema(documents)",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_documents_episode_id ON documents (episode_id)",
+            ],
+        )
+        ensure_columns(
+            engine,
+            "medications",
+            [
+                ("profile_id", "INTEGER NULL", "INTEGER"),
+                ("episode_id", "INTEGER NULL", "INTEGER"),
+            ],
+            label="ensure_episode_schema(medications)",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_medications_profile_id ON medications (profile_id)",
+                "CREATE INDEX IF NOT EXISTS ix_medications_episode_id ON medications (episode_id)",
+            ],
+        )
+        ensure_columns(
+            engine,
+            "medication_purchases",
+            [
+                ("episode_id", "INTEGER NULL", "INTEGER"),
+            ],
+            label="ensure_episode_schema(medication_purchases)",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_medication_purchases_episode_id ON medication_purchases (episode_id)",
+            ],
+        )
+        ensure_columns(
+            engine,
+            "external_clinical_records",
+            [
+                ("episode_id", "INTEGER NULL", "INTEGER"),
+            ],
+            label="ensure_episode_schema(external_clinical_records)",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_external_clinical_records_episode_id ON external_clinical_records (episode_id)",
+            ],
+        )
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_clinical_episodes_profile_status "
+                    "ON clinical_episodes (profile_id, status)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_clinical_tasks_episode_status "
+                    "ON clinical_tasks (episode_id, status)"
+                )
+            )
+        _episode_schema_ready = True
+    except Exception as exc:
+        print(f"WARNING ensure_episode_schema: no se pudo ajustar la tabla: {exc}")
+
+
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_medication_schema()
+    ensure_episode_schema()
 
 
 def ensure_medication_purchase_schema(force: bool = False):
@@ -18973,6 +19073,79 @@ def _requested_or_active_profile_only(
     return _get_active_profile_context(db, current_user)
 
 
+def _get_clinical_episode_or_404(
+    db: Session,
+    current_user: models.User,
+    profile_id: int,
+    episode_id: int,
+) -> tuple[models.HealthProfile, models.ProfileRelationship, models.ClinicalEpisode]:
+    ensure_episode_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, int(profile_id))
+    episode = (
+        db.query(models.ClinicalEpisode)
+        .filter(
+            models.ClinicalEpisode.id == int(episode_id),
+            models.ClinicalEpisode.profile_id == int(profile.id),
+        )
+        .first()
+    )
+    if not episode:
+        raise HTTPException(status_code=404, detail="Episodio clínico no encontrado")
+    return profile, link, episode
+
+
+def _episode_linkable_record(
+    db: Session,
+    profile: models.HealthProfile,
+    owner_user_id: int,
+    *,
+    item_type: str,
+    item_id: int,
+):
+    normalized = (item_type or "").strip().lower()
+    if normalized == "appointment":
+        return (
+            db.query(models.Appointment)
+            .filter(
+                models.Appointment.id == int(item_id),
+                models.Appointment.user_id == int(owner_user_id),
+            )
+            .first(),
+            "appointment",
+        )
+    if normalized == "document":
+        return (
+            db.query(models.Document)
+            .filter(
+                models.Document.id == int(item_id),
+                *_document_scope_filter(profile, owner_user_id),
+            )
+            .first(),
+            "document",
+        )
+    if normalized == "medication":
+        return (
+            db.query(models.Medication)
+            .filter(
+                models.Medication.id == int(item_id),
+                models.Medication.user_id == int(owner_user_id),
+            )
+            .first(),
+            "medication",
+        )
+    if normalized in {"external_record", "external_clinical_record"}:
+        return (
+            db.query(models.ExternalClinicalRecord)
+            .filter(
+                models.ExternalClinicalRecord.id == int(item_id),
+                models.ExternalClinicalRecord.profile_id == int(profile.id),
+            )
+            .first(),
+            "external_record",
+        )
+    raise HTTPException(status_code=400, detail="Tipo de elemento no soportado para episodios")
+
+
 def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> list[models.ProfileRelationship]:
     return (
         db.query(models.ProfileRelationship)
@@ -19799,11 +19972,13 @@ async def create_external_clinical_record(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_episode_schema(force=True)
     target_profile_id = int(profile_id or _requested_or_active_profile_context(db, current_user).get("profile", {}).get("id") or 0)
     profile, link = _get_profile_access_or_404(db, current_user, target_profile_id)
     _require_role(link, "caregiver")
     row = models.ExternalClinicalRecord(
         profile_id=profile.id,
+        episode_id=payload.episode_id,
         source_id=payload.source_id,
         external_id=_safe_text(payload.external_id or "")[:80],
         record_type=_safe_text(payload.record_type or "lab_result")[:40] or "lab_result",
@@ -19813,9 +19988,109 @@ async def create_external_clinical_record(
         event_at=payload.event_at,
     )
     db.add(row)
+    db.flush()
+    refresh_episode_links_for_record(db, profile, "external_record", row)
     db.commit()
     db.refresh(row)
     return row
+
+
+@app.get("/health-profiles/{profile_id}/episodes", response_model=List[schemas.ClinicalEpisodeOut])
+async def list_clinical_episodes(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    episodes = (
+        db.query(models.ClinicalEpisode)
+        .filter(models.ClinicalEpisode.profile_id == int(profile.id))
+        .order_by(models.ClinicalEpisode.last_activity_at.desc(), models.ClinicalEpisode.created_at.desc())
+        .all()
+    )
+    payload = [serialize_episode_out(db, episode) for episode in episodes]
+    db.commit()
+    return payload
+
+
+@app.get(
+    "/health-profiles/{profile_id}/episodes/{episode_id}",
+    response_model=schemas.ClinicalEpisodeDetailOut,
+)
+async def get_clinical_episode_detail(
+    profile_id: int,
+    episode_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    _, _, episode = _get_clinical_episode_or_404(db, current_user, profile_id, episode_id)
+    tasks = (
+        db.query(models.ClinicalTask)
+        .filter(models.ClinicalTask.episode_id == int(episode.id))
+        .order_by(models.ClinicalTask.due_at.asc(), models.ClinicalTask.created_at.asc())
+        .all()
+    )
+    response = {
+        "episode": serialize_episode_out(db, episode),
+        "tasks": tasks,
+        "timeline": build_episode_timeline(db, episode),
+        "related_items": get_episode_related_items(db, episode),
+        "ai_context": build_episode_ai_context(db, episode),
+    }
+    db.commit()
+    return response
+
+
+@app.put(
+    "/health-profiles/{profile_id}/episodes/relink-item",
+    response_model=schemas.EpisodeLinkResultOut,
+)
+async def relink_clinical_episode_item(
+    profile_id: int,
+    payload: schemas.EpisodeLinkRequest,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    record, normalized_type = _episode_linkable_record(
+        db,
+        profile,
+        profile.owner_user_id,
+        item_type=payload.item_type,
+        item_id=payload.item_id,
+    )
+    if not record:
+        raise HTTPException(status_code=404, detail="Elemento no encontrado para este perfil")
+    previous_episode_id, episode = set_record_episode(
+        db,
+        profile,
+        record_type=normalized_type,
+        record=record,
+        episode_id=payload.episode_id,
+    )
+    if previous_episode_id and previous_episode_id != payload.episode_id:
+        previous_episode = (
+            db.query(models.ClinicalEpisode)
+            .filter(models.ClinicalEpisode.id == int(previous_episode_id))
+            .first()
+        )
+        if previous_episode:
+            refresh_episode_snapshot(db, previous_episode)
+    if episode:
+        refresh_episode_snapshot(db, episode)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    return {
+        "item_type": normalized_type,
+        "item_id": int(payload.item_id),
+        "previous_episode_id": previous_episode_id,
+        "episode_id": int(episode.id) if episode else None,
+        "episode_title": episode.title if episode else None,
+    }
 
 
 @app.get("/ai/health-radar", response_model=List[schemas.HealthAlertOut])
@@ -20048,9 +20323,12 @@ async def create_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = models.Appointment(
         user_id=target_user_id,
+        profile_id=int(getattr(profile, "id", 0) or 0) or None,
+        episode_id=appt_in.episode_id,
         type=appt_in.type,
         specialty=appt_in.specialty,
         center=appt_in.center,
@@ -20060,6 +20338,8 @@ async def create_appointment(
         checklist=appt_in.checklist or [],
     )
     db.add(appt)
+    db.flush()
+    refresh_episode_links_for_record(db, profile, "appointment", appt)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
@@ -20101,6 +20381,7 @@ async def update_appointment(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     appt = (
         db.query(models.Appointment)
@@ -20115,6 +20396,8 @@ async def update_appointment(
 
     for field, value in appt_in.dict(exclude_unset=True).items():
         setattr(appt, field, value)
+    appt.profile_id = int(getattr(profile, "id", 0) or 0) or None
+    refresh_episode_links_for_record(db, profile, "appointment", appt)
 
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
@@ -20212,6 +20495,8 @@ async def create_medication(
             refill_fixed_user_id = int(refill_participant_user_ids[0])
         med = models.Medication(
             user_id=target_user_id,
+            profile_id=int(getattr(profile, "id", 0) or 0) or None,
+            episode_id=getattr(med_in, "episode_id", None),
             name=med_in.name,
             dose=med_in.dose or "",
             frequency=med_in.frequency or "",
@@ -20239,6 +20524,8 @@ async def create_medication(
         elif med.refill_alert_threshold_doses > med.stock_total_doses:
             med.refill_alert_threshold_doses = med.stock_total_doses
         db.add(med)
+        db.flush()
+        refresh_episode_links_for_record(db, profile, "medication", med)
         _mark_profile_ai_dirty(db, profile, include_family=True)
         db.commit()
         db.refresh(med)
@@ -20285,6 +20572,7 @@ async def update_medication(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     ensure_medication_schema(force=True)
+    ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     med = (
         db.query(models.Medication)
@@ -20331,6 +20619,7 @@ async def update_medication(
             )
         )
     med.stock_total_doses = max(int(getattr(med, "stock_total_doses", 0) or 0), 0)
+    med.profile_id = int(getattr(profile, "id", 0) or 0) or None
     med.refill_alert_threshold_doses = max(
         int(getattr(med, "refill_alert_threshold_doses", 0) or 0),
         0,
@@ -20348,6 +20637,7 @@ async def update_medication(
         med.refill_rotation_index = int(getattr(med, "refill_rotation_index", 0) or 0) + 1
         med.refill_last_notified_at = None
         med.refill_last_notified_remaining = None
+    refresh_episode_links_for_record(db, profile, "medication", med)
 
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
@@ -21494,6 +21784,7 @@ async def list_documents(
 async def upload_document(
     background_tasks: BackgroundTasks,
     doc_type: str = Form(...),
+    episode_id: int | None = Form(None),
     appointment_id: int | None = Form(None),
     date: str | None = Form(None),
     center: str | None = Form(""),
@@ -21503,6 +21794,7 @@ async def upload_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     # Leer y validar el archivo
     file_content = await file.read()
@@ -21524,6 +21816,7 @@ async def upload_document(
         user_id=target_user_id,
         profile_id=int(getattr(profile, "id", 0) or 0) or None,
         appointment_id=appointment_id,
+        episode_id=episode_id,
         doc_type=models.DocumentType(doc_type),
         file_data=file_content,
         filename=safe_filename,   # nombre saneado
@@ -21535,6 +21828,8 @@ async def upload_document(
         ocr_lang=OCR_LANG_DEFAULT,
     )
     db.add(doc)
+    db.flush()
+    refresh_episode_links_for_record(db, profile, "document", doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
@@ -21604,6 +21899,7 @@ async def update_document(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
     doc = (
         db.query(models.Document)
@@ -21618,6 +21914,7 @@ async def update_document(
 
     for field, value in doc_in.dict(exclude_unset=True).items():
         setattr(doc, field, value)
+    refresh_episode_links_for_record(db, profile, "document", doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)

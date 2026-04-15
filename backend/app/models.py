@@ -39,6 +39,13 @@ class DocumentType(str, enum.Enum):
     otro = "otro"
 
 
+class ClinicalEpisodeStatus(str, enum.Enum):
+    active = "active"
+    monitoring = "monitoring"
+    resolved = "resolved"
+    archived = "archived"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -101,6 +108,8 @@ class Appointment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=True, index=True)
     type = Column(Enum(AppointmentType), nullable=False)
     specialty = Column(String, default="")
     center = Column(String, default="")
@@ -111,6 +120,8 @@ class Appointment(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="appointments")
+    profile = relationship("HealthProfile")
+    episode = relationship("ClinicalEpisode")
     documents = relationship("Document", back_populates="appointment")
 
 
@@ -121,6 +132,7 @@ class Document(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
     appointment_id = Column(Integer, ForeignKey("appointments.id"), nullable=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=True, index=True)
     doc_type = Column(Enum(DocumentType), nullable=False)
     file_path = Column(
         String, nullable=True
@@ -138,6 +150,7 @@ class Document(Base):
     user = relationship("User", back_populates="documents")
     profile = relationship("HealthProfile")
     appointment = relationship("Appointment", back_populates="documents")
+    episode = relationship("ClinicalEpisode")
 
 
 class Medication(Base):
@@ -145,6 +158,8 @@ class Medication(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=True, index=True)
     name = Column(String, nullable=False)
     dose = Column(String, default="")
     frequency = Column(String, default="")
@@ -169,6 +184,8 @@ class Medication(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User")
+    profile = relationship("HealthProfile")
+    episode = relationship("ClinicalEpisode")
     document = relationship("Document")
 
 
@@ -179,6 +196,7 @@ class MedicationPurchase(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     medication_id = Column(Integer, ForeignKey("medications.id"), nullable=False, index=True)
     profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=True, index=True)
     assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     purchased_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     medication_name_snapshot = Column(String, default="")
@@ -200,6 +218,7 @@ class MedicationPurchase(Base):
     user = relationship("User", foreign_keys=[user_id])
     medication = relationship("Medication")
     profile = relationship("HealthProfile")
+    episode = relationship("ClinicalEpisode")
     assigned_user = relationship("User", foreign_keys=[assigned_user_id])
     purchased_by_user = relationship("User", foreign_keys=[purchased_by_user_id])
 
@@ -323,6 +342,11 @@ class HealthProfile(Base):
         "ProfileNote",
         back_populates="profile",
         cascade="all, delete-orphan",
+    )
+    clinical_episodes = relationship(
+        "ClinicalEpisode",
+        cascade="all, delete-orphan",
+        foreign_keys="ClinicalEpisode.profile_id",
     )
 
 
@@ -682,6 +706,7 @@ class ExternalClinicalRecord(Base):
     id = Column(Integer, primary_key=True, index=True)
     profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
     source_id = Column(Integer, ForeignKey("external_clinical_sources.id"), nullable=True, index=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=True, index=True)
     external_id = Column(String, default="", index=True)
     record_type = Column(String, default="lab_result", index=True)
     title = Column(String, nullable=False)
@@ -693,6 +718,74 @@ class ExternalClinicalRecord(Base):
 
     profile = relationship("HealthProfile")
     source = relationship("ExternalClinicalSource")
+    episode = relationship("ClinicalEpisode")
+
+
+class ClinicalEpisode(Base):
+    __tablename__ = "clinical_episodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    episode_type = Column(String, default="general", index=True)
+    status = Column(
+        Enum(ClinicalEpisodeStatus),
+        default=ClinicalEpisodeStatus.active,
+        index=True,
+    )
+    source = Column(String, default="manual", index=True)
+    started_at = Column(DateTime, nullable=True, index=True)
+    last_activity_at = Column(DateTime, nullable=True, index=True)
+    closed_at = Column(DateTime, nullable=True)
+    summary = Column(Text, default="")
+    care_summary = Column(Text, default="")
+    tags_json = Column(JSON, default=list)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User")
+    tasks = relationship(
+        "ClinicalTask",
+        back_populates="episode",
+        cascade="all, delete-orphan",
+    )
+
+
+class ClinicalTask(Base):
+    __tablename__ = "clinical_tasks"
+    __table_args__ = (
+        UniqueConstraint(
+            "episode_id",
+            "source_record_type",
+            "source_record_id",
+            "task_type",
+            name="uq_clinical_task_source",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    episode_id = Column(Integer, ForeignKey("clinical_episodes.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    task_type = Column(String, default="follow_up", index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, default="")
+    status = Column(String, default="pending", index=True)
+    due_at = Column(DateTime, nullable=True, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    source_module = Column(String, default="", index=True)
+    source_record_type = Column(String, default="", index=True)
+    source_record_id = Column(Integer, nullable=True, index=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    episode = relationship("ClinicalEpisode", back_populates="tasks")
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User")
 
 
 # ─── KlinipFeed ───────────────────────────────────────────────────────────────
