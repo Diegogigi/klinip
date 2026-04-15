@@ -32932,7 +32932,7 @@ body.theme-dark .ob-quick-btn {
 .kfeed-clinical-event strong {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   overflow: hidden;
 }
 
@@ -32948,7 +32948,7 @@ body.theme-dark .ob-quick-btn {
 .kfeed-clinical-event p {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   overflow: hidden;
 }
 
@@ -43449,6 +43449,38 @@ body.theme-dark .health-hub-card-eyebrow {
 
   .kfeed-page-header .kfeed-section-kicker {
     color: #2563eb !important;
+  }
+
+  .kfeed-care-overview-item {
+    border-color: rgba(191, 219, 254, 0.95);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: none;
+  }
+
+  .kfeed-care-overview-item span {
+    color: #64748b;
+  }
+
+  .kfeed-care-overview-item strong {
+    color: #0f172a;
+  }
+
+  .kfeed-care-overview-item.tone-red {
+    background:
+      radial-gradient(circle at top right, rgba(248, 113, 113, 0.18), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #fff7f7 100%);
+  }
+
+  .kfeed-care-overview-item.tone-blue {
+    background:
+      radial-gradient(circle at top right, rgba(96, 165, 250, 0.18), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%);
+  }
+
+  .kfeed-care-overview-item.tone-teal {
+    background:
+      radial-gradient(circle at top right, rgba(45, 212, 191, 0.16), transparent 34%),
+      linear-gradient(180deg, #ffffff 0%, #f4fcfb 100%);
   }
 
   .kfeed-composer-card,

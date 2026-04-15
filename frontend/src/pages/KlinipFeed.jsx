@@ -215,6 +215,12 @@ function summarizeNames(names = [], emptyText = "") {
   return `${names[0]} y ${names.length - 1} más`;
 }
 
+function conciseReason(value = "", fallback = "Revisar hoy") {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return fallback;
+  return truncateText(normalized.replace(/[.:;,\s]+$/, ""), 68);
+}
+
 function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
   const events = [];
 
@@ -223,9 +229,9 @@ function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
     events.push({
       key: `alert-${alert.id || `${alert.profile_name}-${alert.title}`}`,
       tone,
-      badge: tone === "red" ? "Alerta crítica" : "Seguimiento",
-      title: `${alert.profile_name || "Perfil"} requiere atención`,
-      body: truncateText(alert.title || alert.message || "Hay una novedad clínica para revisar.", 130),
+      badge: tone === "red" ? "Urgente" : "Revisar",
+      title: alert.profile_name || "Perfil",
+      body: conciseReason(alert.title || alert.message, "Hay una novedad clínica para revisar"),
       meta: alert.suggested_action || "Revisa el radar familiar y define el siguiente paso.",
       route: "/settings/familia",
     });
@@ -237,8 +243,8 @@ function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
         key: `adherence-${item.profile_id}`,
         tone: "amber",
         badge: "Adherencia",
-        title: `${item.profile_name || "Perfil"} necesita apoyo con su tratamiento`,
-        body: `${item.relation_with_owner || "Perfil familiar"} con adherencia baja detectada.`,
+        title: item.profile_name || "Perfil",
+        body: "Adherencia baja detectada",
         meta: item.upcoming_appointments
           ? `${formatUnitLabel(item.upcoming_appointments, "cita próxima", "citas próximas")}.`
           : "Conviene revisar tomas pendientes y próximos controles.",
@@ -248,9 +254,9 @@ function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
       events.push({
         key: `appointment-${item.profile_id}`,
         tone: "blue",
-        badge: "Próxima cita",
-        title: `${item.profile_name || "Perfil"} tiene ${formatUnitLabel(Number(item.upcoming_appointments || 0), "cita próxima", "citas próximas")}`,
-        body: `${item.relation_with_owner || "Perfil familiar"} con agenda activa.`,
+        badge: "Cita",
+        title: item.profile_name || "Perfil",
+        body: formatUnitLabel(Number(item.upcoming_appointments || 0), "cita próxima", "citas próximas"),
         meta: Number(item.active_alerts || 0) > 0
           ? `${formatUnitLabel(Number(item.active_alerts || 0), "alerta activa", "alertas activas")}.`
           : "Revisa la preparación previa y la confirmación de la cita.",
@@ -273,8 +279,8 @@ function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
             ? "blue"
             : "violet",
         badge: postTypeInfo.label,
-        title: `${post.profile_name || "Perfil"} registró una actualización clínica`,
-        body: truncateText(post.content || `Nueva actualización de tipo ${postTypeInfo.label}.`, 135),
+        title: post.profile_name || "Perfil",
+        body: conciseReason(post.content || `Nueva actualización de tipo ${postTypeInfo.label}.`, `Nueva ${postTypeInfo.label.toLowerCase()}`),
         meta: `${post.user_name || "Familiar"} · ${timeAgo(post.created_at)}`,
         route: "/family",
       });
@@ -1826,13 +1832,13 @@ export default function KlinipFeed({ user }) {
   const remainingAttentionCount = Math.max(importantEvents.length - attentionPreview.length, 0);
   const familySummary =
     activeAlertsTotal > 0
-      ? `${formatUnitLabel(activeAlertsTotal, "alerta activa", "alertas activas")} para revisar hoy.`
+      ? `${formatUnitLabel(activeAlertsTotal, "alerta hoy", "alertas hoy")}.`
       : lowAdherenceProfiles > 0
-      ? `${formatUnitLabel(lowAdherenceProfiles, "perfil con baja adherencia", "perfiles con baja adherencia")}.`
+      ? `${formatUnitLabel(lowAdherenceProfiles, "caso de adherencia", "casos de adherencia")}.`
       : upcomingAppointments > 0
-      ? `${formatUnitLabel(upcomingAppointments, "cita próxima", "citas próximas")} y sin señales críticas.`
+      ? `${formatUnitLabel(upcomingAppointments, "cita próxima", "citas próximas")}.`
       : collaborativeProfiles > 0
-      ? "Sin señales críticas por ahora."
+      ? "Sin alertas críticas."
       : "Activa tu equipo para coordinar el cuidado.";
   const feedClinicalPosts = posts.filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type));
 
