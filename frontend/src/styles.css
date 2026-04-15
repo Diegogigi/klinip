@@ -47768,3 +47768,595 @@ body.theme-dark .history-episode-related-head span {
     font-size: 0.77rem;
   }
 }
+
+/* Historial simplificado */
+.history-process-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: end;
+  margin-bottom: 0.95rem;
+}
+
+.history-process-kicker {
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.history-process-title {
+  margin: 0.12rem 0 0;
+  color: #102033;
+  font-size: clamp(1.58rem, 2vw, 2.08rem);
+  line-height: 1.08;
+}
+
+.history-process-subtitle,
+.history-process-toolbar-note,
+.history-process-note,
+.history-process-item-next,
+.history-process-panel-copy p,
+.history-process-related-row p,
+.history-process-line-row p,
+.history-process-manual-intro p,
+.history-process-manual-preview p,
+.history-process-empty {
+  margin: 0;
+  color: #5f708b;
+  line-height: 1.42;
+}
+
+.history-process-summarybar {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(78px, 1fr));
+  gap: 0.5rem;
+}
+
+.history-process-summaryitem {
+  display: grid;
+  justify-items: center;
+  gap: 0.08rem;
+  padding: 0.62rem 0.78rem;
+  border: 1px solid rgba(214, 226, 244, 0.95);
+  border-radius: 18px;
+  background: rgba(247, 250, 255, 0.92);
+}
+
+.history-process-summaryitem strong {
+  color: #102033;
+  font-size: 1.18rem;
+}
+
+.history-process-summaryitem span {
+  color: #5f708b;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.history-process-shell {
+  display: grid;
+  gap: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 1px solid rgba(174, 198, 235, 0.78) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 251, 255, 0.99)) !important;
+}
+
+.history-process-toolbar {
+  display: grid;
+  gap: 0.82rem;
+  padding: 0.95rem !important;
+  border-bottom: 1px solid rgba(220, 230, 245, 0.96);
+}
+
+.history-process-toolbar-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 0.72rem;
+}
+
+.history-process-toolbar-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.history-process-filters {
+  display: flex;
+  gap: 0.48rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.history-process-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.history-process-filter-btn,
+.history-process-inline-btn {
+  min-height: 38px;
+}
+
+.history-process-layout {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  min-height: 560px;
+}
+
+.history-process-rail {
+  display: grid;
+  align-content: start;
+  border-right: 1px solid rgba(225, 234, 247, 0.96);
+  background: rgba(249, 251, 255, 0.88);
+}
+
+.history-process-rail-head {
+  display: grid;
+  gap: 0.12rem;
+  padding: 0.88rem 0.95rem 0.78rem;
+  border-bottom: 1px solid rgba(227, 235, 247, 0.96);
+}
+
+.history-process-rail-head strong,
+.history-process-item-title,
+.history-process-panel-copy h2,
+.history-process-spotlight-item strong,
+.history-process-section-head h3,
+.history-process-line-row strong,
+.history-process-related-head strong,
+.history-process-manual-preview strong,
+.history-process-legacy-head strong {
+  color: #102033;
+}
+
+.history-process-rail-head span,
+.history-process-item-meta span,
+.history-process-section-head span,
+.history-process-related-head span,
+.history-process-line-row span,
+.history-process-manual-preview span,
+.history-process-legacy-head span {
+  color: #6a7c96;
+  font-size: 0.8rem;
+}
+
+.history-process-list {
+  display: grid;
+}
+
+.history-process-item {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr);
+  gap: 0.72rem;
+  width: 100%;
+  padding: 0.78rem 0.95rem;
+  border: 0;
+  border-bottom: 1px solid rgba(229, 236, 247, 0.96);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-process-item.is-selected {
+  background: rgba(237, 244, 255, 0.9);
+}
+
+.history-process-item-bar {
+  border-radius: 999px;
+  background: #94a3b8;
+}
+
+.history-process-item-bar.tone-active {
+  background: #10b981;
+}
+
+.history-process-item-bar.tone-attention {
+  background: #f59e0b;
+}
+
+.history-process-item-bar.tone-closed {
+  background: #94a3b8;
+}
+
+.history-process-item-body {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.history-process-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.42rem;
+}
+
+.history-process-item-type,
+.history-process-item-status,
+.history-process-panel-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0.14rem 0.58rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 900;
+}
+
+.history-process-item-type,
+.history-process-panel-kicker {
+  background: rgba(37, 99, 235, 0.11);
+  color: #1d4ed8;
+}
+
+.history-process-item-status.tone-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+.history-process-item-status.tone-attention {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+
+.history-process-item-status.tone-closed {
+  background: rgba(148, 163, 184, 0.18);
+  color: #475569;
+}
+
+.history-process-item-title {
+  font-size: 0.98rem;
+  line-height: 1.26;
+}
+
+.history-process-item-next {
+  font-size: 0.9rem;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.history-process-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem 0.38rem;
+}
+
+.history-process-item-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0.08rem 0.48rem;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.96);
+}
+
+.history-process-panel {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.history-process-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.9rem;
+}
+
+.history-process-panel-copy {
+  display: grid;
+  gap: 0.36rem;
+}
+
+.history-process-panel-copy h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.7vw, 1.55rem);
+  line-height: 1.14;
+}
+
+.history-process-spotlight {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.68rem;
+}
+
+.history-process-spotlight-item {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.8rem 0.88rem;
+  border: 1px solid rgba(219, 229, 243, 0.96);
+  border-radius: 18px;
+  background: rgba(248, 251, 255, 0.92);
+}
+
+.history-process-spotlight-item span {
+  color: #2563eb;
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-process-spotlight-item strong {
+  font-size: 0.97rem;
+  line-height: 1.28;
+}
+
+.history-process-section {
+  display: grid;
+  gap: 0.72rem;
+  padding-top: 0.1rem;
+}
+
+.history-process-section + .history-process-section {
+  border-top: 1px solid rgba(227, 235, 247, 0.96);
+  padding-top: 0.95rem;
+}
+
+.history-process-section-head,
+.history-process-related-head,
+.history-process-legacy-head,
+.history-process-manual-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.history-process-section-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.history-process-line-list,
+.history-process-related-list {
+  display: grid;
+}
+
+.history-process-line-row,
+.history-process-related-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 0.72rem 0;
+  border-bottom: 1px solid rgba(231, 237, 247, 0.95);
+}
+
+.history-process-line-row:last-child,
+.history-process-related-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.history-process-line-row:first-child,
+.history-process-related-row:first-child {
+  padding-top: 0;
+}
+
+.history-process-line-row > div,
+.history-process-related-row > p,
+.history-process-manual-preview,
+.history-process-manual {
+  min-width: 0;
+}
+
+.history-process-line-row > div {
+  display: grid;
+  gap: 0.14rem;
+}
+
+.history-process-line-row span {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.history-process-related-row {
+  align-items: center;
+}
+
+.history-process-related-head span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 0.46rem;
+  border-radius: 999px;
+  background: rgba(239, 245, 255, 0.96);
+  color: #1d4ed8;
+  font-weight: 900;
+}
+
+.history-process-related-row p {
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+.history-process-manual-intro p {
+  max-width: 660px;
+}
+
+.history-process-manual {
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.88rem;
+  border-radius: 18px;
+  border: 1px solid rgba(221, 230, 244, 0.96);
+  background: rgba(248, 251, 255, 0.92);
+}
+
+.history-process-manual-grid {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 0.68rem;
+}
+
+.history-process-manual-preview {
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.74rem 0.78rem;
+  border: 1px solid rgba(224, 232, 244, 0.95);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.history-process-manual-actions,
+.history-process-empty-zone,
+.history-process-empty-actions {
+  display: flex;
+  gap: 0.72rem;
+  flex-wrap: wrap;
+}
+
+.history-process-empty,
+.history-process-legacy {
+  padding: 0.98rem;
+}
+
+.history-process-legacy {
+  border-top: 1px solid rgba(227, 235, 247, 0.96);
+}
+
+body.theme-dark .history-process-title,
+body.theme-dark .history-process-summaryitem strong,
+body.theme-dark .history-process-rail-head strong,
+body.theme-dark .history-process-item-title,
+body.theme-dark .history-process-panel-copy h2,
+body.theme-dark .history-process-spotlight-item strong,
+body.theme-dark .history-process-section-head h3,
+body.theme-dark .history-process-line-row strong,
+body.theme-dark .history-process-related-head strong,
+body.theme-dark .history-process-manual-preview strong,
+body.theme-dark .history-process-legacy-head strong {
+  color: #f4f8ff;
+}
+
+body.theme-dark .history-process-subtitle,
+body.theme-dark .history-process-toolbar-note,
+body.theme-dark .history-process-note,
+body.theme-dark .history-process-item-next,
+body.theme-dark .history-process-panel-copy p,
+body.theme-dark .history-process-related-row p,
+body.theme-dark .history-process-line-row p,
+body.theme-dark .history-process-manual-intro p,
+body.theme-dark .history-process-manual-preview p,
+body.theme-dark .history-process-empty,
+body.theme-dark .history-process-summaryitem span,
+body.theme-dark .history-process-rail-head span,
+body.theme-dark .history-process-item-meta span,
+body.theme-dark .history-process-section-head span,
+body.theme-dark .history-process-line-row span,
+body.theme-dark .history-process-manual-preview span,
+body.theme-dark .history-process-legacy-head span {
+  color: rgba(209, 222, 245, 0.8);
+}
+
+body.theme-dark .history-process-summaryitem,
+body.theme-dark .history-process-shell,
+body.theme-dark .history-process-rail,
+body.theme-dark .history-process-item.is-selected,
+body.theme-dark .history-process-spotlight-item,
+body.theme-dark .history-process-manual,
+body.theme-dark .history-process-manual-preview,
+body.theme-dark .history-process-empty,
+body.theme-dark .history-process-legacy {
+  background: rgba(15, 23, 38, 0.94) !important;
+  border-color: rgba(63, 82, 116, 0.86) !important;
+}
+
+body.theme-dark .history-process-toolbar,
+body.theme-dark .history-process-rail,
+body.theme-dark .history-process-section + .history-process-section,
+body.theme-dark .history-process-line-row,
+body.theme-dark .history-process-related-row,
+body.theme-dark .history-process-legacy {
+  border-color: rgba(63, 82, 116, 0.68) !important;
+}
+
+body.theme-dark .history-process-item-meta span {
+  background: rgba(30, 41, 59, 0.96);
+}
+
+body.theme-dark .history-process-item-type,
+body.theme-dark .history-process-panel-kicker,
+body.theme-dark .history-process-related-head span {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+@media (max-width: 980px) {
+  .history-process-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .history-process-rail {
+    border-right: 0;
+    border-bottom: 1px solid rgba(225, 234, 247, 0.96);
+  }
+}
+
+@media (max-width: 768px) {
+  .history-process-header {
+    grid-template-columns: 1fr;
+    gap: 0.72rem;
+  }
+
+  .history-process-summarybar {
+    width: 100%;
+  }
+
+  .history-process-toolbar,
+  .history-process-panel,
+  .history-process-empty,
+  .history-process-legacy,
+  .history-process-rail-head,
+  .history-process-item {
+    padding: 0.82rem !important;
+  }
+
+  .history-process-toolbar-grid,
+  .history-process-manual-grid,
+  .history-process-spotlight {
+    grid-template-columns: 1fr;
+  }
+
+  .history-process-toolbar-bottom,
+  .history-process-panel-head,
+  .history-process-section-head,
+  .history-process-manual-intro,
+  .history-process-line-row,
+  .history-process-related-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .history-process-line-row span,
+  .history-process-related-row p {
+    text-align: left;
+  }
+
+  .history-process-inline-btn {
+    width: 100%;
+  }
+
+  .history-process-item {
+    gap: 0.62rem;
+  }
+
+  .history-process-item-title {
+    font-size: 0.94rem;
+  }
+
+  .history-process-item-next {
+    font-size: 0.84rem;
+    -webkit-line-clamp: 2;
+  }
+}
