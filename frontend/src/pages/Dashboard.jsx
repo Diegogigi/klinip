@@ -817,16 +817,8 @@ export default function Dashboard({
   }, []);
 
   const openMedicationFocus = useCallback(() => {
-    if (nextMedicationEvent?.itemId) {
-      navigate(
-        `/medications?notify=1&medicationId=${nextMedicationEvent.itemId}&trigger=${
-          nextMedicationEvent.date?.getTime?.() || Date.now()
-        }`
-      );
-      return;
-    }
     navigate("/medications");
-  }, [navigate, nextMedicationEvent]);
+  }, [navigate]);
 
   const openAppointmentFocus = useCallback(() => {
     navigate(nextAppointmentEvent ? "/appointments" : "/calendar");

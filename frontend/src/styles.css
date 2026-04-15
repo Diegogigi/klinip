@@ -34314,6 +34314,7 @@ body.theme-dark .kfeed-video-name { color: #f1f5f9; }
   .kfeed-sidebar-close-btn:hover { background: var(--border, #e2e8f0); }
   .kfeed-sidebar {
     display: flex;
+    flex-direction: column;
     position: fixed;
     top: 0.9rem;
     right: 0.9rem;
@@ -34323,8 +34324,7 @@ body.theme-dark .kfeed-video-name { color: #f1f5f9; }
     background: var(--card-bg, #fff);
     border-radius: 16px;
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.22);
-    overflow-y: auto;
-    scrollbar-width: none;
+    overflow: hidden;
     z-index: 1300;
     transform: translateX(calc(100% + 1.8rem));
     opacity: 0;
@@ -34373,6 +34373,24 @@ body.theme-dark .kfeed-video-name { color: #f1f5f9; }
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  min-height: 0;
+}
+
+@media (max-width: 1049px) {
+  .kfeed-sidebar-group-shell {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    scrollbar-width: none;
+    padding-bottom: 0.9rem;
+  }
+
+  .kfeed-sidebar-group-shell::-webkit-scrollbar {
+    display: none;
+  }
 }
 .kfeed-sidebar-group-head {
   display: flex;
