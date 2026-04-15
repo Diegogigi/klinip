@@ -1454,30 +1454,22 @@ function CaregiverRow({ caregiver }) {
   );
 }
 
-function PermissionSummaryCard({ title, tone = "blue", names = [], emptyText, detail }) {
+function PermissionSummaryCard({ title, tone = "blue", names = [], emptyText }) {
   return (
     <article className={`kfeed-permission-card tone-${tone}`}>
       <span className="kfeed-permission-card-label">{title}</span>
       <strong>{names.length ? names.join(", ") : emptyText}</strong>
-      <p>{detail}</p>
     </article>
   );
 }
 
 function ClinicalEventCard({ item }) {
   return (
-    <article className={`kfeed-clinical-event tone-${item.tone || "blue"}`}>
-      <div className="kfeed-clinical-event-top">
-        <span className={`kfeed-clinical-badge tone-${item.tone || "blue"}`}>{item.badge}</span>
-        <span className="kfeed-clinical-arrow">→</span>
-      </div>
+    <Link to={item.route || "/settings/familia"} className={`kfeed-clinical-event tone-${item.tone || "blue"}`}>
+      <span className={`kfeed-clinical-badge tone-${item.tone || "blue"}`}>{item.badge}</span>
       <strong>{item.title}</strong>
       <p>{item.body}</p>
-      <small>{item.meta}</small>
-      <Link to={item.route || "/settings/familia"} className="kfeed-clinical-link">
-        Ver detalle
-      </Link>
-    </article>
+    </Link>
   );
 }
 
@@ -1831,75 +1823,51 @@ export default function KlinipFeed({ user }) {
           <div className="kfeed-brand-row">
             <div>
               <h1 className="kfeed-page-title">Cuidado colaborativo</h1>
-              <p className="kfeed-page-subtitle">
-                Coordina medicamentos, citas y alertas familiares desde una sola vista clínica.
-              </p>
             </div>
-          </div>
-          <div className="kfeed-hero-chip-row">
-            <span className="kfeed-hero-chip">Perfiles activos: {collaborativeProfiles}</span>
-            <span className="kfeed-hero-chip">Equipo de cuidado: {careTeamTotal}</span>
-            <span className="kfeed-hero-chip">Invitaciones pendientes: {pendingInvitations.length}</span>
-          </div>
-        </div>
-
-        <div className="kfeed-actions-row kfeed-actions-row-care">
-          <div className="kfeed-actions-copy">
-            <p className="kfeed-section-kicker">Panel del día</p>
-            <p className="kfeed-section-subtitle">
-              Primero lo importante: alertas, próximas citas y claridad de acceso para cada colaborador.
-            </p>
-          </div>
-          <div className="kfeed-actions-right">
-            {profiles.length > 0 && (
-              <button
-                type="button"
-                className="kfeed-family-panel-btn"
-                onClick={() => setFamilySidebarOpen(true)}
-                title="Ver equipo"
-                aria-label="Abrir panel del equipo de cuidado"
-              >
-                <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
-              </button>
-            )}
-            <Link className="kfeed-manage-link" to="/settings/familia">
-              Gestionar cuidado
-            </Link>
+            <div className="kfeed-actions-right">
+              {profiles.length > 0 && (
+                <button
+                  type="button"
+                  className="kfeed-family-panel-btn"
+                  onClick={() => setFamilySidebarOpen(true)}
+                  title="Ver equipo"
+                  aria-label="Abrir panel del equipo de cuidado"
+                >
+                  <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
+                </button>
+              )}
+              <Link className="kfeed-manage-link" to="/settings/familia">
+                Gestionar
+              </Link>
+            </div>
           </div>
         </div>
 
         <section className="kfeed-care-grid">
           <article className="kfeed-care-kpi tone-red">
-            <span>Alertas activas</span>
+            <span>Alertas</span>
             <strong>{activeAlertsTotal}</strong>
-            <small>Casos que necesitan revisión clínica o coordinación familiar.</small>
           </article>
           <article className="kfeed-care-kpi tone-blue">
-            <span>Próximas citas</span>
+            <span>Citas</span>
             <strong>{upcomingAppointments}</strong>
-            <small>Controles cercanos detectados en los perfiles compartidos.</small>
           </article>
           <article className="kfeed-care-kpi tone-amber">
-            <span>Adherencia en riesgo</span>
+            <span>Adherencia</span>
             <strong>{lowAdherenceProfiles}</strong>
-            <small>Perfiles donde conviene reforzar el seguimiento de medicamentos.</small>
           </article>
           <article className="kfeed-care-kpi tone-teal">
-            <span>Colaboradores</span>
+            <span>Equipo</span>
             <strong>{careTeamTotal}</strong>
-            <small>Personas involucradas actualmente en el cuidado compartido.</small>
           </article>
         </section>
 
         <div className="kfeed-care-layout">
           <section className="kfeed-care-panel">
             <div className="kfeed-care-panel-head">
-              <div>
-                <p className="kfeed-section-kicker">Eventos clínicos importantes</p>
-                <h2 className="kfeed-section-title">Qué requiere atención hoy</h2>
-              </div>
+              <h2 className="kfeed-section-title">Atención hoy</h2>
               <Link className="kfeed-inline-link" to="/settings/familia">
-                Ver panel completo
+                Ver todo
               </Link>
             </div>
             {importantEvents.length ? (
@@ -1910,60 +1878,37 @@ export default function KlinipFeed({ user }) {
               </div>
             ) : (
               <div className="kfeed-care-empty">
-                <strong>No hay señales críticas por ahora.</strong>
-                <span>Cuando aparezcan alertas, baja adherencia o citas próximas, las verás aquí.</span>
+                <strong>Sin señales críticas</strong>
               </div>
             )}
           </section>
 
           <section className="kfeed-care-panel">
             <div className="kfeed-care-panel-head">
-              <div>
-                <p className="kfeed-section-kicker">Permisos claros</p>
-                <h2 className="kfeed-section-title">Quién ve, quién edita y quién recibe alertas</h2>
-              </div>
+              <h2 className="kfeed-section-title">Permisos</h2>
               <Link className="kfeed-inline-link" to="/settings/familia">
-                Ajustar permisos
+                Ajustar
               </Link>
             </div>
             <div className="kfeed-permission-grid">
               <PermissionSummaryCard
-                title="Puede ver"
+                title="Ver"
                 tone="blue"
                 names={permissionViewNames}
                 emptyText="Solo tú"
-                detail="Incluye a quienes pueden revisar el perfil y seguir eventos clínicos relevantes."
               />
               <PermissionSummaryCard
-                title="Puede editar"
+                title="Editar"
                 tone="teal"
                 names={permissionEditNames}
                 emptyText="Solo tú"
-                detail="Solo colaboradores con rol editor o administrador pueden modificar datos."
               />
               <PermissionSummaryCard
-                title="Recibe alertas"
+                title="Alertas"
                 tone={alertsEnabled ? "amber" : "slate"}
                 names={alertsEnabled ? alertRecipients : []}
-                emptyText={alertsEnabled ? "Solo tú" : "Alertas automáticas desactivadas"}
-                detail={
-                  alertsEnabled
-                    ? "Se calcula usando automatizaciones activas y el equipo con acceso operativo."
-                    : "Activa automatizaciones familiares para avisar a más colaboradores."
-                }
+                emptyText={alertsEnabled ? "Solo tú" : "Desactivadas"}
               />
-            </div>
-            <div className="kfeed-permission-note">
-              {editingCaregivers.length ? (
-                <p>
-                  {formatUnitLabel(editingCaregivers.length, "editor activo", "editores activos")} listos para ayudar.{" "}
-                  {viewerCaregivers.length
-                    ? `${formatUnitLabel(viewerCaregivers.length, "lector con acceso", "lectores con acceso")} para seguimiento.`
-                    : "No hay lectores configurados."}
-                </p>
-              ) : (
-                <p>No hay colaboradores con permisos de edición en este momento.</p>
-              )}
             </div>
           </section>
         </div>

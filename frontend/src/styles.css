@@ -32625,8 +32625,8 @@ body.theme-dark .ob-quick-btn {
 
 .kfeed-care-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
 }
 
 .kfeed-care-kpi,
@@ -32634,18 +32634,17 @@ body.theme-dark .ob-quick-btn {
 .kfeed-feed-head {
   position: relative;
   overflow: hidden;
-  border: 1.5px solid var(--border, #e2e8f0);
-  border-radius: 16px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 12px;
   background: linear-gradient(180deg, var(--card-bg, #ffffff) 0%, #f8fbff 100%);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .kfeed-care-kpi {
   display: flex;
   flex-direction: column;
-  gap: 0.36rem;
-  min-height: 142px;
-  padding: 1rem;
+  gap: 0.18rem;
+  padding: 0.7rem 0.8rem;
 }
 
 .kfeed-care-kpi::before,
@@ -32660,23 +32659,19 @@ body.theme-dark .ob-quick-btn {
 }
 
 .kfeed-care-kpi span {
-  font-size: 0.76rem;
-  font-weight: 800;
+  font-size: 0.66rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #64748b;
 }
 
 .kfeed-care-kpi strong {
-  font-size: 1.6rem;
-  line-height: 1;
+  font-size: 1.3rem;
+  line-height: 1.1;
   color: #0f172a;
-}
-
-.kfeed-care-kpi small {
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: #64748b;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .kfeed-care-kpi.tone-red {
@@ -32712,16 +32707,20 @@ body.theme-dark .ob-quick-btn {
 .kfeed-care-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  padding: 1rem;
+  gap: 0.65rem;
+  padding: 0.85rem 0.95rem 0.95rem;
 }
 
 .kfeed-care-panel-head,
 .kfeed-feed-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
+  gap: 0.6rem;
+}
+
+.kfeed-care-panel-head .kfeed-section-title {
+  font-size: 0.92rem;
 }
 
 .kfeed-inline-link,
@@ -32741,24 +32740,37 @@ body.theme-dark .ob-quick-btn {
   outline: none;
 }
 
-.kfeed-clinical-event-list,
+.kfeed-clinical-event-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
 .kfeed-permission-grid {
   display: grid;
-  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
 }
 
 .kfeed-clinical-event,
 .kfeed-permission-card {
-  border-radius: 14px;
+  border-radius: 11px;
   border: 1px solid rgba(226, 232, 240, 0.95);
   background: rgba(255, 255, 255, 0.82);
-  padding: 0.92rem;
+  padding: 0.65rem 0.8rem;
 }
 
 .kfeed-clinical-event {
   display: flex;
   flex-direction: column;
-  gap: 0.48rem;
+  gap: 0.2rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.1s, box-shadow 0.15s;
+}
+
+.kfeed-clinical-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06);
 }
 
 .kfeed-clinical-event-top {
@@ -32771,12 +32783,13 @@ body.theme-dark .ob-quick-btn {
 .kfeed-clinical-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 26px;
-  padding: 0.26rem 0.62rem;
+  align-self: flex-start;
+  padding: 0.18rem 0.5rem;
   border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .kfeed-clinical-badge.tone-red {
@@ -32817,23 +32830,17 @@ body.theme-dark .ob-quick-btn {
 .kfeed-clinical-event strong,
 .kfeed-permission-card strong {
   color: #0f172a;
-  font-size: 0.95rem;
-  line-height: 1.35;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .kfeed-clinical-event p,
-.kfeed-permission-card p,
 .kfeed-care-empty span,
 .kfeed-feed-head-note {
   margin: 0;
   color: #64748b;
-  font-size: 0.84rem;
-  line-height: 1.48;
-}
-
-.kfeed-clinical-event small {
-  color: #94a3b8;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   line-height: 1.4;
 }
 
@@ -32860,14 +32867,23 @@ body.theme-dark .ob-quick-btn {
 .kfeed-permission-card {
   display: flex;
   flex-direction: column;
-  gap: 0.38rem;
+  gap: 0.2rem;
 }
 
 .kfeed-permission-card-label {
-  font-size: 0.74rem;
-  font-weight: 800;
+  font-size: 0.62rem;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.kfeed-permission-card strong {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kfeed-permission-card.tone-blue .kfeed-permission-card-label {
@@ -44173,29 +44189,28 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
   }
 
   .kfeed-care-grid {
-    grid-template-columns: 1fr;
-    gap: 0.62rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
   }
 
   .kfeed-care-kpi,
   .kfeed-care-panel,
   .kfeed-feed-head {
-    border-radius: 18px;
+    border-radius: 12px;
   }
 
   .kfeed-care-kpi {
-    min-height: 0;
-    padding: 0.88rem;
-    gap: 0.3rem;
+    padding: 0.65rem 0.75rem;
+    gap: 0.15rem;
   }
 
   .kfeed-care-kpi strong {
-    font-size: 1.38rem;
+    font-size: 1.2rem;
   }
 
   .kfeed-care-panel {
-    padding: 0.88rem;
-    gap: 0.78rem;
+    padding: 0.8rem 0.9rem;
+    gap: 0.55rem;
   }
 
   .kfeed-care-panel-head,
@@ -44203,10 +44218,15 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
     gap: 0.55rem;
   }
 
+  .kfeed-permission-grid {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
   .kfeed-clinical-event,
   .kfeed-permission-card,
   .kfeed-care-empty {
-    padding: 0.8rem;
+    padding: 0.6rem 0.75rem;
   }
 
   .kfeed-feed-head {
