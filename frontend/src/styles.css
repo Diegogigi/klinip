@@ -47866,6 +47866,10 @@ body.theme-dark .history-episode-related-head span {
   gap: 0.8rem;
 }
 
+.history-process-mobile-nav {
+  display: none;
+}
+
 .history-process-filters {
   display: flex;
   gap: 0.48rem;
@@ -48041,6 +48045,21 @@ body.theme-dark .history-episode-related-head span {
   align-content: start;
   gap: 1rem;
   padding: 1rem;
+}
+
+.history-process-commandbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.56rem;
+}
+
+.history-process-command-btn,
+.history-process-row-action {
+  min-height: 36px;
+}
+
+.history-process-row-action {
+  flex: 0 0 auto;
 }
 
 .history-process-panel-head {
@@ -48328,6 +48347,21 @@ body.theme-dark .history-process-related-head span {
     grid-template-columns: 1fr;
   }
 
+  .history-process-mobile-nav {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .history-process-mobile-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.56rem;
+  }
+
+  .history-process-rail {
+    display: none;
+  }
+
   .history-process-toolbar-bottom,
   .history-process-panel-head,
   .history-process-section-head,
@@ -48343,7 +48377,9 @@ body.theme-dark .history-process-related-head span {
     text-align: left;
   }
 
-  .history-process-inline-btn {
+  .history-process-inline-btn,
+  .history-process-command-btn,
+  .history-process-row-action {
     width: 100%;
   }
 

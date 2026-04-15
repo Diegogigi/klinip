@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   getActiveHealthProfile,
   getAiLifeTimeline,
@@ -118,6 +119,33 @@ function getLastActivityLabel(value) {
   return `Último cambio ${toLocaleDateOrEmpty(value)}`;
 }
 
+function getTaskAction(task) {
+  const text = `${cleanUiText(task?.title)} ${cleanUiText(task?.description)}`.toLowerCase();
+  if (!text) return null;
+  if (/(medic|toma|tratamiento|pastilla|dosis|farmac)/.test(text)) {
+    return { label: "Ir a medicamentos", to: "/medications" };
+  }
+  if (/(document|receta|informe|resultado|archivo|orden)/.test(text)) {
+    return { label: "Ir a documentos", to: "/documents" };
+  }
+  if (/(examen|laboratorio|agenda|agendar|fecha)/.test(text)) {
+    return { label: "Ir al calendario", to: "/calendar" };
+  }
+  if (/(cita|control|consulta|doctor|especial|medic[o|a])/i.test(text)) {
+    return { label: "Ir a citas", to: "/appointments" };
+  }
+  return null;
+}
+
+function getEventAction(event) {
+  const type = String(event?.source_record_type || "").toLowerCase();
+  if (type === "appointment") return { label: "Citas", to: "/appointments" };
+  if (type === "document") return { label: "Documentos", to: "/documents" };
+  if (type === "medication") return { label: "Medicamentos", to: "/medications" };
+  if (type === "external_record") return { label: "Documentos", to: "/documents" };
+  return null;
+}
+
 function getPreviewItem(kind, item) {
   if (kind === "appointments") {
     return {
@@ -197,6 +225,7 @@ function buildManualCandidates({ appointments, documents, medications, currentEp
 }
 
 export default function Timeline() {
+  const navigate = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
   const [selectedProfileId, setSelectedProfileId] = useState("active");
@@ -364,25 +393,76 @@ export default function Timeline() {
     [selectedDetail]
   );
 
+  const selectedEpisodeIndex = useMemo(
+    () => filteredEpisodes.findIndex((item) => item.id === selectedEpisodeId),
+    [filteredEpisodes, selectedEpisodeId]
+  );
+
   const selectedRelatedItems = useMemo(() => {
     if (!selectedEpisode) return [];
     return [
-      buildRelatedPreview("Citas", selectedEpisode.linked_appointments || 0, selectedDetail?.related_items?.appointments, "appointments"),
-      buildRelatedPreview("Documentos", selectedEpisode.linked_documents || 0, selectedDetail?.related_items?.documents, "documents"),
-      buildRelatedPreview(
-        "Medicamentos",
-        selectedEpisode.linked_medications || 0,
-        selectedDetail?.related_items?.medications,
-        "medications"
-      ),
-      buildRelatedPreview(
+      {
+        ...buildRelatedPreview("Citas", selectedEpisode.linked_appointments || 0, selectedDetail?.related_items?.appointments, "appointments"),
+        to: "/appointments",
+      },
+      {
+        ...buildRelatedPreview("Documentos", selectedEpisode.linked_documents || 0, selectedDetail?.related_items?.documents, "documents"),
+        to: "/documents",
+      },
+      {
+        ...buildRelatedPreview(
+          "Medicamentos",
+          selectedEpisode.linked_medications || 0,
+          selectedDetail?.related_items?.medications,
+          "medications"
+        ),
+        to: "/medications",
+      },
+      {
+        ...buildRelatedPreview(
         "Resultados",
         selectedEpisode.linked_external_records || 0,
         selectedDetail?.related_items?.external_records,
         "external_records"
-      ),
+        ),
+        to: "/documents",
+      },
     ];
   }, [selectedDetail, selectedEpisode]);
+
+  const selectedQuickActions = useMemo(() => {
+    if (!selectedEpisode) return [];
+    const primaryTaskAction = selectedPendingTasks[0] ? getTaskAction(selectedPendingTasks[0]) : null;
+    const baseActions = [
+      primaryTaskAction
+        ? { id: "next", label: primaryTaskAction.label, to: primaryTaskAction.to, tone: "primary" }
+        : null,
+      {
+        id: "appointments",
+        label: selectedEpisode.linked_appointments ? `Ver citas (${selectedEpisode.linked_appointments})` : "Ir a citas",
+        to: "/appointments",
+      },
+      {
+        id: "documents",
+        label: selectedEpisode.linked_documents ? `Ver documentos (${selectedEpisode.linked_documents})` : "Ir a documentos",
+        to: "/documents",
+      },
+      {
+        id: "medications",
+        label: selectedEpisode.linked_medications ? `Ver medicamentos (${selectedEpisode.linked_medications})` : "Ir a medicamentos",
+        to: "/medications",
+      },
+      {
+        id: "calendar",
+        label: "Ver agenda",
+        to: "/calendar",
+      },
+    ].filter(Boolean);
+
+    return baseActions.filter(
+      (item, index, collection) => collection.findIndex((candidate) => candidate.to === item.to) === index
+    );
+  }, [selectedEpisode, selectedPendingTasks]);
 
   const visibleManualItems = useMemo(
     () => ensureArray(manualLinker.items).filter((item) => item.type === manualLinker.type),
@@ -458,6 +538,13 @@ export default function Timeline() {
     }
   }
 
+  function selectRelativeEpisode(direction) {
+    if (!filteredEpisodes.length || selectedEpisodeIndex < 0) return;
+    const nextIndex = selectedEpisodeIndex + direction;
+    if (nextIndex < 0 || nextIndex >= filteredEpisodes.length) return;
+    setSelectedEpisodeId(filteredEpisodes[nextIndex].id);
+  }
+
   return (
     <>
       <section className="history-process-header">
@@ -528,6 +615,44 @@ export default function Timeline() {
               ))}
             </div>
           </div>
+
+          {filteredEpisodes.length ? (
+            <div className="history-process-mobile-nav">
+              <div className="input-group">
+                <label className="input-label">Proceso activo</label>
+                <select
+                  className="input-field"
+                  value={selectedEpisodeId || ""}
+                  onChange={(e) => setSelectedEpisodeId(Number(e.target.value) || null)}
+                >
+                  {filteredEpisodes.map((episode) => (
+                    <option key={episode.id} value={episode.id}>
+                      {cleanUiText(episode.title, "Proceso de salud")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="history-process-mobile-nav-actions">
+                <button
+                  type="button"
+                  className="secondary-btn history-process-inline-btn"
+                  disabled={selectedEpisodeIndex <= 0}
+                  onClick={() => selectRelativeEpisode(-1)}
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn history-process-inline-btn"
+                  disabled={selectedEpisodeIndex < 0 || selectedEpisodeIndex >= filteredEpisodes.length - 1}
+                  onClick={() => selectRelativeEpisode(1)}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {loading ? (
@@ -590,6 +715,19 @@ export default function Timeline() {
                     </div>
                   </div>
 
+                  <div className="history-process-commandbar">
+                    {selectedQuickActions.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className={`${action.tone === "primary" ? "primary-btn" : "secondary-btn"} history-process-command-btn`}
+                        onClick={() => navigate(action.to)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <div className="history-process-spotlight">
                     <div className="history-process-spotlight-item">
                       <span>Próximo paso</span>
@@ -636,6 +774,15 @@ export default function Timeline() {
                                   <strong>{cleanUiText(task.title, "Pendiente clínico")}</strong>
                                   <p>{getTaskLabel(task)}</p>
                                 </div>
+                                {getTaskAction(task) ? (
+                                  <button
+                                    type="button"
+                                    className="secondary-btn history-process-row-action"
+                                    onClick={() => navigate(getTaskAction(task).to)}
+                                  >
+                                    {getTaskAction(task).label}
+                                  </button>
+                                ) : null}
                               </div>
                             ))}
                           </div>
@@ -658,6 +805,15 @@ export default function Timeline() {
                                 <span>{item.count}</span>
                               </div>
                               <p>{item.preview}</p>
+                              {item.to ? (
+                                <button
+                                  type="button"
+                                  className="secondary-btn history-process-row-action"
+                                  onClick={() => navigate(item.to)}
+                                >
+                                  Abrir
+                                </button>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -681,6 +837,15 @@ export default function Timeline() {
                                   <p>{cleanUiText(event.summary, "Sin detalle adicional")}</p>
                                 </div>
                                 <span>{event.event_at ? toLocaleDateTimeOrEmpty(event.event_at) : "Fecha no informada"}</span>
+                                {getEventAction(event) ? (
+                                  <button
+                                    type="button"
+                                    className="secondary-btn history-process-row-action"
+                                    onClick={() => navigate(getEventAction(event).to)}
+                                  >
+                                    {getEventAction(event).label}
+                                  </button>
+                                ) : null}
                               </div>
                             ))}
                           </div>
