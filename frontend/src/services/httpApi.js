@@ -706,8 +706,10 @@ export async function deleteAppointment(id) {
   return res.data;
 }
 
-export async function getDocuments() {
-  const res = await api.get("/documents");
+export async function getDocuments(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/documents", { params });
   return res.data;
 }
 

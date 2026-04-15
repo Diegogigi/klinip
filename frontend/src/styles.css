@@ -47545,3 +47545,226 @@ body.theme-dark .history-episode-timeline-dot {
     min-width: 0;
   }
 }
+
+/* Historial compacto fase 2 */
+.history-episodes-stats.is-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.history-episode-card.is-compact {
+  gap: 0.72rem;
+  padding: 0.88rem !important;
+}
+
+.history-episode-card.is-compact .history-episode-title {
+  font-size: 1.12rem;
+}
+
+.history-episode-nextline {
+  margin: -0.18rem 0 0;
+  color: #52627d;
+  font-size: 0.96rem;
+  line-height: 1.4;
+}
+
+.history-episode-inline-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
+.history-episode-inline-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.22rem 0.62rem;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.95);
+  color: #5d6d88;
+  font-size: 0.81rem;
+  font-weight: 700;
+}
+
+.history-episode-summary-band {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.78rem 0.88rem;
+  border-radius: 18px;
+  border: 1px solid rgba(174, 198, 235, 0.72);
+  background: rgba(248, 251, 255, 0.9);
+}
+
+.history-episode-summary-band strong {
+  color: #102033;
+}
+
+.history-episode-summary-band p,
+.history-episode-helper,
+.history-episode-empty-note {
+  margin: 0;
+  color: #5f708b;
+  line-height: 1.45;
+}
+
+.history-episode-detail-grid.compact-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.68rem;
+}
+
+.history-episode-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.history-episode-related-grid.compact-related {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.58rem;
+}
+
+.history-episode-related-group {
+  display: grid;
+  gap: 0.48rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+  border: 1px solid rgba(215, 226, 244, 0.95);
+  background: rgba(248, 251, 255, 0.95);
+}
+
+.history-episode-related-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.history-episode-related-head strong {
+  color: #102033;
+  font-size: 0.94rem;
+}
+
+.history-episode-related-head span {
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.history-episode-related-items {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.history-episode-related-item strong {
+  color: #102033;
+  font-size: 0.9rem;
+}
+
+.history-episode-related-item p {
+  margin: 0.14rem 0 0;
+  color: #607089;
+  font-size: 0.86rem;
+}
+
+.history-manual-toggle {
+  min-height: 38px;
+  padding-inline: 0.82rem !important;
+}
+
+.history-manual-linker {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.history-manual-linker-grid {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.history-manual-preview {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.76rem 0.82rem;
+  border-radius: 16px;
+  border: 1px solid rgba(174, 198, 235, 0.72);
+  background: rgba(248, 251, 255, 0.92);
+}
+
+.history-manual-preview strong {
+  color: #102033;
+}
+
+.history-manual-preview p,
+.history-manual-preview span,
+.history-manual-message {
+  margin: 0;
+  color: #5f708b;
+  line-height: 1.4;
+}
+
+.history-manual-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.history-legacy-card.is-compact,
+.history-episode-panel,
+.history-episode-task,
+.history-episode-mini-item,
+.history-legacy-item {
+  box-shadow: none !important;
+}
+
+.history-episode-task {
+  padding: 0.72rem 0.78rem;
+}
+
+body.theme-dark .history-episode-nextline,
+body.theme-dark .history-episode-summary-band p,
+body.theme-dark .history-episode-helper,
+body.theme-dark .history-episode-empty-note,
+body.theme-dark .history-episode-related-item p,
+body.theme-dark .history-manual-preview p,
+body.theme-dark .history-manual-preview span,
+body.theme-dark .history-manual-message,
+body.theme-dark .history-episode-inline-meta span {
+  color: rgba(209, 222, 245, 0.8);
+}
+
+body.theme-dark .history-episode-inline-meta span,
+body.theme-dark .history-episode-summary-band,
+body.theme-dark .history-episode-related-group,
+body.theme-dark .history-manual-preview {
+  border-color: rgba(63, 82, 116, 0.86);
+  background: rgba(15, 23, 38, 0.92);
+}
+
+body.theme-dark .history-episode-summary-band strong,
+body.theme-dark .history-episode-related-head strong,
+body.theme-dark .history-episode-related-item strong,
+body.theme-dark .history-manual-preview strong {
+  color: #f4f8ff;
+}
+
+body.theme-dark .history-episode-related-head span {
+  color: #93c5fd;
+}
+
+@media (max-width: 768px) {
+  .history-episodes-stats.is-compact,
+  .history-episode-detail-grid.compact-grid,
+  .history-episode-related-grid.compact-related,
+  .history-manual-linker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .history-episode-card.is-compact {
+    padding: 0.78rem !important;
+  }
+
+  .history-episode-inline-meta {
+    gap: 0.36rem;
+  }
+
+  .history-episode-inline-meta span {
+    font-size: 0.77rem;
+  }
+}

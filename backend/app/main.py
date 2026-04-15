@@ -21767,10 +21767,11 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 @app.get("/documents", response_model=List[schemas.DocumentOut])
 async def list_documents(
+    profile_id: int | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    profile, _, target_user_id = _get_active_profile_context(db, current_user)
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
     docs = (
         db.query(models.Document)
         .filter(*_document_scope_filter(profile, target_user_id))

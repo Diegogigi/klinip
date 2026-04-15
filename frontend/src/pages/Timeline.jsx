@@ -2,12 +2,16 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   getActiveHealthProfile,
   getAiLifeTimeline,
+  getAppointments,
   getClinicalEpisodeDetail,
   getClinicalEpisodes,
+  getDocuments,
   getHealthProfiles,
+  getMedications,
+  relinkClinicalEpisodeItem,
 } from "../api";
 import { ensureArray } from "../utils/arrays";
-import { parseDate, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
+import { toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
 import { cleanUiText } from "../utils/textEncoding";
 
 const EPISODE_STATUS_LABELS = {
@@ -22,20 +26,10 @@ const EPISODE_STATUS_LABELS = {
 
 const EPISODE_TYPE_LABELS = {
   general: "Proceso general",
-  consultation: "Consulta médica",
-  exam: "Exámenes",
-  treatment: "Tratamiento",
-  surgery: "Cirugía",
-  rehabilitation: "Rehabilitación",
-  chronic: "Control crónico",
-};
-
-const EVENT_TYPE_LABELS = {
-  appointment: "Cita",
-  document: "Documento",
-  medication: "Medicamento",
-  medication_intake: "Dosis registrada",
-  external_record: "Resultado",
+  clinical_follow_up: "Seguimiento clínico",
+  diagnostic_workup: "Estudio clínico",
+  treatment_cycle: "Tratamiento",
+  interoperability: "Resultado externo",
 };
 
 const STATUS_FILTERS = [
@@ -43,6 +37,12 @@ const STATUS_FILTERS = [
   { id: "active", label: "Activos" },
   { id: "pending", label: "Con pendiente" },
   { id: "closed", label: "Cerrados" },
+];
+
+const MANUAL_ITEM_TYPES = [
+  { id: "appointment", label: "Citas" },
+  { id: "document", label: "Documentos" },
+  { id: "medication", label: "Medicamentos" },
 ];
 
 function getEpisodeStatusLabel(status) {
@@ -53,10 +53,6 @@ function getEpisodeTypeLabel(type) {
   return EPISODE_TYPE_LABELS[String(type || "").toLowerCase()] || "Proceso de salud";
 }
 
-function getEventTypeLabel(type) {
-  return EVENT_TYPE_LABELS[String(type || "").toLowerCase()] || "Evento";
-}
-
 function getEpisodeTone(status) {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "completed" || normalized === "closed" || normalized === "resolved") return "closed";
@@ -64,7 +60,7 @@ function getEpisodeTone(status) {
   return "active";
 }
 
-function buildEpisodeSearchValue(episode) {
+function getEpisodeSearchValue(episode) {
   return [
     cleanUiText(episode.title),
     cleanUiText(episode.summary),
@@ -77,12 +73,6 @@ function buildEpisodeSearchValue(episode) {
     .toLowerCase();
 }
 
-function getEpisodeLead(episode) {
-  const summary = cleanUiText(episode.care_summary || episode.summary, "");
-  if (summary) return summary;
-  return "Aquí reunimos citas, documentos, resultados y tratamientos de este proceso.";
-}
-
 function getProfileLabel(selectedProfileId, profiles, activeProfile) {
   if (selectedProfileId === "active") {
     return cleanUiText(activeProfile?.full_name || activeProfile?.name, "perfil activo");
@@ -93,118 +83,145 @@ function getProfileLabel(selectedProfileId, profiles, activeProfile) {
 
 function getEpisodeNextStep(episode, detail) {
   const pendingTasks = ensureArray(detail?.tasks).filter((task) => task.status !== "completed");
-  const firstPendingTask = pendingTasks[0];
-  if (firstPendingTask?.title) {
-    const dueText = firstPendingTask.due_at ? ` antes del ${toLocaleDateOrEmpty(firstPendingTask.due_at)}` : "";
-    return `${cleanUiText(firstPendingTask.title)}${dueText}`.trim();
+  if (pendingTasks[0]?.title) {
+    return cleanUiText(pendingTasks[0].title, "Tienes una acción pendiente en este proceso.");
   }
   if (episode.next_due_at) {
-    return `Revisar este proceso el ${toLocaleDateOrEmpty(episode.next_due_at)}.`;
+    return `Revisar antes del ${toLocaleDateOrEmpty(episode.next_due_at)}.`;
+  }
+  if (episode.linked_medications) {
+    return "El tratamiento ya quedó vinculado a este proceso.";
   }
   return "No hay un próximo paso pendiente registrado.";
 }
 
-function getEpisodeCountSummary(episode) {
+function getEpisodeCountsLine(episode) {
   const parts = [];
   if (episode.linked_appointments) parts.push(`${episode.linked_appointments} cita${episode.linked_appointments === 1 ? "" : "s"}`);
   if (episode.linked_documents) parts.push(`${episode.linked_documents} documento${episode.linked_documents === 1 ? "" : "s"}`);
-  if (episode.linked_medications) parts.push(`${episode.linked_medications} medicamento${episode.linked_medications === 1 ? "" : "s"}`);
+  if (episode.linked_medications) parts.push(`${episode.linked_medications} tratamiento${episode.linked_medications === 1 ? "" : "s"}`);
   if (episode.linked_external_records) {
     parts.push(`${episode.linked_external_records} resultado${episode.linked_external_records === 1 ? "" : "s"}`);
   }
-  if (!parts.length) return "Aún no hay elementos vinculados.";
-  return `Incluye ${parts.join(", ")}.`;
+  return parts.length ? parts.join(" · ") : "Sin elementos relacionados todavía.";
+}
+
+function getEpisodePendingLabel(episode) {
+  if (!episode.pending_tasks) return "Sin pendientes";
+  return `${episode.pending_tasks} pendiente${episode.pending_tasks === 1 ? "" : "s"}`;
 }
 
 function getTaskTone(task) {
   if (String(task?.status || "").toLowerCase() === "completed") return "done";
-  const dueDate = parseDate(task?.due_at);
-  if (dueDate && dueDate.getTime() < Date.now()) return "overdue";
   return "pending";
 }
 
-function getTaskStatusLabel(task) {
-  const normalized = String(task?.status || "").toLowerCase();
-  if (normalized === "completed") return "Listo";
-  if (getTaskTone(task) === "overdue") return "Atrasado";
-  return "Pendiente";
+function getTaskLine(task) {
+  if (task?.description) return cleanUiText(task.description);
+  if (task?.due_at) return `Hacer antes del ${toLocaleDateOrEmpty(task.due_at)}`;
+  return "Sin detalle adicional.";
 }
 
-function getTaskDateLabel(task) {
-  if (task.completed_at) return `Completado el ${toLocaleDateOrEmpty(task.completed_at)}`;
-  if (task.due_at) return `Hacer antes del ${toLocaleDateOrEmpty(task.due_at)}`;
-  return "Sin fecha límite";
+function getTimelineLabel(event) {
+  return cleanUiText(event.title, "Evento clínico");
 }
 
-function getTimelineEventDate(event) {
+function getTimelineMeta(event) {
   return event?.event_at ? toLocaleDateTimeOrEmpty(event.event_at) : "Fecha no informada";
 }
 
-function getLegacyLeadText(item) {
-  const typeLabel = getEventTypeLabel(item.event_type);
-  const title = cleanUiText(item.title, "Evento clínico");
-  return `${typeLabel}: ${title}`;
-}
-
-function renderRelatedItem(item, kind) {
+function getItemPreview(kind, item) {
   if (kind === "appointments") {
     return {
       title: cleanUiText(item.specialty || item.type, "Cita médica"),
-      detail: [cleanUiText(item.status), cleanUiText(item.center), toLocaleDateTimeOrEmpty(item.date_time)]
-        .filter(Boolean)
-        .join(" · "),
+      meta: [cleanUiText(item.status), toLocaleDateTimeOrEmpty(item.date_time)].filter(Boolean).join(" · "),
     };
   }
   if (kind === "documents") {
     return {
       title: cleanUiText(item.filename, "Documento clínico"),
-      detail: [cleanUiText(item.doc_type), cleanUiText(item.center), toLocaleDateOrEmpty(item.date)]
-        .filter(Boolean)
-        .join(" · "),
+      meta: [cleanUiText(item.doc_type), toLocaleDateOrEmpty(item.date)].filter(Boolean).join(" · "),
     };
   }
   if (kind === "medications") {
     return {
       title: cleanUiText(item.name, "Medicamento"),
-      detail: [cleanUiText(item.dose), cleanUiText(item.frequency), item.completed ? "Finalizado" : "Activo"]
-        .filter(Boolean)
-        .join(" · "),
+      meta: [cleanUiText(item.dose), cleanUiText(item.frequency)].filter(Boolean).join(" · "),
     };
   }
   return {
     title: cleanUiText(item.title, "Resultado"),
-    detail: [cleanUiText(item.record_type), toLocaleDateTimeOrEmpty(item.event_at)].filter(Boolean).join(" · "),
+    meta: toLocaleDateTimeOrEmpty(item.event_at),
   };
 }
 
-function EpisodeSection({ title, count, emptyText, items, kind }) {
+function RelatedGroup({ label, count, items, kind }) {
   const safeItems = ensureArray(items);
+  const preview = safeItems.slice(0, 2);
   return (
-    <section className="history-episode-panel">
-      <div className="history-episode-panel-head">
-        <h4>{title}</h4>
+    <div className="history-episode-related-group">
+      <div className="history-episode-related-head">
+        <strong>{label}</strong>
         <span>{count}</span>
       </div>
-      {safeItems.length ? (
-        <div className="history-episode-mini-list">
-          {safeItems.slice(0, 3).map((item) => {
-            const view = renderRelatedItem(item, kind);
+      {preview.length ? (
+        <div className="history-episode-related-items">
+          {preview.map((item) => {
+            const view = getItemPreview(kind, item);
             return (
-              <article key={`${kind}-${item.id}`} className="history-episode-mini-item">
+              <div key={`${kind}-${item.id}`} className="history-episode-related-item">
                 <strong>{view.title}</strong>
-                <p>{view.detail || "Sin detalle adicional"}</p>
-              </article>
+                <p>{view.meta || "Sin detalle adicional"}</p>
+              </div>
             );
           })}
-          {safeItems.length > 3 ? (
-            <p className="history-episode-more">+ {safeItems.length - 3} elemento(s) más dentro de este proceso.</p>
-          ) : null}
         </div>
       ) : (
-        <p className="history-episode-empty">{emptyText}</p>
+        <p className="history-episode-empty-note">Nada vinculado todavía.</p>
       )}
-    </section>
+    </div>
   );
+}
+
+function buildManualCandidates({ appointments, documents, medications, currentEpisodeId, episodesById }) {
+  const appointmentItems = ensureArray(appointments)
+    .filter((item) => item.episode_id !== currentEpisodeId)
+    .map((item) => ({
+      id: item.id,
+      type: "appointment",
+      currentEpisodeId: item.episode_id || null,
+      label: cleanUiText(item.specialty || item.type, "Cita médica"),
+      meta: [cleanUiText(item.status), toLocaleDateTimeOrEmpty(item.date_time)].filter(Boolean).join(" · "),
+    }));
+
+  const documentItems = ensureArray(documents)
+    .filter((item) => item.episode_id !== currentEpisodeId)
+    .map((item) => ({
+      id: item.id,
+      type: "document",
+      currentEpisodeId: item.episode_id || null,
+      label: cleanUiText(item.filename, "Documento clínico"),
+      meta: [cleanUiText(item.doc_type), toLocaleDateOrEmpty(item.date)].filter(Boolean).join(" · "),
+    }));
+
+  const medicationItems = ensureArray(medications)
+    .filter((item) => item.episode_id !== currentEpisodeId)
+    .map((item) => ({
+      id: item.id,
+      type: "medication",
+      currentEpisodeId: item.episode_id || null,
+      label: cleanUiText(item.name, "Medicamento"),
+      meta: [cleanUiText(item.dose), cleanUiText(item.frequency)].filter(Boolean).join(" · "),
+    }));
+
+  return [...appointmentItems, ...documentItems, ...medicationItems]
+    .map((item) => ({
+      ...item,
+      currentEpisodeLabel: item.currentEpisodeId
+        ? cleanUiText(episodesById[item.currentEpisodeId]?.title, "Otro proceso")
+        : "Sin proceso asignado",
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, "es"));
 }
 
 export default function Timeline() {
@@ -220,6 +237,16 @@ export default function Timeline() {
   const [expandedEpisodeId, setExpandedEpisodeId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [manualLinker, setManualLinker] = useState({
+    episodeId: null,
+    loading: false,
+    saving: false,
+    type: "appointment",
+    itemId: "",
+    items: [],
+    message: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -253,9 +280,18 @@ export default function Timeline() {
 
         const safeEpisodes = ensureArray(episodesData);
         setEpisodes(safeEpisodes);
-        setLegacyTimeline(legacyData || { summary: "", events: [], event_count: 0 });
         setEpisodeDetails({});
-        setExpandedEpisodeId(safeEpisodes[0]?.id || null);
+        setLegacyTimeline(legacyData || { summary: "", events: [], event_count: 0 });
+        setExpandedEpisodeId((current) => (safeEpisodes.some((item) => item.id === current) ? current : null));
+        setManualLinker({
+          episodeId: null,
+          loading: false,
+          saving: false,
+          type: "appointment",
+          itemId: "",
+          items: [],
+          message: "",
+        });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -265,7 +301,7 @@ export default function Timeline() {
     return () => {
       cancelled = true;
     };
-  }, [selectedProfileId]);
+  }, [refreshTick, selectedProfileId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,6 +325,15 @@ export default function Timeline() {
     };
   }, [episodeDetails, expandedEpisodeId, resolvedProfileId]);
 
+  const episodesById = useMemo(
+    () =>
+      ensureArray(episodes).reduce((acc, item) => {
+        acc[item.id] = item;
+        return acc;
+      }, {}),
+    [episodes]
+  );
+
   const filteredEpisodes = useMemo(() => {
     const searchValue = searchTerm.trim().toLowerCase();
     return ensureArray(episodes).filter((episode) => {
@@ -298,7 +343,7 @@ export default function Timeline() {
         (statusFilter === "active" && tone === "active") ||
         (statusFilter === "pending" && episode.pending_tasks > 0) ||
         (statusFilter === "closed" && tone === "closed");
-      const matchesSearch = !searchValue || buildEpisodeSearchValue(episode).includes(searchValue);
+      const matchesSearch = !searchValue || getEpisodeSearchValue(episode).includes(searchValue);
       return matchesStatus && matchesSearch;
     });
   }, [episodes, searchTerm, statusFilter]);
@@ -309,7 +354,6 @@ export default function Timeline() {
       total: safeEpisodes.length,
       active: safeEpisodes.filter((item) => getEpisodeTone(item.status) === "active").length,
       pending: safeEpisodes.reduce((sum, item) => sum + Number(item.pending_tasks || 0), 0),
-      medications: safeEpisodes.reduce((sum, item) => sum + Number(item.linked_medications || 0), 0),
     };
   }, [episodes]);
 
@@ -318,24 +362,96 @@ export default function Timeline() {
     [activeProfile, profiles, selectedProfileId]
   );
 
-  const legacyEvents = useMemo(() => ensureArray(legacyTimeline.events).slice(0, 6), [legacyTimeline.events]);
+  const legacyEvents = useMemo(() => ensureArray(legacyTimeline.events).slice(0, 4), [legacyTimeline.events]);
+
+  const visibleManualItems = useMemo(
+    () => ensureArray(manualLinker.items).filter((item) => item.type === manualLinker.type),
+    [manualLinker.items, manualLinker.type]
+  );
+
+  async function openManualLinker(episodeId) {
+    if (!resolvedProfileId) return;
+    if (manualLinker.episodeId === episodeId) {
+      setManualLinker((current) => ({
+        ...current,
+        episodeId: current.episodeId === episodeId ? null : episodeId,
+      }));
+      return;
+    }
+
+    setManualLinker({
+      episodeId,
+      loading: true,
+      saving: false,
+      type: "appointment",
+      itemId: "",
+      items: [],
+      message: "",
+    });
+
+    const [appointments, documents, medications] = await Promise.all([
+      getAppointments({ profileId: resolvedProfileId }).catch(() => []),
+      getDocuments({ profileId: resolvedProfileId }).catch(() => []),
+      getMedications({ profileId: resolvedProfileId }).catch(() => []),
+    ]);
+
+    const items = buildManualCandidates({
+      appointments,
+      documents,
+      medications,
+      currentEpisodeId: episodeId,
+      episodesById,
+    });
+
+    const firstType = MANUAL_ITEM_TYPES.find((group) => items.some((item) => item.type === group.id))?.id || "appointment";
+    const firstItem = items.find((item) => item.type === firstType);
+
+    setManualLinker({
+      episodeId,
+      loading: false,
+      saving: false,
+      type: firstType,
+      itemId: firstItem ? String(firstItem.id) : "",
+      items,
+      message: items.length ? "" : "No encontramos elementos para agregar o mover a este proceso.",
+    });
+  }
+
+  async function handleManualAttach(episodeId) {
+    if (!resolvedProfileId || !manualLinker.itemId) return;
+    setManualLinker((current) => ({ ...current, saving: true, message: "" }));
+    try {
+      await relinkClinicalEpisodeItem(resolvedProfileId, {
+        item_type: manualLinker.type,
+        item_id: Number(manualLinker.itemId),
+        episode_id: episodeId,
+      });
+      setExpandedEpisodeId(episodeId);
+      setRefreshTick((value) => value + 1);
+    } catch {
+      setManualLinker((current) => ({
+        ...current,
+        saving: false,
+        message: "No pudimos mover este elemento. Intenta otra vez.",
+      }));
+    }
+  }
 
   return (
     <>
       <div className="card history-episodes-hero">
         <div className="history-episodes-hero-copy">
           <span className="history-episodes-kicker">Historial</span>
-          <h2 className="card-title">Procesos de salud conectados</h2>
+          <h2 className="card-title">Procesos de salud</h2>
           <p className="muted">
-            Aquí cada atención se entiende como un proceso completo: consulta, exámenes, documentos, resultados y
-            tratamiento en un mismo lugar.
+            Cada tarjeta resume un mismo motivo de salud, aunque haya pasado por varias citas, documentos o tratamientos.
           </p>
           <p className="history-episodes-hero-note">
             Perfil actual: <strong>{profileLabel}</strong>
           </p>
         </div>
 
-        <div className="history-episodes-stats">
+        <div className="history-episodes-stats is-compact">
           <article className="history-episodes-stat">
             <strong>{stats.total}</strong>
             <span>Procesos</span>
@@ -347,10 +463,6 @@ export default function Timeline() {
           <article className="history-episodes-stat">
             <strong>{stats.pending}</strong>
             <span>Pendientes</span>
-          </article>
-          <article className="history-episodes-stat">
-            <strong>{stats.medications}</strong>
-            <span>Medicamentos</span>
           </article>
         </div>
       </div>
@@ -374,7 +486,7 @@ export default function Timeline() {
             <input
               type="text"
               className="input-field"
-              placeholder="Ejemplo: traumatología, rodilla, receta"
+              placeholder="Ejemplo: rodilla, receta, control"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -402,12 +514,12 @@ export default function Timeline() {
             const detail = episodeDetails[episode.id];
             const isExpanded = expandedEpisodeId === episode.id;
             const tone = getEpisodeTone(episode.status);
-            const pendingTasks = ensureArray(detail?.tasks).filter((task) => task.status !== "completed");
-            const recentTimeline = ensureArray(detail?.timeline).slice().reverse().slice(0, 6);
-            const tags = ensureArray(episode.tags_json).filter(Boolean).slice(0, 4);
+            const pendingTasks = ensureArray(detail?.tasks).filter((task) => task.status !== "completed").slice(0, 3);
+            const timelineItems = ensureArray(detail?.timeline).slice().reverse().slice(0, 4);
+            const manualOpen = manualLinker.episodeId === episode.id;
 
             return (
-              <article key={episode.id} className={`card history-episode-card tone-${tone}`}>
+              <article key={episode.id} className={`card history-episode-card is-compact tone-${tone}`}>
                 <div className="history-episode-card-head">
                   <div className="history-episode-eyebrow">
                     <span className="history-episode-type">{getEpisodeTypeLabel(episode.episode_type)}</span>
@@ -417,37 +529,18 @@ export default function Timeline() {
                     className="secondary-btn history-episode-toggle"
                     onClick={() => setExpandedEpisodeId(isExpanded ? null : episode.id)}
                   >
-                    {isExpanded ? "Ocultar detalle" : "Ver proceso"}
+                    {isExpanded ? "Ocultar" : "Ver"}
                   </button>
                 </div>
 
                 <h3 className="history-episode-title">{cleanUiText(episode.title, "Proceso de salud")}</h3>
-                <p className="history-episode-summary">{getEpisodeLead(episode)}</p>
+                <p className="history-episode-nextline">{getEpisodeNextStep(episode, detail)}</p>
 
-                <div className="history-episode-highlights">
-                  <article className="history-episode-highlight">
-                    <span>Próximo paso</span>
-                    <strong>{getEpisodeNextStep(episode, detail)}</strong>
-                  </article>
-                  <article className="history-episode-highlight">
-                    <span>Qué incluye</span>
-                    <strong>{getEpisodeCountSummary(episode)}</strong>
-                  </article>
-                  <article className="history-episode-highlight">
-                    <span>Último movimiento</span>
-                    <strong>{episode.last_activity_at ? toLocaleDateOrEmpty(episode.last_activity_at) : "Sin fecha registrada"}</strong>
-                  </article>
+                <div className="history-episode-inline-meta">
+                  <span>{getEpisodeCountsLine(episode)}</span>
+                  <span>{getEpisodePendingLabel(episode)}</span>
+                  <span>{episode.last_activity_at ? `Último cambio ${toLocaleDateOrEmpty(episode.last_activity_at)}` : "Sin fecha registrada"}</span>
                 </div>
-
-                {tags.length ? (
-                  <div className="history-episode-tags">
-                    {tags.map((tag) => (
-                      <span key={`${episode.id}-${tag}`} className="history-episode-tag">
-                        {cleanUiText(tag)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
 
                 {isExpanded ? (
                   <div className="history-episode-detail">
@@ -455,7 +548,17 @@ export default function Timeline() {
                       <div className="history-episode-empty">Cargando este proceso...</div>
                     ) : (
                       <>
-                        <div className="history-episode-detail-grid">
+                        <div className="history-episode-summary-band">
+                          <strong>Resumen simple</strong>
+                          <p>
+                            {cleanUiText(
+                              episode.care_summary || episode.summary,
+                              "Este proceso reúne la atención, sus documentos y los pasos pendientes."
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="history-episode-detail-grid compact-grid">
                           <section className="history-episode-panel">
                             <div className="history-episode-panel-head">
                               <h4>Lo que falta</h4>
@@ -467,70 +570,170 @@ export default function Timeline() {
                                   <article key={task.id} className={`history-episode-task tone-${getTaskTone(task)}`}>
                                     <div>
                                       <strong>{cleanUiText(task.title, "Pendiente clínico")}</strong>
-                                      <p>{cleanUiText(task.description, getTaskDateLabel(task))}</p>
+                                      <p>{getTaskLine(task)}</p>
                                     </div>
-                                    <span>{getTaskStatusLabel(task)}</span>
                                   </article>
                                 ))}
                               </div>
                             ) : (
-                              <p className="history-episode-empty">No hay tareas pendientes en este proceso.</p>
+                              <p className="history-episode-empty-note">No hay tareas pendientes en este proceso.</p>
                             )}
                           </section>
 
                           <section className="history-episode-panel">
                             <div className="history-episode-panel-head">
-                              <h4>Qué pasó hasta ahora</h4>
+                              <h4>Actividad reciente</h4>
                               <span>{ensureArray(detail?.timeline).length}</span>
                             </div>
-                            {recentTimeline.length ? (
+                            {timelineItems.length ? (
                               <div className="history-episode-timeline">
-                                {recentTimeline.map((event, index) => (
-                                  <article key={`${episode.id}-${event.source_record_type}-${event.source_record_id}-${index}`} className="history-episode-timeline-item">
+                                {timelineItems.map((event, index) => (
+                                  <article
+                                    key={`${episode.id}-${event.source_record_type}-${event.source_record_id}-${index}`}
+                                    className="history-episode-timeline-item"
+                                  >
                                     <div className="history-episode-timeline-dot" />
                                     <div>
-                                      <strong>{getLegacyLeadText(event)}</strong>
+                                      <strong>{getTimelineLabel(event)}</strong>
                                       <p>{cleanUiText(event.summary, "Sin detalle adicional")}</p>
-                                      <span>{getTimelineEventDate(event)}</span>
+                                      <span>{getTimelineMeta(event)}</span>
                                     </div>
                                   </article>
                                 ))}
                               </div>
                             ) : (
-                              <p className="history-episode-empty">Aún no hay eventos visibles dentro de este proceso.</p>
+                              <p className="history-episode-empty-note">Aún no hay eventos visibles dentro de este proceso.</p>
                             )}
                           </section>
-                        </div>
 
-                        <div className="history-episode-related-grid">
-                          <EpisodeSection
-                            title="Citas vinculadas"
-                            count={episode.linked_appointments || 0}
-                            emptyText="No hay citas vinculadas todavía."
-                            items={detail?.related_items?.appointments}
-                            kind="appointments"
-                          />
-                          <EpisodeSection
-                            title="Documentos"
-                            count={episode.linked_documents || 0}
-                            emptyText="No hay documentos vinculados todavía."
-                            items={detail?.related_items?.documents}
-                            kind="documents"
-                          />
-                          <EpisodeSection
-                            title="Medicamentos"
-                            count={episode.linked_medications || 0}
-                            emptyText="No hay medicamentos vinculados todavía."
-                            items={detail?.related_items?.medications}
-                            kind="medications"
-                          />
-                          <EpisodeSection
-                            title="Resultados e informes"
-                            count={episode.linked_external_records || 0}
-                            emptyText="No hay resultados vinculados todavía."
-                            items={detail?.related_items?.external_records}
-                            kind="external_records"
-                          />
+                          <section className="history-episode-panel history-episode-panel-wide">
+                            <div className="history-episode-panel-head">
+                              <h4>Elementos del proceso</h4>
+                              <span>{getEpisodePendingLabel(episode)}</span>
+                            </div>
+                            <div className="history-episode-related-grid compact-related">
+                              <RelatedGroup
+                                label="Citas"
+                                count={episode.linked_appointments || 0}
+                                items={detail?.related_items?.appointments}
+                                kind="appointments"
+                              />
+                              <RelatedGroup
+                                label="Documentos"
+                                count={episode.linked_documents || 0}
+                                items={detail?.related_items?.documents}
+                                kind="documents"
+                              />
+                              <RelatedGroup
+                                label="Medicamentos"
+                                count={episode.linked_medications || 0}
+                                items={detail?.related_items?.medications}
+                                kind="medications"
+                              />
+                              <RelatedGroup
+                                label="Resultados"
+                                count={episode.linked_external_records || 0}
+                                items={detail?.related_items?.external_records}
+                                kind="external_records"
+                              />
+                            </div>
+                          </section>
+
+                          <section className="history-episode-panel history-episode-panel-wide">
+                            <div className="history-episode-panel-head">
+                              <h4>Ajustar manualmente</h4>
+                              <button className="secondary-btn history-manual-toggle" onClick={() => openManualLinker(episode.id)}>
+                                {manualOpen ? "Ocultar" : "Agregar o mover"}
+                              </button>
+                            </div>
+                            <p className="history-episode-helper">
+                              Si algo quedó fuera o en otro proceso, puedes corregirlo aquí sin depender solo de la IA.
+                            </p>
+
+                            {manualOpen ? (
+                              manualLinker.loading ? (
+                                <div className="history-episode-empty">Buscando citas, documentos y medicamentos...</div>
+                              ) : (
+                                <div className="history-manual-linker">
+                                  <div className="history-manual-linker-grid">
+                                    <div className="input-group">
+                                      <label className="input-label">Tipo</label>
+                                      <select
+                                        className="input-field"
+                                        value={manualLinker.type}
+                                        onChange={(e) =>
+                                          setManualLinker((current) => {
+                                            const nextType = e.target.value;
+                                            const nextItem = ensureArray(current.items).find((item) => item.type === nextType);
+                                            return {
+                                              ...current,
+                                              type: nextType,
+                                              itemId: nextItem ? String(nextItem.id) : "",
+                                              message: "",
+                                            };
+                                          })
+                                        }
+                                      >
+                                        {MANUAL_ITEM_TYPES.map((item) => (
+                                          <option key={item.id} value={item.id}>
+                                            {item.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+
+                                    <div className="input-group">
+                                      <label className="input-label">Elemento</label>
+                                      <select
+                                        className="input-field"
+                                        value={manualLinker.itemId}
+                                        onChange={(e) =>
+                                          setManualLinker((current) => ({ ...current, itemId: e.target.value, message: "" }))
+                                        }
+                                      >
+                                        {!visibleManualItems.length ? <option value="">No hay elementos disponibles</option> : null}
+                                        {visibleManualItems.map((item) => (
+                                          <option key={`${item.type}-${item.id}`} value={item.id}>
+                                            {item.label} · {item.currentEpisodeLabel}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {manualLinker.itemId ? (
+                                    <div className="history-manual-preview">
+                                      {(() => {
+                                        const selectedItem = visibleManualItems.find(
+                                          (item) => String(item.id) === String(manualLinker.itemId)
+                                        );
+                                        if (!selectedItem) return null;
+                                        return (
+                                          <>
+                                            <strong>{selectedItem.label}</strong>
+                                            <p>{selectedItem.meta || "Sin detalle adicional"}</p>
+                                            <span>Estado actual: {selectedItem.currentEpisodeLabel}</span>
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  ) : null}
+
+                                  <div className="history-manual-actions">
+                                    <button
+                                      className="primary-btn"
+                                      disabled={!manualLinker.itemId || manualLinker.saving}
+                                      onClick={() => handleManualAttach(episode.id)}
+                                    >
+                                      {manualLinker.saving ? "Guardando..." : "Asignar a este proceso"}
+                                    </button>
+                                  </div>
+
+                                  {manualLinker.message ? <p className="history-manual-message">{manualLinker.message}</p> : null}
+                                </div>
+                              )
+                            ) : null}
+                          </section>
                         </div>
                       </>
                     )}
@@ -545,16 +748,16 @@ export default function Timeline() {
           <div className="card history-episodes-empty history-episodes-transition">
             <h3>No encontramos procesos agrupados para este perfil</h3>
             <p>
-              Estamos conectando tus atenciones para que se entiendan como un solo proceso. Mientras eso termina, abajo
-              verás la actividad reciente de la forma tradicional.
+              Seguimos conectando las atenciones que pertenecen al mismo motivo de salud. Mientras tanto, abajo verás la
+              actividad reciente.
             </p>
           </div>
 
-          <div className="card history-legacy-card">
+          <div className="card history-legacy-card is-compact">
             <div className="history-legacy-head">
               <div>
                 <span className="history-episodes-kicker">Vista temporal</span>
-                <h3>Actividad reciente aún sin agrupar</h3>
+                <h3>Actividad reciente</h3>
               </div>
               <span>{legacyTimeline.event_count || legacyEvents.length} evento(s)</span>
             </div>
@@ -563,7 +766,7 @@ export default function Timeline() {
               <div className="history-legacy-list">
                 {legacyEvents.map((item, index) => (
                   <article key={`${item.id || item.source_record_id || index}-${index}`} className="history-legacy-item">
-                    <strong>{getLegacyLeadText(item)}</strong>
+                    <strong>{cleanUiText(item.title, "Evento clínico")}</strong>
                     <p>{cleanUiText(item.summary, "Sin detalle adicional")}</p>
                     <span>{item.event_at ? toLocaleDateTimeOrEmpty(item.event_at) : "Fecha no informada"}</span>
                   </article>

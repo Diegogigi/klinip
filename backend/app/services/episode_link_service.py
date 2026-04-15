@@ -8,6 +8,30 @@ from sqlalchemy.orm import Session
 
 from .. import models
 
+GENERIC_TOKENS = {
+    "clinica",
+    "clinico",
+    "control",
+    "consulta",
+    "doctor",
+    "doctora",
+    "hospital",
+    "medico",
+    "medica",
+    "salud",
+    "resultado",
+    "resultados",
+    "documento",
+    "documentos",
+    "tratamiento",
+    "examen",
+    "examenes",
+    "orden",
+    "informe",
+    "centro",
+    "receta",
+}
+
 
 def _normalize_text(value: str | None) -> str:
     raw = unicodedata.normalize("NFKD", str(value or ""))
@@ -15,13 +39,27 @@ def _normalize_text(value: str | None) -> str:
     return re.sub(r"[^a-z0-9\s]", " ", ascii_text.lower()).strip()
 
 
-def _tokens_for(*values: str | None) -> list[str]:
+def _tokens_for(*values: str | None, max_tokens: int = 18) -> list[str]:
     tokens: list[str] = []
     for value in values:
         for token in _normalize_text(value).split():
-            if len(token) >= 3 and token not in tokens:
-                tokens.append(token)
-    return tokens[:12]
+            if len(token) < 3 or token in GENERIC_TOKENS or token in tokens:
+                continue
+            tokens.append(token)
+            if len(tokens) >= max_tokens:
+                return tokens
+    return tokens
+
+
+def _merge_tokens(existing: list[str], new_tokens: list[str], *, max_tokens: int = 24) -> list[str]:
+    merged = list(existing)
+    for token in new_tokens:
+        if token in merged:
+            continue
+        merged.append(token)
+        if len(merged) >= max_tokens:
+            break
+    return merged
 
 
 def _clip(value: str | None, max_len: int) -> str:
@@ -44,19 +82,37 @@ def _record_anchor(record_type: str, record) -> datetime | None:
 def _episode_title_for_record(record_type: str, record) -> str:
     if record_type == "appointment":
         specialty = _clip(getattr(record, "specialty", None), 80)
-        center = _clip(getattr(record, "center", None), 80)
-        base = specialty or f"Atención {getattr(getattr(record, 'type', None), 'value', getattr(record, 'type', 'clínica'))}"
-        return f"{base} · {center}" if center else base
+        appointment_type = getattr(getattr(record, "type", None), "value", getattr(record, "type", "clinica"))
+        return specialty or f"Atencion {appointment_type}"
     if record_type == "document":
-        doc_type = getattr(getattr(record, "doc_type", None), "value", getattr(record, "doc_type", "documento"))
-        center = _clip(getattr(record, "center", None), 80)
+        notes = _clip(getattr(record, "notes", None), 80)
         filename = _clip(getattr(record, "filename", None), 80)
-        return center or filename or f"Proceso asociado a {doc_type}"
+        doc_type = getattr(getattr(record, "doc_type", None), "value", getattr(record, "doc_type", "documento"))
+        return notes or filename or f"Proceso asociado a {doc_type}"
     if record_type == "medication":
-        return f"Tratamiento con {_clip(getattr(record, 'name', None), 100) or 'medicación'}"
+        return f"Tratamiento con {_clip(getattr(record, 'name', None), 100) or 'medicacion'}"
     if record_type == "external_record":
-        return _clip(getattr(record, "title", None), 120) or "Registro clínico externo"
-    return "Proceso clínico"
+        return _clip(getattr(record, "title", None), 120) or "Registro clinico externo"
+    return "Proceso clinico"
+
+
+def _episode_summary_for_record(record_type: str, record) -> str:
+    if record_type == "appointment":
+        center = _clip(getattr(record, "center", None), 80)
+        notes = _clip(getattr(record, "notes", None), 180)
+        return notes or (f"Atencion registrada en {center}" if center else "Atencion registrada para seguimiento.")
+    if record_type == "document":
+        center = _clip(getattr(record, "center", None), 80)
+        notes = _clip(getattr(record, "notes", None), 180)
+        return notes or (f"Documento subido desde {center}" if center else "Documento asociado al proceso.")
+    if record_type == "medication":
+        dose = _clip(getattr(record, "dose", None), 60)
+        frequency = _clip(getattr(record, "frequency", None), 60)
+        parts = [part for part in [dose, frequency] if part]
+        return " · ".join(parts) if parts else "Tratamiento activo registrado."
+    if record_type == "external_record":
+        return _clip(getattr(record, "summary", None), 180) or "Resultado o registro externo vinculado."
+    return "Proceso clinico en seguimiento."
 
 
 def _episode_type_for_record(record_type: str, record) -> str:
@@ -79,9 +135,9 @@ def _episode_type_for_record(record_type: str, record) -> str:
 
 def _record_tokens(record_type: str, record) -> list[str]:
     if record_type == "appointment":
-        return _tokens_for(record.specialty, record.center, record.notes)
+        return _tokens_for(record.specialty, record.notes)
     if record_type == "document":
-        return _tokens_for(record.center, record.notes, record.filename, getattr(record.doc_type, "value", record.doc_type))
+        return _tokens_for(record.notes, record.filename, getattr(record.doc_type, "value", record.doc_type), record.center)
     if record_type == "medication":
         return _tokens_for(record.name, record.dose, record.frequency, record.notes)
     if record_type == "external_record":
@@ -100,12 +156,14 @@ def _find_explicit_related_episode(db: Session, record_type: str, record) -> mod
             appointment = db.query(models.Appointment).filter(models.Appointment.id == int(appointment_id)).first()
             if appointment and getattr(appointment, "episode_id", None):
                 return db.query(models.ClinicalEpisode).filter(models.ClinicalEpisode.id == int(appointment.episode_id)).first()
+
     if record_type == "medication":
         document_id = getattr(record, "document_id", None)
         if document_id:
             document = db.query(models.Document).filter(models.Document.id == int(document_id)).first()
             if document and getattr(document, "episode_id", None):
                 return db.query(models.ClinicalEpisode).filter(models.ClinicalEpisode.id == int(document.episode_id)).first()
+
     if record_type == "external_record":
         payload = getattr(record, "payload_json", {}) or {}
         for model_class, key in (
@@ -122,15 +180,103 @@ def _find_explicit_related_episode(db: Session, record_type: str, record) -> mod
     return None
 
 
+def _episode_context_tokens(db: Session, episode: models.ClinicalEpisode) -> list[str]:
+    tokens = _tokens_for(
+        episode.title,
+        episode.summary,
+        episode.care_summary,
+        " ".join(episode.tags_json or []),
+        max_tokens=18,
+    )
+
+    appointments = (
+        db.query(models.Appointment)
+        .filter(models.Appointment.episode_id == int(episode.id))
+        .order_by(models.Appointment.created_at.desc())
+        .limit(4)
+        .all()
+    )
+    for item in appointments:
+        tokens = _merge_tokens(tokens, _tokens_for(item.specialty, item.notes, max_tokens=10))
+
+    documents = (
+        db.query(models.Document)
+        .filter(models.Document.episode_id == int(episode.id))
+        .order_by(models.Document.created_at.desc())
+        .limit(4)
+        .all()
+    )
+    for item in documents:
+        tokens = _merge_tokens(tokens, _tokens_for(item.notes, item.filename, item.center, max_tokens=10))
+
+    medications = (
+        db.query(models.Medication)
+        .filter(models.Medication.episode_id == int(episode.id))
+        .order_by(models.Medication.created_at.desc())
+        .limit(4)
+        .all()
+    )
+    for item in medications:
+        tokens = _merge_tokens(tokens, _tokens_for(item.name, item.notes, max_tokens=10))
+
+    external_records = (
+        db.query(models.ExternalClinicalRecord)
+        .filter(models.ExternalClinicalRecord.episode_id == int(episode.id))
+        .order_by(models.ExternalClinicalRecord.created_at.desc())
+        .limit(3)
+        .all()
+    )
+    for item in external_records:
+        tokens = _merge_tokens(tokens, _tokens_for(item.title, item.summary, max_tokens=10))
+
+    return tokens[:24]
+
+
+def _candidate_status_value(candidate: models.ClinicalEpisode) -> str:
+    return str(getattr(getattr(candidate, "status", None), "value", getattr(candidate, "status", "")) or "").lower()
+
+
+def _score_candidate_episode(
+    *,
+    record_tokens: list[str],
+    anchor: datetime | None,
+    candidate: models.ClinicalEpisode,
+    candidate_tokens: list[str],
+) -> float:
+    overlap_tokens = set(record_tokens).intersection(candidate_tokens)
+    score = float(len(overlap_tokens))
+
+    if len(overlap_tokens) >= 2:
+        score += 0.6
+    if any(len(token) >= 6 for token in overlap_tokens):
+        score += 0.4
+
+    status_value = _candidate_status_value(candidate)
+    if status_value in {"active", "monitoring", "pending"}:
+        score += 0.5
+
+    if anchor and candidate.last_activity_at:
+        delta_days = abs((anchor - candidate.last_activity_at).days)
+        if delta_days <= 45:
+            score += 1.8
+        elif delta_days <= 180:
+            score += 1.1
+        elif delta_days <= 365 and len(overlap_tokens) >= 2:
+            score += 0.6
+
+    return score
+
+
 def _find_candidate_episode(
     db: Session,
     profile: models.HealthProfile,
     record_type: str,
     record,
 ) -> models.ClinicalEpisode | None:
-    tokens = _record_tokens(record_type, record)
-    if not tokens:
+    record_tokens = _record_tokens(record_type, record)
+    if not record_tokens:
         return None
+
     anchor = _record_anchor(record_type, record)
     candidates = (
         db.query(models.ClinicalEpisode)
@@ -139,23 +285,25 @@ def _find_candidate_episode(
             models.ClinicalEpisode.status != models.ClinicalEpisodeStatus.archived,
         )
         .order_by(models.ClinicalEpisode.last_activity_at.desc(), models.ClinicalEpisode.created_at.desc())
-        .limit(12)
+        .limit(16)
         .all()
     )
-    best: tuple[float, models.ClinicalEpisode | None] = (0.0, None)
+
+    best_candidate = None
+    best_score = 0.0
     for candidate in candidates:
-        candidate_tokens = _tokens_for(candidate.title, candidate.summary, candidate.care_summary, " ".join(candidate.tags_json or []))
-        overlap = len(set(tokens).intersection(candidate_tokens))
-        score = float(overlap)
-        if anchor and candidate.last_activity_at:
-            delta_days = abs((anchor - candidate.last_activity_at).days)
-            if delta_days <= 30:
-                score += 1.5
-            elif delta_days <= 90:
-                score += 0.5
-        if score > best[0]:
-            best = (score, candidate)
-    return best[1] if best[0] >= 2.0 else None
+        candidate_tokens = _episode_context_tokens(db, candidate)
+        score = _score_candidate_episode(
+            record_tokens=record_tokens,
+            anchor=anchor,
+            candidate=candidate,
+            candidate_tokens=candidate_tokens,
+        )
+        if score > best_score:
+            best_candidate = candidate
+            best_score = score
+
+    return best_candidate if best_candidate and best_score >= 2.7 else None
 
 
 def _upsert_task(
@@ -213,7 +361,7 @@ def sync_episode_tasks_for_record(
         appointment_type = getattr(getattr(record, "type", None), "value", getattr(record, "type", ""))
         appointment_status = getattr(getattr(record, "status", None), "value", getattr(record, "status", "pendiente"))
         pending = appointment_status != "realizada"
-        title = "Realizar examen agendado" if appointment_type == "examen" else "Asistir a la atención"
+        title = "Realizar examen agendado" if appointment_type == "examen" else "Asistir a la atencion"
         description = _clip(getattr(record, "notes", None), 240) or _clip(getattr(record, "specialty", None), 160)
         _upsert_task(
             db,
@@ -246,7 +394,7 @@ def sync_episode_tasks_for_record(
                 episode,
                 task_type="lab_result_follow_up",
                 title="Subir resultado del examen u orden",
-                description="Este episodio tiene una orden médica. Falta confirmar el resultado o el documento de cierre.",
+                description="Este proceso tiene una orden medica. Falta confirmar el resultado o el documento de cierre.",
                 due_at=(getattr(record, "date", None) or getattr(record, "created_at", None)) + timedelta(days=30),
                 status="completed" if has_results else "pending",
                 source_module="documents",
@@ -269,7 +417,7 @@ def sync_episode_tasks_for_record(
                 episode,
                 task_type="prescription_follow_up",
                 title="Confirmar tratamiento indicado",
-                description="La receta quedó guardada. Revisa si el tratamiento ya fue registrado en medicamentos.",
+                description="La receta ya esta guardada. Revisa si el tratamiento fue registrado en medicamentos.",
                 due_at=(getattr(record, "date", None) or getattr(record, "created_at", None)) + timedelta(days=7),
                 status="completed" if linked_meds > 0 else "pending",
                 source_module="documents",
@@ -286,19 +434,26 @@ def refresh_episode_links_for_record(
     record_type: str,
     record,
 ) -> models.ClinicalEpisode | None:
-    existing = _find_explicit_related_episode(db, record_type, record)
-    episode = existing or _find_candidate_episode(db, profile, record_type, record)
+    explicit_episode = _find_explicit_related_episode(db, record_type, record)
+    episode = explicit_episode or _find_candidate_episode(db, profile, record_type, record)
+
+    anchor = _record_anchor(record_type, record)
+    title = _episode_title_for_record(record_type, record)
+    summary = _episode_summary_for_record(record_type, record)
+    tokens = _record_tokens(record_type, record)
+
     if not episode:
-        anchor = _record_anchor(record_type, record)
         episode = models.ClinicalEpisode(
             profile_id=int(profile.id),
             owner_user_id=int(profile.owner_user_id),
-            title=_episode_title_for_record(record_type, record),
+            title=title,
             episode_type=_episode_type_for_record(record_type, record),
             source="auto_link",
             started_at=anchor,
             last_activity_at=anchor or datetime.now(),
-            tags_json=_record_tokens(record_type, record)[:6],
+            summary=summary,
+            care_summary=summary,
+            tags_json=tokens[:8],
         )
         db.add(episode)
         db.flush()
@@ -307,13 +462,18 @@ def refresh_episode_links_for_record(
         record.profile_id = int(profile.id)
     if hasattr(record, "episode_id"):
         record.episode_id = int(episode.id)
+
     if episode.started_at is None:
-        episode.started_at = _record_anchor(record_type, record)
-    episode.last_activity_at = _record_anchor(record_type, record) or datetime.now()
+        episode.started_at = anchor
+    episode.last_activity_at = anchor or datetime.now()
     if not episode.title:
-        episode.title = _episode_title_for_record(record_type, record)
-    merged_tags = list(dict.fromkeys((episode.tags_json or []) + _record_tokens(record_type, record)))[:10]
-    episode.tags_json = merged_tags
+        episode.title = title
+    if not (episode.summary or "").strip():
+        episode.summary = summary
+    if not (episode.care_summary or "").strip():
+        episode.care_summary = summary
+    episode.tags_json = _merge_tokens(list(episode.tags_json or []), tokens, max_tokens=12)
+
     db.add(record)
     db.add(episode)
     sync_episode_tasks_for_record(db, profile, record_type, record, episode)
@@ -340,7 +500,7 @@ def set_record_episode(
             .first()
         )
         if not target_episode:
-            raise ValueError("Episodio clínico no encontrado para este perfil")
+            raise ValueError("Episodio clinico no encontrado para este perfil")
         record.episode_id = int(target_episode.id)
         if hasattr(record, "profile_id") and not getattr(record, "profile_id", None):
             record.profile_id = int(profile.id)
