@@ -209,6 +209,12 @@ function formatUnitLabel(count, singular, plural) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function summarizeNames(names = [], emptyText = "") {
+  if (!names.length) return emptyText;
+  if (names.length === 1) return names[0];
+  return `${names[0]} y ${names.length - 1} más`;
+}
+
 function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
   const events = [];
 
@@ -1455,10 +1461,12 @@ function CaregiverRow({ caregiver }) {
 }
 
 function PermissionSummaryCard({ title, tone = "blue", names = [], emptyText }) {
+  const summary = summarizeNames(names, emptyText);
+
   return (
-    <article className={`kfeed-permission-card tone-${tone}`}>
+    <article className={`kfeed-permission-card tone-${tone}`} title={names.length ? names.join(", ") : emptyText}>
       <span className="kfeed-permission-card-label">{title}</span>
-      <strong>{names.length ? names.join(", ") : emptyText}</strong>
+      <strong>{summary}</strong>
     </article>
   );
 }
@@ -1814,6 +1822,18 @@ export default function KlinipFeed({ user }) {
     aiContext: familyAiContext,
     posts,
   });
+  const attentionPreview = importantEvents.slice(0, 2);
+  const remainingAttentionCount = Math.max(importantEvents.length - attentionPreview.length, 0);
+  const familySummary =
+    activeAlertsTotal > 0
+      ? `${formatUnitLabel(activeAlertsTotal, "alerta activa", "alertas activas")} para revisar hoy.`
+      : lowAdherenceProfiles > 0
+      ? `${formatUnitLabel(lowAdherenceProfiles, "perfil con baja adherencia", "perfiles con baja adherencia")}.`
+      : upcomingAppointments > 0
+      ? `${formatUnitLabel(upcomingAppointments, "cita próxima", "citas próximas")} y sin señales críticas.`
+      : collaborativeProfiles > 0
+      ? "Sin señales críticas por ahora."
+      : "Activa tu equipo para coordinar el cuidado.";
   const feedClinicalPosts = posts.filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type));
 
   return (
@@ -1821,8 +1841,10 @@ export default function KlinipFeed({ user }) {
       <div className="kfeed-page">
         <div className="kfeed-page-header">
           <div className="kfeed-brand-row">
-            <div>
-              <h1 className="kfeed-page-title">Cuidado colaborativo</h1>
+            <div className="kfeed-brand-copy">
+              <p className="kfeed-section-kicker">Familia</p>
+              <h1 className="kfeed-page-title">Resumen familiar</h1>
+              <p className="kfeed-page-subtitle">{familySummary}</p>
             </div>
             <div className="kfeed-actions-right">
               {profiles.length > 0 && (
@@ -1841,26 +1863,21 @@ export default function KlinipFeed({ user }) {
               </Link>
             </div>
           </div>
+          <section className="kfeed-care-overview" aria-label="Resumen del grupo familiar">
+            <article className="kfeed-care-overview-item tone-red">
+              <span>Alertas</span>
+              <strong>{activeAlertsTotal}</strong>
+            </article>
+            <article className="kfeed-care-overview-item tone-blue">
+              <span>Citas</span>
+              <strong>{upcomingAppointments}</strong>
+            </article>
+            <article className="kfeed-care-overview-item tone-teal">
+              <span>Equipo</span>
+              <strong>{careTeamTotal}</strong>
+            </article>
+          </section>
         </div>
-
-        <section className="kfeed-care-grid">
-          <article className="kfeed-care-kpi tone-red">
-            <span>Alertas</span>
-            <strong>{activeAlertsTotal}</strong>
-          </article>
-          <article className="kfeed-care-kpi tone-blue">
-            <span>Citas</span>
-            <strong>{upcomingAppointments}</strong>
-          </article>
-          <article className="kfeed-care-kpi tone-amber">
-            <span>Adherencia</span>
-            <strong>{lowAdherenceProfiles}</strong>
-          </article>
-          <article className="kfeed-care-kpi tone-teal">
-            <span>Equipo</span>
-            <strong>{careTeamTotal}</strong>
-          </article>
-        </section>
 
         <div className="kfeed-care-layout">
           <section className="kfeed-care-panel">
@@ -1871,10 +1888,17 @@ export default function KlinipFeed({ user }) {
               </Link>
             </div>
             {importantEvents.length ? (
-              <div className="kfeed-clinical-event-list">
-                {importantEvents.map((item) => (
-                  <ClinicalEventCard key={item.key} item={item} />
-                ))}
+              <div className="kfeed-care-panel-body">
+                <div className="kfeed-clinical-event-list">
+                  {attentionPreview.map((item) => (
+                    <ClinicalEventCard key={item.key} item={item} />
+                  ))}
+                </div>
+                {remainingAttentionCount > 0 && (
+                  <Link className="kfeed-care-more-link" to="/settings/familia">
+                    Ver {formatUnitLabel(remainingAttentionCount, "caso más", "casos más")}
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="kfeed-care-empty">
