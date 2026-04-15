@@ -688,7 +688,7 @@ ${med.dose ? `Dosis: ${med.dose}
 
         const targetUrl =
           offsetMinutes === 0
-            ? `/medications?notify=1&medicationId=${med.id}&trigger=${triggerExact}`
+            ? `/medications?medicationId=${med.id}&trigger=${triggerExact}&source=reminder`
             : "/medications";
 
         notificationManager.addScheduledNotification({

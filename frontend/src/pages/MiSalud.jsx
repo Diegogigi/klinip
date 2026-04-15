@@ -9,6 +9,7 @@ import {
   recordMedicationIntake,
 } from "../services/httpApi";
 import { ensureArray } from "../utils/arrays";
+import { getNextMedicationDose } from "../utils/medicationSchedule";
 
 /* ── helpers ───────────────────────────────────────────────── */
 function parseDate(str) {
@@ -40,6 +41,17 @@ function fmtTime12(str) {
   if (!str) return "";
   const [h, m] = str.split(":").map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`;
+}
+
+function fmtMedicationMoment(value) {
+  const date = parseDate(value);
+  if (!date) return "Sin horario definido";
+  return date.toLocaleDateString("es-CL", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function timeAgo(str) {
@@ -110,11 +122,16 @@ export default function MiSalud() {
     });
   }, []);
 
-  const markIntake = useCallback(async (medId) => {
+  const markIntake = useCallback(async (medId, scheduledAt = null) => {
     if (intakeBusy) return;
     setIntakeBusy(medId);
     try {
-      await recordMedicationIntake(medId, { status: "taken", source: "manual" });
+      const payload = { status: "taken", source: "manual_health_card" };
+      if (scheduledAt) {
+        payload.scheduled_at =
+          scheduledAt instanceof Date ? scheduledAt.toISOString() : scheduledAt;
+      }
+      await recordMedicationIntake(medId, payload);
       setIntakeDone((prev) => ({ ...prev, [medId]: true }));
     } catch { /* silently fail */ }
     setIntakeBusy(null);
@@ -235,7 +252,7 @@ export default function MiSalud() {
           <span className="clp-card-icon tone-green"><IcoPill /></span>
           <div className="clp-card-titles">
             <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
-            <p className="clp-card-sub">Toca el círculo verde cuando tomes tu dosis</p>
+            <p className="clp-card-sub">Marca aquí la dosis que ya tomaste. Primero revisa la hora que te corresponde.</p>
           </div>
           <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
         </div>
@@ -244,6 +261,7 @@ export default function MiSalud() {
             {activeMeds.slice(0, 5).map((med) => {
               const done = intakeDone[med.id];
               const busy = intakeBusy === med.id;
+              const nextDose = getNextMedicationDose(med);
               return (
                 <div key={med.id} className={`clp-med-row ${done ? "is-done" : ""}`} role="listitem">
                   <div className="clp-med-info">
@@ -251,19 +269,25 @@ export default function MiSalud() {
                     <p className="clp-med-detail">
                       {med.dose || ""}
                       {med.frequency ? ` · ${med.frequency}` : ""}
-                      {med.schedule_time ? ` · ${fmtTime12(med.schedule_time)}` : ""}
+                    </p>
+                    <p className="clp-med-next">
+                      {nextDose
+                        ? `Te toca: ${fmtMedicationMoment(nextDose)}`
+                        : med.schedule_time
+                        ? `Horario habitual: ${fmtTime12(med.schedule_time)}`
+                        : "Sin horario definido"}
                     </p>
                   </div>
                   <button
                     type="button"
                     className={`clp-med-check ${done ? "is-done" : ""}`}
                     disabled={done || busy}
-                    onClick={() => markIntake(med.id)}
+                    onClick={() => markIntake(med.id, nextDose || med.start_at || null)}
                     aria-label={`Marcar ${med.name} como tomado`}
-                    title={done ? "Ya lo tomaste" : "Toca para marcar como tomado"}
+                    title={done ? "Esta dosis ya quedó registrada" : "Marca aquí solo cuando ya hayas tomado esta dosis"}
                   >
                     {busy ? <span className="clp-med-spin" /> : <IcoCheck />}
-                    <span className="clp-med-check-label">{done ? "Tomado" : "Tomé"}</span>
+                    <span className="clp-med-check-label">{done ? "Registrado" : "Marcar dosis"}</span>
                   </button>
                 </div>
               );

@@ -92,6 +92,15 @@ function formatMedicationDateTime(value) {
   }).format(parsed);
 }
 
+function formatMedicationTime(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin horario";
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
 function formatAlertDay(date) {
   return new Intl.DateTimeFormat("es-CL", {
     weekday: "long",
@@ -112,6 +121,41 @@ function formatPurchaseAmount(value, currency = "CLP") {
   } catch {
     return `${currency || "CLP"} ${numeric}`;
   }
+}
+
+function getIntakeSourceLabel(source = "") {
+  const normalized = String(source || "").toLowerCase();
+  if (!normalized || normalized === "manual") return "Registrado manualmente";
+  if (normalized.startsWith("reminder")) return "Registrado desde un recordatorio";
+  if (normalized === "timeline_update") return "Actualizado desde el historial";
+  return "Registro automático";
+}
+
+function getIntakeNoteLabel(item) {
+  const note = String(item?.notes || "").trim();
+  if (!note) return "";
+  if (note === "Fallback sin horario programado desde recordatorio.") {
+    return "Se registró sin una hora programada exacta.";
+  }
+  if (note === "El usuario marco la dosis como omitida desde el recordatorio.") {
+    return "Esta dosis se marcó como omitida.";
+  }
+  if (note.startsWith("Actualizado desde la línea de tiempo")) {
+    return "";
+  }
+  return note;
+}
+
+function getDoseProgressLabel(taken, expected) {
+  const normalizedTaken = Math.max(0, Number(taken || 0));
+  const normalizedExpected = Math.max(0, Number(expected || 0));
+  if (normalizedExpected > 0) {
+    return `${normalizedTaken} de ${normalizedExpected} dosis registradas`;
+  }
+  if (normalizedTaken > 0) {
+    return `${normalizedTaken} dosis registradas`;
+  }
+  return "Aún no hay dosis registradas";
 }
 
 export default function Medications() {
@@ -172,6 +216,7 @@ export default function Medications() {
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
   const [endDateAuto, setEndDateAuto] = useState(true);
   const [draggedParticipantId, setDraggedParticipantId] = useState("");
+  const [dismissedRouteReminderId, setDismissedRouteReminderId] = useState("");
   const [registerPurchaseNow, setRegisterPurchaseNow] = useState(false);
   const [formPurchaseNewStock, setFormPurchaseNewStock] = useState("");
   const [formPurchaseAmount, setFormPurchaseAmount] = useState("");
@@ -180,6 +225,10 @@ export default function Medications() {
   const [formPurchaseBuyerUserId, setFormPurchaseBuyerUserId] = useState("");
   const [medicationsPage, setMedicationsPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const searchParams = new URLSearchParams(location.search);
+  const routeMedicationId = searchParams.get("medicationId");
+  const routeTriggerParam = searchParams.get("trigger");
+  const routeFocusSource = searchParams.get("source") || (searchParams.get("notify") === "1" ? "reminder" : "");
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -325,27 +374,6 @@ export default function Medications() {
   }, [location.search, meds, navigate]);
 
   useEffect(() => {
-    if (!location.search) return;
-    const params = new URLSearchParams(location.search);
-    const notify = params.get("notify") === "1";
-    const notifyId = params.get("medicationId");
-    const triggerParam = params.get("trigger");
-    if (!notify || !notifyId) return;
-    const target = meds.find((m) => String(m.id) === String(notifyId));
-    if (!target) return;
-    const trigger = triggerParam ? new Date(Number(triggerParam)) : new Date();
-    const key = buildDosePromptKey(target, trigger);
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, "prompted");
-    }
-    setNotifyQueue((prev) => {
-      if (prev.some((item) => item.key === key)) return prev;
-      return [...prev, { med: target, key, triggeredAt: trigger }];
-    });
-    navigate("/medications", { replace: true });
-  }, [location.search, meds, navigate]);
-
-  useEffect(() => {
     setMedicationsPage(1);
   }, [search, statusFilter]);
 
@@ -357,6 +385,16 @@ export default function Medications() {
     }
     loadDetailIntakeItems(detailTarget.id);
   }, [detailOpen, detailTarget?.id]);
+
+  useEffect(() => {
+    if (!detailOpen || !detailTarget?.id) return;
+    const refreshedTarget = meds.find(
+      (med) => String(med.id) === String(detailTarget.id)
+    );
+    if (refreshedTarget && refreshedTarget !== detailTarget) {
+      setDetailTarget(refreshedTarget);
+    }
+  }, [detailOpen, detailTarget, meds]);
 
   useEffect(() => {
     const checkDueMedicationPrompt = () => {
@@ -727,21 +765,38 @@ export default function Medications() {
     }
   };
 
-  const handleRecordIntake = async (med) => {
+  const dismissRouteReminder = () => {
+    if (routeMedicationId) {
+      setDismissedRouteReminderId(String(routeMedicationId));
+    }
+    navigate("/medications", { replace: true });
+  };
+
+  const handleRecordIntake = async (med, options = {}) => {
     if (!canEditActiveProfile) {
       alert("Este perfil está en modo solo lectura. No puedes registrar tomas.");
       return;
     }
     try {
-      await recordMedicationIntake(med.id, { status: "taken", source: "manual" });
+      const payload = {
+        status: "taken",
+        source: options.source || "manual",
+      };
+      if (options.scheduledAt) {
+        payload.scheduled_at =
+          options.scheduledAt instanceof Date
+            ? options.scheduledAt.toISOString()
+            : options.scheduledAt;
+      }
+      await recordMedicationIntake(med.id, payload);
       await refreshMedicationStateAfterIntake(
-        `info:Toma registrada: ${med.name}`,
-        `info:Toma registrada: ${med.name}. Actualiza la lista si no ves el cambio.`
+        `success:Dosis registrada: ${med.name}`,
+        `info:Dosis registrada: ${med.name}. Actualiza la lista si no ves el cambio.`
       );
     } catch (err) {
       console.error(err);
       alert(
-        "No se pudo marcar como realizado: " +
+        "No se pudo registrar la dosis: " +
           (err?.response?.data?.detail || err?.message || "Error desconocido")
       );
     }
@@ -923,6 +978,70 @@ export default function Medications() {
     }
   };
 
+  const handleTakeRouteReminder = async () => {
+    if (!routeReminderMedication || !canEditActiveProfile) return;
+    setNotifyActionLoading(true);
+    try {
+      await recordTakenFromReminder(
+        routeReminderMedication,
+        "reminder_prompt",
+        routeReminderTrigger
+      );
+      if (routeReminderPromptKey) {
+        localStorage.setItem(routeReminderPromptKey, "taken");
+      }
+      dismissRouteReminder();
+      await refreshMedicationStateAfterIntake(
+        `success:Dosis registrada: ${routeReminderMedication.name}`,
+        `info:Dosis registrada: ${routeReminderMedication.name}. Actualiza la lista si no ves el cambio.`
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudo registrar la dosis: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
+    } finally {
+      setNotifyActionLoading(false);
+    }
+  };
+
+  const handleSkipRouteReminder = async () => {
+    if (!routeReminderMedication || !canEditActiveProfile) return;
+    setNotifyActionLoading(true);
+    try {
+      await recordMedicationIntake(routeReminderMedication.id, {
+        status: "skipped",
+        source: "reminder_prompt",
+        scheduled_at:
+          routeReminderTrigger?.toISOString?.() || new Date().toISOString(),
+        notes: "El usuario marcó la dosis como omitida desde el recordatorio.",
+      });
+      if (routeReminderPromptKey) {
+        localStorage.setItem(routeReminderPromptKey, "skipped");
+      }
+      dismissRouteReminder();
+      await refreshMedicationStateAfterIntake(
+        `info:Dosis omitida: ${routeReminderMedication.name}`,
+        "info:La omisión quedó registrada. Actualiza la lista si no ves el cambio."
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudo registrar la omisión: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
+    } finally {
+      setNotifyActionLoading(false);
+    }
+  };
+
+  const handleOpenRouteReminderDetail = () => {
+    if (!routeReminderMedication) return;
+    handleOpenDetail(routeReminderMedication);
+    dismissRouteReminder();
+  };
+
   const handleDelete = async (med) => {
     if (!canEditActiveProfile) {
       alert("Este perfil está en modo solo lectura. No puedes eliminar medicamentos.");
@@ -1025,6 +1144,20 @@ export default function Medications() {
   const medsMissingFrequency = (meds || []).filter(
     (m) => !m.frequency || m.frequency.trim() === ""
   );
+  const routeReminderTrigger =
+    routeTriggerParam && !Number.isNaN(Number(routeTriggerParam))
+      ? new Date(Number(routeTriggerParam))
+      : null;
+  const routeReminderMedication =
+    routeFocusSource === "reminder" &&
+    routeMedicationId &&
+    dismissedRouteReminderId !== String(routeMedicationId)
+      ? (meds || []).find((med) => String(med.id) === String(routeMedicationId)) || null
+      : null;
+  const routeReminderPromptKey =
+    routeReminderMedication && routeReminderTrigger
+      ? buildDosePromptKey(routeReminderMedication, routeReminderTrigger)
+      : "";
   const adherenceTotals = (meds || []).reduce(
     (acc, med) => {
       acc.expected += Number(med.expected_doses || 0);
@@ -1186,6 +1319,10 @@ export default function Medications() {
     safeMedicationPage * MEDICATIONS_PAGE_SIZE,
     filteredMeds.length
   );
+  const detailNextDose = detailTarget ? getNextMedicationDose(detailTarget) : null;
+  const detailTakenDoses = Number(detailTarget?.taken_doses || 0);
+  const detailExpectedDoses = Number(detailTarget?.expected_doses || 0);
+  const detailDoseProgress = getDoseProgressLabel(detailTakenDoses, detailExpectedDoses);
 
   useEffect(() => {
     if (medicationsPage > totalMedicationPages) {
@@ -1193,6 +1330,37 @@ export default function Medications() {
     }
   }, [medicationsPage, totalMedicationPages]);
   const remindersReady = Boolean(frequencyValue && form.start_at);
+
+  useEffect(() => {
+    setDismissedRouteReminderId("");
+  }, [location.search]);
+
+  useEffect(() => {
+    if (!routeReminderPromptKey) return;
+    if (localStorage.getItem(routeReminderPromptKey)) return;
+    localStorage.setItem(routeReminderPromptKey, "prompted");
+  }, [routeReminderPromptKey]);
+
+  useEffect(() => {
+    if (!routeReminderMedication) return;
+    const indexInFiltered = filteredMeds.findIndex(
+      (med) => String(med.id) === String(routeReminderMedication.id)
+    );
+    if (indexInFiltered < 0) return;
+    const nextPage = Math.floor(indexInFiltered / MEDICATIONS_PAGE_SIZE) + 1;
+    setMedicationsPage((current) => (current === nextPage ? current : nextPage));
+  }, [filteredMeds, routeReminderMedication]);
+
+  useEffect(() => {
+    if (!routeReminderMedication) return;
+    const timerId = window.setTimeout(() => {
+      const focusedCard = document.querySelector(
+        `[data-medication-id="${routeReminderMedication.id}"]`
+      );
+      focusedCard?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, 160);
+    return () => window.clearTimeout(timerId);
+  }, [paginatedMeds, routeReminderMedication]);
 
   useEffect(() => {
     if (!endDateAuto) return;
@@ -2356,10 +2524,41 @@ export default function Medications() {
                 </div>
               </div>
               <div className="medication-intake-timeline">
+                <div className="med-detail-dose-summary">
+                  <div>
+                    <span className="med-detail-dose-summary-label">Qué corresponde ahora</span>
+                    <h4>
+                      {detailNextDose
+                        ? `Próxima dosis: ${formatMedicationDateTime(detailNextDose)}`
+                        : "No hay una próxima dosis pendiente"}
+                    </h4>
+                    <p>
+                      {detailTarget.dose || "Sin dosis definida"}
+                      {detailTarget.frequency ? ` · ${detailTarget.frequency}` : ""}
+                    </p>
+                  </div>
+                  <div className="med-detail-dose-summary-side">
+                    <span>{detailDoseProgress}</span>
+                    {canEditActiveProfile && !isMedicationFinished(detailTarget) ? (
+                      <button
+                        type="button"
+                        className="primary-btn med-detail-dose-summary-btn"
+                        onClick={() =>
+                          handleRecordIntake(detailTarget, {
+                            source: "manual_detail",
+                            scheduledAt: detailNextDose || detailTarget.start_at || null,
+                          })
+                        }
+                      >
+                        Marcar esta dosis ahora
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
                 <div className="medication-intake-timeline-head">
                   <div>
-                    <h4>Línea de tiempo de adherencia</h4>
-                    <p>Eventos reales registrados para este medicamento.</p>
+                    <h4>Historial de tomas</h4>
+                    <p>Revisa qué dosis quedaron registradas y corrige solo si fue necesario.</p>
                   </div>
                   <span className="medication-intake-timeline-count">
                     {detailIntakes.length} eventos
@@ -2381,12 +2580,12 @@ export default function Medications() {
                               <span>{formatTimelineStamp(primaryStamp)}</span>
                             </div>
                             <div className="medication-intake-meta">
-                              <span>Fuente: {item.source || "manual"}</span>
+                              <span>{getIntakeSourceLabel(item.source)}</span>
                               {item.taken_at && item.scheduled_at ? (
-                                <span>Registrado: {formatTimelineStamp(item.taken_at)}</span>
+                                <span>Se registró: {formatTimelineStamp(item.taken_at)}</span>
                               ) : null}
                             </div>
-                            {item.notes ? <p>{item.notes}</p> : null}
+                            {getIntakeNoteLabel(item) ? <p>{getIntakeNoteLabel(item)}</p> : null}
                             {canEditActiveProfile ? (
                               <div className="medication-intake-actions">
                                 <button
@@ -2414,7 +2613,7 @@ export default function Medications() {
                   </div>
                 ) : (
                   <div className="medication-intake-empty">
-                    Todavía no hay eventos explícitos de adherencia para este medicamento.
+                    Aún no hay dosis registradas para este medicamento.
                   </div>
                 )}
               </div>
@@ -2549,6 +2748,84 @@ export default function Medications() {
         </div>
       </div>
 
+      {routeReminderMedication ? (
+        <div className="card med-route-reminder-card" role="status" aria-live="polite">
+          <div className="med-route-reminder-kicker">Recordatorio activo</div>
+          <div className="med-route-reminder-head">
+            <div>
+              <h3>Te corresponde esta dosis</h3>
+              <p className="med-route-reminder-name">{routeReminderMedication.name}</p>
+            </div>
+            <span className="med-route-reminder-time">
+              {formatMedicationTime(
+                routeReminderTrigger ||
+                  getNextMedicationDose(routeReminderMedication) ||
+                  routeReminderMedication.start_at ||
+                  routeReminderMedication.schedule_time
+              )}
+            </span>
+          </div>
+          <div className="med-route-reminder-grid">
+            <div className="med-route-reminder-item">
+              <span>Dosis</span>
+              <strong>{routeReminderMedication.dose || "Sin dosis definida"}</strong>
+            </div>
+            <div className="med-route-reminder-item">
+              <span>Frecuencia</span>
+              <strong>{routeReminderMedication.frequency || "Sin frecuencia definida"}</strong>
+            </div>
+            <div className="med-route-reminder-item">
+              <span>Registro</span>
+              <strong>
+                {getDoseProgressLabel(
+                  routeReminderMedication.taken_doses,
+                  routeReminderMedication.expected_doses
+                )}
+              </strong>
+            </div>
+          </div>
+          <p className="med-route-reminder-copy">
+            Marca esta dosis solo cuando ya la hayas tomado. Si no corresponde, puedes revisar el detalle u omitirla.
+          </p>
+          <div className="med-route-reminder-actions">
+            {canEditActiveProfile ? (
+              <>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={handleTakeRouteReminder}
+                  disabled={notifyActionLoading}
+                >
+                  {notifyActionLoading ? "Registrando..." : "Marcar esta dosis ahora"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={handleSkipRouteReminder}
+                  disabled={notifyActionLoading}
+                >
+                  Omitir esta dosis
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="secondary-btn ghost"
+              onClick={handleOpenRouteReminderDetail}
+            >
+              Ver detalle
+            </button>
+            <button
+              type="button"
+              className="secondary-btn ghost"
+              onClick={dismissRouteReminder}
+            >
+              Seguir viendo la lista
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="card medications-surface-free medications-list-card">
         {meds.length === 0 ? (
           <p className="muted">Aún no has registrado medicamentos.</p>
@@ -2595,7 +2872,12 @@ export default function Medications() {
                     return (
                       <tr
                         key={m.id}
-                        className={`table-row-clickable ${finished ? "is-finished" : ""}`}
+                        data-medication-id={m.id}
+                        className={`table-row-clickable ${finished ? "is-finished" : ""} ${
+                          routeReminderMedication && String(routeReminderMedication.id) === String(m.id)
+                            ? "is-focused-reminder"
+                            : ""
+                        }`}
                         onClick={() => handleOpenDetail(m)}
                         role="button"
                         tabIndex={0}
@@ -2721,7 +3003,12 @@ export default function Medications() {
                 return (
                   <article
                     key={`mobile-${m.id}`}
-                    className={`records-mobile-card medications-mobile-card ${finished ? "is-finished" : ""}`}
+                    data-medication-id={m.id}
+                    className={`records-mobile-card medications-mobile-card ${finished ? "is-finished" : ""} ${
+                      routeReminderMedication && String(routeReminderMedication.id) === String(m.id)
+                        ? "is-focused-reminder"
+                        : ""
+                    }`}
                     onClick={() => handleOpenDetail(m)}
                     role="button"
                     tabIndex={0}
@@ -2780,22 +3067,42 @@ export default function Medications() {
                       </div>
                     </div>
 
+                    <div className="medications-mobile-next-dose">
+                      <span className="medications-mobile-next-label">Qué corresponde ahora</span>
+                      <strong>
+                        {finished
+                          ? "Tratamiento finalizado"
+                          : nextDose
+                          ? `Te toca el ${formatMedicationDateTime(nextDose)}`
+                          : "Aún no hay una próxima dosis calculada"}
+                      </strong>
+                      <p>
+                        {finished
+                          ? "Este tratamiento ya no requiere nuevas tomas."
+                          : "Cuando tomes esta dosis, usa el botón azul para dejarla registrada."}
+                      </p>
+                    </div>
+
                     <div className="records-mobile-meta-grid">
                       <div className="records-mobile-meta-item">
-                        <span className="records-mobile-meta-label">Próxima dosis</span>
-                        <span>{finished ? "—" : (nextDose ? formatMedicationDateTime(nextDose) : "Sin próxima dosis")}</span>
+                        <span className="records-mobile-meta-label">Registro</span>
+                        <span>{getDoseProgressLabel(taken, expected)}</span>
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Adherencia</span>
-                        <span>{adherenceText}</span>
-                      </div>
-                      <div className="records-mobile-meta-item">
-                        <span className="records-mobile-meta-label">Tomas</span>
-                        <span>{taken}/{expected}</span>
+                        <span>{adherenceText} de cumplimiento</span>
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Inicio</span>
                         <span>{formatMedicationDateTime(m.start_at || m.created_at)}</span>
+                      </div>
+                      <div className="records-mobile-meta-item">
+                        <span className="records-mobile-meta-label">Horario habitual</span>
+                        <span>
+                          {nextDose
+                            ? formatMedicationTime(nextDose)
+                            : formatMedicationTime(m.start_at || m.schedule_time)}
+                        </span>
                       </div>
                     </div>
 
@@ -2836,6 +3143,21 @@ export default function Medications() {
                     ) : null}
 
                     <div className="records-mobile-footer">
+                      {!finished && canEditActiveProfile ? (
+                        <button
+                          type="button"
+                          className="primary-btn medications-mobile-primary-action"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleRecordIntake(m, {
+                              source: "manual_card",
+                              scheduledAt: nextDose || m.start_at || null,
+                            });
+                          }}
+                        >
+                          Marcar esta dosis
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="records-mobile-link"

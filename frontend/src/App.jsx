@@ -970,9 +970,9 @@ export default function App() {
           const first = due[0].med;
           const key = buildMedicationPromptKey(first, now, due[0].slotKey);
           localStorage.setItem(key, "prompted");
-          const target = `/medications?notify=1&medicationId=${first.id}`;
+          const target = `/medications?medicationId=${first.id}&source=reminder`;
           const currentSearch = locationRef.current?.search || "";
-          if (!(currentPath === "/medications" && currentSearch.includes(`medicationId=${first.id}`) && currentSearch.includes("notify=1"))) {
+          if (!(currentPath === "/medications" && currentSearch.includes(`medicationId=${first.id}`))) {
             navigate(target);
           }
         }
