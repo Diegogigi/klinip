@@ -432,30 +432,52 @@ export default function Timeline() {
 
   const selectedQuickActions = useMemo(() => {
     if (!selectedEpisode) return [];
-    const primaryTaskAction = selectedPendingTasks[0] ? getTaskAction(selectedPendingTasks[0]) : null;
+    const primaryTask = selectedPendingTasks[0] || null;
+    const primaryTaskAction = primaryTask ? getTaskAction(primaryTask) : null;
     const baseActions = [
       primaryTaskAction
-        ? { id: "next", label: primaryTaskAction.label, to: primaryTaskAction.to, tone: "primary" }
+        ? {
+            id: "next",
+            label: primaryTaskAction.label,
+            to: primaryTaskAction.to,
+            tone: "primary",
+            kicker: "Siguiente paso",
+            description: getTaskLabel(primaryTask),
+          }
         : null,
       {
         id: "appointments",
         label: selectedEpisode.linked_appointments ? `Ver citas (${selectedEpisode.linked_appointments})` : "Ir a citas",
         to: "/appointments",
+        kicker: "Citas",
+        description: selectedEpisode.linked_appointments
+          ? `Revisa las ${selectedEpisode.linked_appointments} cita${selectedEpisode.linked_appointments === 1 ? "" : "s"} vinculadas a este proceso.`
+          : "Agenda controles o revisa atenciones relacionadas con este proceso.",
       },
       {
         id: "documents",
         label: selectedEpisode.linked_documents ? `Ver documentos (${selectedEpisode.linked_documents})` : "Ir a documentos",
         to: "/documents",
+        kicker: "Documentos",
+        description: selectedEpisode.linked_documents
+          ? `Abre los ${selectedEpisode.linked_documents} documento${selectedEpisode.linked_documents === 1 ? "" : "s"} asociados a este proceso.`
+          : "Consulta órdenes, informes o recetas vinculadas a este proceso.",
       },
       {
         id: "medications",
         label: selectedEpisode.linked_medications ? `Ver medicamentos (${selectedEpisode.linked_medications})` : "Ir a medicamentos",
         to: "/medications",
+        kicker: "Medicamentos",
+        description: selectedEpisode.linked_medications
+          ? `Revisa los ${selectedEpisode.linked_medications} medicamento${selectedEpisode.linked_medications === 1 ? "" : "s"} relacionados.`
+          : "Confirma tratamientos, dosis y seguimiento farmacológico.",
       },
       {
         id: "calendar",
         label: "Ver agenda",
         to: "/calendar",
+        kicker: "Agenda",
+        description: "Ordena próximas fechas, controles y recordatorios de este proceso.",
       },
     ].filter(Boolean);
 
@@ -651,6 +673,19 @@ export default function Timeline() {
                   Siguiente
                 </button>
               </div>
+
+              {selectedEpisode ? (
+                <div className={`history-process-mobile-summary tone-${getEpisodeTone(selectedEpisode.status)}`}>
+                  <div className="history-process-mobile-summary-head">
+                    <strong>{cleanUiText(selectedEpisode.title, "Proceso de salud")}</strong>
+                    <span>{`${selectedEpisodeIndex + 1} de ${filteredEpisodes.length}`}</span>
+                  </div>
+                  <p>
+                    {getEpisodeTypeLabel(selectedEpisode.episode_type)} · {getPendingLabel(selectedEpisode)} ·{" "}
+                    {getLastActivityLabel(selectedEpisode.last_activity_at)}
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -715,17 +750,45 @@ export default function Timeline() {
                     </div>
                   </div>
 
-                  <div className="history-process-commandbar">
-                    {selectedQuickActions.map((action) => (
+                  <div className="history-process-action-block">
+                    <div className="history-process-section-head history-process-action-head">
+                      <div>
+                        <h3>Qué puedes hacer ahora</h3>
+                        <p className="history-process-note">
+                          Abre el módulo correcto o corrige esta agrupación sin tener que salir a buscarla.
+                        </p>
+                      </div>
+                      <span>{selectedQuickActions.length + 1} acción(es)</span>
+                    </div>
+
+                    <div className="history-process-commandbar">
+                      {selectedQuickActions.map((action) => (
+                        <button
+                          key={action.id}
+                          type="button"
+                          className={`${action.tone === "primary" ? "primary-btn" : "secondary-btn"} history-process-command-btn history-process-command-card`}
+                          onClick={() => navigate(action.to)}
+                        >
+                          <span className="history-process-command-kicker">{action.kicker}</span>
+                          <strong className="history-process-command-title">{action.label}</strong>
+                          <span className="history-process-command-copy">{action.description}</span>
+                        </button>
+                      ))}
+
                       <button
-                        key={action.id}
                         type="button"
-                        className={`${action.tone === "primary" ? "primary-btn" : "secondary-btn"} history-process-command-btn`}
-                        onClick={() => navigate(action.to)}
+                        className={`${manualLinker.episodeId === selectedEpisode.id ? "primary-btn" : "secondary-btn"} history-process-command-btn history-process-command-card`}
+                        onClick={() => openManualLinker(selectedEpisode.id)}
                       >
-                        {action.label}
+                        <span className="history-process-command-kicker">Organización</span>
+                        <strong className="history-process-command-title">
+                          {manualLinker.episodeId === selectedEpisode.id ? "Seguir organizando proceso" : "Agregar o mover elementos"}
+                        </strong>
+                        <span className="history-process-command-copy">
+                          Reubica citas, documentos o medicamentos cuando este proceso quedó incompleto.
+                        </span>
                       </button>
-                    ))}
+                    </div>
                   </div>
 
                   <div className="history-process-spotlight">
