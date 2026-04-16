@@ -86,6 +86,7 @@ class EpisodeSummary:
     summary: str = ""
     pending_task_count: int = 0
     active_medication_count: int = 0
+    relevance_score: float = 0.0
 
 
 @dataclass
@@ -97,6 +98,7 @@ class TaskSummary:
     status: str
     due_at: Optional[datetime] = None
     is_overdue: bool = False
+    relevance_score: float = 0.0
 
 
 @dataclass
@@ -107,6 +109,7 @@ class MedicationSummary:
     frequency: str
     episode_id: Optional[int] = None
     completed: bool = False
+    relevance_score: float = 0.0
 
 
 @dataclass
@@ -118,6 +121,7 @@ class AppointmentSummary:
     status: str
     episode_id: Optional[int] = None
     hours_until: Optional[float] = None
+    relevance_score: float = 0.0
 
 
 @dataclass
@@ -127,6 +131,7 @@ class DocumentRef:
     filename: str
     date: Optional[datetime]
     episode_id: Optional[int] = None
+    relevance_score: float = 0.0
 
 
 @dataclass
@@ -137,6 +142,7 @@ class AlertSummary:
     title: str
     description: str
     detected_at: Optional[datetime] = None
+    relevance_score: float = 0.0
 
 
 @dataclass

@@ -29,7 +29,9 @@ from .intent_shadow_logger import (
     log_intent_shadow,
     run_intent_shadow_pipeline,
 )
+from .relevance_scorer import score_context
 from .shadow_metrics import compute_shadow_metrics
+from .token_budgeter import DEFAULT_BUDGET_TOKENS, apply_token_budget
 
 __all__ = [
     "AlertSummary",
@@ -38,6 +40,7 @@ __all__ = [
     "ClinicalPhase",
     "ClinicalState",
     "ContextTrace",
+    "DEFAULT_BUDGET_TOKENS",
     "DocumentRef",
     "EpisodeSummary",
     "Intent",
@@ -46,6 +49,7 @@ __all__ = [
     "MedicationSummary",
     "TaskSummary",
     "UrgencyLevel",
+    "apply_token_budget",
     "build_clinical_context",
     "classify_intent",
     "compute_clinical_state",
@@ -53,4 +57,5 @@ __all__ = [
     "estimate_would_change_response",
     "log_intent_shadow",
     "run_intent_shadow_pipeline",
+    "score_context",
 ]
