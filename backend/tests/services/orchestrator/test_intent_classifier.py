@@ -139,8 +139,8 @@ class TestUnknownAndGeneral:
         assert result.confidence == 0.0
 
     def test_texto_sin_match_fuerte_cae_a_general(self):
-        # Mensaje sin señales claras — score bajo pero no nulo o UNKNOWN
-        result = classify_intent("hola, me duele algo raro")
+        # Frase sin ninguna señal heuristica — debe caer a UNKNOWN o GENERAL_QUESTION
+        result = classify_intent("xyz qwerty foo bar baz")
         assert result.kind in {IntentKind.UNKNOWN, IntentKind.GENERAL_QUESTION}
         assert result.confidence < 0.55
 
@@ -183,3 +183,159 @@ class TestNormalization:
         a = classify_intent("¿CÓMO ESTOY?")
         b = classify_intent("como estoy")
         assert a.kind == b.kind
+
+
+# ─── Nuevos intents (spec Fase 1b refinada) ──────────────────────────────────
+
+
+class TestGreeting:
+    def test_hola_simple(self):
+        assert classify_intent("Hola").kind == IntentKind.GREETING
+
+    def test_buenos_dias(self):
+        assert classify_intent("Buenos días").kind == IntentKind.GREETING
+
+    def test_buenas_tardes(self):
+        assert classify_intent("Buenas tardes").kind == IntentKind.GREETING
+
+    def test_negativo_no_confunde_mensaje_clinico(self):
+        # "tengo un dolor" no debe clasificarse como GREETING
+        assert classify_intent("tengo un dolor").kind != IntentKind.GREETING
+
+
+class TestAssistantCapabilities:
+    def test_capacidades_del_bot(self):
+        result = classify_intent("Qué capacidades tienes ?")
+        assert result.kind == IntentKind.ASSISTANT_CAPABILITIES
+
+    def test_que_puedes_hacer(self):
+        result = classify_intent("qué puedes hacer")
+        assert result.kind == IntentKind.ASSISTANT_CAPABILITIES
+
+    def test_en_que_me_ayudas(self):
+        result = classify_intent("en qué me ayudas")
+        assert result.kind == IntentKind.ASSISTANT_CAPABILITIES
+
+    def test_negativo_pregunta_clinica_no_matchea(self):
+        # "qué tengo pendiente" no debe caer en capabilities
+        assert classify_intent("qué tengo pendiente").kind != IntentKind.ASSISTANT_CAPABILITIES
+
+
+class TestFamilyInfo:
+    def test_cuantos_familiares(self):
+        result = classify_intent("Cuántos familiares están asociados a mi?")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_publicaciones_del_feed(self):
+        result = classify_intent("cuántas publicaciones de mi familia hay")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_acceso_admin_al_perfil(self):
+        result = classify_intent("ella tiene acceso como admin a mi perfil")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_grupo_familiar(self):
+        assert classify_intent("mi grupo familiar").kind == IntentKind.FAMILY_INFO
+
+    def test_negativo_mi_medicamento_no_es_familia(self):
+        assert classify_intent("mi medicamento").kind != IntentKind.FAMILY_INFO
+
+
+class TestDocumentInfo:
+    def test_leer_documento(self):
+        assert classify_intent("leer documento").kind == IntentKind.DOCUMENT_INFO
+
+    def test_de_que_trata_el_documento(self):
+        assert classify_intent("de qué trata el documento").kind == IntentKind.DOCUMENT_INFO
+
+    def test_ultimo_documento(self):
+        assert classify_intent("mi último documento").kind == IntentKind.DOCUMENT_INFO
+
+    def test_negativo_cita_no_es_document_info(self):
+        assert classify_intent("próxima cita").kind != IntentKind.DOCUMENT_INFO
+
+
+class TestHistorySummary:
+    def test_mi_historial(self):
+        assert classify_intent("mi historial").kind == IntentKind.HISTORY_SUMMARY
+
+    def test_cuantas_atenciones(self):
+        assert classify_intent("cuántas atenciones tengo").kind == IntentKind.HISTORY_SUMMARY
+
+    def test_que_tengo_registrado(self):
+        assert classify_intent("qué tengo registrado").kind == IntentKind.HISTORY_SUMMARY
+
+    def test_negativo_medicamentos_no_es_historial(self):
+        assert classify_intent("mis medicamentos").kind != IntentKind.HISTORY_SUMMARY
+
+
+class TestExamInfo:
+    def test_examenes_que_debo_realizarme(self):
+        result = classify_intent("Cuáles son mis exámenes que debo realizarme ?")
+        assert result.kind == IntentKind.EXAM_INFO
+
+    def test_que_examenes_tengo(self):
+        assert classify_intent("qué exámenes tengo").kind == IntentKind.EXAM_INFO
+
+    def test_orden_medica(self):
+        assert classify_intent("necesito una orden médica").kind == IntentKind.EXAM_INFO
+
+    def test_negativo_cuantos_familiares_no_es_exam(self):
+        assert classify_intent("cuántos familiares tengo").kind != IntentKind.EXAM_INFO
+
+
+class TestFollowUpAction:
+    def test_sin_contexto_cae_en_unknown(self):
+        # Sin previous_intent no debe activar FOLLOW_UP_ACTION
+        result = classify_intent("Si hazlo")
+        assert result.kind != IntentKind.FOLLOW_UP_ACTION
+        assert result.kind in {IntentKind.UNKNOWN, IntentKind.GENERAL_QUESTION}
+
+    def test_con_contexto_activa_follow_up(self):
+        result = classify_intent("Si hazlo", previous_intent=IntentKind.APPOINTMENT_ACTION)
+        assert result.kind == IntentKind.FOLLOW_UP_ACTION
+
+    def test_con_contexto_correcto(self):
+        result = classify_intent("correcto", previous_intent=IntentKind.GET_PENDING)
+        assert result.kind == IntentKind.FOLLOW_UP_ACTION
+
+    def test_con_contexto_si_toda_la_informacion_es_correcta(self):
+        result = classify_intent(
+            "Si toda la información es correcta",
+            previous_intent=IntentKind.UPLOAD_INFO,
+        )
+        assert result.kind == IntentKind.FOLLOW_UP_ACTION
+
+    def test_previous_unknown_no_cuenta_como_contexto(self):
+        # previous_intent = UNKNOWN no debe habilitar FOLLOW_UP_ACTION
+        result = classify_intent("si hazlo", previous_intent=IntentKind.UNKNOWN)
+        assert result.kind != IntentKind.FOLLOW_UP_ACTION
+
+
+# ─── Expansión MEDICATION_INFO ───────────────────────────────────────────────
+
+
+class TestMedicationInfoExpanded:
+    def test_para_que_sirve(self):
+        assert classify_intent("para qué sirve").kind == IntentKind.MEDICATION_INFO
+
+    def test_que_hace_este_medicamento(self):
+        result = classify_intent("qué hace este medicamento")
+        assert result.kind == IntentKind.MEDICATION_INFO
+
+
+# ─── Patrones expandidos en intents existentes ───────────────────────────────
+
+
+class TestExpandedPatterns:
+    def test_me_duele_es_get_status(self):
+        result = classify_intent("me duele la cabeza")
+        assert result.kind == IntentKind.GET_STATUS
+
+    def test_no_me_siento_bien_es_get_status(self):
+        result = classify_intent("no me siento bien")
+        assert result.kind == IntentKind.GET_STATUS
+
+    def test_que_tiene_mi_hijo_es_get_status(self):
+        result = classify_intent("qué tiene mi hijo")
+        assert result.kind == IntentKind.GET_STATUS

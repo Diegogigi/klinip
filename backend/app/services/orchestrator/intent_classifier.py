@@ -36,6 +36,7 @@ def classify_intent(
     *,
     source: str = "chat",
     state: Optional[ClinicalState] = None,
+    previous_intent: Optional[IntentKind] = None,
     enable_llm_fallback: bool = False,
 ) -> Intent:
     """Clasifica un mensaje del usuario en un IntentKind.
@@ -47,6 +48,9 @@ def classify_intent(
             inferirá el intent del contenido más adelante).
         state: ClinicalState opcional — si se pasa, se usa como
             desambiguador en mensajes ambiguos.
+        previous_intent: último intent válido (no UNKNOWN/None) de la
+            conversación. Necesario para habilitar FOLLOW_UP_ACTION —
+            sin contexto, frases como "sí hazlo" caen a UNKNOWN.
         enable_llm_fallback: si True y la confidence heurística queda
             por debajo del umbral, consulta al LLM. Default: False
             (shadow mode debe ser barato y determinista).
@@ -68,6 +72,11 @@ def classify_intent(
         )
 
     scores, matches = _score_intents(normalized)
+
+    # FOLLOW_UP_ACTION solo es válido si hay contexto conversacional previo.
+    if not _has_valid_followup_context(previous_intent):
+        scores[IntentKind.FOLLOW_UP_ACTION] = 0.0
+
     kind, confidence = _pick_top(scores)
 
     if state is not None:
@@ -92,6 +101,12 @@ def classify_intent(
     )
 
 
+def _has_valid_followup_context(previous_intent: Optional[IntentKind]) -> bool:
+    if previous_intent is None:
+        return False
+    return previous_intent != IntentKind.UNKNOWN
+
+
 # ─── Normalización ───────────────────────────────────────────────────────────
 
 
@@ -114,6 +129,11 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\bestado general\b", 0.9),
         (r"\bresumen (de mi salud|general|clinico)\b", 0.95),
         (r"\bque tal (estoy|voy)\b", 0.9),
+        (r"\b(me duele|tengo dolor|me siento mal)\b", 0.85),
+        (r"\bno me siento bien\b", 0.9),
+        (r"\bcuentame (de )?mi salud\b", 0.9),
+        (r"\bdime (de )?mi (salud|estado)\b", 0.9),
+        (r"\bque tiene mi (hijo|hija|mama|papa|esposo|esposa|pareja)\b", 0.9),
     ],
     IntentKind.GET_PENDING: [
         (r"\bque me falta\b", 1.0),
@@ -123,6 +143,7 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\bproximos? pasos?\b", 0.9),
         (r"\bque (tengo|hay) que hacer\b", 0.9),
         (r"\btareas? pendientes?\b", 0.95),
+        (r"\bcuales son mis (pendientes|tareas)\b", 0.9),
     ],
     IntentKind.GET_EPISODE_DETAIL: [
         (r"\bque paso con\b", 1.0),
@@ -147,6 +168,9 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\b(tomar|tome|tomo)\b.*\b(remedio|medicamento|pastilla)\b", 0.95),
         (r"\badherencia\b", 0.95),
         (r"\bmi tratamiento\b", 0.6),
+        (r"\bpara que (es|sirve|se (usa|toma))\b", 0.85),
+        (r"\bque hace (este|el|la|mi) (remedio|medicamento|pastilla)\b", 0.95),
+        (r"\bsirve para\b", 0.8),
     ],
     IntentKind.APPOINTMENT_ACTION: [
         (r"\bcitas?\b", 0.7),
@@ -164,6 +188,66 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"^como funciona\b", 0.5),
         (r"\besto es normal\b", 0.6),
         (r"\bque significa\b", 0.5),
+    ],
+    IntentKind.GREETING: [
+        (r"^\s*hola\b", 1.0),
+        (r"^\s*buenas?\b", 0.95),
+        (r"^\s*buen[oa]s? (dias|tardes|noches)\b", 1.0),
+        (r"^\s*hey\b", 0.9),
+        (r"^\s*saludos\b", 0.9),
+    ],
+    IntentKind.ASSISTANT_CAPABILITIES: [
+        (r"\bque capacidades tienes\b", 1.0),
+        (r"\b(que (puedes|puede|sabes) hacer)\b", 1.0),
+        (r"\ben que me ayudas\b", 0.95),
+        (r"\bcomo me (puedes|podrias) asistir\b", 0.95),
+        (r"\b(capacidades|funcionalidades)\b", 0.85),
+        (r"\bcomo (uso|funciona) (la app|klinip)\b", 0.9),
+        (r"\bque es klinip\b", 1.0),
+        (r"\bme (gustaria|gustaria que) (me )?(asista|asistas|ayudes|ayude)\b", 0.8),
+    ],
+    IntentKind.FAMILY_INFO: [
+        (r"\bmi familia\b", 0.9),
+        (r"\bfamiliares?\b", 0.85),
+        (r"\bgrupo familiar\b", 1.0),
+        (r"\bfamiliares? (asociados?|vinculad[oa]s?|de mi cuenta)\b", 0.95),
+        (r"\b(asociados?|vinculad[oa]s?) a mi (cuenta|perfil)\b", 0.9),
+        (r"\bcuantos (familiares?|usuarios?)\b", 0.9),
+        (r"\b(publicacione?s?|posts?|feed)\b", 0.85),
+        (r"\b(acceso|permisos?) (como )?admin(istrador)?\b", 0.9),
+        (r"\badmin a mi perfil\b", 0.95),
+    ],
+    IntentKind.DOCUMENT_INFO: [
+        (r"\b(ultimo|mi ultimo) documento\b", 1.0),
+        (r"\bleer (el |mi )?documento\b", 0.95),
+        (r"\bde que trata (el |mi )?documento\b", 1.0),
+        (r"\bque dice (el |mi )?documento\b", 1.0),
+        (r"\bdocumentos?\b", 0.7),
+        (r"\bmostrar (el |mi )?documento\b", 0.9),
+    ],
+    IntentKind.HISTORY_SUMMARY: [
+        (r"\bmi historial\b", 1.0),
+        (r"\bhistorial (clinico|medico)\b", 1.0),
+        (r"\bque me puedes decir\b", 0.85),
+        (r"\bcuantas atenciones\b", 0.95),
+        (r"\bque tengo registrado\b", 0.95),
+        (r"\bresumen de (mi )?historial\b", 1.0),
+    ],
+    IntentKind.EXAM_INFO: [
+        (r"\bexamenes? que (debo|tengo que) (realizarme|hacerme|hacer)\b", 1.0),
+        (r"\bque examenes?\b", 0.9),
+        (r"\bcuales son mis examenes?\b", 0.95),
+        (r"\bque examen debo hacerme\b", 1.0),
+        (r"\borden medica\b", 0.95),
+        (r"\b(mis )?examenes?\b", 0.7),
+    ],
+    IntentKind.FOLLOW_UP_ACTION: [
+        (r"^\s*si\s+hazlo\b", 1.0),
+        (r"^\s*si toda la informacion es correcta\b", 1.0),
+        (r"^\s*correcto\b", 0.95),
+        (r"^\s*esta bien\b", 0.9),
+        (r"^\s*(confirmo|de acuerdo|perfecto)\b", 0.9),
+        (r"^\s*si\s*[.!]?\s*$", 0.85),
     ],
 }
 
@@ -188,13 +272,43 @@ def _score_intents(
     return normalized_scores, matches
 
 
+_PRIORITY_ORDER: list[IntentKind] = [
+    IntentKind.GREETING,
+    IntentKind.ASSISTANT_CAPABILITIES,
+    IntentKind.FAMILY_INFO,
+    IntentKind.DOCUMENT_INFO,
+    IntentKind.MEDICATION_INFO,
+    IntentKind.EXAM_INFO,
+    IntentKind.HISTORY_SUMMARY,
+    IntentKind.GET_STATUS,
+    IntentKind.GET_PENDING,
+    IntentKind.GET_EPISODE_DETAIL,
+    IntentKind.UPLOAD_INFO,
+    IntentKind.APPOINTMENT_ACTION,
+    IntentKind.GENERAL_QUESTION,
+    IntentKind.FOLLOW_UP_ACTION,
+]
+_PRIORITY_RANK: dict[IntentKind, int] = {kind: i for i, kind in enumerate(_PRIORITY_ORDER)}
+_TIE_EPSILON = 0.05
+
+
 def _pick_top(scores: dict[IntentKind, float]) -> tuple[IntentKind, float]:
+    """Elige el intent ganador. Score manda; prioridad desempata empates cercanos."""
     if not scores:
         return IntentKind.UNKNOWN, 0.0
-    kind, value = max(scores.items(), key=lambda item: item[1])
-    if value <= 0.0:
+    top_score = max(scores.values())
+    if top_score <= 0.0:
         return IntentKind.UNKNOWN, 0.0
-    return kind, value
+    candidates = [
+        (kind, value)
+        for kind, value in scores.items()
+        if value >= top_score - _TIE_EPSILON
+    ]
+    winner = min(
+        candidates,
+        key=lambda item: _PRIORITY_RANK.get(item[0], len(_PRIORITY_ORDER)),
+    )
+    return winner[0], winner[1]
 
 
 # ─── Desambiguación por estado clínico ───────────────────────────────────────

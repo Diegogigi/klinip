@@ -46,6 +46,13 @@ class IntentKind(str, Enum):
     MEDICATION_INFO = "medication_info"          # "¿qué remedio tomo?"
     APPOINTMENT_ACTION = "appointment_action"    # "agenda una cita"
     GENERAL_QUESTION = "general_question"        # pregunta genérica de salud
+    GREETING = "greeting"                        # "hola", "buenos días"
+    ASSISTANT_CAPABILITIES = "assistant_capabilities"  # "qué puedes hacer"
+    FAMILY_INFO = "family_info"                  # "cuántos familiares", "publicaciones"
+    DOCUMENT_INFO = "document_info"              # "de qué trata el documento"
+    HISTORY_SUMMARY = "history_summary"          # "mi historial", "qué tengo registrado"
+    EXAM_INFO = "exam_info"                      # "qué exámenes debo hacer"
+    FOLLOW_UP_ACTION = "follow_up_action"        # "sí hazlo" — requiere contexto previo
     VOICE_INPUT = "voice_input"                  # viene de pipeline de voz
     UNKNOWN = "unknown"
 
