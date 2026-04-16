@@ -40,13 +40,14 @@ def _make_log(
     latency_ms: int = 10,
     source: str = "chat",
     profile_id: int | None = None,
+    message_preview: str = "x",
 ):
     log = models.IntentShadowLog(
         user_id=user.id,
         profile_id=profile_id,
         conversation_id="c",
         source=source,
-        message_preview="x",
+        message_preview=message_preview,
         intent_predicted=intent,
         intent_source=intent_source,
         confidence=confidence,
@@ -91,6 +92,7 @@ class TestSinLogs:
         assert result["llm_fallback_rate_pct"] == 0.0
         assert result["would_change_response_rate_pct"] == 0.0
         assert result["latency_ms"] == {"avg": 0.0, "p50": 0, "p95": 0}
+        assert result["samples"] == {}
 
 
 class TestAgregacionPorIntent:
@@ -227,3 +229,123 @@ class TestLatencia:
         assert lat["p50"] == 30  # valor en posición 5 de 10 (0-indexed)
         # p95 con 10 valores cae en posición min(9, int(9.5)) = 9 → último
         assert lat["p95"] == 200
+
+
+class TestSamples:
+    def test_incluye_previews_por_intent(self, db_session):
+        user = _make_user(db_session)
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="que tiene mi hijo",
+            created_days_ago=0.1,
+        )
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="me duele la cabeza",
+            created_days_ago=0.2,
+        )
+        _make_log(
+            db_session,
+            user,
+            intent="get_status",
+            message_preview="como estoy",
+            created_days_ago=0.3,
+        )
+        db_session.commit()
+
+        result = compute_shadow_metrics(db_session, days=7, now=NOW)
+        samples = result["samples"]
+        assert "unknown" in samples
+        assert "get_status" in samples
+        assert len(samples["unknown"]) == 2
+        unknown_previews = [s["preview"] for s in samples["unknown"]]
+        assert "que tiene mi hijo" in unknown_previews
+        assert "me duele la cabeza" in unknown_previews
+
+    def test_orden_descendente_por_fecha(self, db_session):
+        user = _make_user(db_session)
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="viejo",
+            created_days_ago=3.0,
+        )
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="reciente",
+            created_days_ago=0.1,
+        )
+        db_session.commit()
+
+        result = compute_shadow_metrics(db_session, days=7, now=NOW)
+        previews = [s["preview"] for s in result["samples"]["unknown"]]
+        assert previews[0] == "reciente"
+        assert previews[1] == "viejo"
+
+    def test_capea_en_samples_per_intent(self, db_session):
+        from app.services.orchestrator.shadow_metrics import SAMPLES_PER_INTENT
+
+        user = _make_user(db_session)
+        for i in range(SAMPLES_PER_INTENT + 5):
+            _make_log(
+                db_session,
+                user,
+                intent="unknown",
+                message_preview=f"msg-{i}",
+                created_days_ago=0.1 + i * 0.01,
+            )
+        db_session.commit()
+
+        result = compute_shadow_metrics(db_session, days=7, now=NOW)
+        assert len(result["samples"]["unknown"]) == SAMPLES_PER_INTENT
+
+    def test_respeta_ventana_temporal(self, db_session):
+        user = _make_user(db_session)
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="dentro",
+            created_days_ago=1.0,
+        )
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="fuera",
+            created_days_ago=20.0,
+        )
+        db_session.commit()
+
+        result = compute_shadow_metrics(db_session, days=7, now=NOW)
+        previews = [s["preview"] for s in result["samples"]["unknown"]]
+        assert "dentro" in previews
+        assert "fuera" not in previews
+
+    def test_incluye_metadata_util(self, db_session):
+        user = _make_user(db_session)
+        _make_log(
+            db_session,
+            user,
+            intent="unknown",
+            message_preview="test msg",
+            confidence=0.12,
+            clinical_phase="treatment",
+            source="voice",
+        )
+        db_session.commit()
+
+        result = compute_shadow_metrics(db_session, days=7, now=NOW)
+        sample = result["samples"]["unknown"][0]
+        assert sample["preview"] == "test msg"
+        assert sample["confidence"] == 0.12
+        assert sample["phase"] == "treatment"
+        assert sample["source"] == "voice"
+        assert sample["created_at"] is not None

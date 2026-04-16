@@ -23,6 +23,7 @@ from ... import models
 
 DEFAULT_WINDOW_DAYS = 7
 MAX_WINDOW_DAYS = 90
+SAMPLES_PER_INTENT = 10
 
 
 def _clamp_days(days: Optional[int]) -> int:
@@ -71,6 +72,7 @@ def compute_shadow_metrics(
             "llm_fallback_rate_pct": 0.0,
             "would_change_response_rate_pct": 0.0,
             "latency_ms": {"avg": 0.0, "p50": 0, "p95": 0},
+            "samples": {},
         }
 
     by_intent = _aggregate_by_intent(db, since, total)
@@ -79,6 +81,7 @@ def compute_shadow_metrics(
     llm_rate = _llm_fallback_rate(db, since, total)
     would_change_rate = _would_change_rate(db, since, total)
     latency = _latency_stats(db, since)
+    samples = _samples_by_intent(db, since)
 
     return {
         "window_days": window_days,
@@ -90,6 +93,7 @@ def compute_shadow_metrics(
         "llm_fallback_rate_pct": llm_rate,
         "would_change_response_rate_pct": would_change_rate,
         "latency_ms": latency,
+        "samples": samples,
     }
 
 
@@ -208,6 +212,51 @@ def _would_change_rate(db: Session, since: datetime, total: int) -> float:
         or 0
     )
     return _percent(int(count), total)
+
+
+def _samples_by_intent(
+    db: Session, since: datetime, limit: int = SAMPLES_PER_INTENT
+) -> dict[str, list[dict]]:
+    """Retorna los ultimos `limit` message_preview por intent, mas recientes primero.
+
+    Sirve para auditar por que cayeron en `unknown` (o en otro intent) y
+    calibrar heuristicas con frases reales.
+    """
+    intents = (
+        db.query(models.IntentShadowLog.intent_predicted)
+        .filter(models.IntentShadowLog.created_at >= since)
+        .distinct()
+        .all()
+    )
+    out: dict[str, list[dict]] = {}
+    for (intent,) in intents:
+        rows = (
+            db.query(
+                models.IntentShadowLog.message_preview,
+                models.IntentShadowLog.confidence,
+                models.IntentShadowLog.clinical_phase,
+                models.IntentShadowLog.source,
+                models.IntentShadowLog.created_at,
+            )
+            .filter(
+                models.IntentShadowLog.created_at >= since,
+                models.IntentShadowLog.intent_predicted == intent,
+            )
+            .order_by(models.IntentShadowLog.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        out[intent or "unknown"] = [
+            {
+                "preview": (r.message_preview or "")[:200],
+                "confidence": round(float(r.confidence or 0.0), 3),
+                "phase": r.clinical_phase or "unknown",
+                "source": r.source or "unknown",
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    return out
 
 
 def _latency_stats(db: Session, since: datetime) -> dict:
