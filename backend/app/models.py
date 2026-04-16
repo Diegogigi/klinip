@@ -788,6 +788,34 @@ class ClinicalTask(Base):
     owner_user = relationship("User")
 
 
+# ─── Clinical Orchestrator — shadow logs ─────────────────────────────────────
+
+
+class IntentShadowLog(Base):
+    __tablename__ = "intent_shadow_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    conversation_id = Column(String, default="", index=True)
+    source = Column(String, default="chat", index=True)
+    message_preview = Column(String, default="")
+    intent_predicted = Column(String, default="unknown", index=True)
+    intent_source = Column(String, default="heuristic")
+    confidence = Column(Float, default=0.0)
+    used_llm_fallback = Column(Boolean, default=False)
+    clinical_phase = Column(String, default="", index=True)
+    clinical_urgency = Column(String, default="")
+    primary_episode_id = Column(Integer, nullable=True)
+    would_change_response = Column(Boolean, default=False, index=True)
+    latency_ms = Column(Integer, default=0)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    user = relationship("User")
+    profile = relationship("HealthProfile")
+
+
 # ─── KlinipFeed ───────────────────────────────────────────────────────────────
 
 class FeedPost(Base):

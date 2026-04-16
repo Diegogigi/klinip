@@ -114,6 +114,7 @@ from .services.ai_context_service import build_episode_ai_context
 from .services.clinical_summary_service import refresh_episode_snapshot, serialize_episode_out
 from .services.episode_link_service import refresh_episode_links_for_record, set_record_episode
 from .services.timeline_builder_service import build_episode_timeline, get_episode_related_items
+from .services.orchestrator import compute_shadow_metrics, run_intent_shadow_pipeline
 
 try:
     from pywebpush import webpush, WebPushException
@@ -17058,6 +17059,67 @@ async def delete_profile_note(
     return {"ok": True}
 
 
+def _run_intent_shadow_background(
+    *,
+    user_id: int,
+    profile_id: int | None,
+    conversation_id: str,
+    source: str,
+    message: str,
+) -> None:
+    """Ejecuta el pipeline shadow del orchestrator en su propia sesión.
+
+    Fail-safe: cualquier excepción se traga. Nunca afecta la respuesta del
+    endpoint que lo encoló.
+    """
+    db = SessionLocal()
+    try:
+        run_intent_shadow_pipeline(
+            db,
+            user_id=user_id,
+            profile_id=profile_id,
+            conversation_id=conversation_id,
+            source=source,
+            message=message,
+        )
+    except Exception as exc:
+        print(f"WARNING _run_intent_shadow_background: {exc}")
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+
+def _get_admin_emails() -> set[str]:
+    raw = (os.getenv("KLINIP_ADMIN_EMAILS") or "").strip()
+    if not raw:
+        return set()
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def _require_admin_user(current_user: models.User) -> None:
+    admin_emails = _get_admin_emails()
+    if not admin_emails:
+        raise HTTPException(
+            status_code=503,
+            detail="Panel admin no configurado (KLINIP_ADMIN_EMAILS).",
+        )
+    if (current_user.email or "").lower() not in admin_emails:
+        raise HTTPException(status_code=403, detail="Acceso restringido.")
+
+
+@app.get("/admin/intent-shadow/metrics")
+def admin_intent_shadow_metrics(
+    days: int = 7,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Agregaciones de intent_shadow_logs para validar shadow mode del orquestador."""
+    _require_admin_user(current_user)
+    return compute_shadow_metrics(db, days=days)
+
+
 @app.post("/ai/chat", response_model=schemas.AiChatResponse)
 async def ai_chat(
     payload: schemas.AiChatRequest,
@@ -17094,6 +17156,21 @@ async def ai_chat(
         conversation_title = (existing_title_item.conversation_title or "").strip()
     if not conversation_title:
         conversation_title = _derive_ai_conversation_title(message)
+
+    # Clinical orchestrator — shadow mode (Fase 1b).
+    # Fire-and-forget: no afecta latencia ni respuesta.
+    try:
+        background_tasks.add_task(
+            _run_intent_shadow_background,
+            user_id=int(current_user.id),
+            profile_id=int(profile.id) if profile else None,
+            conversation_id=conversation_id,
+            source="chat",
+            message=message,
+        )
+    except Exception as shadow_exc:
+        print(f"WARNING ai_chat shadow enqueue: {shadow_exc}")
+
     attachment_payload = _workflow_attachment_payload(payload.attachment)
     has_workflow = _get_ai_conversation_workflow(
         db,
