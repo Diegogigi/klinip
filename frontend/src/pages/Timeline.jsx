@@ -496,6 +496,13 @@ export default function Timeline() {
     [manualLinker.itemId, visibleManualItems]
   );
 
+  const selectedEpisodeTone = selectedEpisode ? getEpisodeTone(selectedEpisode.status) : "active";
+
+  const heroPrimaryAction = useMemo(
+    () => selectedQuickActions.find((item) => item.tone === "primary") || selectedQuickActions[0] || null,
+    [selectedQuickActions]
+  );
+
   async function openManualLinker(episodeId) {
     if (!resolvedProfileId) return;
     if (manualLinker.episodeId === episodeId) {
@@ -569,32 +576,79 @@ export default function Timeline() {
 
   return (
     <>
-      <section className="history-process-header">
-        <div>
-          <span className="history-process-kicker">Historial</span>
-          <h1 className="history-process-title">Procesos de salud</h1>
-          <p className="history-process-subtitle">
-            Tu historial se ordena por motivo de salud para que entiendas qué pasó, qué falta y qué se relaciona entre sí.
-          </p>
+      <section className={`history-process-header timeline-overview-card tone-${selectedEpisodeTone}`}>
+        <div className="history-process-hero-main">
+          <div className="history-process-hero-copy">
+            <span className="history-process-kicker">Historia clínica</span>
+            <h1 className="card-title history-process-title">Procesos de salud</h1>
+            <p className="muted history-process-subtitle">
+              Tu historial se ordena por proceso para que entiendas qué pasó, qué falta y qué puedes resolver ahora.
+            </p>
+          </div>
+
+          <div className="history-process-hero-actions">
+            {heroPrimaryAction ? (
+              <button type="button" className="primary-btn history-process-hero-btn" onClick={() => navigate(heroPrimaryAction.to)}>
+                {heroPrimaryAction.label}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="secondary-btn history-process-hero-btn"
+              onClick={() => {
+                if (selectedEpisode) {
+                  openManualLinker(selectedEpisode.id);
+                  return;
+                }
+                setStatusFilter("active");
+              }}
+            >
+              {selectedEpisode ? "Organizar proceso" : "Ver procesos activos"}
+            </button>
+          </div>
         </div>
 
-        <div className="history-process-summarybar" aria-label="Resumen del historial">
-          <div className="history-process-summaryitem">
-            <strong>{summaryCounts.active}</strong>
-            <span>activos</span>
+        <div className="history-process-hero-side">
+          <div className={`history-process-hero-focus tone-${selectedEpisodeTone}`}>
+            <span className={`history-process-hero-focus-pill tone-${selectedEpisodeTone}`}>
+              {selectedEpisode ? getEpisodeStatusLabel(selectedEpisode.status) : `${filteredEpisodes.length} visibles`}
+            </span>
+            <strong>{selectedEpisode ? cleanUiText(selectedEpisode.title, "Proceso de salud") : `Perfil: ${profileLabel}`}</strong>
+            <p>
+              {selectedEpisode
+                ? getEpisodeLead(selectedEpisode, selectedDetail)
+                : "Elige un proceso para ver su resumen, pendientes y accesos directos."}
+            </p>
           </div>
-          <div className="history-process-summaryitem">
-            <strong>{summaryCounts.pending}</strong>
-            <span>pendientes</span>
-          </div>
-          <div className="history-process-summaryitem">
-            <strong>{summaryCounts.closed}</strong>
-            <span>cerrados</span>
+
+          <div className="history-process-summarybar" aria-label="Resumen del historial">
+            <div className="history-process-summaryitem">
+              <strong>{summaryCounts.active}</strong>
+              <span>Activos</span>
+            </div>
+            <div className="history-process-summaryitem">
+              <strong>{summaryCounts.pending}</strong>
+              <span>Pendientes</span>
+            </div>
+            <div className="history-process-summaryitem">
+              <strong>{summaryCounts.closed}</strong>
+              <span>Cerrados</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <div className="card history-process-shell">
+      <div className="history-process-toolbar-shell timeline-filters-card">
+        <div className="history-process-toolbar-intro">
+          <div>
+            <h2>Filtra y ubica un proceso</h2>
+            <p>
+              Busca por motivo, documento o control. Cambia el perfil activo y deja visible solo lo que necesitas revisar.
+            </p>
+          </div>
+          <span className="history-process-toolbar-chip">{filteredEpisodes.length} visibles para {profileLabel}</span>
+        </div>
+
         <div className="history-process-toolbar">
           <div className="history-process-toolbar-grid">
             <div className="input-group">
@@ -689,9 +743,11 @@ export default function Timeline() {
             </div>
           ) : null}
         </div>
+      </div>
 
+      <div className="card history-process-shell">
         {loading ? (
-          <div className="history-process-empty">Estamos organizando tu historial por procesos de salud...</div>
+          <div className="history-process-empty timeline-card">Estamos organizando tu historial por procesos de salud...</div>
         ) : filteredEpisodes.length ? (
           <div className="history-process-layout">
             <aside className="history-process-rail">
@@ -750,7 +806,7 @@ export default function Timeline() {
                     </div>
                   </div>
 
-                  <div className="history-process-action-block">
+                  <div className="history-process-action-block timeline-card">
                     <div className="history-process-section-head history-process-action-head">
                       <div>
                         <h3>Qué puedes hacer ahora</h3>
@@ -792,7 +848,7 @@ export default function Timeline() {
                   </div>
 
                   <div className="history-process-spotlight">
-                    <div className="history-process-spotlight-item">
+                    <div className="history-process-spotlight-item timeline-card">
                       <span>Próximo paso</span>
                       <strong>
                         {selectedPendingTasks[0]
@@ -806,13 +862,13 @@ export default function Timeline() {
                       </p>
                     </div>
 
-                    <div className="history-process-spotlight-item">
+                    <div className="history-process-spotlight-item timeline-card">
                       <span>Incluye</span>
                       <strong>{getEpisodeCountsLine(selectedEpisode)}</strong>
                       <p>{getPendingLabel(selectedEpisode)}</p>
                     </div>
 
-                    <div className="history-process-spotlight-item">
+                    <div className="history-process-spotlight-item timeline-card">
                       <span>Último movimiento</span>
                       <strong>{getLastActivityLabel(selectedEpisode.last_activity_at)}</strong>
                       <p>{cleanUiText(selectedEpisode.care_summary || selectedEpisode.summary, "Sin resumen adicional.")}</p>
@@ -823,7 +879,7 @@ export default function Timeline() {
                     <div className="history-process-empty">Cargando este proceso...</div>
                   ) : (
                     <>
-                      <section className="history-process-section">
+                      <section className="history-process-section history-process-section-card timeline-card">
                         <div className="history-process-section-head">
                           <h3>Qué falta ahora</h3>
                           <span>{selectedPendingTasks.length ? `${selectedPendingTasks.length} pendiente(s)` : "Al día"}</span>
@@ -854,7 +910,7 @@ export default function Timeline() {
                         )}
                       </section>
 
-                      <section className="history-process-section">
+                      <section className="history-process-section history-process-section-card timeline-card">
                         <div className="history-process-section-head">
                           <h3>Qué ya está dentro</h3>
                           <span>Resumen rápido</span>
@@ -882,7 +938,7 @@ export default function Timeline() {
                         </div>
                       </section>
 
-                      <section className="history-process-section">
+                      <section className="history-process-section history-process-section-card timeline-card">
                         <div className="history-process-section-head">
                           <h3>Últimos movimientos</h3>
                           <span>{selectedTimelineItems.length} evento(s)</span>
@@ -917,7 +973,7 @@ export default function Timeline() {
                         )}
                       </section>
 
-                      <section className="history-process-section">
+                      <section className="history-process-section history-process-section-card timeline-card">
                         <div className="history-process-section-head">
                           <h3>Corregir agrupación</h3>
                           <span>Ayuda a completar este proceso</span>
@@ -937,7 +993,7 @@ export default function Timeline() {
                           manualLinker.loading ? (
                             <div className="history-process-empty">Buscando citas, documentos y medicamentos...</div>
                           ) : (
-                            <div className="history-process-manual">
+                            <div className="history-process-manual timeline-card">
                               <div className="history-process-manual-grid">
                                 <div className="input-group">
                                   <label className="input-label">Tipo</label>
@@ -1009,13 +1065,13 @@ export default function Timeline() {
                   )}
                 </>
               ) : (
-                <div className="history-process-empty">Selecciona un proceso para ver su resumen y sus acciones.</div>
+                <div className="history-process-empty timeline-card">Selecciona un proceso para ver su resumen y sus acciones.</div>
               )}
             </section>
           </div>
         ) : episodes.length ? (
           <div className="history-process-empty-zone">
-            <div className="history-process-empty">
+            <div className="history-process-empty timeline-card">
               No encontramos procesos con este filtro. Prueba cambiar el filtro o borrar la búsqueda.
             </div>
 
@@ -1030,11 +1086,11 @@ export default function Timeline() {
           </div>
         ) : (
           <div className="history-process-empty-zone">
-            <div className="history-process-empty">
+            <div className="history-process-empty timeline-card">
               No encontramos procesos agrupados para este perfil. Seguimos conectando tus atenciones para que se entiendan mejor.
             </div>
 
-            <div className="history-process-legacy">
+            <div className="history-process-legacy timeline-card">
               <div className="history-process-legacy-head">
                 <strong>Actividad reciente</strong>
                 <span>{legacyTimeline.event_count || legacyEvents.length} evento(s)</span>
