@@ -40,6 +40,113 @@ def get_episode_related_items(db: Session, episode: models.ClinicalEpisode) -> d
     }
 
 
+def build_episode_folder_items(db: Session, episode: models.ClinicalEpisode) -> list[dict]:
+    related = get_episode_related_items(db, episode)
+    items: list[dict] = []
+
+    for item in related["appointments"]:
+        when = item.date_time or item.created_at
+        status_value = getattr(item.status, "value", item.status) or ""
+        subtitle_parts = [
+            "Cita",
+            status_value,
+            item.center or "",
+        ]
+        items.append(
+            {
+                "item_type": "appointment",
+                "item_id": int(item.id),
+                "title": item.specialty or f"Cita {getattr(item.type, 'value', item.type)}",
+                "subtitle": " · ".join(part for part in subtitle_parts if part),
+                "event_at": when,
+                "status_label": status_value,
+                "source_module": "appointments",
+                "metadata_json": {
+                    "notes": item.notes or "",
+                    "specialty": item.specialty or "",
+                    "center": item.center or "",
+                },
+            }
+        )
+
+    for item in related["documents"]:
+        when = item.date or item.created_at
+        doc_type = getattr(item.doc_type, "value", item.doc_type) or ""
+        subtitle_parts = [
+            doc_type,
+            item.center or "",
+            item.notes or "",
+        ]
+        items.append(
+            {
+                "item_type": "document",
+                "item_id": int(item.id),
+                "title": item.filename or f"Documento {doc_type or 'clinico'}",
+                "subtitle": " · ".join(part for part in subtitle_parts if part),
+                "event_at": when,
+                "status_label": doc_type,
+                "source_module": "documents",
+                "metadata_json": {
+                    "center": item.center or "",
+                    "notes": item.notes or "",
+                    "appointment_id": item.appointment_id,
+                },
+            }
+        )
+
+    for item in related["medications"]:
+        when = item.start_at or item.created_at
+        status_value = "Finalizado" if bool(item.completed) else "Activo"
+        subtitle_parts = [
+            item.dose or "",
+            item.frequency or "",
+            status_value,
+        ]
+        items.append(
+            {
+                "item_type": "medication",
+                "item_id": int(item.id),
+                "title": item.name or "Medicamento",
+                "subtitle": " · ".join(part for part in subtitle_parts if part),
+                "event_at": when,
+                "status_label": status_value,
+                "source_module": "medications",
+                "metadata_json": {
+                    "dose": item.dose or "",
+                    "frequency": item.frequency or "",
+                    "notes": item.notes or "",
+                    "completed": bool(item.completed),
+                },
+            }
+        )
+
+    for item in related["external_records"]:
+        when = item.event_at or item.created_at
+        record_type = item.record_type or "resultado"
+        subtitle_parts = [
+            record_type,
+            item.summary or "",
+        ]
+        items.append(
+            {
+                "item_type": "external_record",
+                "item_id": int(item.id),
+                "title": item.title or "Resultado externo",
+                "subtitle": " · ".join(part for part in subtitle_parts if part),
+                "event_at": when,
+                "status_label": record_type,
+                "source_module": "interoperability",
+                "metadata_json": {
+                    "summary": item.summary or "",
+                    "source_id": item.source_id,
+                },
+            }
+        )
+
+    items.sort(key=lambda current: current.get("event_at") or datetime.min, reverse=True)
+    return items
+
+
 def build_episode_timeline(db: Session, episode: models.ClinicalEpisode) -> list[dict]:
     related = get_episode_related_items(db, episode)
     events: list[dict] = []

@@ -113,7 +113,7 @@ from .schema_helpers import ensure_columns
 from .services.ai_context_service import build_episode_ai_context
 from .services.clinical_summary_service import refresh_episode_snapshot, serialize_episode_out
 from .services.episode_link_service import refresh_episode_links_for_record, set_record_episode
-from .services.timeline_builder_service import build_episode_timeline, get_episode_related_items
+from .services.timeline_builder_service import build_episode_folder_items, build_episode_timeline, get_episode_related_items
 from .services.orchestrator import compute_shadow_metrics, run_intent_shadow_pipeline
 
 try:
@@ -20146,6 +20146,7 @@ async def get_clinical_episode_detail(
     response = {
         "episode": serialize_episode_out(db, episode),
         "tasks": tasks,
+        "folder_items": build_episode_folder_items(db, episode),
         "timeline": build_episode_timeline(db, episode),
         "related_items": get_episode_related_items(db, episode),
         "ai_context": build_episode_ai_context(db, episode),

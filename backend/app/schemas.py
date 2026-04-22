@@ -736,6 +736,23 @@ class EpisodeTimelineEventOut(BaseModel):
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
 
+class ClinicalFolderItemOut(BaseModel):
+    item_type: str
+    item_id: int
+    title: str
+    subtitle: str = ""
+    event_at: datetime | None = None
+    status_label: str = ""
+    source_module: str = ""
+    metadata_json: dict = {}
+
+    @field_serializer('event_at')
+    def serialize_folder_item_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class EpisodeRelatedItemsOut(BaseModel):
     appointments: list[AppointmentOut] = []
     documents: list[DocumentOut] = []
@@ -746,6 +763,7 @@ class EpisodeRelatedItemsOut(BaseModel):
 class ClinicalEpisodeDetailOut(BaseModel):
     episode: ClinicalEpisodeOut
     tasks: list[ClinicalTaskOut] = []
+    folder_items: list[ClinicalFolderItemOut] = []
     timeline: list[EpisodeTimelineEventOut] = []
     related_items: EpisodeRelatedItemsOut
     ai_context: dict = {}
