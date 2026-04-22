@@ -1373,10 +1373,30 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY")
 VAPID_EMAIL = os.getenv("VAPID_EMAIL")
+MAX_PUSH_SUBSCRIPTIONS_PER_USER = max(
+    2,
+    int(os.getenv("MAX_PUSH_SUBSCRIPTIONS_PER_USER", "6") or "6"),
+)
 
 
 def _push_configured() -> bool:
-    return bool(webpush and VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY and VAPID_EMAIL)
+    return bool(
+        webpush
+        and VAPID_PUBLIC_KEY
+        and VAPID_PRIVATE_KEY
+        and _normalized_vapid_subject(VAPID_EMAIL)
+    )
+
+
+def _normalized_vapid_subject(raw_value: str | None) -> str:
+    value = str(raw_value or "").strip()
+    if not value:
+        return ""
+    if value.startswith(("mailto:", "http://", "https://")):
+        return value
+    if "@" in value and " " not in value:
+        return f"mailto:{value}"
+    return value
 
 
 def ensure_login_security_schema():
@@ -1428,6 +1448,7 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         print("DEBUG push: falta configuracion VAPID o pywebpush")
         return False
     try:
+        vapid_subject = _normalized_vapid_subject(VAPID_EMAIL)
         webpush(
             subscription_info={
                 "endpoint": subscription.endpoint,
@@ -1435,7 +1456,7 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
             },
             data=json.dumps(payload),
             vapid_private_key=VAPID_PRIVATE_KEY,
-            vapid_claims={"sub": VAPID_EMAIL},
+            vapid_claims={"sub": vapid_subject},
         )
         return True
     except WebPushException as exc:
@@ -1446,7 +1467,11 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         return False
 
 
-def _prune_push_subscriptions_for_user(db: Session, user_id: int, keep: int = 3) -> int:
+def _prune_push_subscriptions_for_user(
+    db: Session,
+    user_id: int,
+    keep: int = MAX_PUSH_SUBSCRIPTIONS_PER_USER,
+) -> int:
     keep_count = max(1, int(keep or 1))
     subscriptions = (
         db.query(models.PushSubscription)
@@ -1464,7 +1489,7 @@ def _prune_push_subscriptions_for_user(db: Session, user_id: int, keep: int = 3)
 
 
 def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
-    if not (webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY):
+    if not _push_configured():
         return 0
     subscriptions = (
         db.query(models.PushSubscription)
@@ -1474,11 +1499,20 @@ def _send_push_to_user(db: Session, user_id: int, payload: dict) -> int:
     )
     if not subscriptions:
         return 0
-    # En producción hemos visto que iOS puede regenerar endpoints y dejar varias
-    # suscripciones válidas para el mismo usuario/dispositivo. Para evitar pushes
-    # duplicados conservamos solo la suscripción más reciente.
-    active_subs = subscriptions[:1]
-    stale_subs = subscriptions[1:]
+    # Mantener varias suscripciones permite entregar el mismo recordatorio a
+    # celular, tablet o desktop del mismo usuario. El service worker deduplica
+    # por tag en cada dispositivo si existieran endpoints repetidos.
+    active_subs = []
+    seen_endpoints = set()
+    for sub in subscriptions:
+        endpoint = str(getattr(sub, "endpoint", "") or "").strip()
+        if not endpoint or endpoint in seen_endpoints:
+            continue
+        seen_endpoints.add(endpoint)
+        active_subs.append(sub)
+
+    stale_subs = active_subs[MAX_PUSH_SUBSCRIPTIONS_PER_USER:]
+    active_subs = active_subs[:MAX_PUSH_SUBSCRIPTIONS_PER_USER]
     for sub in stale_subs:
         db.delete(sub)
     if stale_subs:
@@ -21234,7 +21268,11 @@ async def subscribe_push(
         try:
             db.commit()
             db.refresh(existing)
-            _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
+            _prune_push_subscriptions_for_user(
+                db,
+                int(current_user.id),
+                keep=MAX_PUSH_SUBSCRIPTIONS_PER_USER,
+            )
             return existing
         except Exception as exc:
             db.rollback()
@@ -21251,7 +21289,11 @@ async def subscribe_push(
     try:
         db.commit()
         db.refresh(sub)
-        _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
+        _prune_push_subscriptions_for_user(
+            db,
+            int(current_user.id),
+            keep=MAX_PUSH_SUBSCRIPTIONS_PER_USER,
+        )
         return sub
     except IntegrityError:
         db.rollback()
@@ -21268,7 +21310,11 @@ async def subscribe_push(
             try:
                 db.commit()
                 db.refresh(recovered)
-                _prune_push_subscriptions_for_user(db, int(current_user.id), keep=1)
+                _prune_push_subscriptions_for_user(
+                    db,
+                    int(current_user.id),
+                    keep=MAX_PUSH_SUBSCRIPTIONS_PER_USER,
+                )
                 return recovered
             except Exception as exc:
                 db.rollback()

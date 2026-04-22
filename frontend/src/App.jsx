@@ -690,6 +690,8 @@ const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v1";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
+const MED_ALERT_INITIAL_DELAY_MS = 15000;
+const FAMILY_CONTEXT_ROUTE_REFRESH_MS = 30000;
 const ONBOARDING_TIMEZONE_OPTIONS = [
   "America/Santiago",
   "America/Lima",
@@ -809,6 +811,8 @@ export default function App() {
   const seenUpdateKeysRef = useRef(new Set());
   const dismissedUpdateKeyRef = useRef("");
   const pushNotifiedUpdateKeyRef = useRef("");
+  const familyContextLoadingRef = useRef(false);
+  const lastFamilyContextRefreshRef = useRef(0);
 
   useEffect(() => {
     document.body.classList.toggle("theme-dark", theme === "dark");
@@ -869,12 +873,15 @@ export default function App() {
     let mounted = true;
     const loadFamilyContext = async () => {
       if (!user?.id) {
+        familyContextLoadingRef.current = false;
+        lastFamilyContextRefreshRef.current = 0;
         if (!mounted) return;
         setPlanInfo(null);
         setHealthProfiles([]);
         setActiveHealthProfileId(null);
         return;
       }
+      familyContextLoadingRef.current = true;
       try {
         const [plan, profiles, active] = await Promise.all([
           getMyPlan(),
@@ -886,6 +893,7 @@ export default function App() {
         const list = Array.isArray(profiles) ? profiles : [];
         setHealthProfiles(list);
         setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
+        lastFamilyContextRefreshRef.current = Date.now();
       } catch (err) {
         if (!mounted) return;
         if (!isAuthSessionError(err)) {
@@ -894,6 +902,8 @@ export default function App() {
         setPlanInfo(null);
         setHealthProfiles([]);
         setActiveHealthProfileId(null);
+      } finally {
+        familyContextLoadingRef.current = false;
       }
     };
     loadFamilyContext();
@@ -904,8 +914,16 @@ export default function App() {
 
   useEffect(() => {
     if (!user?.id) return;
+    if (familyContextLoadingRef.current) return;
+    if (
+      lastFamilyContextRefreshRef.current &&
+      (Date.now() - lastFamilyContextRefreshRef.current) < FAMILY_CONTEXT_ROUTE_REFRESH_MS
+    ) {
+      return;
+    }
     let cancelled = false;
     const refreshOnRoute = async () => {
+      familyContextLoadingRef.current = true;
       try {
         const [profiles, active] = await Promise.all([
           getHealthProfiles(),
@@ -915,8 +933,11 @@ export default function App() {
         const list = Array.isArray(profiles) ? profiles : [];
         setHealthProfiles(list);
         setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
+        lastFamilyContextRefreshRef.current = Date.now();
       } catch (_) {
         // noop: evitar ruido en cada cambio de ruta
+      } finally {
+        familyContextLoadingRef.current = false;
       }
     };
     refreshOnRoute();
@@ -984,11 +1005,15 @@ export default function App() {
       }
     };
 
-    checkDueMedicationPopups();
+    const initialTimeoutId = window.setTimeout(
+      checkDueMedicationPopups,
+      MED_ALERT_INITIAL_DELAY_MS
+    );
     const intervalId = window.setInterval(checkDueMedicationPopups, MED_ALERT_POLL_MS);
     return () => {
       active = false;
       medAlertPollingRef.current = false;
+      window.clearTimeout(initialTimeoutId);
       window.clearInterval(intervalId);
     };
   }, [user, booting, navigate]);
@@ -1079,6 +1104,19 @@ export default function App() {
   useEffect(() => {
     clearScheduledNotifications();
     if (!user) return;
+    const consentValue =
+      localStorage.getItem(getUserKey(NOTIF_CONSENT_KEY_BASE, user.id)) || "";
+    const pushRegistered =
+      localStorage.getItem(getUserKey(PUSH_REGISTERED_KEY_BASE, user.id)) === "true";
+    const browserNotificationsEnabled =
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted";
+    const usePushOnly =
+      consentValue === "accepted" && browserNotificationsEnabled && pushRegistered;
+    if (usePushOnly) {
+      return;
+    }
     let active = true;
     let refreshSequence = 0;
     const refreshScheduledNotifications = async (sources = []) => {
@@ -1678,6 +1716,7 @@ export default function App() {
       if (Array.isArray(profiles)) {
         setHealthProfiles(profiles);
       }
+      lastFamilyContextRefreshRef.current = Date.now();
     } catch (err) {
       console.error("No se pudo cambiar el perfil activo en header:", err);
     } finally {
