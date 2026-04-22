@@ -153,6 +153,31 @@ class AlertSummary:
 
 
 @dataclass
+class FamilyMemberSummary:
+    """Familiar/usuario asociado al perfil vía ProfileRelationship."""
+
+    user_id: int
+    name: str
+    email: str = ""
+    relationship_type: str = ""
+    role: str = ""
+    status: str = ""
+
+
+@dataclass
+class FamilyContext:
+    """Contexto familiar del perfil — plan + miembros asociados."""
+
+    owner_user_id: int
+    owner_name: str
+    owner_is_current_user: bool = False
+    plan_type: str = ""
+    member_count: int = 0
+    members: list[FamilyMemberSummary] = field(default_factory=list)
+    pending_invitations: int = 0
+
+
+@dataclass
 class ContextTrace:
     """Trazabilidad interna — qué se incluyó, qué se excluyó y por qué.
 
@@ -179,5 +204,6 @@ class ClinicalContext:
     upcoming_appointments: list[AppointmentSummary] = field(default_factory=list)
     recent_documents: list[DocumentRef] = field(default_factory=list)
     critical_alerts: list[AlertSummary] = field(default_factory=list)
+    family_context: Optional[FamilyContext] = None
     token_estimate: int = 0
     trace: Optional[ContextTrace] = None

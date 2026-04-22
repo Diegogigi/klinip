@@ -31,11 +31,17 @@ from .contracts import (
     ContextTrace,
     DocumentRef,
     EpisodeSummary,
+    FamilyContext,
+    FamilyMemberSummary,
     Intent,
     IntentKind,
     MedicationSummary,
     TaskSummary,
 )
+
+
+# Documentos que cuentan como "exámenes" en búsquedas cross-módulo.
+EXAM_DOC_TYPES: tuple[str, ...] = ("orden", "resultado", "informe")
 
 
 # ─── Estrategia por intent ────────────────────────────────────────────────────
@@ -50,8 +56,11 @@ class _IntentStrategy:
     include_active_medications: bool = False
     upcoming_appointments_limit: int = 0
     recent_documents_limit: int = 0
+    document_type_filter: Optional[tuple[str, ...]] = None
     include_critical_alerts: bool = False
     scope_to_primary: bool = False  # filtra tasks/meds/etc al primary_episode
+    include_family_context: bool = False
+    family_members_limit: int = 0
 
 
 _INTENT_STRATEGY: dict[IntentKind, _IntentStrategy] = {
@@ -111,6 +120,51 @@ _INTENT_STRATEGY: dict[IntentKind, _IntentStrategy] = {
     IntentKind.UNKNOWN: _IntentStrategy(
         build_reason="unknown_light",
         include_primary_episode=True,
+        include_critical_alerts=True,
+    ),
+    IntentKind.EXAM_INFO: _IntentStrategy(
+        build_reason="exam_cross_module",
+        include_primary_episode=True,
+        pending_tasks_limit=10,
+        recent_documents_limit=10,
+        document_type_filter=EXAM_DOC_TYPES,
+        include_critical_alerts=True,
+    ),
+    IntentKind.DOCUMENT_INFO: _IntentStrategy(
+        build_reason="document_focus",
+        include_primary_episode=True,
+        recent_documents_limit=10,
+    ),
+    IntentKind.HISTORY_SUMMARY: _IntentStrategy(
+        build_reason="history_summary",
+        include_primary_episode=True,
+        include_secondary_episodes=True,
+        pending_tasks_limit=3,
+        include_active_medications=True,
+        recent_documents_limit=5,
+        include_critical_alerts=True,
+    ),
+    IntentKind.FAMILY_INFO: _IntentStrategy(
+        build_reason="family_focus",
+        include_primary_episode=False,
+        include_family_context=True,
+        family_members_limit=20,
+    ),
+    IntentKind.GREETING: _IntentStrategy(
+        build_reason="greeting_minimal",
+        include_primary_episode=True,
+        include_critical_alerts=True,
+    ),
+    IntentKind.ASSISTANT_CAPABILITIES: _IntentStrategy(
+        build_reason="capabilities_minimal",
+        include_primary_episode=False,
+    ),
+    IntentKind.FOLLOW_UP_ACTION: _IntentStrategy(
+        build_reason="follow_up_action",
+        include_primary_episode=True,
+        pending_tasks_limit=5,
+        include_active_medications=True,
+        upcoming_appointments_limit=3,
         include_critical_alerts=True,
     ),
 }
@@ -198,6 +252,7 @@ def build_clinical_context(
             scope_ep,
             strategy.recent_documents_limit,
             trace,
+            doc_type_filter=strategy.document_type_filter,
         )
     else:
         trace.excluded["recent_documents"] = "intent strategy skips documents"
@@ -206,6 +261,13 @@ def build_clinical_context(
         ctx.critical_alerts = _load_critical_alerts(db, profile_id, trace)
     else:
         trace.excluded["critical_alerts"] = "intent strategy skips alerts"
+
+    if strategy.include_family_context:
+        ctx.family_context = _load_family_context(
+            db, profile_id, strategy.family_members_limit, trace
+        )
+    else:
+        trace.excluded["family_context"] = "intent strategy skips family"
 
     ctx.token_estimate = _estimate_tokens(ctx)
     ctx.trace = trace
@@ -440,10 +502,14 @@ def _load_recent_documents(
     scope_episode_id: Optional[int],
     limit: int,
     trace: ContextTrace,
+    doc_type_filter: Optional[tuple[str, ...]] = None,
 ) -> list[DocumentRef]:
     q = db.query(models.Document).filter(models.Document.profile_id == profile_id)
     if scope_episode_id is not None:
         q = q.filter(models.Document.episode_id == scope_episode_id)
+    if doc_type_filter:
+        # doc_type es Enum; comparar contra valores string aceptados.
+        q = q.filter(models.Document.doc_type.in_(doc_type_filter))
     rows = q.order_by(models.Document.date.desc().nullslast()).limit(limit).all()
     refs = [
         DocumentRef(
@@ -456,6 +522,10 @@ def _load_recent_documents(
         for r in rows
     ]
     trace.included["recent_documents"] = len(refs)
+    if doc_type_filter:
+        trace.notes.append(
+            f"recent_documents filtered by doc_type in {list(doc_type_filter)}"
+        )
     return refs
 
 
@@ -487,6 +557,78 @@ def _load_critical_alerts(
     return summaries
 
 
+def _load_family_context(
+    db: Session,
+    profile_id: int,
+    members_limit: int,
+    trace: ContextTrace,
+) -> Optional[FamilyContext]:
+    """Carga datos familiares del perfil: dueño, plan, miembros y pendientes."""
+    profile = (
+        db.query(models.HealthProfile)
+        .filter(models.HealthProfile.id == profile_id)
+        .first()
+    )
+    if profile is None:
+        trace.excluded["family_context"] = "profile not found"
+        return None
+
+    owner = (
+        db.query(models.User)
+        .filter(models.User.id == profile.owner_user_id)
+        .first()
+    )
+    owner_name = (owner.name if owner else "") or ""
+    plan_type = (getattr(owner, "plan_type", "") or "") if owner else ""
+
+    member_rows_q = (
+        db.query(models.ProfileRelationship, models.User)
+        .join(models.User, models.User.id == models.ProfileRelationship.user_id)
+        .filter(models.ProfileRelationship.profile_id == profile_id)
+        .order_by(models.ProfileRelationship.created_at.asc())
+    )
+    member_rows = (
+        member_rows_q.limit(members_limit).all() if members_limit > 0 else member_rows_q.all()
+    )
+    members = [
+        FamilyMemberSummary(
+            user_id=int(rel.user_id),
+            name=(usr.name or "") if usr else "",
+            email=(usr.email or "") if usr else "",
+            relationship_type=rel.relationship_type or "",
+            role=rel.role or "",
+            status=rel.status or "",
+        )
+        for rel, usr in member_rows
+    ]
+    member_count = (
+        db.query(models.ProfileRelationship)
+        .filter(models.ProfileRelationship.profile_id == profile_id)
+        .count()
+    )
+    pending_invitations = (
+        db.query(models.ProfileInvitation)
+        .filter(
+            models.ProfileInvitation.profile_id == profile_id,
+            models.ProfileInvitation.status == "pending",
+        )
+        .count()
+    )
+
+    ctx = FamilyContext(
+        owner_user_id=int(profile.owner_user_id),
+        owner_name=owner_name,
+        owner_is_current_user=False,
+        plan_type=plan_type,
+        member_count=int(member_count),
+        members=members,
+        pending_invitations=int(pending_invitations),
+    )
+    trace.included["family_context"] = 1
+    trace.included["family_members"] = len(members)
+    return ctx
+
+
 # ─── Token estimate ──────────────────────────────────────────────────────────
 
 
@@ -510,4 +652,9 @@ def _estimate_tokens(ctx: ClinicalContext) -> int:
         chars += len(d.filename) + len(d.doc_type) + 15
     for al in ctx.critical_alerts:
         chars += len(al.title) + len(al.description) + 20
+    if ctx.family_context:
+        fc = ctx.family_context
+        chars += len(fc.owner_name) + len(fc.plan_type) + 30
+        for m in fc.members:
+            chars += len(m.name) + len(m.relationship_type) + len(m.role) + 15
     return max(0, int(chars / CHARS_PER_TOKEN))

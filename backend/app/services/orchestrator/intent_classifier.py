@@ -134,6 +134,8 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\bcuentame (de )?mi salud\b", 0.9),
         (r"\bdime (de )?mi (salud|estado)\b", 0.9),
         (r"\bque tiene mi (hijo|hija|mama|papa|esposo|esposa|pareja)\b", 0.9),
+        (r"^\s*que tengo\s*[?.!]?\s*$", 0.85),
+        (r"\bque me pasa\b", 0.85),
     ],
     IntentKind.GET_PENDING: [
         (r"\bque me falta\b", 1.0),
@@ -216,6 +218,9 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\b(publicacione?s?|posts?|feed)\b", 0.85),
         (r"\b(acceso|permisos?) (como )?admin(istrador)?\b", 0.9),
         (r"\badmin a mi perfil\b", 0.95),
+        (r"\b(quien|tiene|tienen) acceso a mi perfil\b", 0.95),
+        (r"\bacceso a mi perfil\b", 0.85),
+        (r"\bes mi (esposa|esposo|pareja|hijo|hija|mama|papa|hermano|hermana)\b", 0.85),
     ],
     IntentKind.DOCUMENT_INFO: [
         (r"\b(ultimo|mi ultimo) documento\b", 1.0),
@@ -232,13 +237,17 @@ INTENT_PATTERNS: dict[IntentKind, list[tuple[str, float]]] = {
         (r"\bcuantas atenciones\b", 0.95),
         (r"\bque tengo registrado\b", 0.95),
         (r"\bresumen de (mi )?historial\b", 1.0),
+        (r"\bque (me )?dijo (el )?doctor\b", 1.0),
+        (r"\bque (me )?indico (el )?doctor\b", 0.95),
+        (r"\bque dice (mi )?(ultima )?(atencion|consulta)\b", 0.9),
     ],
     IntentKind.EXAM_INFO: [
         (r"\bexamenes? que (debo|tengo que) (realizarme|hacerme|hacer)\b", 1.0),
         (r"\bque examenes?\b", 0.9),
         (r"\bcuales son mis examenes?\b", 0.95),
         (r"\bque examen debo hacerme\b", 1.0),
-        (r"\borden medica\b", 0.95),
+        (r"\b(mi |mis )?orden(es)? medic[oa]s?\b", 0.95),
+        (r"\bcuales son mis orden(es)? medic[oa]s?\b", 1.0),
         (r"\b(mis )?examenes?\b", 0.7),
     ],
     IntentKind.FOLLOW_UP_ACTION: [

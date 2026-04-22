@@ -589,3 +589,150 @@ class TestTokenEstimate:
             now=NOW,
         )
         assert ctx.token_estimate > 50
+
+
+# ─── EXAM_INFO (cross-módulo) ────────────────────────────────────────────────
+
+
+class TestExamInfo:
+    def test_filtra_documentos_a_examenes(self, db_session):
+        user = _make_user(db_session)
+        profile = _make_profile(db_session, user)
+        ep = _make_episode(db_session, profile)
+        # 3 docs de exámenes + 2 que NO lo son
+        _make_document(db_session, profile, episode=ep, doc_type=models.DocumentType.orden)
+        _make_document(db_session, profile, episode=ep, doc_type=models.DocumentType.resultado)
+        _make_document(db_session, profile, episode=ep, doc_type=models.DocumentType.informe)
+        _make_document(db_session, profile, episode=ep, doc_type=models.DocumentType.receta)
+        _make_document(db_session, profile, episode=ep, doc_type=models.DocumentType.otro)
+        db_session.commit()
+
+        ctx = build_clinical_context(
+            db_session,
+            profile_id=profile.id,
+            state=_state(primary_episode_id=ep.id),
+            intent=_intent(IntentKind.EXAM_INFO),
+            now=NOW,
+        )
+
+        assert ctx.trace.build_reason == "exam_cross_module"
+        assert len(ctx.recent_documents) == 3
+        types = {d.doc_type for d in ctx.recent_documents}
+        assert types == {"orden", "resultado", "informe"}
+        assert any("doc_type" in n for n in ctx.trace.notes)
+
+    def test_no_scopea_a_episodio_primario(self, db_session):
+        # Exámenes deben ser cross-episodio para responder "qué exámenes tengo"
+        user = _make_user(db_session)
+        profile = _make_profile(db_session, user)
+        ep1 = _make_episode(db_session, profile, title="E1")
+        ep2 = _make_episode(db_session, profile, title="E2", last_activity_days_ago=10)
+        _make_document(db_session, profile, episode=ep1, doc_type=models.DocumentType.orden)
+        _make_document(db_session, profile, episode=ep2, doc_type=models.DocumentType.resultado)
+        db_session.commit()
+
+        ctx = build_clinical_context(
+            db_session,
+            profile_id=profile.id,
+            state=_state(primary_episode_id=ep1.id),
+            intent=_intent(IntentKind.EXAM_INFO),
+            now=NOW,
+        )
+        assert len(ctx.recent_documents) == 2
+
+
+# ─── FAMILY_INFO ─────────────────────────────────────────────────────────────
+
+
+class TestFamilyInfo:
+    def test_carga_owner_y_miembros(self, db_session):
+        owner = _make_user(db_session, email="owner@test.cl")
+        owner.plan_type = "familiar"
+        member1 = _make_user(db_session, email="m1@test.cl")
+        member2 = _make_user(db_session, email="m2@test.cl")
+        profile = _make_profile(db_session, owner)
+        db_session.add(
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=member1.id,
+                relationship_type="esposa",
+                role="admin",
+                status="accepted",
+            )
+        )
+        db_session.add(
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=member2.id,
+                relationship_type="hija",
+                role="viewer",
+                status="accepted",
+            )
+        )
+        db_session.commit()
+
+        ctx = build_clinical_context(
+            db_session,
+            profile_id=profile.id,
+            state=_state(),
+            intent=_intent(IntentKind.FAMILY_INFO),
+            now=NOW,
+        )
+
+        assert ctx.trace.build_reason == "family_focus"
+        fc = ctx.family_context
+        assert fc is not None
+        assert fc.owner_user_id == owner.id
+        assert fc.plan_type == "familiar"
+        assert fc.member_count == 2
+        assert len(fc.members) == 2
+        names = {m.relationship_type for m in fc.members}
+        assert names == {"esposa", "hija"}
+        assert ctx.trace.included["family_context"] == 1
+
+    def test_cuenta_invitaciones_pendientes(self, db_session):
+        owner = _make_user(db_session)
+        profile = _make_profile(db_session, owner)
+        db_session.add(
+            models.ProfileInvitation(
+                profile_id=profile.id,
+                inviter_user_id=owner.id,
+                invitee_email="pending@test.cl",
+                token="tok-1",
+                status="pending",
+            )
+        )
+        db_session.add(
+            models.ProfileInvitation(
+                profile_id=profile.id,
+                inviter_user_id=owner.id,
+                invitee_email="accepted@test.cl",
+                token="tok-2",
+                status="accepted",
+            )
+        )
+        db_session.commit()
+
+        ctx = build_clinical_context(
+            db_session,
+            profile_id=profile.id,
+            state=_state(),
+            intent=_intent(IntentKind.FAMILY_INFO),
+            now=NOW,
+        )
+        assert ctx.family_context is not None
+        assert ctx.family_context.pending_invitations == 1
+
+    def test_otros_intents_no_cargan_family(self, db_session):
+        owner = _make_user(db_session)
+        profile = _make_profile(db_session, owner)
+        db_session.commit()
+        ctx = build_clinical_context(
+            db_session,
+            profile_id=profile.id,
+            state=_state(),
+            intent=_intent(IntentKind.GET_STATUS),
+            now=NOW,
+        )
+        assert ctx.family_context is None
+        assert "family_context" in ctx.trace.excluded

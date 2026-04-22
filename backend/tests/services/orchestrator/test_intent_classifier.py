@@ -339,3 +339,45 @@ class TestExpandedPatterns:
     def test_que_tiene_mi_hijo_es_get_status(self):
         result = classify_intent("qué tiene mi hijo")
         assert result.kind == IntentKind.GET_STATUS
+
+
+# ─── Patches segunda ronda (gaps detectados post-deploy) ─────────────────────
+
+
+class TestSecondRoundPatches:
+    def test_que_tengo_solo_es_get_status(self):
+        # "que tengo" sin contexto adicional debe ser GET_STATUS, no UNKNOWN
+        result = classify_intent("qué tengo")
+        assert result.kind == IntentKind.GET_STATUS
+
+    def test_que_me_pasa_es_get_status(self):
+        result = classify_intent("qué me pasa")
+        assert result.kind == IntentKind.GET_STATUS
+
+    def test_quien_tiene_acceso_a_mi_perfil_es_family_info(self):
+        result = classify_intent("quién tiene acceso a mi perfil")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_acceso_a_mi_perfil_es_family_info(self):
+        result = classify_intent("acceso a mi perfil")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_es_mi_esposa_es_family_info(self):
+        result = classify_intent("ella es mi esposa")
+        assert result.kind == IntentKind.FAMILY_INFO
+
+    def test_que_me_dijo_el_doctor_es_history_summary(self):
+        result = classify_intent("qué me dijo el doctor")
+        assert result.kind == IntentKind.HISTORY_SUMMARY
+
+    def test_que_dijo_doctor_es_history_summary(self):
+        result = classify_intent("qué dijo doctor")
+        assert result.kind == IntentKind.HISTORY_SUMMARY
+
+    def test_ordenes_medicas_plural_es_exam_info(self):
+        result = classify_intent("mis órdenes médicas")
+        assert result.kind == IntentKind.EXAM_INFO
+
+    def test_cuales_son_mis_ordenes_medicas_es_exam_info(self):
+        result = classify_intent("cuáles son mis órdenes médicas")
+        assert result.kind == IntentKind.EXAM_INFO
