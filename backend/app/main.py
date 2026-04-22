@@ -1377,6 +1377,10 @@ MAX_PUSH_SUBSCRIPTIONS_PER_USER = max(
     2,
     int(os.getenv("MAX_PUSH_SUBSCRIPTIONS_PER_USER", "6") or "6"),
 )
+PUSH_TTL_DEFAULT_SECONDS = max(
+    300,
+    int(os.getenv("PUSH_TTL_DEFAULT_SECONDS", "43200") or "43200"),
+)
 
 
 def _push_configured() -> bool:
@@ -1397,6 +1401,39 @@ def _normalized_vapid_subject(raw_value: str | None) -> str:
     if "@" in value and " " not in value:
         return f"mailto:{value}"
     return value
+
+
+def _coerce_push_ttl(raw_value) -> int | None:
+    try:
+        ttl = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    return max(60, min(ttl, 7 * 24 * 60 * 60))
+
+
+def _push_delivery_options(payload: dict | None) -> tuple[int, dict[str, str]]:
+    data = payload if isinstance(payload, dict) else {}
+    explicit_ttl = _coerce_push_ttl(data.get("ttlSeconds"))
+    if explicit_ttl is None:
+        explicit_ttl = _coerce_push_ttl(data.get("ttl"))
+
+    priority = str(data.get("priority") or "normal").strip().lower()
+    if priority not in {"urgent", "high", "normal", "low"}:
+        priority = "normal"
+
+    if explicit_ttl is not None:
+        ttl = explicit_ttl
+    elif priority == "urgent":
+        ttl = 30 * 60
+    elif priority == "high":
+        ttl = 3 * 60 * 60
+    elif priority == "low":
+        ttl = 24 * 60 * 60
+    else:
+        ttl = PUSH_TTL_DEFAULT_SECONDS
+
+    urgency = "high" if priority in {"urgent", "high"} else priority
+    return ttl, {"Urgency": urgency}
 
 
 def ensure_login_security_schema():
@@ -1449,6 +1486,7 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
         return False
     try:
         vapid_subject = _normalized_vapid_subject(VAPID_EMAIL)
+        ttl, headers = _push_delivery_options(payload)
         webpush(
             subscription_info={
                 "endpoint": subscription.endpoint,
@@ -1457,6 +1495,8 @@ def send_web_push(subscription: models.PushSubscription, payload: dict):
             data=json.dumps(payload),
             vapid_private_key=VAPID_PRIVATE_KEY,
             vapid_claims={"sub": vapid_subject},
+            ttl=ttl,
+            headers=headers,
         )
         return True
     except WebPushException as exc:
