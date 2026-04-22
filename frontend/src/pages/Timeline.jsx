@@ -232,6 +232,270 @@ function buildFolderItemDetails(item, record) {
   return [];
 }
 
+function getAppointmentTypeLabel(type) {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized === "examen") return "Examen";
+  if (normalized === "tramite") return "Trámite";
+  return "Cita";
+}
+
+function getDocumentTypeValue(item) {
+  return String(item?.doc_type?.value || item?.doc_type || "").toLowerCase();
+}
+
+function getDocumentSectionId(item) {
+  const normalized = getDocumentTypeValue(item);
+  if (normalized === "receta") return "recipes";
+  if (normalized === "informe") return "reports";
+  if (normalized === "orden") return "orders";
+  if (normalized === "resultado") return "results";
+  return "other_documents";
+}
+
+function getDocumentKindLabel(item) {
+  const normalized = getDocumentTypeValue(item);
+  if (normalized === "receta") return "Receta";
+  if (normalized === "informe") return "Informe";
+  if (normalized === "orden") return "Orden";
+  if (normalized === "resultado") return "Resultado";
+  return "Documento";
+}
+
+function getExplorerSectionAction(sectionId) {
+  if (sectionId === "appointments") return { label: "Abrir citas", to: "/appointments" };
+  if (sectionId === "medications") return { label: "Abrir medicamentos", to: "/medications" };
+  if (["recipes", "reports", "orders", "results", "other_documents"].includes(sectionId)) {
+    return { label: "Abrir documentos", to: "/documents" };
+  }
+  return null;
+}
+
+function sortEntriesDesc(entries) {
+  return entries.slice().sort((a, b) => {
+    const left = a.when ? new Date(a.when).getTime() : 0;
+    const right = b.when ? new Date(b.when).getTime() : 0;
+    return right - left;
+  });
+}
+
+function buildAppointmentExplorerEntry(item) {
+  const kind = getAppointmentTypeLabel(item.type);
+  return {
+    key: `appointment-${item.id}`,
+    sectionId: "appointments",
+    tone: "appointment",
+    kind,
+    title: cleanUiText(item.specialty || `${kind} médica`, kind),
+    subtitle: [cleanUiText(item.status), cleanUiText(item.center)].filter(Boolean).join(" · "),
+    description: cleanUiText(item.notes, "Atención clínica vinculada a esta carpeta."),
+    when: item.date_time || item.created_at || null,
+    action: getExplorerSectionAction("appointments"),
+    details: [
+      { label: "Tipo", value: kind },
+      { label: "Estado", value: cleanUiText(item.status, "Sin estado") },
+      { label: "Centro", value: cleanUiText(item.center, "Sin centro informado") },
+      { label: "Fecha", value: item.date_time ? toLocaleDateTimeOrEmpty(item.date_time) : "Fecha no informada" },
+    ],
+  };
+}
+
+function buildMedicationExplorerEntry(item) {
+  return {
+    key: `medication-${item.id}`,
+    sectionId: "medications",
+    tone: "medication",
+    kind: "Medicamento",
+    title: cleanUiText(item.name, "Medicamento"),
+    subtitle: [cleanUiText(item.dose), cleanUiText(item.frequency)].filter(Boolean).join(" · "),
+    description: cleanUiText(item.notes, "Tratamiento registrado dentro de esta atención."),
+    when: item.start_at || item.created_at || null,
+    action: getExplorerSectionAction("medications"),
+    details: [
+      { label: "Dosis", value: cleanUiText(item.dose, "Sin dosis informada") },
+      { label: "Frecuencia", value: cleanUiText(item.frequency, "Sin frecuencia informada") },
+      { label: "Inicio", value: item.start_at ? toLocaleDateOrEmpty(item.start_at) : "Fecha no informada" },
+      { label: "Estado", value: item.completed ? "Finalizado" : "Activo" },
+    ],
+  };
+}
+
+function buildDocumentExplorerEntry(item) {
+  const sectionId = getDocumentSectionId(item);
+  const kind = getDocumentKindLabel(item);
+  return {
+    key: `document-${item.id}`,
+    sectionId,
+    tone: sectionId === "results" ? "result" : "document",
+    kind,
+    title: cleanUiText(item.filename, kind),
+    subtitle: [kind, cleanUiText(item.center)].filter(Boolean).join(" · "),
+    description: cleanUiText(item.notes, `${kind} vinculado a esta carpeta.`),
+    when: item.date || item.created_at || null,
+    action: getExplorerSectionAction(sectionId),
+    details: [
+      { label: "Tipo", value: kind },
+      { label: "Centro", value: cleanUiText(item.center, "Sin centro informado") },
+      { label: "Fecha", value: item.date ? toLocaleDateOrEmpty(item.date) : "Fecha no informada" },
+      { label: "Archivo", value: cleanUiText(item.filename, "Documento clínico") },
+    ],
+  };
+}
+
+function buildExternalRecordExplorerEntry(item) {
+  return {
+    key: `external-${item.id}`,
+    sectionId: "results",
+    tone: "result",
+    kind: "Resultado",
+    title: cleanUiText(item.title, "Resultado externo"),
+    subtitle: cleanUiText(item.record_type, "Interoperabilidad"),
+    description: cleanUiText(item.summary, "Resultado externo asociado a esta atención."),
+    when: item.event_at || item.created_at || null,
+    action: getExplorerSectionAction("results"),
+    details: [
+      { label: "Origen", value: cleanUiText(item.title, "Resultado externo") },
+      { label: "Tipo", value: cleanUiText(item.record_type, "Resultado") },
+      { label: "Fecha", value: item.event_at ? toLocaleDateTimeOrEmpty(item.event_at) : "Fecha no informada" },
+      { label: "Resumen", value: cleanUiText(item.summary, "Sin resumen informado") },
+    ],
+  };
+}
+
+function buildTimelineExplorerEntry(item) {
+  const eventType = String(item?.event_type || "").toLowerCase();
+  let kind = "Actividad";
+  let tone = "activity";
+  if (eventType.includes("appointment")) {
+    kind = "Cita";
+    tone = "appointment";
+  } else if (eventType.includes("medication")) {
+    kind = "Medicamento";
+    tone = "medication";
+  } else if (eventType.includes("document")) {
+    kind = "Documento";
+    tone = "document";
+  } else if (eventType.includes("result") || eventType.includes("external")) {
+    kind = "Resultado";
+    tone = "result";
+  }
+  return {
+    key: `timeline-${item.source_record_type || item.event_type}-${item.source_record_id || item.title}`,
+    sectionId: "activity",
+    tone,
+    kind,
+    title: cleanUiText(item.title, "Actividad clínica"),
+    subtitle: cleanUiText(item.summary, "Movimiento registrado dentro de esta carpeta."),
+    description: cleanUiText(item.summary, "Movimiento registrado dentro de esta carpeta."),
+    when: item.event_at || null,
+    action: null,
+    details: [
+      { label: "Evento", value: cleanUiText(item.event_type, "Actividad") },
+      { label: "Módulo", value: cleanUiText(item.source_module, "Historial") },
+      { label: "Fecha", value: item.event_at ? toLocaleDateTimeOrEmpty(item.event_at) : "Fecha no informada" },
+      { label: "Detalle", value: cleanUiText(item.summary, "Sin detalle adicional") },
+    ],
+  };
+}
+
+function buildExplorerSections(detail) {
+  const appointments = sortEntriesDesc(ensureArray(detail?.related_items?.appointments).map(buildAppointmentExplorerEntry));
+  const medications = sortEntriesDesc(ensureArray(detail?.related_items?.medications).map(buildMedicationExplorerEntry));
+  const documents = ensureArray(detail?.related_items?.documents).map(buildDocumentExplorerEntry);
+  const results = sortEntriesDesc([
+    ...documents.filter((item) => item.sectionId === "results"),
+    ...ensureArray(detail?.related_items?.external_records).map(buildExternalRecordExplorerEntry),
+  ]);
+  const recipes = sortEntriesDesc(documents.filter((item) => item.sectionId === "recipes"));
+  const reports = sortEntriesDesc(documents.filter((item) => item.sectionId === "reports"));
+  const orders = sortEntriesDesc(documents.filter((item) => item.sectionId === "orders"));
+  const otherDocuments = sortEntriesDesc(documents.filter((item) => item.sectionId === "other_documents"));
+  const activity = sortEntriesDesc(ensureArray(detail?.timeline).slice().reverse().map(buildTimelineExplorerEntry));
+
+  return [
+    {
+      id: "appointments",
+      label: "Citas",
+      description: "Consultas, controles y exámenes vinculados a esta atención.",
+      emptyText: "No hay citas relacionadas dentro de esta carpeta.",
+      action: getExplorerSectionAction("appointments"),
+      entries: appointments,
+    },
+    {
+      id: "medications",
+      label: "Medicamentos",
+      description: "Tratamientos y fármacos indicados durante esta atención.",
+      emptyText: "No hay medicamentos vinculados a esta carpeta.",
+      action: getExplorerSectionAction("medications"),
+      entries: medications,
+    },
+    {
+      id: "recipes",
+      label: "Recetas",
+      description: "Recetas e indicaciones farmacológicas asociadas.",
+      emptyText: "No hay recetas cargadas en esta carpeta.",
+      action: getExplorerSectionAction("recipes"),
+      entries: recipes,
+    },
+    {
+      id: "reports",
+      label: "Informes",
+      description: "Informes clínicos, evoluciones y reportes médicos.",
+      emptyText: "No hay informes dentro de esta carpeta.",
+      action: getExplorerSectionAction("reports"),
+      entries: reports,
+    },
+    {
+      id: "orders",
+      label: "Órdenes",
+      description: "Órdenes médicas y solicitudes relacionadas con la atención.",
+      emptyText: "No hay órdenes asociadas a esta carpeta.",
+      action: getExplorerSectionAction("orders"),
+      entries: orders,
+    },
+    {
+      id: "results",
+      label: "Resultados",
+      description: "Resultados de documentos e interoperabilidad externa.",
+      emptyText: "No hay resultados clínicos visibles en esta carpeta.",
+      action: getExplorerSectionAction("results"),
+      entries: results,
+    },
+    {
+      id: "other_documents",
+      label: "Otros documentos",
+      description: "Archivos clínicos adicionales que también forman parte de esta atención.",
+      emptyText: "No hay otros documentos vinculados a esta carpeta.",
+      action: getExplorerSectionAction("other_documents"),
+      entries: otherDocuments,
+    },
+    {
+      id: "activity",
+      label: "Actividad",
+      description: "Trazabilidad cronológica de todo lo que ocurrió en esta carpeta.",
+      emptyText: "Todavía no hay actividad registrada para esta carpeta.",
+      action: null,
+      entries: activity,
+    },
+  ].map((section) => ({
+    ...section,
+    count: section.entries.length,
+  }));
+}
+
+function FolderIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M3.5 7.5a2 2 0 0 1 2-2h4l1.4 1.6H18.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function buildManualCandidates({ appointments, documents, medications, currentEpisodeId, episodesById }) {
   const appointmentItems = ensureArray(appointments)
     .filter((item) => item.episode_id !== currentEpisodeId)
@@ -288,6 +552,8 @@ export default function Timeline() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
+  const [selectedSectionId, setSelectedSectionId] = useState("");
+  const [selectedEntryKey, setSelectedEntryKey] = useState("");
   const [selectedFolderItemKey, setSelectedFolderItemKey] = useState("");
   const [manualLinker, setManualLinker] = useState({
     episodeId: null,
@@ -334,6 +600,8 @@ export default function Timeline() {
         setEpisodeDetails({});
         setLegacyTimeline(legacyData || { summary: "", events: [], event_count: 0 });
         setSelectedEpisodeId((current) => (safeEpisodes.some((item) => item.id === current) ? current : safeEpisodes[0]?.id || null));
+        setSelectedSectionId("");
+        setSelectedEntryKey("");
         setSelectedFolderItemKey("");
         setManualLinker({
           episodeId: null,
@@ -433,6 +701,7 @@ export default function Timeline() {
   );
 
   const selectedDetail = selectedEpisode ? episodeDetails[selectedEpisode.id] : null;
+  const explorerSections = useMemo(() => buildExplorerSections(selectedDetail), [selectedDetail]);
 
   const selectedPendingTasks = useMemo(
     () => ensureArray(selectedDetail?.tasks).filter((task) => task.status !== "completed").slice(0, 3),
@@ -474,6 +743,38 @@ export default function Timeline() {
   const selectedFolderItemAction = useMemo(
     () => getFolderItemAction(selectedFolderItem?.item_type),
     [selectedFolderItem]
+  );
+
+  useEffect(() => {
+    if (!explorerSections.length) {
+      setSelectedSectionId("");
+      return;
+    }
+    if (!explorerSections.some((section) => section.id === selectedSectionId)) {
+      const firstVisibleSection = explorerSections.find((section) => section.count > 0) || explorerSections[0];
+      setSelectedSectionId(firstVisibleSection.id);
+    }
+  }, [explorerSections, selectedSectionId]);
+
+  const activeExplorerSection = useMemo(
+    () => explorerSections.find((section) => section.id === selectedSectionId) || explorerSections[0] || null,
+    [explorerSections, selectedSectionId]
+  );
+
+  useEffect(() => {
+    const entries = ensureArray(activeExplorerSection?.entries);
+    if (!entries.length) {
+      setSelectedEntryKey("");
+      return;
+    }
+    if (!entries.some((entry) => entry.key === selectedEntryKey)) {
+      setSelectedEntryKey(entries[0].key);
+    }
+  }, [activeExplorerSection, selectedEntryKey]);
+
+  const selectedExplorerEntry = useMemo(
+    () => ensureArray(activeExplorerSection?.entries).find((entry) => entry.key === selectedEntryKey) || null,
+    [activeExplorerSection, selectedEntryKey]
   );
 
   const selectedQuickActions = useMemo(() => {
@@ -622,408 +923,245 @@ export default function Timeline() {
 
   return (
     <>
-      <section className={`history-process-header timeline-overview-card tone-${selectedEpisodeTone}`}>
-        <div className="history-process-hero-main">
-          <div className="history-process-hero-copy">
-            <span className="history-process-kicker">Historia clínica</span>
-            <h1 className="card-title history-process-title">Carpetas clínicas</h1>
-            <p className="muted history-process-subtitle">
-              Cada carpeta reúne una atención de salud y todo lo que se fue relacionando con ella en el tiempo.
-            </p>
-          </div>
-
-          <div className="history-process-hero-actions">
-            {heroPrimaryAction ? (
-              <button type="button" className="primary-btn history-process-hero-btn" onClick={() => navigate(heroPrimaryAction.to)}>
-                {heroPrimaryAction.label}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="secondary-btn history-process-hero-btn"
-              onClick={() => {
-                if (selectedEpisode) {
-                  openManualLinker(selectedEpisode.id);
-                  return;
-                }
-                setStatusFilter("active");
-              }}
-            >
-              {selectedEpisode ? "Organizar carpeta" : "Ver carpetas activas"}
-            </button>
-          </div>
+      <section className={`history-explorer-header timeline-overview-card tone-${selectedEpisodeTone}`}>
+        <div className="history-explorer-header-copy">
+          <span className="history-explorer-kicker">Historial clínico</span>
+          <h1 className="card-title">Carpetas clínicas</h1>
+          <p className="muted">
+            Cada carpeta representa una atención y reúne citas, medicamentos, recetas, informes, resultados y toda la
+            trazabilidad relacionada.
+          </p>
         </div>
 
-        <div className="history-process-hero-side">
-          <div className={`history-process-hero-focus tone-${selectedEpisodeTone}`}>
-            <span className={`history-process-hero-focus-pill tone-${selectedEpisodeTone}`}>
-              {selectedEpisode ? getEpisodeStatusLabel(selectedEpisode.status) : `${filteredEpisodes.length} visibles`}
-            </span>
-            <strong>{selectedEpisode ? cleanUiText(selectedEpisode.title, "Carpeta clínica") : `Perfil: ${profileLabel}`}</strong>
-            <p>
-              {selectedEpisode
-                ? getEpisodeLead(selectedEpisode, selectedDetail)
-                : "Elige una carpeta para ver sus citas, documentos, medicamentos y resultados relacionados."}
-            </p>
+        <div className="history-explorer-header-stats" aria-label="Resumen del historial">
+          <div className="history-explorer-stat">
+            <strong>{filteredEpisodes.length}</strong>
+            <span>Visibles</span>
           </div>
-
-          <div className="history-process-summarybar" aria-label="Resumen del historial">
-            <div className="history-process-summaryitem">
-              <strong>{summaryCounts.active}</strong>
-              <span>Activos</span>
-            </div>
-            <div className="history-process-summaryitem">
-              <strong>{summaryCounts.pending}</strong>
-              <span>Pendientes</span>
-            </div>
-            <div className="history-process-summaryitem">
-              <strong>{summaryCounts.closed}</strong>
-              <span>Cerrados</span>
-            </div>
+          <div className="history-explorer-stat">
+            <strong>{summaryCounts.pending}</strong>
+            <span>Pendientes</span>
+          </div>
+          <div className="history-explorer-stat">
+            <strong>{summaryCounts.closed}</strong>
+            <span>Cerradas</span>
           </div>
         </div>
       </section>
 
-      <div className="history-process-toolbar-shell timeline-filters-card">
-        <div className="history-process-toolbar-intro">
-          <div>
-            <h2>Filtra y ubica una carpeta</h2>
-            <p>
-              Busca por motivo, documento o control. Cambia el perfil y deja visibles solo las carpetas que necesitas revisar.
-            </p>
+      <div className="history-explorer-toolbar timeline-filters-card">
+        <div className="history-explorer-toolbar-grid">
+          <div className="input-group">
+            <label className="input-label">Perfil</label>
+            <select className="input-field" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
+              <option value="active">Perfil activo</option>
+              {profiles.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {cleanUiText(item.full_name, `Perfil ${item.id}`)}
+                </option>
+              ))}
+            </select>
           </div>
-          <span className="history-process-toolbar-chip">{filteredEpisodes.length} visibles para {profileLabel}</span>
+
+          <div className="input-group">
+            <label className="input-label">Buscar carpeta</label>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Ejemplo: control, receta o rodilla"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div className="history-process-toolbar">
-          <div className="history-process-toolbar-grid">
-            <div className="input-group">
-              <label className="input-label">Perfil</label>
-              <select className="input-field" value={selectedProfileId} onChange={(e) => setSelectedProfileId(e.target.value)}>
-                <option value="active">Perfil activo</option>
-                {profiles.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {cleanUiText(item.full_name, `Perfil ${item.id}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="input-group">
-              <label className="input-label">Buscar</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="Ejemplo: rodilla, receta o control"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+        <div className="history-explorer-toolbar-row">
+          <p className="history-explorer-toolbar-note">{filteredEpisodes.length} carpetas visibles para {profileLabel}.</p>
+          <div className="history-explorer-filter-list" role="tablist" aria-label="Filtrar carpetas">
+            {STATUS_FILTERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`history-explorer-filter ${statusFilter === item.id ? "is-active" : ""}`}
+                onClick={() => setStatusFilter(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
-
-          <div className="history-process-toolbar-bottom">
-              <p className="history-process-toolbar-note">
-                {filteredEpisodes.length} carpetas visibles para {profileLabel}.
-              </p>
-              <div className="history-process-filters" role="tablist" aria-label="Filtrar carpetas">
-              {STATUS_FILTERS.map((item) => (
-                <button
-                  key={item.id}
-                  className={`${statusFilter === item.id ? "primary-btn" : "secondary-btn"} history-process-filter-btn`}
-                  onClick={() => setStatusFilter(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredEpisodes.length ? (
-            <div className="history-process-mobile-nav">
-              <div className="input-group">
-                  <label className="input-label">Carpeta activa</label>
-                <select
-                  className="input-field"
-                  value={selectedEpisodeId || ""}
-                  onChange={(e) => setSelectedEpisodeId(Number(e.target.value) || null)}
-                >
-                  {filteredEpisodes.map((episode) => (
-                    <option key={episode.id} value={episode.id}>
-                      {cleanUiText(episode.title, "Carpeta clínica")}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="history-process-mobile-nav-actions">
-                <button
-                  type="button"
-                  className="secondary-btn history-process-inline-btn"
-                  disabled={selectedEpisodeIndex <= 0}
-                  onClick={() => selectRelativeEpisode(-1)}
-                >
-                  Anterior
-                </button>
-                <button
-                  type="button"
-                  className="secondary-btn history-process-inline-btn"
-                  disabled={selectedEpisodeIndex < 0 || selectedEpisodeIndex >= filteredEpisodes.length - 1}
-                  onClick={() => selectRelativeEpisode(1)}
-                >
-                  Siguiente
-                </button>
-              </div>
-
-              {selectedEpisode ? (
-                <div className={`history-process-mobile-summary tone-${getEpisodeTone(selectedEpisode.status)}`}>
-                  <div className="history-process-mobile-summary-head">
-                    <strong>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</strong>
-                    <span>{`${selectedEpisodeIndex + 1} de ${filteredEpisodes.length}`}</span>
-                  </div>
-                  <p>
-                    {getEpisodeTypeLabel(selectedEpisode.episode_type)} · {getPendingLabel(selectedEpisode)} ·{" "}
-                    {getLastActivityLabel(selectedEpisode.last_activity_at)}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
         </div>
       </div>
 
-      <div className="card history-process-shell">
+      <div className="history-explorer-shell">
         {loading ? (
-          <div className="history-process-empty timeline-card">Estamos organizando tu historial por carpetas clínicas...</div>
+          <div className="history-explorer-empty timeline-card">Cargando carpetas clínicas...</div>
         ) : filteredEpisodes.length ? (
-          <div className="history-process-layout">
-            <aside className="history-process-rail">
-              <div className="history-process-rail-head">
+          <>
+            <aside className="history-explorer-sidebar timeline-card">
+              <div className="history-explorer-sidebar-head">
                 <strong>Carpetas</strong>
-                <span>Selecciona una para ver todo lo relacionado en un solo lugar.</span>
+                <span>Selecciona una atención para abrir su ecosistema clínico.</span>
               </div>
 
-              <div className="history-process-list" role="list">
+              <div className="history-explorer-folder-list" role="list">
                 {filteredEpisodes.map((episode) => {
                   const detail = episodeDetails[episode.id];
-                  const tone = getEpisodeTone(episode.status);
                   const isSelected = selectedEpisodeId === episode.id;
                   return (
                     <button
                       key={episode.id}
                       type="button"
-                      className={`history-process-item tone-${tone} ${isSelected ? "is-selected" : ""}`}
+                      className={`history-explorer-folder-row ${isSelected ? "is-selected" : ""}`}
                       onClick={() => setSelectedEpisodeId(episode.id)}
                     >
-                      <span className={`history-process-item-bar tone-${tone}`} />
-                      <div className="history-process-item-body">
-                        <div className="history-process-item-head">
-                          <span className="history-process-item-type">{getEpisodeTypeLabel(episode.episode_type)}</span>
-                          <span className={`history-process-item-status tone-${tone}`}>{getEpisodeStatusLabel(episode.status)}</span>
-                        </div>
-                        <strong className="history-process-item-title">
-                          {cleanUiText(episode.title, "Carpeta clínica")}
-                        </strong>
-                        <p className="history-process-item-next">{getEpisodeLead(episode, detail)}</p>
-                        <div className="history-process-item-meta">
-                          <span>{getPendingLabel(episode)}</span>
-                          <span>{getLastActivityLabel(episode.last_activity_at)}</span>
-                        </div>
-                      </div>
+                      <span className="history-explorer-folder-icon">
+                        <FolderIcon />
+                      </span>
+                      <span className="history-explorer-folder-copy">
+                        <strong>{cleanUiText(episode.title, "Carpeta clínica")}</strong>
+                        <span>{getEpisodeLead(episode, detail)}</span>
+                        <small>{getEpisodeCountsLine(episode)}</small>
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </aside>
 
-            <section className="history-process-panel">
+            <section className="history-explorer-main">
               {selectedEpisode ? (
                 <>
-                  <div className="history-process-panel-head">
-                    <div className="history-process-panel-copy">
-                      <span className="history-process-panel-kicker">{getEpisodeTypeLabel(selectedEpisode.episode_type)}</span>
+                  <div className="history-explorer-main-head timeline-card">
+                    <div className="history-explorer-main-copy">
+                      <span className="history-explorer-folder-type">{getEpisodeTypeLabel(selectedEpisode.episode_type)}</span>
                       <h2>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</h2>
                       <p>{getEpisodeLead(selectedEpisode, selectedDetail)}</p>
                     </div>
 
-                    <div className="history-process-panel-actions">
-                      <button className="primary-btn history-process-inline-btn" onClick={() => openManualLinker(selectedEpisode.id)}>
-                        {manualLinker.episodeId === selectedEpisode.id ? "Ocultar organización" : "Organizar carpeta"}
-                      </button>
+                    <div className="history-explorer-main-meta">
+                      <span>{getEpisodeStatusLabel(selectedEpisode.status)}</span>
+                      <span>{getPendingLabel(selectedEpisode)}</span>
+                      <span>{getLastActivityLabel(selectedEpisode.last_activity_at)}</span>
                     </div>
                   </div>
 
-                  <div className="history-process-action-block timeline-card">
-                    <div className="history-process-section-head history-process-action-head">
-                      <div>
-                        <h3>Qué puedes hacer ahora</h3>
-                        <p className="history-process-note">
-                          Abre el módulo correcto o corrige esta agrupación sin tener que salir a buscarla.
-                        </p>
-                      </div>
-                      <span>{selectedQuickActions.length + 1} acción(es)</span>
-                    </div>
-
-                    <div className="history-process-commandbar">
-                      {selectedQuickActions.map((action) => (
-                        <button
-                          key={action.id}
-                          type="button"
-                          className={`${action.tone === "primary" ? "primary-btn" : "secondary-btn"} history-process-command-btn history-process-command-card`}
-                          onClick={() => navigate(action.to)}
-                        >
-                          <span className="history-process-command-kicker">{action.kicker}</span>
-                          <strong className="history-process-command-title">{action.label}</strong>
-                          <span className="history-process-command-copy">{action.description}</span>
-                        </button>
-                      ))}
-
+                  <div className="history-explorer-module-grid">
+                    {explorerSections.map((section) => (
                       <button
+                        key={section.id}
                         type="button"
-                        className={`${manualLinker.episodeId === selectedEpisode.id ? "primary-btn" : "secondary-btn"} history-process-command-btn history-process-command-card`}
-                        onClick={() => openManualLinker(selectedEpisode.id)}
+                        className={`history-explorer-module ${activeExplorerSection?.id === section.id ? "is-active" : ""} ${
+                          section.count ? "" : "is-empty"
+                        }`}
+                        onClick={() => setSelectedSectionId(section.id)}
                       >
-                        <span className="history-process-command-kicker">Organización</span>
-                        <strong className="history-process-command-title">
-                          {manualLinker.episodeId === selectedEpisode.id ? "Seguir organizando carpeta" : "Agregar o mover elementos"}
-                        </strong>
-                        <span className="history-process-command-copy">
-                          Reubica citas, documentos o medicamentos cuando esta carpeta quedó incompleta.
-                        </span>
+                        <span className="history-explorer-module-count">{section.count}</span>
+                        <strong>{section.label}</strong>
+                        <p>{section.description}</p>
                       </button>
-                    </div>
-                  </div>
-
-                  <div className="history-process-spotlight">
-                    <div className="history-process-spotlight-item timeline-card">
-                      <span>Próximo paso</span>
-                      <strong>
-                        {selectedPendingTasks[0]
-                          ? cleanUiText(selectedPendingTasks[0].title, "Hay una acción pendiente.")
-                          : "No hay pendientes por ahora"}
-                      </strong>
-                      <p>
-                        {selectedPendingTasks[0]
-                          ? getTaskLabel(selectedPendingTasks[0])
-                          : "Esta carpeta está al día con la información registrada."}
-                      </p>
-                    </div>
-
-                    <div className="history-process-spotlight-item timeline-card">
-                      <span>Contenido</span>
-                      <strong>{getEpisodeCountsLine(selectedEpisode)}</strong>
-                      <p>{getPendingLabel(selectedEpisode)}</p>
-                    </div>
-
-                    <div className="history-process-spotlight-item timeline-card">
-                      <span>Último movimiento</span>
-                      <strong>{getLastActivityLabel(selectedEpisode.last_activity_at)}</strong>
-                      <p>{cleanUiText(selectedEpisode.care_summary || selectedEpisode.summary, "Sin resumen adicional.")}</p>
-                    </div>
+                    ))}
                   </div>
 
                   {loadingDetailId === selectedEpisode.id && !selectedDetail ? (
-                    <div className="history-process-empty">Cargando esta carpeta...</div>
+                    <div className="history-explorer-empty timeline-card">Cargando el contenido de esta carpeta...</div>
                   ) : (
                     <>
-                      <div className="history-folder-workspace">
-                        <section className="history-folder-items timeline-card">
-                          <div className="history-process-section-head">
+                      <div className="history-explorer-stage">
+                        <section className="history-explorer-entry-list timeline-card">
+                          <div className="history-explorer-section-head">
                             <div>
-                              <h3>Dentro de esta carpeta</h3>
-                              <p className="history-process-note">
-                                Aquí se ordena todo lo que quedó asociado a esta atención en el tiempo.
-                              </p>
+                              <h3>{activeExplorerSection?.label || "Contenido"}</h3>
+                              <p>{activeExplorerSection?.description || "Explora el contenido clínico de esta carpeta."}</p>
                             </div>
-                            <span>{selectedFolderItems.length} {selectedFolderItems.length === 1 ? "elemento" : "elementos"}</span>
+                            <span>{activeExplorerSection?.count || 0}</span>
                           </div>
 
-                          {selectedFolderItems.length ? (
-                            <div className="history-folder-item-list">
-                              {selectedFolderItems.map((item) => {
-                                const isSelected = getFolderItemKey(item) === selectedFolderItemKey;
-                                return (
-                                  <button
-                                    key={getFolderItemKey(item)}
-                                    type="button"
-                                    className={`history-folder-item ${isSelected ? "is-selected" : ""}`}
-                                    onClick={() => setSelectedFolderItemKey(getFolderItemKey(item))}
-                                  >
-                                    <div className="history-folder-item-top">
-                                      <span className={`history-folder-item-kind type-${item.item_type}`}>
-                                        {getFolderItemTypeLabel(item.item_type)}
-                                      </span>
-                                      <span className="history-folder-item-date">
-                                        {item.event_at ? toLocaleDateTimeOrEmpty(item.event_at) : "Fecha no informada"}
-                                      </span>
-                                    </div>
-                                    <strong>{cleanUiText(item.title, "Elemento clínico")}</strong>
-                                    <p>{cleanUiText(item.subtitle, "Sin detalle adicional.")}</p>
-                                  </button>
-                                );
-                              })}
+                          {ensureArray(activeExplorerSection?.entries).length ? (
+                            <div className="history-explorer-entry-stack">
+                              {activeExplorerSection.entries.map((entry) => (
+                                <button
+                                  key={entry.key}
+                                  type="button"
+                                  className={`history-explorer-entry ${selectedEntryKey === entry.key ? "is-selected" : ""}`}
+                                  onClick={() => setSelectedEntryKey(entry.key)}
+                                >
+                                  <div className="history-explorer-entry-top">
+                                    <span className={`history-explorer-pill tone-${entry.tone}`}>{entry.kind}</span>
+                                    <span>{entry.when ? toLocaleDateTimeOrEmpty(entry.when) : "Fecha no informada"}</span>
+                                  </div>
+                                  <strong>{entry.title}</strong>
+                                  <p>{entry.subtitle || entry.description}</p>
+                                </button>
+                              ))}
                             </div>
                           ) : (
-                            <p className="history-process-note">Esta carpeta todavía no tiene elementos relacionados visibles.</p>
+                            <div className="history-explorer-empty-block">
+                              <p>{activeExplorerSection?.emptyText || "No hay contenido para mostrar."}</p>
+                              {activeExplorerSection?.action ? (
+                                <button
+                                  type="button"
+                                  className="secondary-btn history-process-inline-btn"
+                                  onClick={() => navigate(activeExplorerSection.action.to)}
+                                >
+                                  {activeExplorerSection.action.label}
+                                </button>
+                              ) : null}
+                            </div>
                           )}
                         </section>
 
-                        <aside className="history-folder-detail timeline-card">
-                          <div className="history-process-section-head">
-                            <div>
-                              <h3>Detalle del elemento</h3>
-                              <p className="history-process-note">Selecciona una cita, documento, medicamento o resultado para revisar sus datos.</p>
-                            </div>
-                            <span>{selectedFolderItem ? getFolderItemTypeLabel(selectedFolderItem.item_type) : "Sin selección"}</span>
-                          </div>
-
-                          {selectedFolderItem ? (
-                            <div className="history-folder-detail-body">
-                              <div className="history-folder-detail-header">
-                                <span className={`history-folder-item-kind type-${selectedFolderItem.item_type}`}>
-                                  {getFolderItemTypeLabel(selectedFolderItem.item_type)}
-                                </span>
-                                <strong>{cleanUiText(selectedFolderItem.title, "Elemento clínico")}</strong>
-                                <p>{getFolderItemDescription(selectedFolderItem, selectedFolderRecord)}</p>
+                        <aside className="history-explorer-detail timeline-card">
+                          {selectedExplorerEntry ? (
+                            <div className="history-explorer-detail-body">
+                              <div className="history-explorer-detail-head">
+                                <span className={`history-explorer-pill tone-${selectedExplorerEntry.tone}`}>{selectedExplorerEntry.kind}</span>
+                                <strong>{selectedExplorerEntry.title}</strong>
+                                <p>{selectedExplorerEntry.description || "Sin detalle adicional."}</p>
                               </div>
 
-                              <div className="history-folder-detail-grid">
-                                {selectedFolderItemDetails.map((row) => (
-                                  <div key={`${selectedFolderItem.item_type}-${row.label}`} className="history-folder-detail-cell">
+                              <div className="history-explorer-detail-grid">
+                                {selectedExplorerEntry.details.map((row) => (
+                                  <div key={`${selectedExplorerEntry.key}-${row.label}`} className="history-explorer-detail-cell">
                                     <span>{row.label}</span>
                                     <strong>{row.value}</strong>
                                   </div>
                                 ))}
                               </div>
 
-                              <div className="history-folder-detail-actions">
-                                {selectedFolderItemAction ? (
+                              <div className="history-explorer-detail-actions">
+                                {selectedExplorerEntry.action ? (
                                   <button
                                     type="button"
                                     className="secondary-btn history-process-inline-btn"
-                                    onClick={() => navigate(selectedFolderItemAction.to)}
+                                    onClick={() => navigate(selectedExplorerEntry.action.to)}
                                   >
-                                    {selectedFolderItemAction.label}
+                                    {selectedExplorerEntry.action.label}
                                   </button>
                                 ) : null}
                               </div>
                             </div>
                           ) : (
-                            <div className="history-process-empty">Selecciona un elemento de la carpeta para ver su detalle.</div>
+                            <div className="history-explorer-empty-block">
+                              <p>Selecciona un elemento para revisar su detalle clínico.</p>
+                            </div>
                           )}
                         </aside>
                       </div>
 
-                      <div className="history-folder-support-grid">
-                        <section className="history-process-section history-process-section-card timeline-card">
-                          <div className="history-process-section-head">
-                            <h3>Qué falta ahora</h3>
-                            <span>{selectedPendingTasks.length ? `${selectedPendingTasks.length} pendiente(s)` : "Al día"}</span>
+                      <div className="history-explorer-bottom-grid">
+                        <section className="history-explorer-support timeline-card">
+                          <div className="history-explorer-section-head">
+                            <div>
+                              <h3>Pendientes de esta atención</h3>
+                              <p>Acciones clínicas que todavía requieren seguimiento.</p>
+                            </div>
+                            <span>{selectedPendingTasks.length}</span>
                           </div>
 
                           {selectedPendingTasks.length ? (
-                            <div className="history-process-line-list">
+                            <div className="history-explorer-support-list">
                               {selectedPendingTasks.map((task) => (
-                                <div key={task.id} className="history-process-line-row">
+                                <div key={task.id} className="history-explorer-support-row">
                                   <div>
                                     <strong>{cleanUiText(task.title, "Pendiente clínico")}</strong>
                                     <p>{getTaskLabel(task)}</p>
@@ -1041,31 +1179,32 @@ export default function Timeline() {
                               ))}
                             </div>
                           ) : (
-                            <p className="history-process-note">No hay pasos pendientes registrados para esta carpeta.</p>
+                            <p className="history-explorer-note">No hay pendientes registrados para esta carpeta.</p>
                           )}
                         </section>
 
-                        <section className="history-process-section history-process-section-card timeline-card">
-                          <div className="history-process-section-head">
-                            <h3>Corregir carpeta</h3>
-                            <span>Ayuda a completar esta trazabilidad</span>
-                          </div>
-
-                          <div className="history-process-manual-intro">
-                            <p>
-                              Si una cita, un documento o un medicamento quedó fuera, puedes moverlo manualmente a esta
-                              carpeta.
-                            </p>
-                            <button className="secondary-btn history-process-inline-btn" onClick={() => openManualLinker(selectedEpisode.id)}>
-                              {manualLinker.episodeId === selectedEpisode.id ? "Ocultar formulario" : "Agregar o mover elemento"}
+                        <section className="history-explorer-support timeline-card">
+                          <div className="history-explorer-section-head">
+                            <div>
+                              <h3>Corregir carpeta</h3>
+                              <p>Si algo quedó fuera, puedes moverlo manualmente y mantener la trazabilidad.</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="secondary-btn history-process-inline-btn"
+                              onClick={() => openManualLinker(selectedEpisode.id)}
+                            >
+                              {manualLinker.episodeId === selectedEpisode.id ? "Ocultar" : "Agregar o mover"}
                             </button>
                           </div>
 
                           {manualLinker.episodeId === selectedEpisode.id ? (
                             manualLinker.loading ? (
-                              <div className="history-process-empty">Buscando citas, documentos y medicamentos...</div>
+                              <div className="history-explorer-empty-block">
+                                <p>Buscando citas, documentos y medicamentos disponibles...</p>
+                              </div>
                             ) : (
-                              <div className="history-process-manual timeline-card">
+                              <div className="history-process-manual">
                                 <div className="history-process-manual-grid">
                                   <div className="input-group">
                                     <label className="input-label">Tipo</label>
@@ -1114,7 +1253,7 @@ export default function Timeline() {
                                   <div className="history-process-manual-preview">
                                     <strong>{selectedManualItem.label}</strong>
                                     <p>{selectedManualItem.meta || "Sin detalle adicional"}</p>
-                                    <span>Ahora está en: {selectedManualItem.currentEpisodeLabel}</span>
+                                    <span>Actualmente está en: {selectedManualItem.currentEpisodeLabel}</span>
                                   </div>
                                 ) : null}
 
@@ -1128,50 +1267,55 @@ export default function Timeline() {
                                   </button>
                                 </div>
 
-                                {manualLinker.message ? <p className="history-process-note">{manualLinker.message}</p> : null}
+                                {manualLinker.message ? <p className="history-explorer-note">{manualLinker.message}</p> : null}
                               </div>
                             )
-                          ) : null}
+                          ) : (
+                            <p className="history-explorer-note">Usa esta acción cuando una cita, receta o medicamento quedó asociado a otra carpeta.</p>
+                          )}
                         </section>
                       </div>
                     </>
                   )}
                 </>
               ) : (
-                <div className="history-process-empty timeline-card">Selecciona una carpeta para ver su resumen y sus acciones.</div>
+                <div className="history-explorer-empty timeline-card">Selecciona una carpeta para abrir su ecosistema clínico.</div>
               )}
             </section>
-          </div>
+          </>
         ) : episodes.length ? (
-          <div className="history-process-empty-zone">
-            <div className="history-process-empty timeline-card">
-              No encontramos carpetas con este filtro. Prueba cambiar el filtro o borrar la búsqueda.
+          <div className="history-explorer-empty-stack">
+            <div className="history-explorer-empty timeline-card">
+              No encontramos carpetas con este filtro. Prueba con otro criterio o limpia la búsqueda.
             </div>
-
-            <div className="history-process-empty-actions">
-              <button className="secondary-btn history-process-inline-btn" onClick={() => setStatusFilter("all")}>
-                Ver todos
+            <div className="history-explorer-empty-actions">
+              <button type="button" className="secondary-btn history-process-inline-btn" onClick={() => setStatusFilter("all")}>
+                Ver todas
               </button>
-              <button className="secondary-btn history-process-inline-btn" onClick={() => setSearchTerm("")}>
+              <button type="button" className="secondary-btn history-process-inline-btn" onClick={() => setSearchTerm("")}>
                 Limpiar búsqueda
               </button>
             </div>
           </div>
         ) : (
-          <div className="history-process-empty-zone">
-            <div className="history-process-empty timeline-card">
-              No encontramos carpetas agrupadas para este perfil. Seguimos conectando tus atenciones para que se entiendan mejor.
+          <div className="history-explorer-empty-stack">
+            <div className="history-explorer-empty timeline-card">
+              Aún no hay carpetas clínicas agrupadas para este perfil.
             </div>
 
-            <div className="history-process-legacy timeline-card">
-              <div className="history-process-legacy-head">
-                <strong>Actividad reciente</strong>
-                <span>{legacyTimeline.event_count || legacyEvents.length} evento(s)</span>
+            <div className="history-explorer-support timeline-card">
+              <div className="history-explorer-section-head">
+                <div>
+                  <h3>Actividad reciente</h3>
+                  <p>Mientras se consolidan las carpetas, aquí puedes revisar los últimos movimientos detectados.</p>
+                </div>
+                <span>{legacyTimeline.event_count || legacyEvents.length}</span>
               </div>
+
               {legacyEvents.length ? (
-                <div className="history-process-line-list">
+                <div className="history-explorer-support-list">
                   {legacyEvents.map((item, index) => (
-                    <div key={`${item.id || item.source_record_id || index}-${index}`} className="history-process-line-row">
+                    <div key={`${item.id || item.source_record_id || index}-${index}`} className="history-explorer-support-row">
                       <div>
                         <strong>{cleanUiText(item.title, "Evento clínico")}</strong>
                         <p>{cleanUiText(item.summary, "Sin detalle adicional")}</p>
@@ -1181,7 +1325,7 @@ export default function Timeline() {
                   ))}
                 </div>
               ) : (
-                <p className="history-process-note">Todavía no hay eventos clínicos para mostrar.</p>
+                <p className="history-explorer-note">Todavía no hay actividad clínica disponible para mostrar.</p>
               )}
             </div>
           </div>
