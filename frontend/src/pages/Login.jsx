@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { login, getMe, verifyMfaLogin } from "../api";
+import BrandLogo from "../components/BrandLogo";
 import { clearAppCaches } from "../utils/cache";
 import { extractApiError } from "../utils/errors";
 
@@ -99,10 +100,12 @@ export default function Login({ onAuthenticated }) {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <h1 className="auth-logo-text brand-wordmark" aria-label="Klinip">
-                <span className="brand-wordmark-full">Klinip</span>
-                <span className="brand-wordmark-compact">K</span>
-              </h1>
+              <BrandLogo
+                className="auth-logo-text brand-logo-auth"
+                markClassName="brand-logo-auth-mark"
+                imgClassName="brand-logo-auth-img"
+                nameClassName="brand-logo-auth-name"
+              />
             </div>
 
             {mfaRequired ? (

@@ -696,6 +696,10 @@ export default function Timeline() {
             <span className="history-explorer-folder-type">{getEpisodeTypeLabel(selectedEpisode.episode_type)}</span>
             <h2>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</h2>
             <p>{getEpisodeLead(selectedEpisode, selectedDetail)}</p>
+            <p className="history-explorer-guidance">
+              Esta vista resume la atención en bloques breves. Revisa la sección, selecciona un elemento y usa el panel derecho
+              para entender su contexto clínico sin leer más de lo necesario.
+            </p>
           </div>
 
           <div className="history-explorer-main-meta">
@@ -717,7 +721,7 @@ export default function Timeline() {
             >
               <span className="history-explorer-module-count">{section.count}</span>
               <strong>{section.label}</strong>
-              <p>{section.description}</p>
+              <p>{section.count ? "Abrir sección" : "Sin registros"}</p>
             </button>
           ))}
         </div>
@@ -731,10 +735,14 @@ export default function Timeline() {
                 <div className="history-explorer-section-head">
                   <div>
                     <h3>{activeExplorerSection?.label || "Contenido"}</h3>
-                    <p>{activeExplorerSection?.description || "Explora el contenido clínico de esta carpeta."}</p>
+                    <p>{activeExplorerSection?.description || "Revisa el contenido clínico de esta carpeta."}</p>
                   </div>
                   <span>{activeExplorerSection?.count || 0}</span>
                 </div>
+                <p className="history-explorer-inline-help">
+                  La lista muestra cada registro en formato breve. Al tocar uno, verás a la derecha sus datos clave y un resumen
+                  orientativo.
+                </p>
 
                 {ensureArray(activeExplorerSection?.entries).length ? (
                   <div className="history-explorer-entry-stack">
@@ -749,8 +757,10 @@ export default function Timeline() {
                           <span className={`history-explorer-pill tone-${entry.tone}`}>{entry.kind}</span>
                           <span>{entry.when ? toLocaleDateTimeOrEmpty(entry.when) : "Fecha no informada"}</span>
                         </div>
-                        <strong>{entry.title}</strong>
-                        <p>{entry.subtitle || entry.description}</p>
+                        <div className="history-explorer-entry-main">
+                          <strong>{entry.title}</strong>
+                          {entry.subtitle ? <p className="history-explorer-entry-meta">{entry.subtitle}</p> : null}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -774,9 +784,25 @@ export default function Timeline() {
                 {selectedExplorerEntry ? (
                   <div className="history-explorer-detail-body">
                     <div className="history-explorer-detail-head">
-                      <span className={`history-explorer-pill tone-${selectedExplorerEntry.tone}`}>{selectedExplorerEntry.kind}</span>
+                      <div className="history-explorer-detail-title-row">
+                        <span className={`history-explorer-pill tone-${selectedExplorerEntry.tone}`}>{selectedExplorerEntry.kind}</span>
+                        {selectedExplorerEntry.when ? (
+                          <span className="history-explorer-detail-when">
+                            {toLocaleDateTimeOrEmpty(selectedExplorerEntry.when)}
+                          </span>
+                        ) : null}
+                      </div>
                       <strong>{selectedExplorerEntry.title}</strong>
-                      <p>{selectedExplorerEntry.description || "Sin detalle adicional."}</p>
+                      {selectedExplorerEntry.subtitle ? (
+                        <p className="history-explorer-detail-lead">{selectedExplorerEntry.subtitle}</p>
+                      ) : null}
+                      <p className="history-explorer-detail-summary">
+                        {selectedExplorerEntry.description || "Sin detalle adicional."}
+                      </p>
+                      <p className="history-explorer-detail-note">
+                        Este resumen ayuda a una lectura rápida. Si necesitas el registro completo, usa el acceso directo del
+                        módulo correspondiente.
+                      </p>
                     </div>
 
                     <div className="history-explorer-detail-grid">
@@ -802,7 +828,7 @@ export default function Timeline() {
                   </div>
                 ) : (
                   <div className="history-explorer-empty-block">
-                    <p>Selecciona un elemento para revisar su detalle clínico.</p>
+                    <p>Selecciona un elemento para ver un resumen claro, su fecha y los datos más relevantes.</p>
                   </div>
                 )}
               </aside>
@@ -812,11 +838,14 @@ export default function Timeline() {
               <section className="history-explorer-support timeline-card">
                 <div className="history-explorer-section-head">
                   <div>
-                    <h3>Pendientes de esta atención</h3>
-                    <p>Acciones clínicas que todavía requieren seguimiento.</p>
+                    <h3>Pendientes</h3>
+                    <p>Acciones que aún requieren seguimiento.</p>
                   </div>
                   <span>{selectedPendingTasks.length}</span>
                 </div>
+                <p className="history-explorer-inline-help">
+                  Úsalo como recordatorio de lo que sigue en esta atención: controles, documentos o tareas todavía abiertas.
+                </p>
 
                 {selectedPendingTasks.length ? (
                   <div className="history-explorer-support-list">
@@ -846,8 +875,8 @@ export default function Timeline() {
               <section className="history-explorer-support timeline-card">
                 <div className="history-explorer-section-head">
                   <div>
-                    <h3>Corregir carpeta</h3>
-                    <p>Si algo quedó fuera, puedes moverlo manualmente y mantener la trazabilidad.</p>
+                    <h3>Ajustar carpeta</h3>
+                    <p>Corrige asociaciones si un elemento quedó en la carpeta incorrecta.</p>
                   </div>
                   <button
                     type="button"
@@ -931,7 +960,10 @@ export default function Timeline() {
                     </div>
                   )
                 ) : (
-                  <p className="history-explorer-note">Usa esta acción cuando una cita, receta o medicamento quedó asociado a otra carpeta.</p>
+                  <p className="history-explorer-note">
+                    Usa esta acción solo si una cita, receta o medicamento quedó asociado a otra carpeta. El cambio mantiene la
+                    trazabilidad del historial.
+                  </p>
                 )}
               </section>
             </div>

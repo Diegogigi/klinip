@@ -25,6 +25,7 @@ import {
   isMedicationActiveAt,
   parseScheduleTimeValue,
 } from "./utils/medicationSchedule";
+import BrandLogo, { BrandMark } from "./components/BrandLogo";
 
 const Login = React.lazy(() => import("./pages/Login"));
 const Register = React.lazy(() => import("./pages/Register"));
@@ -137,7 +138,7 @@ const icons = {
       <path d="M12 3v2M4 12H2M22 12h-2M18.5 5.5 17 7M5.5 5.5 7 7" />
     </svg>
   ),
-  aiMobile: <span className="icon-k" aria-hidden="true">K</span>,
+  aiMobile: <BrandMark className="brand-mark-nav" imgClassName="brand-mark-nav-img" />,
   voice: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="2" width="6" height="11" rx="3" />
@@ -262,18 +263,25 @@ function Sidebar({
     .filter(Boolean);
   const mobileOverflowLinks = [];
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
-  const canSwitchProfilesMobile =
+  const canSwitchProfiles =
     Array.isArray(healthProfiles) && healthProfiles.length > 1;
-  const activeProfileMobile =
+  const activeProfile =
     (healthProfiles || []).find((item) => Number(item.id) === Number(activeProfileId)) ||
     (healthProfiles || [])[0] ||
     null;
-  const planLabelMobile =
+  const planLabel =
     normalizedPlan === "familiar"
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
+  const activeProfileAccessLabel = activeProfile
+    ? getHealthProfileAccessLabel(activeProfile, user?.id)
+    : "principal";
+  const sidebarAlertsCount = notifications?.length || 0;
+  const sidebarHealthCount =
+    notificationCounts.medications + notificationCounts.documents;
+  const sidebarInitial = (user?.name || "Klinip").slice(0, 1).toUpperCase();
 
   useEffect(() => {
     setShowMobileMenu(false);
@@ -284,13 +292,78 @@ function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="brand-wordmark brand-wordmark-sidebar" aria-label="Klinip">
-          <span className="brand-wordmark-full">Klinip</span>
-          <span className="brand-wordmark-compact">K</span>
-        </div>
+        <BrandLogo
+          className="brand-wordmark-sidebar brand-logo-sidebar"
+          markClassName="brand-logo-sidebar-mark"
+          imgClassName="brand-logo-sidebar-img"
+          nameClassName="brand-logo-sidebar-name"
+        />
       </div>
 
+      {!isMobile && (
+        <div className="sidebar-desktop-panel">
+          <div className="sidebar-desktop-plan-row">
+            <span className="sidebar-desktop-plan-badge">{planLabel}</span>
+            <span className="sidebar-desktop-plan-caption">Escritorio clínico</span>
+          </div>
+
+          <div className="sidebar-desktop-profile-card">
+            <div className="sidebar-desktop-profile-head">
+              <span className="sidebar-desktop-avatar" aria-hidden="true">
+                {sidebarInitial}
+              </span>
+              <div className="sidebar-desktop-profile-copy">
+                <p className="sidebar-desktop-profile-label">Perfil activo</p>
+                <p className="sidebar-desktop-profile-name">
+                  {activeProfile?.full_name || user?.name || "Perfil personal"}
+                </p>
+              </div>
+            </div>
+            <div className="sidebar-desktop-profile-meta">
+              <span className="sidebar-desktop-profile-role">
+                Acceso {activeProfileAccessLabel}
+              </span>
+              <span className="sidebar-desktop-profile-email">
+                {user?.email || "sin-correo"}
+              </span>
+            </div>
+            {canSwitchProfiles ? (
+              <select
+                className="sidebar-desktop-profile-select"
+                value={activeProfileId || ""}
+                onChange={(e) => onSwitchProfile?.(e.target.value)}
+                disabled={!!switchingProfile}
+                aria-label="Cambiar perfil de salud"
+              >
+                {(healthProfiles || []).map((item) => (
+                  <option value={item.id} key={item.id}>
+                    {item.full_name}
+                    {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+          </div>
+
+          <div className="sidebar-desktop-metrics" aria-label="Resumen lateral">
+            <div className="sidebar-desktop-metric">
+              <span className="sidebar-desktop-metric-value">{sidebarAlertsCount}</span>
+              <span className="sidebar-desktop-metric-label">Alertas</span>
+            </div>
+            <div className="sidebar-desktop-metric">
+              <span className="sidebar-desktop-metric-value">{sidebarHealthCount}</span>
+              <span className="sidebar-desktop-metric-label">Pendientes</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <nav className="sidebar-nav">
+        {!isMobile && (
+          <div className="sidebar-section-label" aria-hidden="true">
+            Navegación clínica
+          </div>
+        )}
         {isMobile ? (
           <>
             {mobilePrimaryLinks.map((link) => (
@@ -367,6 +440,20 @@ function Sidebar({
           ))
         )}
       </nav>
+
+      {!isMobile && (
+        <div className="sidebar-desktop-footer">
+          <Link to="/settings" className="sidebar-desktop-settings-link">
+            <span className="sidebar-icon" aria-hidden="true">{icons.user}</span>
+            <span className="sidebar-desktop-settings-copy">
+              <span className="sidebar-desktop-settings-title">Ajustes de cuenta</span>
+              <span className="sidebar-desktop-settings-subtitle">
+                Perfil, plan y preferencias
+              </span>
+            </span>
+          </Link>
+        </div>
+      )}
 
     </aside>
   );
@@ -476,6 +563,9 @@ function Topbar({
       : normalizedPlan === "plus"
       ? "Plan Plus"
       : "Plan Básico";
+  const activeProfileLabel = activeProfile
+    ? getHealthProfileAccessLabel(activeProfile, user?.id)
+    : "principal";
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute || (!user && location.pathname === "/")) return null;
 
@@ -487,12 +577,31 @@ function Topbar({
 
   return (
     <header className={topbarClass}>
-      <div>
-        <p className="topbar-label">{subtitle}</p>
-        <div className="topbar-row">
-          <h2 className="topbar-title">{title}</h2>
-          <span className="topbar-chip">{today}</span>
+      <div className="topbar-main">
+        <div>
+          <p className="topbar-label">{subtitle}</p>
+          <div className="topbar-row">
+            <h2 className="topbar-title">{title}</h2>
+            <span className="topbar-chip">{today}</span>
+          </div>
         </div>
+        {!isMobileTopbar && (
+          <div className="topbar-highlights" aria-label="Resumen del contexto">
+            <div className="topbar-highlight-card">
+              <span className="topbar-highlight-label">Plan activo</span>
+              <strong className="topbar-highlight-value">{planLabel}</strong>
+            </div>
+            <div className="topbar-highlight-card">
+              <span className="topbar-highlight-label">Perfil actual</span>
+              <strong className="topbar-highlight-value">
+                {activeProfile?.full_name || user?.name || "Perfil personal"}
+              </strong>
+              <span className="topbar-highlight-note">
+                Acceso {activeProfileLabel}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
       <div className="topbar-actions">
         <div className="topbar-notifications">
@@ -1780,6 +1889,11 @@ export default function App() {
                 <span className="splash-brand-orbit-ring splash-brand-orbit-ring-inner" />
                 <span className="splash-brand-core">
                   <span className="splash-brand-core-glow" />
+                  <BrandMark
+                    variant="solid"
+                    className="splash-brand-core-logo"
+                    imgClassName="splash-brand-core-logo-img"
+                  />
                 </span>
               </div>
               <p className="splash-brand-kicker">Plataforma clínica inteligente</p>

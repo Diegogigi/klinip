@@ -2,6 +2,7 @@
 import { Link } from "react-router-dom";
 import { forgotPassword } from "../api";
 import { extractApiError } from "../utils/errors";
+import BrandLogo from "../components/BrandLogo";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -46,10 +47,12 @@ export default function ForgotPassword() {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <h1 className="auth-logo-text brand-wordmark" aria-label="Klinip">
-                <span className="brand-wordmark-full">Klinip</span>
-                <span className="brand-wordmark-compact">K</span>
-              </h1>
+              <BrandLogo
+                className="auth-logo-text brand-logo-auth"
+                markClassName="brand-logo-auth-mark"
+                imgClassName="brand-logo-auth-img"
+                nameClassName="brand-logo-auth-name"
+              />
             </div>
             <h2 className="auth-welcome">Recuperar contraseña</h2>
             <p className="auth-description">
@@ -113,6 +116,5 @@ export default function ForgotPassword() {
     </div>
   );
 }
-
 
 

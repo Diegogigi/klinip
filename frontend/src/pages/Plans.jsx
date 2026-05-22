@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getPublicPlans } from "../api";
 import { getDefaultPlanSlug, getPlanBySlug, PLAN_CATALOG } from "../data/plans";
+import BrandLogo from "../components/BrandLogo";
 
 const PLAN_THEME = {
   basico: { tone: "green", dot: "#16A34A" },
@@ -463,10 +464,13 @@ export default function Plans({ user }) {
       <header className="pp-navbar">
         <div className="pp-navbar-inner">
           <Link to="/" className="pp-nav-logo">
-            <span className="brand-wordmark responsive" aria-label="Klinip">
-              <span className="brand-wordmark-full">Klinip</span>
-              <span className="brand-wordmark-compact">K</span>
-            </span>
+            <BrandLogo
+              className="brand-logo-plans"
+              markClassName="brand-logo-plans-mark"
+              imgClassName="plans-page-brand-img"
+              nameClassName="pp-nav-logo-name"
+              responsive
+            />
           </Link>
 
           <nav className="pp-nav-links">
@@ -654,10 +658,12 @@ export default function Plans({ user }) {
         <div className="pp-footer-inner">
           <div className="pp-footer-brand">
             <div>
-              <div className="pp-footer-name brand-wordmark responsive" aria-label="Klinip">
-                <span className="brand-wordmark-full">Klinip</span>
-                <span className="brand-wordmark-compact">K</span>
-              </div>
+              <BrandLogo
+                className="pp-footer-name brand-logo-plans"
+                markClassName="brand-logo-plans-mark"
+                imgClassName="plans-page-brand-img"
+                responsive
+              />
               <div className="pp-footer-tag">Tu ruta de salud, simplificada</div>
             </div>
           </div>

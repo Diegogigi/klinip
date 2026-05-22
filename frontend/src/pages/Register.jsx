@@ -4,6 +4,7 @@ import { register, login, getMe } from "../api";
 import { clearAppCaches } from "../utils/cache";
 import { extractApiError } from "../utils/errors";
 import { validatePassword, validatePasswordMatch } from "../utils/validation";
+import BrandLogo from "../components/BrandLogo";
 
 export default function Register({ onRegistered }) {
   const [name, setName] = useState("");
@@ -101,10 +102,12 @@ export default function Register({ onRegistered }) {
         <div className="auth-card">
           <div className="auth-header">
             <div className="auth-logo">
-              <h1 className="auth-logo-text brand-wordmark" aria-label="Klinip">
-                <span className="brand-wordmark-full">Klinip</span>
-                <span className="brand-wordmark-compact">K</span>
-              </h1>
+              <BrandLogo
+                className="auth-logo-text brand-logo-auth"
+                markClassName="brand-logo-auth-mark"
+                imgClassName="brand-logo-auth-img"
+                nameClassName="brand-logo-auth-name"
+              />
             </div>
             <h2 className="auth-welcome">¡Crea tu cuenta!</h2>
             <p className="auth-description">
@@ -275,6 +278,5 @@ export default function Register({ onRegistered }) {
     </div>
   );
 }
-
 
 

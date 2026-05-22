@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getLandingStats, getPublicPlans } from "../api";
+import BrandLogo from "../components/BrandLogo";
 import { PLAN_CATALOG } from "../data/plans";
 import { cleanUiText } from "../utils/textEncoding";
 
@@ -215,10 +216,13 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       <header className="lp-navbar">
         <div className="lp-navbar-inner">
           <Link className="lp-nav-logo" to="/">
-            <span className="brand-wordmark responsive" aria-label="Klinip">
-              <span className="brand-wordmark-full">Klinip</span>
-              <span className="brand-wordmark-compact">K</span>
-            </span>
+            <BrandLogo
+              className="brand-logo-landing brand-logo-keep-name-mobile"
+              markClassName="landing-logo-mark"
+              imgClassName="landing-logo-mark-img"
+              nameClassName="lp-nav-logo-name"
+              responsive
+            />
           </Link>
 
           <nav className="lp-nav-links">
@@ -504,10 +508,12 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
             <div>
-              <strong className="brand-wordmark responsive" aria-label="Klinip">
-                <span className="brand-wordmark-full">Klinip</span>
-                <span className="brand-wordmark-compact">K</span>
-              </strong>
+              <BrandLogo
+                className="brand-logo-landing brand-logo-keep-name-mobile"
+                markClassName="landing-logo-mark"
+                imgClassName="landing-logo-mark-img"
+                responsive
+              />
               <span>Tu ruta de salud, simplificada</span>
             </div>
           </div>
