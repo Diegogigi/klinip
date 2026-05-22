@@ -321,36 +321,36 @@ function buildExplorerSections(detail) {
     {
       id: "appointments",
       label: "Citas",
-      hint: "Consultas, controles y examenes",
-      description: "Consultas, controles y exámenes vinculados a esta atención.",
-      emptyText: "No hay citas relacionadas dentro de esta carpeta.",
+      hint: "Consultas y examenes",
+      description: "Consultas y examenes.",
+      emptyText: "No hay citas en esta carpeta.",
       action: getExplorerSectionAction("appointments"),
       entries: appointments,
     },
     {
       id: "medications",
       label: "Medicamentos",
-      hint: "Tratamientos activos o finalizados",
-      description: "Tratamientos y fármacos indicados durante esta atención.",
-      emptyText: "No hay medicamentos vinculados a esta carpeta.",
+      hint: "Tratamientos indicados",
+      description: "Medicamentos y tratamientos.",
+      emptyText: "No hay medicamentos en esta carpeta.",
       action: getExplorerSectionAction("medications"),
       entries: medications,
     },
     {
       id: "documents",
       label: "Documentos",
-      hint: "Informes, recetas y resultados",
-      description: "Recetas, informes, órdenes, resultados y archivos clínicos.",
-      emptyText: "No hay documentos dentro de esta carpeta.",
+      hint: "Recetas e informes",
+      description: "Recetas, informes y resultados.",
+      emptyText: "No hay documentos en esta carpeta.",
       action: { label: "Abrir documentos", to: "/documents" },
       entries: documents,
     },
     {
       id: "activity",
       label: "Actividad",
-      hint: "Linea de tiempo de cambios",
-      description: "Trazabilidad cronológica de todo lo que ocurrió en esta carpeta.",
-      emptyText: "Todavía no hay actividad registrada para esta carpeta.",
+      hint: "Cambios de la carpeta",
+      description: "Linea de tiempo de cambios.",
+      emptyText: "Aun no hay actividad registrada.",
       action: null,
       entries: activity,
     },
@@ -706,10 +706,6 @@ export default function Timeline() {
             <span className="history-explorer-folder-type">{getEpisodeTypeLabel(selectedEpisode.episode_type)}</span>
             <h2>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</h2>
             <p>{getEpisodeLead(selectedEpisode, selectedDetail)}</p>
-            <p className="history-explorer-guidance">
-              Esta vista resume la atención en bloques breves. Elige una sección, revisa la lista y usa el panel derecho para
-              entender rápido el contexto clínico más importante.
-            </p>
           </div>
 
           <div className="history-explorer-main-meta">
@@ -748,14 +744,10 @@ export default function Timeline() {
                 <div className="history-explorer-section-head">
                   <div>
                     <h3>{activeExplorerSection?.label || "Contenido"}</h3>
-                    <p>{activeExplorerSection?.description || "Revisa el contenido clínico de esta carpeta."}</p>
+                    <p>{activeExplorerSection?.description || "Resumen de la sección."}</p>
                   </div>
                   <span>{activeExplorerSection?.count || 0}</span>
                 </div>
-                <p className="history-explorer-inline-help">
-                  La lista muestra cada registro en formato breve. Al tocar uno, verás a la derecha sus datos clave y un resumen
-                  orientativo.
-                </p>
 
                 {ensureArray(activeExplorerSection?.entries).length ? (
                   <div className="history-explorer-entry-stack">
@@ -812,10 +804,6 @@ export default function Timeline() {
                       <p className="history-explorer-detail-summary">
                         {selectedExplorerEntry.description || "Sin detalle adicional."}
                       </p>
-                      <p className="history-explorer-detail-note">
-                        Este resumen ayuda a una lectura rápida. Si necesitas el registro completo, usa el acceso directo del
-                        módulo correspondiente.
-                      </p>
                     </div>
 
                     <div className="history-explorer-detail-grid">
@@ -841,7 +829,7 @@ export default function Timeline() {
                   </div>
                 ) : (
                   <div className="history-explorer-empty-block">
-                    <p>Selecciona un elemento para ver un resumen claro, su fecha y los datos más relevantes.</p>
+                    <p>Selecciona un registro para ver el resumen.</p>
                   </div>
                 )}
               </aside>
@@ -852,13 +840,10 @@ export default function Timeline() {
                 <div className="history-explorer-section-head">
                   <div>
                     <h3>Pendientes</h3>
-                    <p>Acciones que aún requieren seguimiento.</p>
+                    <p>Tareas abiertas.</p>
                   </div>
                   <span>{selectedPendingTasks.length}</span>
                 </div>
-                <p className="history-explorer-inline-help">
-                  Úsalo como recordatorio de lo que sigue en esta atención: controles, documentos o tareas todavía abiertas.
-                </p>
 
                 {selectedPendingTasks.length ? (
                   <div className="history-explorer-support-list">

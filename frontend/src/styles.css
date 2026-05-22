@@ -49310,8 +49310,8 @@ body.theme-dark .history-process-shell {
   grid-template-rows: auto auto auto;
   align-content: start;
   gap: 0.22rem;
-  min-height: 118px;
-  padding: 0.82rem 0.86rem;
+  min-height: 104px;
+  padding: 0.76rem 0.82rem;
   border: 1px solid rgba(220, 230, 245, 0.96);
   border-radius: 16px;
   background:
@@ -49362,8 +49362,8 @@ body.theme-dark .history-process-shell {
 .history-explorer-module-hint {
   margin: 0;
   color: #475569;
-  font-size: 0.79rem;
-  line-height: 1.35;
+  font-size: 0.76rem;
+  line-height: 1.3;
 }
 
 .history-explorer-stage,
@@ -49396,6 +49396,10 @@ body.theme-dark .history-process-shell {
 .history-explorer-section-head h3 {
   margin: 0;
   font-size: 0.96rem;
+}
+
+.history-explorer-section-head p {
+  margin: 0.12rem 0 0;
 }
 
 .history-explorer-inline-help {
@@ -49549,13 +49553,17 @@ body.theme-dark .history-process-shell {
 
 .history-explorer-detail-summary {
   margin: 0.12rem 0 0;
-  padding: 0.72rem 0.78rem;
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 0.62rem 0.7rem;
   border-radius: 14px;
   background: rgba(248, 251, 255, 0.96);
   border: 1px solid rgba(224, 232, 244, 0.96);
   color: #4b5563;
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 
 .history-explorer-detail-note {
@@ -49888,6 +49896,15 @@ body.theme-dark .history-explorer-pill.tone-activity {
   .history-explorer-entry-meta,
   .history-explorer-detail-summary {
     font-size: 0.79rem;
+  }
+
+  .history-explorer-module {
+    min-height: 98px;
+    padding: 0.72rem 0.76rem;
+  }
+
+  .history-explorer-module-hint {
+    font-size: 0.72rem;
   }
 
   .history-explorer-filter {
