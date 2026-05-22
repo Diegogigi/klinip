@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getAppointments, getDocuments, getMedications, isAuthSessionError } from "../api";
 import { parseDate } from "../utils/dates";
+import { isMedicationFinished } from "../utils/medicationSchedule";
 
 function RingChart({ value, label, tone = "blue" }) {
   const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
@@ -102,8 +103,8 @@ export default function Stats() {
     };
 
     const medicationsTotal = medications.length;
-    const medicationsDone = medications.filter((m) => Boolean(m.completed)).length;
-    const medicationsActive = medications.filter((m) => !m.completed).length;
+    const medicationsDone = medications.filter((m) => isMedicationFinished(m)).length;
+    const medicationsActive = medications.filter((m) => !isMedicationFinished(m)).length;
     const medicationsMissingFrequency = medications.filter(
       (m) => !m.frequency || !m.frequency.trim()
     ).length;

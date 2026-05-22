@@ -16640,6 +16640,62 @@ body.theme-dark .home-ops-action-icon {
 
 .home-clinical-side {
   min-width: 220px;
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.home-clinical-ring-button {
+  display: grid;
+  justify-items: center;
+  gap: 0.45rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.home-clinical-ring-meter {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
+    conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+  box-shadow:
+    0 18px 34px rgba(11, 35, 96, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.home-clinical-ring-meter::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #1f5ee0, #123aa0);
+  box-shadow:
+    inset 0 16px 26px rgba(255, 255, 255, 0.08),
+    inset 0 -16px 30px rgba(4, 24, 74, 0.34);
+}
+
+.home-clinical-ring-meter strong {
+  position: relative;
+  z-index: 1;
+  color: #ffffff;
+  font-size: 1.3rem;
+  font-weight: 850;
+  text-shadow: 0 6px 16px rgba(5, 20, 64, 0.28);
+}
+
+.home-clinical-ring-button small {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 .home-clinical-meta {
@@ -22089,6 +22145,17 @@ body.theme-dark .home-clinical-metric {
   border-color: rgba(191, 219, 254, 0.16);
 }
 
+body.theme-dark .home-clinical-ring-meter {
+  background:
+    radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
+    conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+  box-shadow: none;
+}
+
+body.theme-dark .home-clinical-ring-meter::before {
+  background: linear-gradient(145deg, #0f2a67, #071a43);
+}
+
 body.theme-dark .home-attention-item,
 body.theme-dark .home-mobile-action-item,
 body.theme-dark .home-notes-dialog-close {
@@ -24166,6 +24233,13 @@ body.theme-dark .med-intake-toast.is-success {
   font-size: 1rem;
 }
 
+.med-dose-alert-helper {
+  margin: 0.85rem 0 0;
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
 .med-dose-alert-actions {
   margin-top: 1rem;
   display: grid;
@@ -24187,6 +24261,11 @@ body.theme-dark .med-intake-toast.is-success {
   border: none;
   color: #ffffff;
   background: linear-gradient(135deg, #30d7ff, #1f7aff);
+}
+
+.med-dose-btn.is-subtle {
+  background: #ffffff;
+  color: #475569;
 }
 
 /* ── Medication reminder popup – dark mode overrides ── */
@@ -24239,10 +24318,19 @@ body.theme-dark .med-dose-alert-notes {
   color: #cbd5e1;
 }
 
+body.theme-dark .med-dose-alert-helper {
+  color: #cbd5e1;
+}
+
 body.theme-dark .med-dose-btn {
   border-color: rgba(148, 163, 184, 0.25);
   background: rgba(30, 64, 175, 0.45);
   color: #93c5fd;
+}
+
+body.theme-dark .med-dose-btn.is-subtle {
+  background: rgba(15, 23, 42, 0.76);
+  color: #e2e8f0;
 }
 
 body.theme-dark .med-dose-btn.is-primary {
@@ -39592,6 +39680,200 @@ body.theme-dark .appointments-sheet-grabber {
   -webkit-backdrop-filter: blur(12px);
 }
 
+.adherence-guide-sheet {
+  width: min(720px, calc(100vw - 2rem));
+}
+
+.adherence-guide-hero {
+  position: relative;
+  padding: 1.15rem 1.2rem 0.4rem;
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 28%),
+    linear-gradient(145deg, #0f49c8 0%, #2563eb 58%, #36a6ff 100%);
+  color: #ffffff;
+}
+
+.adherence-guide-close {
+  position: absolute;
+  top: 0.8rem;
+  right: 0.8rem;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.adherence-guide-kicker {
+  display: inline-block;
+  margin-bottom: 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.adherence-guide-head {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+}
+
+.adherence-guide-ring {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
+    conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+  box-shadow:
+    0 18px 34px rgba(11, 35, 96, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.adherence-guide-ring::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #1f5ee0, #123aa0);
+  box-shadow:
+    inset 0 16px 26px rgba(255, 255, 255, 0.08),
+    inset 0 -16px 30px rgba(4, 24, 74, 0.34);
+}
+
+.adherence-guide-ring span {
+  position: relative;
+  z-index: 1;
+  font-size: 1.22rem;
+  font-weight: 850;
+  color: #ffffff;
+}
+
+.adherence-guide-copy h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.adherence-guide-copy p {
+  margin: 0.45rem 0 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+.adherence-guide-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.adherence-guide-legend {
+  display: grid;
+  gap: 0.72rem;
+}
+
+.adherence-guide-legend-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: start;
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  background: #f8fbff;
+  border: 1px solid rgba(203, 213, 225, 0.8);
+}
+
+.adherence-guide-legend-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.94rem;
+}
+
+.adherence-guide-legend-item p {
+  margin: 0.22rem 0 0;
+  color: #475569;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.adherence-guide-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  margin-top: 0.2rem;
+}
+
+.adherence-guide-swatch.tone-current {
+  background: #32d9f7;
+}
+
+.adherence-guide-swatch.tone-stable {
+  background: #84cc16;
+}
+
+.adherence-guide-swatch.tone-attention {
+  background: #facc15;
+}
+
+.adherence-guide-swatch.tone-critical {
+  background: #fb7185;
+}
+
+.adherence-guide-swatch.tone-remaining {
+  background: #cbd5e1;
+}
+
+.adherence-guide-insights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.adherence-guide-insight-card {
+  padding: 0.9rem 0.95rem;
+  border-radius: 18px;
+  background: #ffffff;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+}
+
+.adherence-guide-insight-card span {
+  display: block;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.adherence-guide-insight-card strong {
+  display: block;
+  margin-top: 0.22rem;
+  color: #0f172a;
+  font-size: 0.96rem;
+  line-height: 1.45;
+}
+
+.adherence-guide-insight-card p {
+  margin: 0.28rem 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.adherence-guide-footer {
+  flex-direction: row;
+}
+
 /* ── Native buttons ── */
 .native-btn {
   display: inline-flex;
@@ -40417,6 +40699,94 @@ body.theme-dark .native-detail-header {
 body.theme-dark .native-sheet-footer {
   border-top-color: rgba(148, 163, 184, 0.12);
   background: rgba(15, 23, 42, 0.92);
+}
+
+body.theme-dark .adherence-guide-hero {
+  background:
+    radial-gradient(circle at top right, rgba(255, 255, 255, 0.12), transparent 28%),
+    linear-gradient(145deg, #0b3aa4 0%, #1d4ed8 62%, #0f7bbd 100%);
+}
+
+body.theme-dark .adherence-guide-close {
+  background: rgba(15, 23, 42, 0.32);
+  border-color: rgba(191, 219, 254, 0.22);
+}
+
+body.theme-dark .adherence-guide-ring {
+  background:
+    radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
+    conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+  box-shadow: none;
+}
+
+body.theme-dark .adherence-guide-ring::before {
+  background: linear-gradient(145deg, #0f2a67, #071a43);
+}
+
+body.theme-dark .adherence-guide-legend-item,
+body.theme-dark .adherence-guide-insight-card {
+  background: rgba(11, 18, 36, 0.92);
+  border-color: rgba(51, 65, 85, 0.86);
+}
+
+body.theme-dark .adherence-guide-legend-item strong,
+body.theme-dark .adherence-guide-insight-card strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .adherence-guide-legend-item p,
+body.theme-dark .adherence-guide-insight-card p,
+body.theme-dark .adherence-guide-insight-card span {
+  color: #94a3b8;
+}
+
+@media (max-width: 980px) {
+  .home-clinical-side {
+    justify-items: start;
+  }
+
+  .home-clinical-ring-button {
+    order: 3;
+  }
+}
+
+@media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
+  .adherence-guide-sheet {
+    width: 100%;
+    max-height: 88dvh;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .adherence-guide-head {
+    grid-template-columns: 90px minmax(0, 1fr);
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .adherence-guide-ring {
+    width: 84px;
+    height: 84px;
+  }
+
+  .adherence-guide-copy h3 {
+    font-size: 1.02rem;
+  }
+
+  .adherence-guide-copy p {
+    font-size: 0.86rem;
+  }
+
+  .adherence-guide-legend-item {
+    padding: 0.78rem 0.84rem;
+  }
+
+  .adherence-guide-insights {
+    grid-template-columns: 1fr;
+  }
+
+  .adherence-guide-footer {
+    flex-direction: column;
+  }
 }
 
 body.theme-dark .native-btn-outline {
@@ -41569,12 +41939,21 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
     border-color: rgba(252, 165, 165, 0.34);
   }
 
+  .mobile-hero-progress-wrap {
+    display: grid;
+    justify-items: center;
+    gap: 0.28rem;
+  }
+
   .mobile-hero-progress {
     width: 86px;
     height: 86px;
     border-radius: 50%;
     display: grid;
     place-items: center;
+    padding: 0;
+    border: none;
+    cursor: pointer;
     background:
       radial-gradient(circle closest-side, #1b4ecf 68%, transparent 70% 100%),
       conic-gradient(from 220deg, #50e3d0 0 var(--health-progress), rgba(255, 255, 255, 0.24) var(--health-progress) 100%);
@@ -41585,6 +41964,12 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
     font-size: 1.02rem;
     font-weight: 850;
     color: #ffffff;
+  }
+
+  .mobile-hero-progress-hint {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 0.68rem;
+    font-weight: 700;
   }
 
   .mobile-hero-profile-badge {
@@ -42106,6 +42491,9 @@ body.theme-dark .mobile-dashboard {
     position: relative;
     width: 94px;
     height: 94px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
     background:
       radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
       conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
@@ -42141,6 +42529,11 @@ body.theme-dark .mobile-dashboard {
     z-index: 1;
     font-size: 1.16rem;
     text-shadow: 0 6px 16px rgba(5, 20, 64, 0.28);
+  }
+
+  .mobile-hero-progress-hint {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   .mobile-hero-health-footer {
@@ -42330,6 +42723,10 @@ body.theme-dark .mobile-dashboard {
 
   .mobile-hero-progress span {
     font-size: 1rem;
+  }
+
+  .mobile-hero-progress-hint {
+    font-size: 0.64rem;
   }
 
   .mobile-quick-slide {

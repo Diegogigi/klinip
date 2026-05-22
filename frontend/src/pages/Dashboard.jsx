@@ -25,6 +25,7 @@ import {
   getMedicationScheduleSummary,
   getMedicationScheduleTimes,
   getNextMedicationDose,
+  isMedicationFinished,
 } from "../utils/medicationSchedule";
 import { ensureArray } from "../utils/arrays";
 
@@ -116,6 +117,126 @@ function getAdherenceFriendlyValue(adherence, hasMedications) {
   if (adherence >= 80) return `Muy bien · ${adherence}%`;
   if (adherence >= 45) return `Regular · ${adherence}%`;
   return `Bajo · ${adherence}%`;
+}
+
+function clampPercent(value) {
+  return Math.max(0, Math.min(100, Number(value || 0)));
+}
+
+function getAdherenceZone(value) {
+  if (value >= 80) return "stable";
+  if (value >= 45) return "attention";
+  return "critical";
+}
+
+function buildAdherenceGuideData({
+  adherence,
+  expected,
+  taken,
+  activeCount,
+  windowDays,
+  weakestMedication,
+  patternSummary,
+  pendingRefresh,
+}) {
+  if (!activeCount) {
+    return {
+      summary:
+        "Este grafico se activa cuando hay medicamentos en seguimiento. Cuando registres tu tratamiento, Klinip mostrara aqui el avance y las zonas de lectura.",
+      legend: [
+        {
+          key: "remaining",
+          tone: "remaining",
+          title: "Claro",
+          value: "Sin datos",
+          description:
+            "El anillo queda neutro hasta que existan dosis esperadas y registros para calcular tu adherencia.",
+        },
+      ],
+      insights: [
+        { key: "plan", label: "Plan activo", value: "Sin medicamentos activos" },
+        { key: "window", label: "Periodo", value: `${windowDays} dias` },
+      ],
+    };
+  }
+
+  const safeAdherence = clampPercent(adherence);
+  const remaining = Math.max(0, 100 - safeAdherence);
+  const zone = getAdherenceZone(safeAdherence);
+  const weakestLabel = cleanUiText(weakestMedication?.name || "Sin alertas");
+  const weakestRate =
+    weakestMedication?.adherence_rate === null || weakestMedication?.adherence_rate === undefined
+      ? null
+      : `${Math.round(Number(weakestMedication.adherence_rate) || 0)}%`;
+  const weakestValue = weakestRate ? `${weakestLabel} · ${weakestRate}` : weakestLabel;
+  const weakestDescription = weakestMedication
+    ? "Hoy es el medicamento que mas influye en la alerta de adherencia."
+    : "No hay medicamentos por debajo del rango esperado.";
+  const weakestSlot = cleanUiText(
+    patternSummary?.lowest_recorded_time_slot || "Sin patron claro"
+  );
+
+  return {
+    summary: pendingRefresh
+      ? `Estamos actualizando el analisis. Por ahora ves un calculo en vivo basado en ${taken} de ${expected} dosis registradas en ${windowDays} dias.`
+      : `Tu ${safeAdherence}% se calcula con ${taken} de ${expected} dosis registradas en ${windowDays} dias.`,
+    legend: [
+      {
+        key: "current",
+        tone: "current",
+        title: "Celeste",
+        value: `${safeAdherence}% actual`,
+        description:
+          "Muestra el porcentaje ya registrado para tu plan activo dentro del periodo analizado.",
+      },
+      {
+        key: "stable",
+        tone: "stable",
+        title: "Verde",
+        value: "80% a 100%",
+        description:
+          zone === "stable"
+            ? "Tu adherencia actual ya esta en la zona estable."
+            : "Es la zona objetivo. Desde aqui el seguimiento se considera estable.",
+      },
+      {
+        key: "attention",
+        tone: "attention",
+        title: "Amarillo",
+        value: "45% a 79%",
+        description:
+          zone === "attention"
+            ? "Tu adherencia actual esta en una zona intermedia y conviene revisarla."
+            : "Marca una adherencia irregular que puede necesitar ajustes de horario o recordatorios.",
+      },
+      {
+        key: "critical",
+        tone: "critical",
+        title: "Rojo",
+        value: "0% a 44%",
+        description:
+          zone === "critical"
+            ? "Tu adherencia actual hoy cae en la zona critica."
+            : "Si tu porcentaje baja a este tramo, Klinip lo trata como un riesgo de baja adherencia.",
+      },
+      {
+        key: "remaining",
+        tone: "remaining",
+        title: "Claro",
+        value: `${remaining}% restante`,
+        description:
+          remaining > 0
+            ? "Es el tramo que aun falta recuperar o registrar dentro del periodo actual."
+            : "No queda tramo pendiente en este periodo.",
+      },
+    ],
+    insights: [
+      { key: "doses", label: "Dosis registradas", value: `${taken} de ${expected}` },
+      { key: "plan", label: "Medicamentos activos", value: `${activeCount}` },
+      { key: "weakest", label: "Mas sensible", value: weakestValue, description: weakestDescription },
+      { key: "slot", label: "Franja mas debil", value: weakestSlot },
+    ],
+  };
 }
 
 const friendlyAlertTitleMap = {
@@ -406,6 +527,7 @@ export default function Dashboard({
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteMenuOpenId, setNoteMenuOpenId] = useState(null);
   const [activeQuickActionIndex, setActiveQuickActionIndex] = useState(0);
+  const [adherenceGuideOpen, setAdherenceGuideOpen] = useState(false);
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -646,6 +768,17 @@ export default function Dashboard({
     };
   }, [activeProfile?.id, notesStorageKey, canEditActiveProfile]);
 
+  useEffect(() => {
+    if (!adherenceGuideOpen) return undefined;
+    const handleEscape = (event) => {
+      if (event.key === "Escape") {
+        setAdherenceGuideOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [adherenceGuideOpen]);
+
   const now = Date.now();
   const validAppointments = [...appointments]
     .filter((item) => parseDate(item.date_time))
@@ -659,7 +792,7 @@ export default function Dashboard({
   );
   const nextAppointment = futureAppointments[0] || openAppointments[0] || null;
 
-  const activeMedications = medications.filter((item) => !item.completed);
+  const activeMedications = medications.filter((item) => !isMedicationFinished(item));
   const adherenceTotals = activeMedications.reduce(
     (acc, item) => {
       acc.expected += Number(item.expected_doses || 0);
@@ -668,15 +801,24 @@ export default function Dashboard({
     },
     { expected: 0, taken: 0 }
   );
-  const adherence =
-    Number(adherenceSummary?.overall_adherence_rate) > 0
-      ? Math.round(Number(adherenceSummary?.overall_adherence_rate))
-      : adherenceTotals.expected > 0
+  const numericSummaryAdherence = Number(adherenceSummary?.overall_adherence_rate);
+  const hasSummaryAdherence =
+    adherenceSummary?.overall_adherence_rate !== null &&
+    adherenceSummary?.overall_adherence_rate !== undefined &&
+    Number.isFinite(numericSummaryAdherence);
+  const liveAdherence =
+    adherenceTotals.expected > 0
       ? Math.round((adherenceTotals.taken / adherenceTotals.expected) * 100)
       : activeMedications.length
       ? 100
       : 0;
+  const adherence =
+    hasSummaryAdherence && !adherenceSummary?.pending_refresh
+      ? Math.round(numericSummaryAdherence)
+      : liveAdherence;
   const lowAdherenceItems = ensureArray(adherenceSummary?.low_adherence_items);
+  const adherenceMedicationItems = ensureArray(adherenceSummary?.medication_items);
+  const adherencePatternSummary = adherenceSummary?.pattern_summary || {};
   const activeHealthAlerts = ensureArray(healthRadar).filter((item) => item.status === "active");
   const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
   const pendingDocuments = documents.filter((item) => {
@@ -684,6 +826,28 @@ export default function Dashboard({
     return !status || status === "pending" || status === "processing" || status === "error";
   }).length;
   const linkedProfiles = Math.max((healthProfiles || []).length - 1, 0);
+  const adherencePercentValue = activeMedications.length ? clampPercent(adherence) : 0;
+  const adherencePercentLabel = activeMedications.length ? `${adherencePercentValue}%` : "--";
+  const adherenceRingProgress = activeMedications.length ? adherencePercentValue : 0;
+  const weakestMedication =
+    lowAdherenceItems[0] ||
+    [...adherenceMedicationItems].sort(
+      (left, right) => Number(left?.adherence_rate || 0) - Number(right?.adherence_rate || 0)
+    )[0] ||
+    null;
+  const adherenceGuide = buildAdherenceGuideData({
+    adherence: adherencePercentValue,
+    expected: adherenceTotals.expected,
+    taken: adherenceTotals.taken,
+    activeCount: activeMedications.length,
+    windowDays: Number(adherenceSummary?.window_days || 30),
+    weakestMedication,
+    patternSummary: adherencePatternSummary,
+    pendingRefresh: Boolean(adherenceSummary?.pending_refresh),
+  });
+  const openAdherenceGuide = useCallback(() => {
+    setAdherenceGuideOpen(true);
+  }, []);
 
   const radarItems = [
     {
@@ -1477,8 +1641,6 @@ export default function Dashboard({
         : new Date().getHours() < 18
         ? "Buenas tardes"
         : "Buenas noches";
-    const adherencePercentLabel = activeMedications.length ? `${adherence}%` : "--";
-    const adherenceRingProgress = activeMedications.length ? Math.max(0, Math.min(adherence, 100)) : 0;
     const mobileProfileMenu = profileMenuOpen
       ? createPortal(
           <div
@@ -1706,12 +1868,18 @@ export default function Dashboard({
                   <p className="home-mobile-clinical-title">{heroState.title}</p>
                   <p className="mobile-hero-health-copy home-mobile-clinical-copy">{heroState.message}</p>
                 </div>
-                <div
-                  className="mobile-hero-progress"
-                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                  aria-label={`Adherencia ${adherencePercentLabel}`}
-                >
-                  <span>{adherencePercentLabel}</span>
+                <div className="mobile-hero-progress-wrap">
+                  <button
+                    type="button"
+                    className="mobile-hero-progress"
+                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                    aria-label={`Adherencia ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
+                    title="Toca el aro para ver que significa cada color"
+                    onClick={openAdherenceGuide}
+                  >
+                    <span>{adherencePercentLabel}</span>
+                  </button>
+                  <span className="mobile-hero-progress-hint">Toca el aro</span>
                 </div>
               </div>
               <div className="mobile-hero-badges home-mobile-badges">
@@ -1864,8 +2032,6 @@ export default function Dashboard({
         : "Buenas noches";
     const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
     const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
-    const adherencePercentLabel = activeMedications.length ? `${adherence}%` : "--";
-    const adherenceRingProgress = activeMedications.length ? Math.max(0, Math.min(adherence, 100)) : 0;
     const adherenceHelperText = activeMedications.length
       ? adherence < 80
         ? "Recuerda tomar tus medicamentos a tiempo."
@@ -2263,12 +2429,18 @@ export default function Dashboard({
                   )}
                 </div>
               </div>
-              <div
-                className="mobile-hero-progress"
-                style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                aria-label={`Adherencia ${adherencePercentLabel}`}
-              >
-                <span>{adherencePercentLabel}</span>
+              <div className="mobile-hero-progress-wrap">
+                <button
+                  type="button"
+                  className="mobile-hero-progress"
+                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                  aria-label={`Adherencia ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
+                  title="Toca el aro para ver que significa cada color"
+                  onClick={openAdherenceGuide}
+                >
+                  <span>{adherencePercentLabel}</span>
+                </button>
+                <span className="mobile-hero-progress-hint">Toca el aro</span>
               </div>
             </div>
             <div className="mobile-hero-health-footer">
@@ -2568,6 +2740,21 @@ export default function Dashboard({
                 </div>
               </div>
               <div className="home-greeting-side home-clinical-side">
+                <button
+                  type="button"
+                  className="home-clinical-ring-button"
+                  onClick={openAdherenceGuide}
+                  title="Ver que significa cada color del grafico"
+                  aria-label={`Adherencia ${adherencePercentLabel}. Presiona para ver el detalle del grafico.`}
+                >
+                  <span
+                    className="home-clinical-ring-meter"
+                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                  >
+                    <strong>{adherencePercentLabel}</strong>
+                  </span>
+                  <small>Ver colores</small>
+                </button>
                 <div className="home-greeting-date">
                   <strong>{new Date().toLocaleDateString("es-CL", { day: "2-digit" })}</strong>
                   <span>
@@ -2647,7 +2834,8 @@ export default function Dashboard({
   );
 
   return (
-    <section className="home-editorial">
+    <>
+      <section className="home-editorial">
       <div className="home-editorial-layout">
         <div className="home-editorial-top">
           <article className="home-greeting-card home-summary-card">
@@ -2983,7 +3171,98 @@ export default function Dashboard({
         </div>
       </div>
 
-      {loading ? <div className="home-loading">Actualizando tu resumen de salud...</div> : null}
-    </section>
+        {loading ? <div className="home-loading">Actualizando tu resumen de salud...</div> : null}
+      </section>
+      {adherenceGuideOpen &&
+        createPortal(
+          <div
+            className="native-sheet-backdrop"
+            role="presentation"
+            onClick={() => setAdherenceGuideOpen(false)}
+          >
+            <div
+              className="native-sheet adherence-guide-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="adherence-guide-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="native-sheet-grabber" />
+              <div className="adherence-guide-hero">
+                <button
+                  type="button"
+                  className="adherence-guide-close"
+                  onClick={() => setAdherenceGuideOpen(false)}
+                  aria-label="Cerrar explicacion del grafico"
+                >
+                  ×
+                </button>
+                <span className="adherence-guide-kicker">Como leer este grafico</span>
+                <div className="adherence-guide-head">
+                  <div
+                    className="adherence-guide-ring"
+                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                    aria-hidden="true"
+                  >
+                    <span>{adherencePercentLabel}</span>
+                  </div>
+                  <div className="adherence-guide-copy">
+                    <h3 id="adherence-guide-title">Que significa cada color</h3>
+                    <p>{adherenceGuide.summary}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="native-sheet-body adherence-guide-body">
+                <div className="adherence-guide-legend">
+                  {adherenceGuide.legend.map((item) => (
+                    <div key={item.key} className="adherence-guide-legend-item">
+                      <span className={`adherence-guide-swatch tone-${item.tone}`} aria-hidden="true" />
+                      <div>
+                        <strong>
+                          {item.title}
+                          {" · "}
+                          {item.value}
+                        </strong>
+                        <p>{item.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="adherence-guide-insights">
+                  {adherenceGuide.insights.map((item) => (
+                    <div key={item.key} className="adherence-guide-insight-card">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                      {item.description ? <p>{item.description}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="native-sheet-footer adherence-guide-footer">
+                {activeMedications.length > 0 ? (
+                  <button
+                    type="button"
+                    className="native-btn secondary-btn"
+                    onClick={() => {
+                      setAdherenceGuideOpen(false);
+                      navigate("/medications");
+                    }}
+                  >
+                    Ver medicamentos
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="native-btn primary-btn"
+                  onClick={() => setAdherenceGuideOpen(false)}
+                >
+                  Entendido
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

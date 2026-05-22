@@ -9,7 +9,14 @@ import {
   recordMedicationIntake,
 } from "../services/httpApi";
 import { ensureArray } from "../utils/arrays";
-import { getNextMedicationDose } from "../utils/medicationSchedule";
+import {
+  getNextMedicationDose,
+  isMedicationFinished,
+} from "../utils/medicationSchedule";
+import {
+  notifyClinicalDataChanged,
+  subscribeClinicalDataChanged,
+} from "../utils/clinicalRefresh";
 
 /* ── helpers ───────────────────────────────────────────────── */
 function parseDate(str) {
@@ -52,6 +59,22 @@ function fmtMedicationMoment(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function describeMedicationStatus(medication, nextDose, now = new Date()) {
+  if (nextDose) {
+    const deltaMs = nextDose.getTime() - now.getTime();
+    if (deltaMs <= 15 * 60 * 1000) {
+      return deltaMs < -15 * 60 * 1000
+        ? `Pendiente desde ${fmtMedicationMoment(nextDose)}`
+        : "Te corresponde ahora";
+    }
+    return `Proxima: ${fmtMedicationMoment(nextDose)}`;
+  }
+  if (medication.schedule_time) {
+    return `Horario habitual: ${fmtTime12(medication.schedule_time)}`;
+  }
+  return "Sin horario definido";
 }
 
 function timeAgo(str) {
@@ -103,39 +126,57 @@ export default function MiSalud() {
   const [documents, setDocuments] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [intakeBusy, setIntakeBusy] = useState(null);
-  const [intakeDone, setIntakeDone] = useState({});
 
-  useEffect(() => {
-    Promise.allSettled([
+  const loadPanelData = useCallback(async () => {
+    const [profRes, apptRes, medRes, docRes, tlRes] = await Promise.allSettled([
       getActiveHealthProfile(),
       getAppointments(),
       getMedications(),
       getDocuments(),
       getAiLifeTimeline(),
-    ]).then(([profRes, apptRes, medRes, docRes, tlRes]) => {
-      if (profRes.status === "fulfilled") setProfile(profRes.value || null);
-      if (apptRes.status === "fulfilled") setAppointments(ensureArray(apptRes.value));
-      if (medRes.status === "fulfilled") setMedications(ensureArray(medRes.value));
-      if (docRes.status === "fulfilled") setDocuments(ensureArray(docRes.value));
-      if (tlRes.status === "fulfilled") setTimeline(ensureArray(tlRes.value?.events));
-      setLoading(false);
-    });
+    ]);
+    if (profRes.status === "fulfilled") setProfile(profRes.value || null);
+    if (apptRes.status === "fulfilled") setAppointments(ensureArray(apptRes.value));
+    if (medRes.status === "fulfilled") setMedications(ensureArray(medRes.value));
+    if (docRes.status === "fulfilled") setDocuments(ensureArray(docRes.value));
+    if (tlRes.status === "fulfilled") setTimeline(ensureArray(tlRes.value?.events));
+    setLoading(false);
   }, []);
 
-  const markIntake = useCallback(async (medId, scheduledAt = null) => {
+  useEffect(() => {
+    let cancelled = false;
+    loadPanelData().catch(() => {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    });
+    const unsubscribe = subscribeClinicalDataChanged(() => {
+      loadPanelData().catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [loadPanelData]);
+
+  const markIntake = useCallback(async (medication, scheduledAt = null) => {
     if (intakeBusy) return;
-    setIntakeBusy(medId);
+    setIntakeBusy(medication.id);
     try {
       const payload = { status: "taken", source: "manual_health_card" };
       if (scheduledAt) {
         payload.scheduled_at =
           scheduledAt instanceof Date ? scheduledAt.toISOString() : scheduledAt;
       }
-      await recordMedicationIntake(medId, payload);
-      setIntakeDone((prev) => ({ ...prev, [medId]: true }));
+      await recordMedicationIntake(medication.id, payload);
+      notifyClinicalDataChanged({
+        profileId: profile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
+      await loadPanelData();
     } catch { /* silently fail */ }
     setIntakeBusy(null);
-  }, [intakeBusy]);
+  }, [intakeBusy, loadPanelData, profile?.id]);
 
   /* ── derived data ── */
   const now = new Date();
@@ -147,7 +188,7 @@ export default function MiSalud() {
   const pendingCount = appointments.filter((a) => a.status !== "realizada").length;
   const doneCount = appointments.filter((a) => a.status === "realizada").length;
 
-  const activeMeds = medications.filter((m) => !m.completed);
+  const activeMeds = medications.filter((m) => !isMedicationFinished(m, now));
 
   const recentEvents = timeline
     .filter((e) => e && e.event_type)
@@ -252,18 +293,17 @@ export default function MiSalud() {
           <span className="clp-card-icon tone-green"><IcoPill /></span>
           <div className="clp-card-titles">
             <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
-            <p className="clp-card-sub">Marca aquí la dosis que ya tomaste. Primero revisa la hora que te corresponde.</p>
+            <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, dejala pendiente.</p>
           </div>
           <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
         </div>
         {activeMeds.length > 0 ? (
           <div className="clp-med-list" role="list">
             {activeMeds.slice(0, 5).map((med) => {
-              const done = intakeDone[med.id];
               const busy = intakeBusy === med.id;
               const nextDose = getNextMedicationDose(med);
               return (
-                <div key={med.id} className={`clp-med-row ${done ? "is-done" : ""}`} role="listitem">
+                <div key={med.id} className="clp-med-row" role="listitem">
                   <div className="clp-med-info">
                     <p className="clp-med-name">{med.name}</p>
                     <p className="clp-med-detail">
@@ -271,23 +311,19 @@ export default function MiSalud() {
                       {med.frequency ? ` · ${med.frequency}` : ""}
                     </p>
                     <p className="clp-med-next">
-                      {nextDose
-                        ? `Te toca: ${fmtMedicationMoment(nextDose)}`
-                        : med.schedule_time
-                        ? `Horario habitual: ${fmtTime12(med.schedule_time)}`
-                        : "Sin horario definido"}
+                      {describeMedicationStatus(med, nextDose, now)}
                     </p>
                   </div>
                   <button
                     type="button"
-                    className={`clp-med-check ${done ? "is-done" : ""}`}
-                    disabled={done || busy}
-                    onClick={() => markIntake(med.id, nextDose || med.start_at || null)}
+                    className="clp-med-check"
+                    disabled={busy}
+                    onClick={() => markIntake(med, nextDose || med.start_at || null)}
                     aria-label={`Marcar ${med.name} como tomado`}
-                    title={done ? "Esta dosis ya quedó registrada" : "Marca aquí solo cuando ya hayas tomado esta dosis"}
+                    title="Usa este boton solo cuando ya hayas tomado esta dosis"
                   >
                     {busy ? <span className="clp-med-spin" /> : <IcoCheck />}
-                    <span className="clp-med-check-label">{done ? "Registrado" : "Marcar dosis"}</span>
+                    <span className="clp-med-check-label">{busy ? "Guardando..." : "Ya la tome"}</span>
                   </button>
                 </div>
               );

@@ -27,7 +27,10 @@ import { parseDate } from "../utils/dates";
 import { notifyClinicalDataChanged, subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 import { ensureArray } from "../utils/arrays";
-import { getNextMedicationDose } from "../utils/medicationSchedule";
+import {
+  getNextMedicationDose,
+  isMedicationFinished,
+} from "../utils/medicationSchedule";
 
 const QUICK_ACTIONS = [
   { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
@@ -232,7 +235,7 @@ function getUpcomingAppointments(items) {
 }
 
 function getActiveMedications(items) {
-  return [...(items || [])].filter((item) => !item.completed);
+  return [...(items || [])].filter((item) => !isMedicationFinished(item));
 }
 
 function getLatestAppointment(items) {

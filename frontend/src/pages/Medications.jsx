@@ -876,11 +876,11 @@ export default function Medications() {
   const closeNotifyModal = () => {
     if (notifyActionLoading) return;
     if (notifyPromptKey) {
-      localStorage.setItem(notifyPromptKey, "skipped");
+      localStorage.setItem(notifyPromptKey, "dismissed");
     }
     notifyQueue.forEach((item) => {
       if (item.key) {
-        localStorage.setItem(item.key, "skipped");
+        localStorage.setItem(item.key, "dismissed");
       }
     });
     setNotifyQueue([]);
@@ -1594,7 +1594,7 @@ export default function Medications() {
               >
                 {notifyActionLoading
                   ? "Registrando..."
-                  : `Registrar todos como tomados (${notifyQueue.length + 1})`}
+                  : `Marcar todas como tomadas (${notifyQueue.length + 1})`}
               </button>
             )}
             <div className="med-dose-alert-card">
@@ -1605,15 +1605,26 @@ export default function Medications() {
               {notifyTarget.notes && (
                 <p className="med-dose-alert-notes">{notifyTarget.notes}</p>
               )}
+              <p className="med-dose-alert-helper">
+                Si todavia no la tomas, puedes dejarla pendiente y volver despues.
+              </p>
               {canEditActiveProfile ? (
                 <div className="med-dose-alert-actions">
+                  <button
+                    className="med-dose-btn is-subtle"
+                    type="button"
+                    onClick={closeNotifyModal}
+                    disabled={notifyActionLoading}
+                  >
+                    Ahora no
+                  </button>
                   <button
                     className="med-dose-btn"
                     type="button"
                     onClick={handleSkipFromAlert}
                     disabled={notifyActionLoading}
                   >
-                    Omitir
+                    No la tome
                   </button>
                   <button
                     className="med-dose-btn is-primary"
@@ -1621,7 +1632,7 @@ export default function Medications() {
                     onClick={handleTakenFromAlert}
                     disabled={notifyActionLoading}
                   >
-                    {notifyActionLoading ? "Registrando..." : "Tomado"}
+                    {notifyActionLoading ? "Registrando..." : "Ya la tome"}
                   </button>
                 </div>
               ) : null}
@@ -2785,7 +2796,7 @@ export default function Medications() {
             </div>
           </div>
           <p className="med-route-reminder-copy">
-            Marca esta dosis solo cuando ya la hayas tomado. Si no corresponde, puedes revisar el detalle u omitirla.
+            Si ya la tomaste, registrala. Si aun no, puedes dejarla pendiente o marcar que no la tomaste.
           </p>
           <div className="med-route-reminder-actions">
             {canEditActiveProfile ? (
@@ -2796,7 +2807,7 @@ export default function Medications() {
                   onClick={handleTakeRouteReminder}
                   disabled={notifyActionLoading}
                 >
-                  {notifyActionLoading ? "Registrando..." : "Marcar esta dosis ahora"}
+                  {notifyActionLoading ? "Registrando..." : "Ya la tome"}
                 </button>
                 <button
                   type="button"
@@ -2804,7 +2815,7 @@ export default function Medications() {
                   onClick={handleSkipRouteReminder}
                   disabled={notifyActionLoading}
                 >
-                  Omitir esta dosis
+                  No la tome
                 </button>
               </>
             ) : null}
@@ -2820,7 +2831,7 @@ export default function Medications() {
               className="secondary-btn ghost"
               onClick={dismissRouteReminder}
             >
-              Seguir viendo la lista
+              Ahora no
             </button>
           </div>
         </div>
