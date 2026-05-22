@@ -129,6 +129,21 @@ function getAdherenceZone(value) {
   return "critical";
 }
 
+function getAdherenceZoneLabel(value) {
+  const zone = getAdherenceZone(value);
+  if (zone === "stable") return "Estable";
+  if (zone === "attention") return "Necesita atencion";
+  return "Baja";
+}
+
+function humanizeTimeSlot(slot) {
+  const normalized = String(slot || "").trim().toLowerCase();
+  if (normalized === "manana") return "Manana";
+  if (normalized === "tarde") return "Tarde";
+  if (normalized === "noche") return "Noche";
+  return "Sin patron claro";
+}
+
 function buildAdherenceGuideData({
   adherence,
   expected,
@@ -142,7 +157,7 @@ function buildAdherenceGuideData({
   if (!activeCount) {
     return {
       summary:
-        "Este grafico se activa cuando hay medicamentos en seguimiento. Cuando registres tu tratamiento, Klinip mostrara aqui el avance y las zonas de lectura.",
+        "Este grafico se activa cuando hay medicamentos en seguimiento. Cuando empieces a registrar tus dosis, aqui veras tu avance real y una explicacion simple de cada color.",
       legend: [
         {
           key: "remaining",
@@ -168,73 +183,72 @@ function buildAdherenceGuideData({
     weakestMedication?.adherence_rate === null || weakestMedication?.adherence_rate === undefined
       ? null
       : `${Math.round(Number(weakestMedication.adherence_rate) || 0)}%`;
-  const weakestValue = weakestRate ? `${weakestLabel} · ${weakestRate}` : weakestLabel;
+  const weakestValue = weakestRate ? `${weakestLabel} - ${weakestRate}` : weakestLabel;
   const weakestDescription = weakestMedication
-    ? "Hoy es el medicamento que mas influye en la alerta de adherencia."
+    ? `${weakestMedication.missed_count || 0} dosis quedaron sin registrar en los ultimos ${windowDays} dias.`
     : "No hay medicamentos por debajo del rango esperado.";
-  const weakestSlot = cleanUiText(
-    patternSummary?.lowest_recorded_time_slot || "Sin patron claro"
-  );
+  const weakestSlot = humanizeTimeSlot(patternSummary?.lowest_recorded_time_slot);
+  const zoneLabel = getAdherenceZoneLabel(safeAdherence);
 
   return {
     summary: pendingRefresh
-      ? `Estamos actualizando el analisis. Por ahora ves un calculo en vivo basado en ${taken} de ${expected} dosis registradas en ${windowDays} dias.`
-      : `Tu ${safeAdherence}% se calcula con ${taken} de ${expected} dosis registradas en ${windowDays} dias.`,
+      ? `Estamos actualizando tu resumen. Mientras tanto, este ${safeAdherence}% se calcula con ${taken} dosis registradas de ${expected} esperadas en los ultimos ${windowDays} dias.`
+      : `Hoy tu adherencia a medicamentos es ${safeAdherence}%. Ese porcentaje se calcula con ${taken} dosis registradas de ${expected} esperadas en los ultimos ${windowDays} dias.`,
     legend: [
       {
         key: "current",
         tone: "current",
-        title: "Celeste",
-        value: `${safeAdherence}% actual`,
+        title: "Celeste - Tu porcentaje de hoy",
+        value: `${safeAdherence}% hoy`,
         description:
-          "Muestra el porcentaje ya registrado para tu plan activo dentro del periodo analizado.",
+          `El punto celeste marca tu valor real de hoy. Con ese dato, hoy estas en nivel ${zoneLabel.toLowerCase()}.`,
       },
       {
         key: "stable",
         tone: "stable",
-        title: "Verde",
+        title: "Verde - Adherencia estable",
         value: "80% a 100%",
         description:
           zone === "stable"
-            ? "Tu adherencia actual ya esta en la zona estable."
-            : "Es la zona objetivo. Desde aqui el seguimiento se considera estable.",
+            ? "Tu porcentaje de hoy ya esta en la zona mas tranquila."
+            : "Esta es la zona objetivo. Aqui el tratamiento se considera bien seguido.",
       },
       {
         key: "attention",
         tone: "attention",
-        title: "Amarillo",
+        title: "Amarillo - Conviene revisar",
         value: "45% a 79%",
         description:
           zone === "attention"
-            ? "Tu adherencia actual esta en una zona intermedia y conviene revisarla."
-            : "Marca una adherencia irregular que puede necesitar ajustes de horario o recordatorios.",
+            ? "Tu porcentaje de hoy esta en una zona intermedia y conviene revisarla."
+            : "Aqui suele hacer falta ajustar horarios, recordatorios o apoyo para no olvidar dosis.",
       },
       {
         key: "critical",
         tone: "critical",
-        title: "Rojo",
+        title: "Rojo - Riesgo de baja adherencia",
         value: "0% a 44%",
         description:
           zone === "critical"
-            ? "Tu adherencia actual hoy cae en la zona critica."
-            : "Si tu porcentaje baja a este tramo, Klinip lo trata como un riesgo de baja adherencia.",
+            ? "Tu porcentaje de hoy esta en la zona mas baja y conviene actuar pronto."
+            : "Si tu porcentaje cae aqui, Klinip lo interpreta como riesgo de baja adherencia.",
       },
       {
         key: "remaining",
         tone: "remaining",
-        title: "Claro",
-        value: `${remaining}% restante`,
+        title: "Claro - Lo que falta mejorar",
+        value: `${remaining}% por recuperar`,
         description:
           remaining > 0
-            ? "Es el tramo que aun falta recuperar o registrar dentro del periodo actual."
+            ? "Es la parte que aun falta mejorar para acercarte a la zona verde."
             : "No queda tramo pendiente en este periodo.",
       },
     ],
     insights: [
-      { key: "doses", label: "Dosis registradas", value: `${taken} de ${expected}` },
-      { key: "plan", label: "Medicamentos activos", value: `${activeCount}` },
-      { key: "weakest", label: "Mas sensible", value: weakestValue, description: weakestDescription },
-      { key: "slot", label: "Franja mas debil", value: weakestSlot },
+      { key: "doses", label: "Dosis tomadas", value: `${taken} de ${expected}` },
+      { key: "plan", label: "Medicamentos en seguimiento", value: `${activeCount}` },
+      { key: "weakest", label: "Medicamento que mas afecto tu promedio", value: weakestValue, description: weakestDescription },
+      { key: "slot", label: "Momento del dia donde mas cuesta recordar", value: weakestSlot },
     ],
   };
 }
@@ -870,19 +884,20 @@ export default function Dashboard({
                 onClick={() => setAdherenceGuideOpen(false)}
                 aria-label="Cerrar explicacion del grafico"
               >
-                ×
+                x
               </button>
-              <span className="adherence-guide-kicker">Como leer este grafico</span>
+              <span className="adherence-guide-kicker">Adherencia a medicamentos</span>
               <div className="adherence-guide-head">
                 <div
                   className="adherence-guide-ring"
                   style={{ "--health-progress": `${adherenceRingProgress}%` }}
                   aria-hidden="true"
                 >
+                  <span className="adherence-ring-marker" aria-hidden="true" />
                   <span>{adherencePercentLabel}</span>
                 </div>
                 <div className="adherence-guide-copy">
-                  <h3 id="adherence-guide-title">Que significa cada color</h3>
+                  <h3 id="adherence-guide-title">Que significa este grafico</h3>
                   <p>{adherenceGuide.summary}</p>
                 </div>
               </div>
@@ -895,7 +910,7 @@ export default function Dashboard({
                     <div>
                       <strong>
                         {item.title}
-                        {" · "}
+                        {" - "}
                         {item.value}
                       </strong>
                       <p>{item.description}</p>
@@ -1964,12 +1979,14 @@ export default function Dashboard({
                     type="button"
                     className="mobile-hero-progress"
                     style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                    aria-label={`Adherencia ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
+                    aria-label={`Adherencia a medicamentos ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
                     title="Toca el aro para ver que significa cada color"
                     onClick={openAdherenceGuide}
                   >
+                    <span className="adherence-ring-marker" aria-hidden="true" />
                     <span>{adherencePercentLabel}</span>
                   </button>
+                  <span className="mobile-hero-progress-title">Adherencia a medicamentos</span>
                   <span className="mobile-hero-progress-hint">Toca el aro</span>
                 </div>
               </div>
@@ -2526,12 +2543,14 @@ export default function Dashboard({
                   type="button"
                   className="mobile-hero-progress"
                   style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                  aria-label={`Adherencia ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
+                  aria-label={`Adherencia a medicamentos ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
                   title="Toca el aro para ver que significa cada color"
                   onClick={openAdherenceGuide}
                 >
+                  <span className="adherence-ring-marker" aria-hidden="true" />
                   <span>{adherencePercentLabel}</span>
                 </button>
+                <span className="mobile-hero-progress-title">Adherencia a medicamentos</span>
                 <span className="mobile-hero-progress-hint">Toca el aro</span>
               </div>
             </div>
@@ -2843,9 +2862,11 @@ export default function Dashboard({
                     className="home-clinical-ring-meter"
                     style={{ "--health-progress": `${adherenceRingProgress}%` }}
                   >
+                    <span className="adherence-ring-marker" aria-hidden="true" />
                     <strong>{adherencePercentLabel}</strong>
                   </span>
-                  <small>Ver colores</small>
+                  <small>Adherencia a medicamentos</small>
+                  <span className="home-clinical-ring-link">Ver colores</span>
                 </button>
                 <div className="home-greeting-date">
                   <strong>{new Date().toLocaleDateString("es-CL", { day: "2-digit" })}</strong>
