@@ -119,6 +119,12 @@ function getLastActivityLabel(value) {
   return `Último cambio ${toLocaleDateOrEmpty(value)}`;
 }
 
+function getEpisodePreview(episode) {
+  const summary = cleanUiText(episode.care_summary || episode.summary, "");
+  if (summary) return summary;
+  return "Consulta el contenido clínico, sus documentos y los próximos pasos.";
+}
+
 function getTaskAction(task) {
   const text = `${cleanUiText(task?.title)} ${cleanUiText(task?.description)}`.toLowerCase();
   if (!text) return null;
@@ -315,6 +321,7 @@ function buildExplorerSections(detail) {
     {
       id: "appointments",
       label: "Citas",
+      hint: "Consultas, controles y examenes",
       description: "Consultas, controles y exámenes vinculados a esta atención.",
       emptyText: "No hay citas relacionadas dentro de esta carpeta.",
       action: getExplorerSectionAction("appointments"),
@@ -323,6 +330,7 @@ function buildExplorerSections(detail) {
     {
       id: "medications",
       label: "Medicamentos",
+      hint: "Tratamientos activos o finalizados",
       description: "Tratamientos y fármacos indicados durante esta atención.",
       emptyText: "No hay medicamentos vinculados a esta carpeta.",
       action: getExplorerSectionAction("medications"),
@@ -331,6 +339,7 @@ function buildExplorerSections(detail) {
     {
       id: "documents",
       label: "Documentos",
+      hint: "Informes, recetas y resultados",
       description: "Recetas, informes, órdenes, resultados y archivos clínicos.",
       emptyText: "No hay documentos dentro de esta carpeta.",
       action: { label: "Abrir documentos", to: "/documents" },
@@ -339,6 +348,7 @@ function buildExplorerSections(detail) {
     {
       id: "activity",
       label: "Actividad",
+      hint: "Linea de tiempo de cambios",
       description: "Trazabilidad cronológica de todo lo que ocurrió en esta carpeta.",
       emptyText: "Todavía no hay actividad registrada para esta carpeta.",
       action: null,
@@ -697,8 +707,8 @@ export default function Timeline() {
             <h2>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</h2>
             <p>{getEpisodeLead(selectedEpisode, selectedDetail)}</p>
             <p className="history-explorer-guidance">
-              Esta vista resume la atención en bloques breves. Revisa la sección, selecciona un elemento y usa el panel derecho
-              para entender su contexto clínico sin leer más de lo necesario.
+              Esta vista resume la atención en bloques breves. Elige una sección, revisa la lista y usa el panel derecho para
+              entender rápido el contexto clínico más importante.
             </p>
           </div>
 
@@ -719,9 +729,12 @@ export default function Timeline() {
               }`}
               onClick={() => setSelectedSectionId(section.id)}
             >
-              <span className="history-explorer-module-count">{section.count}</span>
-              <strong>{section.label}</strong>
-              <p>{section.count ? "Abrir sección" : "Sin registros"}</p>
+              <div className="history-explorer-module-head">
+                <strong>{section.label}</strong>
+                <span className="history-explorer-module-count">{section.count}</span>
+              </div>
+              <p className="history-explorer-module-hint">{section.hint}</p>
+              <p>{section.count ? "Ver resumen" : "Sin registros"}</p>
             </button>
           ))}
         </div>
@@ -1062,12 +1075,20 @@ export default function Timeline() {
                   <FolderIcon />
                 </span>
                 <span className="history-folder-item-copy">
-                  <strong>{cleanUiText(episode.title, "Carpeta clínica")}</strong>
+                  <span className="history-folder-item-head">
+                    <strong>{cleanUiText(episode.title, "Carpeta clínica")}</strong>
+                    <span className={`history-folder-item-state tone-${tone}`}>{getEpisodeStatusLabel(episode.status)}</span>
+                  </span>
                   <small>{getEpisodeCountsLine(episode)}</small>
+                  <span className="history-folder-item-preview">{getEpisodePreview(episode)}</span>
+                  <span className="history-folder-item-meta">
+                    <span className="history-folder-item-tag">{getEpisodeTypeLabel(episode.episode_type)}</span>
+                    <span className="history-folder-item-tag is-muted">{getLastActivityLabel(episode.last_activity_at)}</span>
+                  </span>
                 </span>
                 {pending > 0 ? (
                   <span className="history-folder-item-badge" aria-label={`${pending} pendiente${pending === 1 ? "" : "s"}`}>
-                    {pending}
+                    {pending} pend.
                   </span>
                 ) : null}
                 <span className="history-folder-item-chevron" aria-hidden="true">›</span>
