@@ -41942,7 +41942,7 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   .mobile-hero-progress-wrap {
     display: grid;
     justify-items: center;
-    gap: 0.28rem;
+    gap: 0.2rem;
   }
 
   .mobile-hero-progress {
@@ -41967,9 +41967,18 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   }
 
   .mobile-hero-progress-hint {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 22px;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.16);
     color: rgba(255, 255, 255, 0.78);
     font-size: 0.68rem;
     font-weight: 700;
+    line-height: 1;
   }
 
   .mobile-hero-profile-badge {

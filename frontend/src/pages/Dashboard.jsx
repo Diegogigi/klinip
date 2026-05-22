@@ -848,6 +848,97 @@ export default function Dashboard({
   const openAdherenceGuide = useCallback(() => {
     setAdherenceGuideOpen(true);
   }, []);
+  const adherenceGuidePortal = adherenceGuideOpen
+    ? createPortal(
+        <div
+          className="native-sheet-backdrop"
+          role="presentation"
+          onClick={() => setAdherenceGuideOpen(false)}
+        >
+          <div
+            className="native-sheet adherence-guide-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="adherence-guide-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="native-sheet-grabber" />
+            <div className="adherence-guide-hero">
+              <button
+                type="button"
+                className="adherence-guide-close"
+                onClick={() => setAdherenceGuideOpen(false)}
+                aria-label="Cerrar explicacion del grafico"
+              >
+                ×
+              </button>
+              <span className="adherence-guide-kicker">Como leer este grafico</span>
+              <div className="adherence-guide-head">
+                <div
+                  className="adherence-guide-ring"
+                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                  aria-hidden="true"
+                >
+                  <span>{adherencePercentLabel}</span>
+                </div>
+                <div className="adherence-guide-copy">
+                  <h3 id="adherence-guide-title">Que significa cada color</h3>
+                  <p>{adherenceGuide.summary}</p>
+                </div>
+              </div>
+            </div>
+            <div className="native-sheet-body adherence-guide-body">
+              <div className="adherence-guide-legend">
+                {adherenceGuide.legend.map((item) => (
+                  <div key={item.key} className="adherence-guide-legend-item">
+                    <span className={`adherence-guide-swatch tone-${item.tone}`} aria-hidden="true" />
+                    <div>
+                      <strong>
+                        {item.title}
+                        {" · "}
+                        {item.value}
+                      </strong>
+                      <p>{item.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="adherence-guide-insights">
+                {adherenceGuide.insights.map((item) => (
+                  <div key={item.key} className="adherence-guide-insight-card">
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    {item.description ? <p>{item.description}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="native-sheet-footer adherence-guide-footer">
+              {activeMedications.length > 0 ? (
+                <button
+                  type="button"
+                  className="native-btn secondary-btn"
+                  onClick={() => {
+                    setAdherenceGuideOpen(false);
+                    navigate("/medications");
+                  }}
+                >
+                  Ver medicamentos
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="native-btn primary-btn"
+                onClick={() => setAdherenceGuideOpen(false)}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
 
   const radarItems = [
     {
@@ -1953,6 +2044,7 @@ export default function Dashboard({
           </div>
         </div>
         {notesHubPortal}
+        {adherenceGuidePortal}
       </>
     );
   })();
@@ -3173,96 +3265,7 @@ export default function Dashboard({
 
         {loading ? <div className="home-loading">Actualizando tu resumen de salud...</div> : null}
       </section>
-      {adherenceGuideOpen &&
-        createPortal(
-          <div
-            className="native-sheet-backdrop"
-            role="presentation"
-            onClick={() => setAdherenceGuideOpen(false)}
-          >
-            <div
-              className="native-sheet adherence-guide-sheet"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="adherence-guide-title"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="native-sheet-grabber" />
-              <div className="adherence-guide-hero">
-                <button
-                  type="button"
-                  className="adherence-guide-close"
-                  onClick={() => setAdherenceGuideOpen(false)}
-                  aria-label="Cerrar explicacion del grafico"
-                >
-                  ×
-                </button>
-                <span className="adherence-guide-kicker">Como leer este grafico</span>
-                <div className="adherence-guide-head">
-                  <div
-                    className="adherence-guide-ring"
-                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                    aria-hidden="true"
-                  >
-                    <span>{adherencePercentLabel}</span>
-                  </div>
-                  <div className="adherence-guide-copy">
-                    <h3 id="adherence-guide-title">Que significa cada color</h3>
-                    <p>{adherenceGuide.summary}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="native-sheet-body adherence-guide-body">
-                <div className="adherence-guide-legend">
-                  {adherenceGuide.legend.map((item) => (
-                    <div key={item.key} className="adherence-guide-legend-item">
-                      <span className={`adherence-guide-swatch tone-${item.tone}`} aria-hidden="true" />
-                      <div>
-                        <strong>
-                          {item.title}
-                          {" · "}
-                          {item.value}
-                        </strong>
-                        <p>{item.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="adherence-guide-insights">
-                  {adherenceGuide.insights.map((item) => (
-                    <div key={item.key} className="adherence-guide-insight-card">
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                      {item.description ? <p>{item.description}</p> : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="native-sheet-footer adherence-guide-footer">
-                {activeMedications.length > 0 ? (
-                  <button
-                    type="button"
-                    className="native-btn secondary-btn"
-                    onClick={() => {
-                      setAdherenceGuideOpen(false);
-                      navigate("/medications");
-                    }}
-                  >
-                    Ver medicamentos
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="native-btn primary-btn"
-                  onClick={() => setAdherenceGuideOpen(false)}
-                >
-                  Entendido
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {adherenceGuidePortal}
     </>
   );
 }
