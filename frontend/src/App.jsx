@@ -801,6 +801,7 @@ const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
 const MED_ALERT_INITIAL_DELAY_MS = 15000;
 const FAMILY_CONTEXT_ROUTE_REFRESH_MS = 30000;
+const BOOTSTRAP_SESSION_TIMEOUT_MS = 12000;
 const ONBOARDING_TIMEZONE_OPTIONS = [
   "America/Santiago",
   "America/Lima",
@@ -869,6 +870,15 @@ function RouteLoadingFallback() {
       </div>
     </div>
   );
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
 }
 
 export default function App() {
@@ -948,24 +958,35 @@ export default function App() {
   }, [location.pathname]);
 
   useEffect(() => {
+    let active = true;
+
     async function bootstrap() {
       const token = localStorage.getItem("token");
       if (!token) {
-        setBooting(false);
+        if (active) setBooting(false);
         return;
       }
       try {
-        const me = await getMe();
+        const me = await withTimeout(
+          getMe(),
+          BOOTSTRAP_SESSION_TIMEOUT_MS,
+          "La sesion inicial tardó demasiado."
+        );
+        if (!active) return;
         setUser(me);
       } catch (err) {
+        if (!active) return;
         localStorage.removeItem("token");
         localStorage.removeItem("refresh_token");
         setUser(null);
       } finally {
-        setBooting(false);
+        if (active) setBooting(false);
       }
     }
     bootstrap();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Redirect to login when session expires (refresh token failed)

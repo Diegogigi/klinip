@@ -2,6 +2,8 @@ import { subscribePush, unsubscribePush } from "./httpApi";
 
 const PUBLIC_VAPID_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
 const SERVICE_WORKER_URL = "/service-worker.js";
+const APP_SHELL_VERSION = "20260522-bootfix-1";
+const APP_SHELL_VERSION_KEY = "klinip-app-shell-version";
 let pendingPushSubscriptionPromise = null;
 
 function urlBase64ToUint8Array(base64String) {
@@ -107,6 +109,45 @@ export async function registerServiceWorker() {
   return _swRegistrationPromise;
 }
 
+async function resetStaleAppShellIfNeeded() {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+    return false;
+  }
+
+  const storedVersion = localStorage.getItem(APP_SHELL_VERSION_KEY) || "";
+  if (storedVersion === APP_SHELL_VERSION) {
+    return false;
+  }
+
+  const refreshGuardKey = `klinip-app-shell-refresh-${APP_SHELL_VERSION}`;
+  if (sessionStorage.getItem(refreshGuardKey) === "done") {
+    localStorage.setItem(APP_SHELL_VERSION_KEY, APP_SHELL_VERSION);
+    return false;
+  }
+
+  sessionStorage.setItem(refreshGuardKey, "done");
+  localStorage.setItem(APP_SHELL_VERSION_KEY, APP_SHELL_VERSION);
+
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
+    await Promise.all(registrations.map((reg) => reg.unregister().catch(() => false)));
+
+    if ("caches" in window) {
+      const cacheKeys = await caches.keys().catch(() => []);
+      await Promise.all(
+        cacheKeys
+          .filter((key) => String(key || "").startsWith("klinip-cache"))
+          .map((key) => caches.delete(key).catch(() => false))
+      );
+    }
+  } catch (error) {
+    console.warn("No se pudo limpiar la shell instalada de Klinip.", error);
+  }
+
+  window.location.reload();
+  return true;
+}
+
 async function _doRegisterServiceWorker() {
   try {
     if (import.meta.env.DEV) {
@@ -116,6 +157,11 @@ async function _doRegisterServiceWorker() {
         const cacheKeys = await caches.keys().catch(() => []);
         await Promise.all(cacheKeys.map((key) => caches.delete(key).catch(() => false)));
       }
+      return null;
+    }
+
+    const refreshTriggered = await resetStaleAppShellIfNeeded();
+    if (refreshTriggered) {
       return null;
     }
 
