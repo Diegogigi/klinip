@@ -840,6 +840,8 @@ export default function Dashboard({
     return !status || status === "pending" || status === "processing" || status === "error";
   }).length;
   const linkedProfiles = Math.max((healthProfiles || []).length - 1, 0);
+  const adherenceWindowDays = Math.max(1, Number(adherenceSummary?.window_days || 30));
+  const adherenceWindowLabel = `${adherenceWindowDays} dia${adherenceWindowDays === 1 ? "" : "s"}`;
   const adherencePercentValue = activeMedications.length ? clampPercent(adherence) : 0;
   const adherencePercentLabel = activeMedications.length ? `${adherencePercentValue}%` : "--";
   const adherenceRingProgress = activeMedications.length ? adherencePercentValue : 0;
@@ -854,11 +856,19 @@ export default function Dashboard({
     expected: adherenceTotals.expected,
     taken: adherenceTotals.taken,
     activeCount: activeMedications.length,
-    windowDays: Number(adherenceSummary?.window_days || 30),
+    windowDays: adherenceWindowDays,
     weakestMedication,
     patternSummary: adherencePatternSummary,
     pendingRefresh: Boolean(adherenceSummary?.pending_refresh),
   });
+  const adherenceLeadMedicationName = cleanUiText(weakestMedication?.name || "");
+  const lowAdherenceHeroMessage = activeMedications.length
+    ? `Tu adherencia a medicamentos es ${adherencePercentValue}% en los ultimos ${adherenceWindowLabel}.${adherenceLeadMedicationName ? ` ${adherenceLeadMedicationName} es el medicamento que necesita mas apoyo.` : ""}`
+    : "Activa tu seguimiento para empezar a ver tu adherencia.";
+  const adherenceRingTitle = activeMedications.length
+    ? `Adherencia ${adherenceWindowLabel}`
+    : "Adherencia a medicamentos";
+  const mobileAdherenceWindowBadge = activeMedications.length ? adherenceWindowLabel : "";
   const openAdherenceGuide = useCallback(() => {
     setAdherenceGuideOpen(true);
   }, []);
@@ -1122,6 +1132,28 @@ export default function Dashboard({
   const topHighAlert = activeHealthAlerts.find((item) => item.severity === "high") || null;
   const topAlert = topHighAlert || activeHealthAlerts[0] || null;
   const topLowAdherenceItem = lowAdherenceItems[0] || null;
+  const topHighAlertType = String(topHighAlert?.alert_type || "").toLowerCase();
+  const highAlertHeroState =
+    topHighAlertType === "low_adherence"
+      ? {
+          tone: "alert",
+          badge: "Urgente",
+          title: "Adherencia baja",
+          message: lowAdherenceHeroMessage,
+          actionLabel: "Revisar tratamiento",
+          onAction: () => openAlertAssistant(topHighAlert),
+        }
+      : {
+          tone: "alert",
+          badge: "Urgente",
+          title: cleanUiText(getFriendlyAlertTitle(topHighAlert)),
+          message: cleanUiText(
+            topHighAlert?.description,
+            "Tienes una alerta clinica que conviene revisar hoy."
+          ),
+          actionLabel: "Revisar alerta",
+          onAction: () => openAlertAssistant(topHighAlert),
+        };
 
   const heroState = topHighAlert
     ? {
@@ -1190,12 +1222,22 @@ export default function Dashboard({
         onAction: openMedicationFocus,
       };
 
+  const displayHeroState =
+    topHighAlertType === "low_adherence"
+      ? highAlertHeroState
+      : !topHighAlert && topLowAdherenceItem && !nextMedicationEvent?.urgent
+      ? {
+          ...heroState,
+          message: lowAdherenceHeroMessage,
+        }
+      : heroState;
+
   const heroHighlights = [
     {
       id: "status",
       label: "Estado de hoy",
-      value: heroState.badge,
-      tone: heroState.tone,
+      value: displayHeroState.badge,
+      tone: displayHeroState.tone,
     },
     {
       id: "adherence",
@@ -1954,10 +1996,10 @@ export default function Dashboard({
               </div>
             </div>
 
-            <div className={`mobile-hero-health-card home-mobile-clinical-card tone-${heroState.tone}`}>
+            <div className={`mobile-hero-health-card home-mobile-clinical-card tone-${displayHeroState.tone}`}>
               <div className="mobile-hero-stat-label">
                 <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.2">
-                  {heroState.tone === "ok" ? (
+                  {displayHeroState.tone === "ok" ? (
                     <polyline points="20 6 9 17 4 12" />
                   ) : (
                     <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z" />
@@ -1968,26 +2010,30 @@ export default function Dashboard({
               <div className="mobile-hero-health-main">
                 <div>
                   <div className="mobile-hero-stat-row">
-                    <span className="mobile-hero-stat-value">{heroState.badge}</span>
-                    <span className={`mobile-hero-stat-badge is-${heroState.tone}`}>{heroHighlights[1].value}</span>
+                    <span className="mobile-hero-stat-value">{displayHeroState.badge}</span>
+                    {mobileAdherenceWindowBadge ? (
+                      <span className={`mobile-hero-stat-badge is-${displayHeroState.tone}`}>
+                        {mobileAdherenceWindowBadge}
+                      </span>
+                    ) : null}
                   </div>
-                  <p className="home-mobile-clinical-title">{heroState.title}</p>
-                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{heroState.message}</p>
+                  <p className="home-mobile-clinical-title">{displayHeroState.title}</p>
+                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{displayHeroState.message}</p>
                 </div>
                 <div className="mobile-hero-progress-wrap">
                   <button
                     type="button"
                     className="mobile-hero-progress"
                     style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                    aria-label={`Adherencia a medicamentos ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
-                    title="Toca el aro para ver que significa cada color"
+                    aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
+                    title="Presiona el aro para ver el detalle"
                     onClick={openAdherenceGuide}
                   >
                     <span className="adherence-ring-marker" aria-hidden="true" />
                     <span>{adherencePercentLabel}</span>
                   </button>
-                  <span className="mobile-hero-progress-title">Adherencia a medicamentos</span>
-                  <span className="mobile-hero-progress-hint">Toca el aro</span>
+                  <span className="mobile-hero-progress-title">{adherenceRingTitle}</span>
+                  <span className="mobile-hero-progress-hint">Ver detalle</span>
                 </div>
               </div>
               <div className="mobile-hero-badges home-mobile-badges">
@@ -2009,8 +2055,8 @@ export default function Dashboard({
                 ) : null}
               </div>
               <div className="home-mobile-hero-actions">
-                <button type="button" className="mobile-hero-recommendation-btn" onClick={heroState.onAction}>
-                  {heroState.actionLabel}
+                <button type="button" className="mobile-hero-recommendation-btn" onClick={displayHeroState.onAction}>
+                  {displayHeroState.actionLabel}
                 </button>
                 <button type="button" className="home-mobile-notes-btn" onClick={openNotesHub}>
                   Notas rápidas
@@ -2543,15 +2589,15 @@ export default function Dashboard({
                   type="button"
                   className="mobile-hero-progress"
                   style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                  aria-label={`Adherencia a medicamentos ${adherencePercentLabel}. Toca para entender los colores del grafico.`}
-                  title="Toca el aro para ver que significa cada color"
+                  aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
+                  title="Presiona el aro para ver el detalle"
                   onClick={openAdherenceGuide}
                 >
                   <span className="adherence-ring-marker" aria-hidden="true" />
                   <span>{adherencePercentLabel}</span>
                 </button>
-                <span className="mobile-hero-progress-title">Adherencia a medicamentos</span>
-                <span className="mobile-hero-progress-hint">Toca el aro</span>
+                <span className="mobile-hero-progress-title">{adherenceRingTitle}</span>
+                <span className="mobile-hero-progress-hint">Ver detalle</span>
               </div>
             </div>
             <div className="mobile-hero-health-footer">
@@ -2827,10 +2873,10 @@ export default function Dashboard({
       <section className="home-editorial">
         <div className="home-editorial-layout home-editorial-layout-clinical">
           <div className="home-editorial-top">
-            <article className={`home-greeting-card home-summary-card home-clinical-hero tone-${heroState.tone}`}>
+            <article className={`home-greeting-card home-summary-card home-clinical-hero tone-${displayHeroState.tone}`}>
               <div className="home-greeting-copy home-clinical-copy-wrap">
                 <div className="home-clinical-status-row">
-                  <span className={`home-clinical-pill tone-${heroState.tone}`}>{heroState.badge}</span>
+                  <span className={`home-clinical-pill tone-${displayHeroState.tone}`}>{displayHeroState.badge}</span>
                   <span className="status-badge status-badge-green">
                     <span className="status-badge-label">Perfil activo</span>
                     <span className="status-badge-value">{activeProfileName}</span>
@@ -2839,11 +2885,11 @@ export default function Dashboard({
                 <h1 className="home-greeting-title">
                   Hola, <em>{userName}</em>
                 </h1>
-                <p className="home-clinical-headline">{heroState.title}</p>
-                <p className="home-greeting-subtitle home-clinical-summary">{heroState.message}</p>
+                <p className="home-clinical-headline">{displayHeroState.title}</p>
+                <p className="home-greeting-subtitle home-clinical-summary">{displayHeroState.message}</p>
                 <div className="home-clinical-actions">
-                  <button type="button" className="home-note-primary home-clinical-primary" onClick={heroState.onAction}>
-                    {heroState.actionLabel}
+                  <button type="button" className="home-note-primary home-clinical-primary" onClick={displayHeroState.onAction}>
+                    {displayHeroState.actionLabel}
                   </button>
                   <button type="button" className="home-panel-link home-clinical-secondary" onClick={openNotesHub}>
                     Notas rápidas
@@ -2855,8 +2901,8 @@ export default function Dashboard({
                   type="button"
                   className="home-clinical-ring-button"
                   onClick={openAdherenceGuide}
-                  title="Ver que significa cada color del grafico"
-                  aria-label={`Adherencia ${adherencePercentLabel}. Presiona para ver el detalle del grafico.`}
+                  title="Presiona el aro para ver el detalle"
+                  aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
                 >
                   <span
                     className="home-clinical-ring-meter"
@@ -2865,8 +2911,8 @@ export default function Dashboard({
                     <span className="adherence-ring-marker" aria-hidden="true" />
                     <strong>{adherencePercentLabel}</strong>
                   </span>
-                  <small>Adherencia a medicamentos</small>
-                  <span className="home-clinical-ring-link">Ver colores</span>
+                  <small>{adherenceRingTitle}</small>
+                  <span className="home-clinical-ring-link">Ver detalle</span>
                 </button>
                 <div className="home-greeting-date">
                   <strong>{new Date().toLocaleDateString("es-CL", { day: "2-digit" })}</strong>

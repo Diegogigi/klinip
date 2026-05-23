@@ -42062,9 +42062,9 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
 
   .mobile-hero-health-main {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 86px;
-    gap: 0.85rem;
-    align-items: center;
+    grid-template-columns: minmax(0, 1fr) 98px;
+    gap: 0.72rem;
+    align-items: start;
   }
 
   .mobile-hero-stat-label {
@@ -42110,13 +42110,15 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   .mobile-hero-progress-wrap {
     display: grid;
     justify-items: center;
-    gap: 0.2rem;
+    justify-self: end;
+    width: 98px;
+    gap: 0.28rem;
   }
 
   .mobile-hero-progress {
     position: relative;
-    width: 86px;
-    height: 86px;
+    width: 84px;
+    height: 84px;
     border-radius: 50%;
     display: grid;
     place-items: center;
@@ -42136,27 +42138,20 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   }
 
   .mobile-hero-progress-hint {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 22px;
-    padding: 0.1rem 0.45rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    color: rgba(255, 255, 255, 0.78);
-    font-size: 0.68rem;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.62rem;
     font-weight: 700;
-    line-height: 1;
+    line-height: 1.1;
   }
 
   .mobile-hero-progress-title {
-    max-width: 88px;
+    max-width: 98px;
     color: rgba(255, 255, 255, 0.88);
-    font-size: 0.66rem;
+    font-size: 0.68rem;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.15;
     text-align: center;
+    text-wrap: balance;
   }
 
   .mobile-hero-profile-badge {
@@ -42676,8 +42671,8 @@ body.theme-dark .mobile-dashboard {
 
   .mobile-hero-progress {
     position: relative;
-    width: 94px;
-    height: 94px;
+    width: 92px;
+    height: 92px;
     border: none;
     padding: 0;
     cursor: pointer;
@@ -42719,8 +42714,8 @@ body.theme-dark .mobile-dashboard {
   }
 
   .mobile-hero-progress-hint {
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0;
+    text-transform: none;
   }
 
   .mobile-hero-health-footer {
