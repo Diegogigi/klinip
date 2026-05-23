@@ -39280,6 +39280,41 @@ body.theme-dark .appointments-success-icon {
   line-height: 1.45;
 }
 
+.route-error-card {
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 0.9rem;
+  border-color: rgba(191, 219, 254, 0.92);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.route-error-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  color: #2563eb;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.route-error-btn {
+  margin-top: 0.7rem;
+  padding: 0.62rem 0.9rem;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
+  color: #ffffff;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.route-error-btn:hover {
+  filter: brightness(0.98);
+}
+
 .route-loading-dot {
   width: 12px;
   height: 12px;
@@ -39433,6 +39468,20 @@ body.theme-dark .route-loading-card p {
   color: #9cb0c8;
 }
 
+body.theme-dark .route-error-card {
+  border-color: rgba(59, 130, 246, 0.22);
+  box-shadow: 0 18px 36px rgba(2, 6, 23, 0.24);
+}
+
+body.theme-dark .route-error-icon {
+  background: rgba(37, 99, 235, 0.18);
+  color: #93c5fd;
+}
+
+body.theme-dark .route-error-btn {
+  background: linear-gradient(135deg, #0ea5e9 0%, #1d4ed8 100%);
+}
+
 body.theme-dark .splash-brand {
   background:
     radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 28%),
@@ -39449,6 +39498,33 @@ body.theme-dark .splash-brand-footnote {
 @media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .route-scene-mobile {
     padding-bottom: 0.2rem;
+  }
+
+  .route-loading-shell {
+    min-height: 46dvh;
+    padding: 0.9rem;
+  }
+
+  .route-loading-card {
+    width: min(100%, 100%);
+    padding: 0.9rem 0.95rem;
+    border-radius: 18px;
+  }
+
+  .route-error-card {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+
+  .route-error-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 0.82rem;
+  }
+
+  .route-error-btn {
+    width: 100%;
+    min-height: 42px;
   }
 
   .splash-brand-shell {

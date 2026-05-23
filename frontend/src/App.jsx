@@ -27,30 +27,65 @@ import {
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
 
-const Login = React.lazy(() => import("./pages/Login"));
-const Register = React.lazy(() => import("./pages/Register"));
-const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
-const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
-const Dashboard = React.lazy(() => import("./pages/Dashboard"));
-const Appointments = React.lazy(() => import("./pages/Appointments"));
-const Calendar = React.lazy(() => import("./pages/Calendar"));
-const Medications = React.lazy(() => import("./pages/Medications"));
-const Documents = React.lazy(() => import("./pages/Documents"));
-const Settings = React.lazy(() => import("./pages/Settings"));
-const Timeline = React.lazy(() => import("./pages/Timeline"));
-const Stats = React.lazy(() => import("./pages/Stats"));
-const MiSalud = React.lazy(() => import("./pages/MiSalud"));
-const AiKlinip = React.lazy(() => import("./pages/AiKlinip"));
-const ClinicalReports = React.lazy(() => import("./pages/ClinicalReports"));
-const Landing = React.lazy(() => import("./pages/Landing"));
-const Plans = React.lazy(() => import("./pages/Plans"));
-const KlinipFeed = React.lazy(() => import("./pages/KlinipFeed"));
-const KlinipVoicePage = React.lazy(() => import("./pages/KlinipVoicePage"));
-const SharedVoicePage = React.lazy(() => import("./pages/SharedVoicePage"));
-const LegalPrivacy = React.lazy(() => import("./pages/LegalPrivacy"));
-const LegalTerms = React.lazy(() => import("./pages/LegalTerms"));
-const LegalConsent = React.lazy(() => import("./pages/LegalConsent"));
-const LegalNotifications = React.lazy(() => import("./pages/LegalNotifications"));
+const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
+
+function isRecoverableLazyError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    message.includes("failed to fetch dynamically imported module") ||
+    message.includes("importing a module script failed") ||
+    message.includes("chunkloaderror") ||
+    message.includes("loading chunk") ||
+    message.includes("unable to preload css")
+  );
+}
+
+function lazyWithRecovery(loader, key) {
+  return React.lazy(async () => {
+    try {
+      const mod = await loader();
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(`${LAZY_ROUTE_RELOAD_PREFIX}:${key}`);
+      }
+      return mod;
+    } catch (error) {
+      if (typeof window !== "undefined" && isRecoverableLazyError(error)) {
+        const reloadKey = `${LAZY_ROUTE_RELOAD_PREFIX}:${key}`;
+        if (sessionStorage.getItem(reloadKey) !== "1") {
+          sessionStorage.setItem(reloadKey, "1");
+          window.location.reload();
+          await new Promise(() => {});
+        }
+      }
+      throw error;
+    }
+  });
+}
+
+const Login = lazyWithRecovery(() => import("./pages/Login"), "login");
+const Register = lazyWithRecovery(() => import("./pages/Register"), "register");
+const ForgotPassword = lazyWithRecovery(() => import("./pages/ForgotPassword"), "forgot-password");
+const ResetPassword = lazyWithRecovery(() => import("./pages/ResetPassword"), "reset-password");
+const Dashboard = lazyWithRecovery(() => import("./pages/Dashboard"), "dashboard");
+const Appointments = lazyWithRecovery(() => import("./pages/Appointments"), "appointments");
+const Calendar = lazyWithRecovery(() => import("./pages/Calendar"), "calendar");
+const Medications = lazyWithRecovery(() => import("./pages/Medications"), "medications");
+const Documents = lazyWithRecovery(() => import("./pages/Documents"), "documents");
+const Settings = lazyWithRecovery(() => import("./pages/Settings"), "settings");
+const Timeline = lazyWithRecovery(() => import("./pages/Timeline"), "timeline");
+const Stats = lazyWithRecovery(() => import("./pages/Stats"), "stats");
+const MiSalud = lazyWithRecovery(() => import("./pages/MiSalud"), "mi-salud");
+const AiKlinip = lazyWithRecovery(() => import("./pages/AiKlinip"), "ai-klinip");
+const ClinicalReports = lazyWithRecovery(() => import("./pages/ClinicalReports"), "clinical-reports");
+const Landing = lazyWithRecovery(() => import("./pages/Landing"), "landing");
+const Plans = lazyWithRecovery(() => import("./pages/Plans"), "plans");
+const KlinipFeed = lazyWithRecovery(() => import("./pages/KlinipFeed"), "feed");
+const KlinipVoicePage = lazyWithRecovery(() => import("./pages/KlinipVoicePage"), "voice");
+const SharedVoicePage = lazyWithRecovery(() => import("./pages/SharedVoicePage"), "shared-voice");
+const LegalPrivacy = lazyWithRecovery(() => import("./pages/LegalPrivacy"), "legal-privacy");
+const LegalTerms = lazyWithRecovery(() => import("./pages/LegalTerms"), "legal-terms");
+const LegalConsent = lazyWithRecovery(() => import("./pages/LegalConsent"), "legal-consent");
+const LegalNotifications = lazyWithRecovery(() => import("./pages/LegalNotifications"), "legal-notifications");
 
 const icons = {
   home: (
@@ -870,6 +905,51 @@ function RouteLoadingFallback() {
       </div>
     </div>
   );
+}
+
+class RouteErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error) {
+    console.error("Error cargando la ruta de Klinip:", error);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
+  }
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="route-loading-shell" role="alert" aria-live="assertive">
+          <div className="route-loading-card route-error-card">
+            <span className="route-error-icon" aria-hidden="true">!</span>
+            <div>
+              <strong>No pudimos abrir esta pantalla</strong>
+              <p>La app intentará recuperar la vista. Si sigue igual, actualiza esta página.</p>
+              <button className="route-error-btn" type="button" onClick={this.handleReload}>
+                Actualizar ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function withTimeout(promise, timeoutMs, message) {
@@ -2389,6 +2469,7 @@ export default function App() {
                 isMobileShell ? "route-scene-mobile" : "route-scene-desktop"
               } ${hideAppChrome ? "route-scene-ai-immersive" : ""}`}
             >
+            <RouteErrorBoundary resetKey={location.pathname}>
             <React.Suspense fallback={<RouteLoadingFallback />}>
             <Routes>
               <Route
@@ -2592,6 +2673,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
             </React.Suspense>
+            </RouteErrorBoundary>
             </div>
           </main>
         </div>
