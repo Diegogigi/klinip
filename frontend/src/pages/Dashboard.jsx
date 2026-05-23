@@ -262,7 +262,8 @@ const friendlyAlertTitleMap = {
 };
 
 function getFriendlyAlertTitle(alert) {
-  return friendlyAlertTitleMap[alert.alert_type] || alert.title;
+  if (!alert) return "";
+  return friendlyAlertTitleMap[alert.alert_type] || alert.title || "";
 }
 
 const alertDetailMap = {
@@ -279,6 +280,7 @@ const alertDetailMap = {
 };
 
 function getAlertDetail(alert) {
+  if (!alert) return "";
   return alertDetailMap[alert.alert_type] || alert.recommended_action || "";
 }
 
