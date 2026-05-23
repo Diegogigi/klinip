@@ -123,6 +123,25 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, Number(value || 0)));
 }
 
+function buildAdherenceRingStyle(progress) {
+  const safeProgress = clampPercent(progress);
+  const criticalEnd = Math.min(safeProgress, 45);
+  const attentionStart = criticalEnd;
+  const attentionEnd = safeProgress > 45 ? Math.min(safeProgress, 80) : attentionStart;
+  const stableStart = attentionEnd;
+  const stableEnd = safeProgress > 80 ? safeProgress : stableStart;
+
+  return {
+    "--health-progress": `${safeProgress}`,
+    "--adherence-critical-end": `${criticalEnd}%`,
+    "--adherence-attention-start": `${attentionStart}%`,
+    "--adherence-attention-end": `${attentionEnd}%`,
+    "--adherence-stable-start": `${stableStart}%`,
+    "--adherence-stable-end": `${stableEnd}%`,
+    "--adherence-remaining-start": `${safeProgress}%`,
+  };
+}
+
 function getAdherenceZone(value) {
   if (value >= 80) return "stable";
   if (value >= 45) return "attention";
@@ -882,6 +901,7 @@ export default function Dashboard({
     ? `Adherencia ${adherenceWindowLabel}`
     : "Adherencia a medicamentos";
   const mobileAdherenceWindowBadge = activeMedications.length ? adherenceWindowLabel : "";
+  const adherenceRingStyle = buildAdherenceRingStyle(adherenceRingProgress);
   const openAdherenceGuide = useCallback(() => {
     setAdherenceGuideOpen(true);
   }, []);
@@ -905,7 +925,7 @@ export default function Dashboard({
                 type="button"
                 className="adherence-guide-close"
                 onClick={() => setAdherenceGuideOpen(false)}
-                aria-label="Cerrar explicacion del grafico"
+                aria-label="Cerrar explicación del gráfico"
               >
                 x
               </button>
@@ -913,14 +933,14 @@ export default function Dashboard({
               <div className="adherence-guide-head">
                 <div
                   className="adherence-guide-ring"
-                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                  style={adherenceRingStyle}
                   aria-hidden="true"
                 >
                   <span className="adherence-ring-marker" aria-hidden="true" />
                   <span>{adherencePercentLabel}</span>
                 </div>
                 <div className="adherence-guide-copy">
-                  <h3 id="adherence-guide-title">Que significa este grafico</h3>
+                  <h3 id="adherence-guide-title">Qué significa este gráfico</h3>
                   <p>{adherenceGuide.summary}</p>
                 </div>
               </div>
@@ -2034,13 +2054,13 @@ export default function Dashboard({
                   <p className="mobile-hero-health-copy home-mobile-clinical-copy">{displayHeroState.message}</p>
                 </div>
                 <div className="mobile-hero-progress-wrap">
-                  <button
-                    type="button"
-                    className="mobile-hero-progress"
-                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                    aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
-                    title="Presiona el aro para ver el detalle"
-                    onClick={openAdherenceGuide}
+                    <button
+                      type="button"
+                      className="mobile-hero-progress"
+                      style={adherenceRingStyle}
+                      aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
+                      title="Presiona el aro para ver el detalle"
+                      onClick={openAdherenceGuide}
                   >
                     <span className="adherence-ring-marker" aria-hidden="true" />
                     <span>{adherencePercentLabel}</span>
@@ -2917,7 +2937,7 @@ export default function Dashboard({
                 >
                   <span
                     className="home-clinical-ring-meter"
-                    style={{ "--health-progress": `${adherenceRingProgress}%` }}
+                    style={adherenceRingStyle}
                   >
                     <span className="adherence-ring-marker" aria-hidden="true" />
                     <strong>{adherencePercentLabel}</strong>
