@@ -158,6 +158,31 @@ function getDoseProgressLabel(taken, expected) {
   return "Aún no hay dosis registradas";
 }
 
+function formatIntakeEventDate(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-CL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  }).format(parsed);
+}
+
+function formatIntakeEventTime(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin hora";
+  return new Intl.DateTimeFormat("es-CL", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function formatIntakeEventDateTime(value) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Sin fecha";
+  return `${formatIntakeEventDate(parsed)} a las ${formatIntakeEventTime(parsed)}`;
+}
+
 export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -1445,18 +1470,7 @@ export default function Medications() {
     setDraggedParticipantId("");
   };
 
-  const formatTimelineStamp = (value) => {
-    if (!value) return "Sin fecha";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return "Sin fecha";
-    return new Intl.DateTimeFormat("es-CL", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(parsed);
-  };
+  const formatTimelineStamp = (value) => formatIntakeEventDateTime(value);
 
   const getIntakeStatusLabel = (status) => {
     const normalized = String(status || "taken").toLowerCase();
@@ -2569,7 +2583,7 @@ export default function Medications() {
                 <div className="medication-intake-timeline-head">
                   <div>
                     <h4>Historial de tomas</h4>
-                    <p>Revisa qué dosis quedaron registradas y corrige solo si fue necesario.</p>
+                    <p>Cada tarjeta muestra cuándo te tocaba la dosis y cuándo quedó registrada.</p>
                   </div>
                   <span className="medication-intake-timeline-count">
                     {detailIntakes.length} eventos
@@ -2581,22 +2595,49 @@ export default function Medications() {
                   <div className="medication-intake-list">
                     {detailIntakes.map((item) => {
                       const normalizedStatus = String(item.status || "taken").toLowerCase();
-                      const primaryStamp = item.scheduled_at || item.taken_at || item.created_at;
+                      const scheduledLabel = item.scheduled_at ? formatIntakeEventDateTime(item.scheduled_at) : "";
+                      const takenLabel = item.taken_at ? formatIntakeEventDateTime(item.taken_at) : "";
+                      const fallbackLabel = item.created_at ? formatIntakeEventDateTime(item.created_at) : "";
+                      const intakeNote = getIntakeNoteLabel(item);
                       return (
                         <article key={item.id} className="medication-intake-item">
                           <div className={`medication-intake-dot status-${normalizedStatus}`} aria-hidden />
                           <div className="medication-intake-copy">
-                            <div className="medication-intake-row">
-                              <strong>{getIntakeStatusLabel(item.status)}</strong>
-                              <span>{formatTimelineStamp(primaryStamp)}</span>
+                            <div className="medication-intake-top">
+                              <strong>Estado de esta dosis</strong>
+                              <span className={`medication-intake-status-chip status-${normalizedStatus}`}>
+                                {getIntakeStatusLabel(item.status)}
+                              </span>
                             </div>
-                            <div className="medication-intake-meta">
-                              <span>{getIntakeSourceLabel(item.source)}</span>
-                              {item.taken_at && item.scheduled_at ? (
-                                <span>Se registró: {formatTimelineStamp(item.taken_at)}</span>
+                            <div className="medication-intake-moments">
+                              {scheduledLabel ? (
+                                <div className="medication-intake-moment">
+                                  <span className="medication-intake-moment-label">Te tocaba</span>
+                                  <strong>{formatIntakeEventDate(item.scheduled_at)}</strong>
+                                  <span>{formatIntakeEventTime(item.scheduled_at)}</span>
+                                </div>
+                              ) : null}
+                              {takenLabel ? (
+                                <div className="medication-intake-moment">
+                                  <span className="medication-intake-moment-label">Se registró</span>
+                                  <strong>{formatIntakeEventDate(item.taken_at)}</strong>
+                                  <span>{formatIntakeEventTime(item.taken_at)}</span>
+                                </div>
+                              ) : !scheduledLabel && fallbackLabel ? (
+                                <div className="medication-intake-moment">
+                                  <span className="medication-intake-moment-label">Registro</span>
+                                  <strong>{formatIntakeEventDate(item.created_at)}</strong>
+                                  <span>{formatIntakeEventTime(item.created_at)}</span>
+                                </div>
                               ) : null}
                             </div>
-                            {getIntakeNoteLabel(item) ? <p>{getIntakeNoteLabel(item)}</p> : null}
+                            <div className="medication-intake-meta">
+                              <span>Origen: {getIntakeSourceLabel(item.source)}</span>
+                              {scheduledLabel && takenLabel && item.scheduled_at !== item.taken_at ? (
+                                <span>La hora programada y la hora registrada fueron distintas.</span>
+                              ) : null}
+                            </div>
+                            {intakeNote ? <p>{intakeNote}</p> : null}
                             {canEditActiveProfile ? (
                               <div className="medication-intake-actions">
                                 <button

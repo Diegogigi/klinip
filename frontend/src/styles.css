@@ -16563,6 +16563,8 @@ body.theme-dark .home-ops-action-icon {
 .home-clinical-copy-wrap {
   display: grid;
   gap: 0.8rem;
+  flex: 1 1 0;
+  min-width: 0;
   max-width: 720px;
 }
 
@@ -16639,11 +16641,14 @@ body.theme-dark .home-ops-action-icon {
 }
 
 .home-clinical-side {
-  min-width: 220px;
+  flex: 0 1 clamp(212px, 22vw, 248px);
+  min-width: 0;
+  width: min(248px, 100%);
   display: grid;
-  justify-items: end;
+  justify-items: stretch;
   align-content: start;
   gap: 0.75rem;
+  padding-inline-end: 0.35rem;
 }
 
 .home-clinical-ring-button {
@@ -16651,6 +16656,7 @@ body.theme-dark .home-ops-action-icon {
   justify-items: center;
   gap: 0.45rem;
   padding: 0;
+  margin-inline: auto;
   border: none;
   background: transparent;
   color: #ffffff;
@@ -16666,7 +16672,7 @@ body.theme-dark .home-ops-action-icon {
   place-items: center;
   background:
     radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
-    conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+    conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
   box-shadow:
     0 18px 34px rgba(11, 35, 96, 0.22),
     inset 0 0 0 1px rgba(255, 255, 255, 0.18);
@@ -16692,16 +16698,47 @@ body.theme-dark .home-ops-action-icon {
   text-shadow: 0 6px 16px rgba(5, 20, 64, 0.28);
 }
 
+.adherence-ring-marker {
+  position: absolute;
+  inset: 0;
+  transform: rotate(calc(215deg + (var(--health-progress) * 3.6deg)));
+  pointer-events: none;
+}
+
+.adherence-ring-marker::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: #32d9f7;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(50, 217, 247, 0.2);
+}
+
 .home-clinical-ring-button small {
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.74rem;
   font-weight: 700;
+  text-align: center;
+}
+
+.home-clinical-ring-link {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .home-clinical-meta {
   display: grid;
   gap: 0.6rem;
   width: 100%;
+  min-width: 0;
 }
 
 .home-clinical-metric {
@@ -22148,12 +22185,18 @@ body.theme-dark .home-clinical-metric {
 body.theme-dark .home-clinical-ring-meter {
   background:
     radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
-    conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+    conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
   box-shadow: none;
 }
 
 body.theme-dark .home-clinical-ring-meter::before {
   background: linear-gradient(145deg, #0f2a67, #071a43);
+}
+
+body.theme-dark .adherence-ring-marker::before {
+  background: #22d3ee;
+  border-color: #071a43;
+  box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.18);
 }
 
 body.theme-dark .home-attention-item,
@@ -31150,6 +31193,90 @@ body.theme-dark .clinical-report-tag {
   min-width: 0;
 }
 
+.medication-intake-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.medication-intake-top strong {
+  color: var(--text-primary);
+  font-size: 0.92rem;
+}
+
+.medication-intake-status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.25rem 0.68rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.medication-intake-status-chip.status-taken {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.2);
+  color: #047857;
+}
+
+.medication-intake-status-chip.status-late {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.22);
+  color: #b45309;
+}
+
+.medication-intake-status-chip.status-missed,
+.medication-intake-status-chip.status-skipped {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #b91c1c;
+}
+
+.medication-intake-moments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.medication-intake-moment {
+  min-width: 0;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  background: rgba(248, 250, 252, 0.92);
+  border: 1px solid rgba(203, 213, 225, 0.72);
+}
+
+.medication-intake-moment-label {
+  display: block;
+  margin-bottom: 0.32rem;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.medication-intake-moment strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.medication-intake-moment span:last-child {
+  display: block;
+  margin-top: 0.22rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .medication-intake-row,
 .medication-intake-meta {
   display: flex;
@@ -31254,13 +31381,16 @@ body.theme-dark .med-detail-dose-summary-side span {
 }
 
 body.theme-dark .medication-intake-timeline-head h4,
-body.theme-dark .medication-intake-row strong {
+body.theme-dark .medication-intake-row strong,
+body.theme-dark .medication-intake-top strong,
+body.theme-dark .medication-intake-moment strong {
   color: #e5eefc;
 }
 
 body.theme-dark .medication-intake-timeline-head p,
 body.theme-dark .medication-intake-row span,
 body.theme-dark .medication-intake-meta span,
+body.theme-dark .medication-intake-moment span:last-child,
 body.theme-dark .medication-intake-copy p,
 body.theme-dark .medication-intake-empty {
   color: #b7c4d8;
@@ -31270,6 +31400,34 @@ body.theme-dark .medication-intake-timeline-count {
   background: rgba(37, 99, 235, 0.18);
   border-color: rgba(96, 165, 250, 0.24);
   color: #dbeafe;
+}
+
+body.theme-dark .medication-intake-moment {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(96, 165, 250, 0.14);
+}
+
+body.theme-dark .medication-intake-moment-label {
+  color: #93c5fd;
+}
+
+body.theme-dark .medication-intake-status-chip.status-taken {
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(52, 211, 153, 0.2);
+  color: #86efac;
+}
+
+body.theme-dark .medication-intake-status-chip.status-late {
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+}
+
+body.theme-dark .medication-intake-status-chip.status-missed,
+body.theme-dark .medication-intake-status-chip.status-skipped {
+  background: rgba(239, 68, 68, 0.16);
+  border-color: rgba(248, 113, 113, 0.18);
+  color: #fca5a5;
 }
 
 body.theme-dark .ai-filter-select {
@@ -31297,6 +31455,15 @@ body.theme-dark .ai-radar-card small {
     padding: 0.75rem;
   }
 
+  .medication-intake-moments {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .medication-intake-moment {
+    padding: 0.68rem 0.72rem;
+  }
+
   .med-detail-dose-summary {
     flex-direction: column;
     padding: 0.82rem 0.86rem;
@@ -31317,6 +31484,7 @@ body.theme-dark .ai-radar-card small {
     margin-right: 0.75rem;
   }
 
+  .medication-intake-top,
   .medication-intake-row,
   .medication-intake-meta,
   .medication-intake-timeline-head {
@@ -39734,7 +39902,7 @@ body.theme-dark .appointments-sheet-grabber {
   place-items: center;
   background:
     radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
-    conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+    conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
   box-shadow:
     0 18px 34px rgba(11, 35, 96, 0.22),
     inset 0 0 0 1px rgba(255, 255, 255, 0.18);
@@ -39751,7 +39919,7 @@ body.theme-dark .appointments-sheet-grabber {
     inset 0 -16px 30px rgba(4, 24, 74, 0.34);
 }
 
-.adherence-guide-ring span {
+.adherence-guide-ring > span:last-child {
   position: relative;
   z-index: 1;
   font-size: 1.22rem;
@@ -40715,7 +40883,7 @@ body.theme-dark .adherence-guide-close {
 body.theme-dark .adherence-guide-ring {
   background:
     radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
-    conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+    conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
   box-shadow: none;
 }
 
@@ -41946,6 +42114,7 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   }
 
   .mobile-hero-progress {
+    position: relative;
     width: 86px;
     height: 86px;
     border-radius: 50%;
@@ -41956,11 +42125,11 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
     cursor: pointer;
     background:
       radial-gradient(circle closest-side, #1b4ecf 68%, transparent 70% 100%),
-      conic-gradient(from 220deg, #50e3d0 0 var(--health-progress), rgba(255, 255, 255, 0.24) var(--health-progress) 100%);
+      conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   }
 
-  .mobile-hero-progress span {
+  .mobile-hero-progress > span:last-child {
     font-size: 1.02rem;
     font-weight: 850;
     color: #ffffff;
@@ -41979,6 +42148,15 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
     font-size: 0.68rem;
     font-weight: 700;
     line-height: 1;
+  }
+
+  .mobile-hero-progress-title {
+    max-width: 88px;
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 0.66rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
   }
 
   .mobile-hero-profile-badge {
@@ -42505,7 +42683,7 @@ body.theme-dark .mobile-dashboard {
     cursor: pointer;
     background:
       radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
-      conic-gradient(from 215deg, #32d9f7 0 var(--health-progress), #d9f99d var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.22) calc(var(--health-progress) + 15%) 100%);
+      conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
     box-shadow:
       0 18px 34px rgba(11, 35, 96, 0.22),
       inset 0 0 0 1px rgba(255, 255, 255, 0.18);
@@ -42533,7 +42711,7 @@ body.theme-dark .mobile-dashboard {
     animation: klinipRingPulse 4.8s ease-in-out infinite;
   }
 
-  .mobile-hero-progress span {
+  .mobile-hero-progress > span:last-child {
     position: relative;
     z-index: 1;
     font-size: 1.16rem;
@@ -42770,7 +42948,7 @@ body.theme-dark .mobile-dashboard {
   body.theme-dark .mobile-hero-progress {
     background:
       radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
-      conic-gradient(from 215deg, #22d3ee 0 var(--health-progress), #bef264 var(--health-progress) calc(var(--health-progress) + 7%), #facc15 calc(var(--health-progress) + 7%) calc(var(--health-progress) + 11%), #fb7185 calc(var(--health-progress) + 11%) calc(var(--health-progress) + 15%), rgba(255, 255, 255, 0.18) calc(var(--health-progress) + 15%) 100%);
+      conic-gradient(from 215deg, #fb7185 0 45%, #facc15 45% 80%, #84cc16 80% 100%);
     box-shadow: none;
   }
 
