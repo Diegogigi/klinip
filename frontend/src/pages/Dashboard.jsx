@@ -2111,9 +2111,6 @@ export default function Dashboard({
       </>
     );
   })();
-  if (isMobile) {
-    return newMobileHome;
-  }
   const greetText = greetStarted ? `Hola, ${firstName}` : "";
   const contextMessages = useMemo(
     () =>
@@ -2174,6 +2171,7 @@ export default function Dashboard({
   }, [isMobile]);
 
   if (isMobile) {
+    return newMobileHome;
     const isCompactLandscape = Boolean(
       window.matchMedia?.("(pointer: coarse) and (orientation: landscape) and (max-height: 600px)").matches
     );
