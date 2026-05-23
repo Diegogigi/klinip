@@ -793,8 +793,19 @@ export default function Dashboard({
     return () => window.removeEventListener("keydown", handleEscape);
   }, [adherenceGuideOpen]);
 
+  const appointmentItems = ensureArray(appointments).filter((item) => item && typeof item === "object");
+  const documentItems = ensureArray(documents).filter((item) => item && typeof item === "object");
+  const medicationItems = ensureArray(medications).filter((item) => item && typeof item === "object");
+  const healthProfileItems = ensureArray(healthProfiles).filter((item) => item && typeof item === "object");
+  const healthRadarItems = ensureArray(healthRadar).filter((item) => item && typeof item === "object");
+  const safeQuickNotes = ensureArray(quickNotes).filter((item) => item && typeof item === "object");
+  const safeNotifications = ensureArray(notifications).filter((item) => item && typeof item === "object");
+  const safeMenuHealthProfiles = ensureArray(menuHealthProfiles).filter(
+    (item) => item && typeof item === "object"
+  );
+
   const now = Date.now();
-  const validAppointments = [...appointments]
+  const validAppointments = [...appointmentItems]
     .filter((item) => parseDate(item.date_time))
     .sort((a, b) => parseDate(a.date_time) - parseDate(b.date_time));
   const openAppointments = validAppointments.filter((item) => {
@@ -806,7 +817,7 @@ export default function Dashboard({
   );
   const nextAppointment = futureAppointments[0] || openAppointments[0] || null;
 
-  const activeMedications = medications.filter((item) => !isMedicationFinished(item));
+  const activeMedications = medicationItems.filter((item) => !isMedicationFinished(item));
   const adherenceTotals = activeMedications.reduce(
     (acc, item) => {
       acc.expected += Number(item.expected_doses || 0);
@@ -833,13 +844,13 @@ export default function Dashboard({
   const lowAdherenceItems = ensureArray(adherenceSummary?.low_adherence_items);
   const adherenceMedicationItems = ensureArray(adherenceSummary?.medication_items);
   const adherencePatternSummary = adherenceSummary?.pattern_summary || {};
-  const activeHealthAlerts = ensureArray(healthRadar).filter((item) => item.status === "active");
+  const activeHealthAlerts = healthRadarItems.filter((item) => item.status === "active");
   const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
-  const pendingDocuments = documents.filter((item) => {
+  const pendingDocuments = documentItems.filter((item) => {
     const status = String(item.ocr_status || "").toLowerCase();
     return !status || status === "pending" || status === "processing" || status === "error";
   }).length;
-  const linkedProfiles = Math.max((healthProfiles || []).length - 1, 0);
+  const linkedProfiles = Math.max(healthProfileItems.length - 1, 0);
   const adherenceWindowDays = Math.max(1, Number(adherenceSummary?.window_days || 30));
   const adherenceWindowLabel = `${adherenceWindowDays} dia${adherenceWindowDays === 1 ? "" : "s"}`;
   const adherencePercentValue = activeMedications.length ? clampPercent(adherence) : 0;
@@ -1050,7 +1061,7 @@ export default function Dashboard({
     .slice(0, 3);
 
   const recentActivity = [
-    ...documents.map((item) => ({
+    ...documentItems.map((item) => ({
       id: `document-${item.id}`,
       date: parseDate(item.date || item.created_at),
       kind: "document",
@@ -1058,7 +1069,7 @@ export default function Dashboard({
       subtitle: cleanUiText(item.center, item.type || "Documento de salud"),
       time: item.date || item.created_at,
     })),
-    ...medications.map((item) => ({
+    ...medicationItems.map((item) => ({
       id: `medication-${item.id}`,
       date: parseDate(item.created_at || item.end_date),
       kind: "medication",
@@ -1066,7 +1077,7 @@ export default function Dashboard({
       subtitle: `${item.name || "Medicamento"}${item.dose ? ` - ${item.dose}` : ""}`,
       time: item.created_at || item.end_date,
     })),
-    ...appointments.map((item) => ({
+    ...appointmentItems.map((item) => ({
       id: `appointment-${item.id}`,
       date: parseDate(item.date_time),
       kind: "appointment",
@@ -1492,11 +1503,11 @@ export default function Dashboard({
   const firstName = (user?.name || activeProfile?.full_name || "").split(" ")[0] || userName;
   const userInitial = (user?.name || userName).trim().slice(0, 1).toUpperCase() || "K";
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
-  const canSwitchProfiles = Array.isArray(menuHealthProfiles) && menuHealthProfiles.length > 1;
+  const canSwitchProfiles = safeMenuHealthProfiles.length > 1;
   const activeMenuProfile =
-    menuHealthProfiles.find((item) => Number(item.id) === Number(activeProfileId)) ||
+    safeMenuHealthProfiles.find((item) => Number(item.id) === Number(activeProfileId)) ||
     activeProfile ||
-    menuHealthProfiles[0] ||
+    safeMenuHealthProfiles[0] ||
     null;
   const planLabel =
     normalizedPlan === "familiar"
@@ -1611,8 +1622,8 @@ export default function Dashboard({
       <div className="home-notes-list">
         {notesLoading ? (
           <div className="home-loading">{"Cargando notas r\u00e1pidas..."}</div>
-        ) : quickNotes.length ? (
-          quickNotes.map((item) => (
+        ) : safeQuickNotes.length ? (
+          safeQuickNotes.map((item) => (
             <article key={item.id} className={`home-note-row note-color-${item.color || "yellow"}`}>
               <div className="home-note-row-main">
                 <span className={`home-note-dot note-color-dot-${item.color || "yellow"}`} />
@@ -1832,7 +1843,7 @@ export default function Dashboard({
                   onChange={(event) => onSwitchProfile?.(event.target.value)}
                   disabled={!!switchingProfile}
                 >
-                  {menuHealthProfiles.map((item) => (
+                  {safeMenuHealthProfiles.map((item) => (
                     <option value={item.id} key={item.id}>
                       {item.full_name}
                       {` (${getHealthProfileAccessLabel(item, user?.id)})`}
@@ -1947,15 +1958,15 @@ export default function Dashboard({
                       <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                       <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                     </svg>
-                    {notifications.length > 0 ? (
-                      <span className="notification-badge">{notifications.length}</span>
+                    {safeNotifications.length > 0 ? (
+                      <span className="notification-badge">{safeNotifications.length}</span>
                     ) : null}
                   </button>
                   {notificationsOpen ? (
                     <div className="notifications-dropdown">
                       <div className="notifications-header">
                         <span className="notifications-heading">Notificaciones</span>
-                        {notifications.length > 0 ? (
+                        {safeNotifications.length > 0 ? (
                           <button
                             className="secondary-btn notifications-clear-btn"
                             type="button"
@@ -1968,9 +1979,9 @@ export default function Dashboard({
                           </button>
                         ) : null}
                       </div>
-                      {notifications.length ? (
+                      {safeNotifications.length ? (
                         <ul className="notifications-list">
-                          {notifications.slice(0, 6).map((item) => (
+                          {safeNotifications.slice(0, 6).map((item) => (
                             <li
                               key={item.id}
                               className="notifications-item"
@@ -2240,7 +2251,7 @@ export default function Dashboard({
               onChange={(event) => onSwitchProfile?.(event.target.value)}
               disabled={!!switchingProfile}
             >
-              {menuHealthProfiles.map((item) => (
+              {safeMenuHealthProfiles.map((item) => (
                 <option value={item.id} key={item.id}>
                   {item.full_name}
                   {` (${getHealthProfileAccessLabel(item, user?.id)})`}
