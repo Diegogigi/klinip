@@ -39319,76 +39319,27 @@ body.theme-dark .appointments-success-icon {
   min-height: 100dvh;
   display: grid;
   justify-items: center;
-  align-content: start;
-  gap: 1rem;
-  padding: max(0.9rem, env(safe-area-inset-top)) 1.15rem calc(1.1rem + env(safe-area-inset-bottom));
+  align-content: center;
+  gap: 0.95rem;
+  padding: max(1.2rem, env(safe-area-inset-top)) 1.15rem calc(1.4rem + env(safe-area-inset-bottom));
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+  animation: splashShellIn 420ms ease-out both;
 }
 
 .splash-native-top,
 .splash-native-bottom {
-  width: 100%;
-  display: flex;
-  align-items: center;
-}
-
-.splash-native-top {
-  justify-content: space-between;
-  min-height: 32px;
-  color: #102033;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.splash-native-top-time {
-  font-size: 1rem;
-}
-
-.splash-native-top-dynamic {
-  width: 112px;
-  height: 28px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.82);
-}
-
-.splash-native-top-icons {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.splash-native-top-icons span {
-  display: inline-block;
-  border-radius: 999px;
-  background: #102033;
-}
-
-.splash-native-top-icons span:nth-child(1) {
-  width: 14px;
-  height: 9px;
-  opacity: 0.95;
-}
-
-.splash-native-top-icons span:nth-child(2) {
-  width: 11px;
-  height: 11px;
-  opacity: 0.92;
-}
-
-.splash-native-top-icons span:nth-child(3) {
-  width: 24px;
-  height: 11px;
-  opacity: 0.9;
+  display: none;
 }
 
 .splash-brand-orbit {
-  margin-top: max(12dvh, 4.8rem);
-  width: 138px;
-  height: 138px;
+  width: 136px;
+  height: 136px;
+  margin-bottom: 0.2rem;
+  animation: splashCopyIn 560ms ease-out both;
 }
 
 .splash-brand-orbit-ring-outer {
@@ -39419,7 +39370,9 @@ body.theme-dark .appointments-success-icon {
 }
 
 .splash-brand-kicker {
-  margin-top: 0.55rem;
+  margin-top: 0.2rem;
+  letter-spacing: 0.2em;
+  animation: splashCopyIn 620ms ease-out both;
 }
 
 .splash-brand-wordmark .brand-wordmark-full {
@@ -39428,24 +39381,31 @@ body.theme-dark .appointments-success-icon {
   color: #102033;
 }
 
+.splash-brand-wordmark {
+  animation: splashCopyIn 680ms ease-out both;
+}
+
 .splash-brand-text {
-  max-width: 18rem;
-  font-size: 1rem;
-  line-height: 1.55;
+  max-width: 19rem;
+  font-size: 1.02rem;
+  line-height: 1.6;
+  animation: splashCopyIn 760ms ease-out both;
 }
 
 .splash-brand-progress {
-  width: min(100%, 220px);
-  height: 6px;
+  width: min(100%, 232px);
+  height: 7px;
   padding: 0;
   border-radius: 999px;
   background: rgba(203, 213, 225, 0.42);
   box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+  animation: splashCopyIn 820ms ease-out both;
 }
 
 .splash-brand-progress span {
   background: linear-gradient(90deg, #38bdf8 0%, #2563eb 100%);
-  box-shadow: none;
+  box-shadow: 0 0 20px rgba(37, 99, 235, 0.18);
 }
 
 .splash-brand-footnote {
@@ -39453,19 +39413,7 @@ body.theme-dark .appointments-success-icon {
   font-size: 0.82rem;
   line-height: 1.4;
   text-align: center;
-}
-
-.splash-native-bottom {
-  margin-top: auto;
-  justify-content: center;
-  padding-top: 1rem;
-}
-
-.splash-native-home-indicator {
-  width: 118px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.16);
+  animation: splashCopyIn 900ms ease-out both;
 }
 
 body.theme-dark .route-scene {
@@ -39505,14 +39453,14 @@ body.theme-dark .splash-brand-footnote {
 
   .splash-brand-shell {
     width: 100%;
+    min-height: 100dvh;
     padding-left: 1rem;
     padding-right: 1rem;
   }
 
   .splash-brand-orbit {
-    margin-top: max(14dvh, 5rem);
-    width: 124px;
-    height: 124px;
+    width: 122px;
+    height: 122px;
   }
 
   .splash-brand-core {
@@ -39528,15 +39476,6 @@ body.theme-dark .splash-brand-footnote {
     max-width: 16.8rem;
     font-size: 0.94rem;
   }
-
-  .splash-native-top-dynamic {
-    width: 108px;
-    height: 27px;
-  }
-
-  .splash-native-home-indicator {
-    width: 108px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -39546,6 +39485,28 @@ body.theme-dark .splash-brand-footnote {
   .splash-brand-core,
   .splash-brand-progress span {
     animation: none !important;
+  }
+}
+
+@keyframes splashShellIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes splashCopyIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

@@ -1896,15 +1896,6 @@ export default function App() {
         <div className="main-content">
           <div className="splash splash-brand" role="status" aria-live="polite" aria-label="Cargando Klinip">
             <div className="splash-brand-shell">
-              <div className="splash-native-top" aria-hidden="true">
-                <span className="splash-native-top-time">9:41</span>
-                <div className="splash-native-top-dynamic" />
-                <div className="splash-native-top-icons">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
               <div className="splash-brand-orbit" aria-hidden="true">
                 <span className="splash-brand-orbit-ring splash-brand-orbit-ring-outer" />
                 <span className="splash-brand-orbit-ring splash-brand-orbit-ring-inner" />
@@ -1926,9 +1917,6 @@ export default function App() {
                 <span />
               </div>
               <p className="splash-brand-footnote">Cargando módulos clínicos y recordatorios personalizados</p>
-              <div className="splash-native-bottom" aria-hidden="true">
-                <span className="splash-native-home-indicator" />
-              </div>
             </div>
           </div>
         </div>
