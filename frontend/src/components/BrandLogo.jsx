@@ -7,7 +7,7 @@ function joinClasses(...classes) {
 export function BrandMark({
   className = "",
   imgClassName = "",
-  variant = "transparent",
+  variant = "solid",
   alt = "",
 }) {
   const src =
@@ -36,7 +36,7 @@ export default function BrandLogo({
   markClassName = "",
   imgClassName = "",
   nameClassName = "",
-  variant = "transparent",
+  variant = "solid",
   responsive = false,
   showName = true,
   name = "Klinip",

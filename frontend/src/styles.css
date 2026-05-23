@@ -39304,9 +39304,9 @@ body.theme-dark .appointments-success-icon {
   min-height: 100dvh;
   padding: 0;
   background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.22), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(40, 193, 143, 0.14), transparent 24%),
-    linear-gradient(180deg, #0f54dc 0%, #2563eb 66%, #1d4ed8 100%);
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.14), transparent 30%),
+    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.1), transparent 26%),
+    linear-gradient(180deg, #fdfefe 0%, #f4f8fe 58%, #edf4fb 100%);
 }
 
 .splash-brand::before,
@@ -39339,7 +39339,7 @@ body.theme-dark .appointments-success-icon {
 .splash-native-top {
   justify-content: space-between;
   min-height: 32px;
-  color: #ffffff;
+  color: #102033;
   font-weight: 700;
   letter-spacing: -0.01em;
 }
@@ -39364,7 +39364,7 @@ body.theme-dark .appointments-success-icon {
 .splash-native-top-icons span {
   display: inline-block;
   border-radius: 999px;
-  background: #ffffff;
+  background: #102033;
 }
 
 .splash-native-top-icons span:nth-child(1) {
@@ -39392,20 +39392,20 @@ body.theme-dark .appointments-success-icon {
 }
 
 .splash-brand-orbit-ring-outer {
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: none;
+  border-color: rgba(37, 99, 235, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.08);
 }
 
 .splash-brand-orbit-ring-inner {
   inset: 15px;
-  border-color: rgba(255, 255, 255, 0.34);
+  border-color: rgba(37, 99, 235, 0.3);
 }
 
 .splash-brand-core {
   width: 62px;
   height: 62px;
-  background: #28c18f;
-  box-shadow: none;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 18px 28px rgba(15, 35, 70, 0.12);
 }
 
 .splash-brand-core-glow {
@@ -39415,7 +39415,7 @@ body.theme-dark .appointments-success-icon {
 .splash-brand-kicker,
 .splash-brand-text,
 .splash-brand-footnote {
-  color: rgba(255, 255, 255, 0.82);
+  color: #536579;
 }
 
 .splash-brand-kicker {
@@ -39424,8 +39424,8 @@ body.theme-dark .appointments-success-icon {
 
 .splash-brand-wordmark .brand-wordmark-full {
   background: none;
-  -webkit-text-fill-color: #ffffff;
-  color: #ffffff;
+  -webkit-text-fill-color: #102033;
+  color: #102033;
 }
 
 .splash-brand-text {
@@ -39439,12 +39439,12 @@ body.theme-dark .appointments-success-icon {
   height: 6px;
   padding: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.18);
-  box-shadow: none;
+  background: rgba(203, 213, 225, 0.42);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.12);
 }
 
 .splash-brand-progress span {
-  background: #ffffff;
+  background: linear-gradient(90deg, #38bdf8 0%, #2563eb 100%);
   box-shadow: none;
 }
 
@@ -39465,7 +39465,7 @@ body.theme-dark .appointments-success-icon {
   width: 118px;
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.84);
+  background: rgba(15, 23, 42, 0.16);
 }
 
 body.theme-dark .route-scene {
@@ -39487,9 +39487,9 @@ body.theme-dark .route-loading-card p {
 
 body.theme-dark .splash-brand {
   background:
-    radial-gradient(circle at top left, rgba(96, 165, 250, 0.16), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(40, 193, 143, 0.12), transparent 24%),
-    linear-gradient(180deg, #0b46c2 0%, #1d4ed8 66%, #1e40af 100%);
+    radial-gradient(circle at top left, rgba(96, 165, 250, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(40, 193, 143, 0.1), transparent 24%),
+    linear-gradient(180deg, #0b1224 0%, #102031 66%, #0f172a 100%);
 }
 
 body.theme-dark .splash-brand-kicker,
@@ -51332,6 +51332,15 @@ body.theme-dark .main-area {
   image-rendering: auto;
 }
 
+.brand-logo-mark.is-solid .brand-logo-img {
+  width: 118%;
+  height: 118%;
+  max-width: none;
+  max-height: none;
+  object-fit: cover;
+  transform: translate(-9%, -9%);
+}
+
 .brand-logo-name {
   display: inline-block;
   min-width: 0;
@@ -51425,17 +51434,17 @@ body.theme-dark .main-area {
   width: 100%;
   height: 100%;
   border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 18px 28px rgba(37, 99, 235, 0.2);
+  overflow: visible;
+  box-shadow: 0 18px 28px rgba(37, 99, 235, 0.14);
 }
 
 .splash-brand-core-logo-img {
-  width: 132%;
-  height: 132%;
-  max-width: none;
-  max-height: none;
-  object-fit: cover;
-  transform: translate(-6%, -6%);
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform: none;
 }
 
 @media (max-width: 640px) {
