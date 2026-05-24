@@ -178,6 +178,10 @@ export function buildMedicationScheduleEventsBetween(med, windowStart, windowEnd
 
 export function getNextMedicationDose(med, now = new Date()) {
   if (!med || med.completed) return null;
+  const persistedNextDose = parseDate(med?.next_dose_at || null);
+  if (persistedNextDose) {
+    return persistedNextDose;
+  }
   const events = buildMedicationScheduleEventsBetween(
     med,
     now,
@@ -210,4 +214,3 @@ export function getMedicationFinishReason(med, now = new Date()) {
   if (endAt && now.getTime() > endAt.getTime()) return "expired";
   return null;
 }
-

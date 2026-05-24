@@ -4033,9 +4033,15 @@ def _attach_medication_adherence(
         return medications
 
     now = datetime.now()
+    horizon_end = now + timedelta(days=45)
+    target_user_id = owner_user_id or current_user.id
     medication_ids = [m.id for m in medications if getattr(m, "id", None)]
     status_counts = {
         int(mid): {"taken": 0, "late": 0, "missed": 0, "skipped": 0}
+        for mid in medication_ids
+    }
+    addressed_schedule_slots: dict[int, set[datetime]] = {
+        int(mid): set()
         for mid in medication_ids
     }
     if medication_ids:
@@ -4043,24 +4049,45 @@ def _attach_medication_adherence(
             db.query(
                 models.MedicationIntake.medication_id,
                 models.MedicationIntake.status,
+                models.MedicationIntake.scheduled_at,
             )
             .filter(
-                models.MedicationIntake.user_id == (owner_user_id or current_user.id),
+                models.MedicationIntake.user_id == target_user_id,
                 models.MedicationIntake.medication_id.in_(medication_ids),
             )
             .all()
         )
-        for medication_id, status in intake_rows:
+        for medication_id, status, scheduled_at in intake_rows:
             key = _normalize_adherence_status(status)
             if int(medication_id) not in status_counts:
                 continue
             if key not in status_counts[int(medication_id)]:
                 key = "taken"
             status_counts[int(medication_id)][key] += 1
+            if scheduled_at:
+                normalized_scheduled_at = (
+                    scheduled_at.replace(tzinfo=None)
+                    if getattr(scheduled_at, "tzinfo", None) is not None
+                    else scheduled_at
+                )
+                addressed_schedule_slots[int(medication_id)].add(normalized_scheduled_at)
 
     for med in medications:
         expected = _calculate_expected_doses_until(med, now)
         med_counts = status_counts.get(int(med.id), {})
+        resolved_slots = addressed_schedule_slots.get(int(med.id), set())
+        next_dose = next(
+            (
+                scheduled_at
+                for scheduled_at in _medication_schedule_events_between(med, now, horizon_end)
+                if (
+                    scheduled_at.replace(tzinfo=None)
+                    if getattr(scheduled_at, "tzinfo", None) is not None
+                    else scheduled_at
+                ) not in resolved_slots
+            ),
+            None,
+        )
         taken = int((med_counts.get("taken") or 0) + (med_counts.get("late") or 0))
         explicit_missed = int((med_counts.get("missed") or 0) + (med_counts.get("skipped") or 0))
         missed = max(explicit_missed, max(expected - taken, 0))
@@ -4071,6 +4098,7 @@ def _attach_medication_adherence(
         setattr(med, "taken_doses", taken)
         setattr(med, "missed_doses", missed)
         setattr(med, "adherence_rate", adherence)
+        setattr(med, "next_dose_at", next_dose)
         _populate_medication_refill_state(db, med, taken_doses=taken)
 
     return medications
@@ -22219,6 +22247,53 @@ def _get_family_user_ids(db: Session, current_user) -> set:
     return set(owner_ids + relation_user_ids + [current_user.id])
 
 
+def _get_feed_profile_ids_for_user(db: Session, current_user) -> set[int]:
+    owned_profile_ids = {
+        int(row[0])
+        for row in db.query(models.HealthProfile.id).filter(
+            models.HealthProfile.owner_user_id == current_user.id,
+            models.HealthProfile.is_archived.is_(False),
+        ).all()
+        if row and row[0] is not None
+    }
+    linked_profile_ids = {
+        int(row[0])
+        for row in db.query(models.ProfileRelationship.profile_id).join(
+            models.HealthProfile,
+            models.HealthProfile.id == models.ProfileRelationship.profile_id,
+        ).filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        ).all()
+        if row and row[0] is not None
+    }
+    return owned_profile_ids | linked_profile_ids
+
+
+def _get_feed_profile_user_ids(db: Session, profile_id: int | None) -> set[int]:
+    if not profile_id:
+        return set()
+
+    profile = db.query(models.HealthProfile).filter(
+        models.HealthProfile.id == int(profile_id),
+        models.HealthProfile.is_archived.is_(False),
+    ).first()
+    if not profile:
+        return set()
+
+    accepted_user_ids = {
+        int(row[0])
+        for row in db.query(models.ProfileRelationship.user_id).filter(
+            models.ProfileRelationship.profile_id == int(profile.id),
+            models.ProfileRelationship.status == "accepted",
+        ).distinct().all()
+        if row and row[0] is not None
+    }
+    accepted_user_ids.add(int(profile.owner_user_id))
+    return accepted_user_ids
+
+
 def _get_user_avatar_url(user) -> str:
     """Devuelve el avatar_url del perfil primario del usuario, o '' si no tiene."""
     if not user:
@@ -22274,10 +22349,7 @@ def _serialize_comment(comment: models.PostComment, current_user_id: int | None 
 def _can_access_feed_post(db: Session, current_user, post: models.FeedPost) -> bool:
     if not post:
         return False
-    if post.user_id == current_user.id:
-        return True
-    family_ids = _get_family_user_ids(db, current_user)
-    return post.user_id in family_ids
+    return int(current_user.id) in _get_feed_profile_user_ids(db, getattr(post, "profile_id", None))
 
 
 def _ensure_feed_post_access(db: Session, current_user, post: models.FeedPost) -> None:
@@ -22291,7 +22363,7 @@ def _resolve_feed_comment_mentions(
     post: models.FeedPost,
     requested_ids,
 ) -> list[int]:
-    allowed_user_ids = _get_family_user_ids(db, current_user) | {post.user_id}
+    allowed_user_ids = _get_feed_profile_user_ids(db, getattr(post, "profile_id", None))
     mention_ids = []
     for raw_id in requested_ids or []:
         try:
@@ -22508,7 +22580,7 @@ def _build_feed_notification_payload(
     return {
         "title": title,
         "body": body,
-        "url": f"/feed?postId={post.id}",
+        "url": f"/family?postId={post.id}",
         "tag": tag,
         "priority": "normal",
         "sound": "default",
@@ -22548,8 +22620,7 @@ def _send_feed_notification_to_family(
     extra: dict = None,
 ):
     try:
-        family_ids = _get_family_user_ids(db, actor_user)
-        recipients = family_ids - {actor_user.id}
+        recipients = _get_feed_profile_user_ids(db, getattr(post, "profile_id", None)) - {int(actor_user.id)}
         _send_feed_notification_to_users(
             db,
             actor_user,
@@ -22571,10 +22642,10 @@ def _send_feed_comment_notifications(
     parent_comment: models.PostComment | None = None,
 ):
     try:
-        family_ids = _get_family_user_ids(db, actor_user) | {post.user_id}
+        profile_user_ids = _get_feed_profile_user_ids(db, getattr(post, "profile_id", None))
         participant_ids = _get_feed_comment_participants(db, post.id)
-        recipients = ({post.user_id} | participant_ids | set(mention_user_ids or [])) & family_ids
-        if parent_comment and parent_comment.user_id in family_ids:
+        recipients = (set(profile_user_ids) | participant_ids | set(mention_user_ids or []))
+        if parent_comment and parent_comment.user_id in profile_user_ids:
             recipients.add(parent_comment.user_id)
         _send_feed_notification_to_users(
             db,
@@ -22622,11 +22693,13 @@ def get_family_feed(
     db: Session = Depends(auth.get_db),
     current_user=Depends(auth.get_current_user),
 ):
-    family_ids = _get_family_user_ids(db, current_user)
+    accessible_profile_ids = _get_feed_profile_ids_for_user(db, current_user)
+    if not accessible_profile_ids:
+        return []
     posts = (
         db.query(models.FeedPost)
         .filter(
-            models.FeedPost.user_id.in_(family_ids),
+            models.FeedPost.profile_id.in_(accessible_profile_ids),
             models.FeedPost.privacy == "family",
         )
         .order_by(models.FeedPost.created_at.desc())
@@ -22758,8 +22831,7 @@ def get_attachment_file(
     attachment = _ensure_feed_video_web_compatible(attachment, db)
 
     post = attachment.post
-    family_ids = _get_family_user_ids(db, current_user)
-    if post.user_id not in family_ids and post.user_id != current_user.id:
+    if int(current_user.id) not in _get_feed_profile_user_ids(db, getattr(post, "profile_id", None)):
         raise HTTPException(status_code=403, detail="Sin acceso")
 
     filename = attachment.filename or "file.bin"

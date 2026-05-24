@@ -552,6 +552,7 @@ class MedicationOut(MedicationBase):
     taken_doses: int = 0
     missed_doses: int = 0
     adherence_rate: Optional[float] = None
+    next_dose_at: Optional[datetime] = None
     effective_end_date: Optional[datetime] = None
     computed_schedule_times: List[str] = []
     computed_schedule_summary: str = ""
@@ -566,7 +567,7 @@ class MedicationOut(MedicationBase):
     refill_contacts_count: int = 0
     refill_alert_active: bool = False
 
-    @field_serializer('start_at', 'end_date', 'created_at', 'effective_end_date')
+    @field_serializer('start_at', 'end_date', 'created_at', 'effective_end_date', 'next_dose_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
