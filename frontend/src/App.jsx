@@ -411,7 +411,7 @@ function Sidebar({
                   onClick={() => setShowMobileMenu(false)}
                 >
                 <span className="sidebar-icon">
-                  {link.to === "/ai" ? icons.aiMobile : link.icon}
+                  {link.to === "/ai" ? <span className="icon-k" aria-hidden="true">K</span> : link.icon}
                 </span>
                 {link.badge > 0 && (
                   <span className="sidebar-badge">{link.badge}</span>

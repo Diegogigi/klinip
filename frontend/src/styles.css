@@ -4136,7 +4136,9 @@ body.theme-dark .primary-btn {
 }
 
 .sidebar-icon .icon-k {
+  display: inline-block;
   font-size: 0.9rem;
+  font-family: inherit;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
