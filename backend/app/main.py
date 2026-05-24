@@ -21875,6 +21875,21 @@ def _sanitize_filename(filename: str) -> str:
     return name or "document"
 
 
+def _normalize_document_filename_update(current_filename: str | None, requested_filename: str | None) -> str:
+    requested_text = str(requested_filename or "").strip()
+    if not requested_text:
+        raise HTTPException(status_code=400, detail="Ingresa un nombre para identificar el archivo.")
+
+    current_safe = _sanitize_filename(current_filename or "document")
+    current_base, current_ext = os.path.splitext(current_safe)
+    requested_safe = _sanitize_filename(requested_text)
+    requested_base, requested_ext = os.path.splitext(requested_safe)
+
+    final_base = requested_base.strip() or current_base.strip() or "document"
+    final_ext = current_ext or requested_ext
+    return _sanitize_filename(f"{final_base}{final_ext}")
+
+
 def _validate_upload(content: bytes, filename: str, max_bytes: int | None = None) -> tuple[str, str]:
     """
     Valida el archivo subido: tamaño, magic bytes, extensión, firmas peligrosas.
@@ -22105,7 +22120,10 @@ async def update_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Documento no encontrado")
 
-    for field, value in doc_in.dict(exclude_unset=True).items():
+    update_values = doc_in.dict(exclude_unset=True)
+    if "filename" in update_values:
+        doc.filename = _normalize_document_filename_update(doc.filename, update_values.pop("filename"))
+    for field, value in update_values.items():
         setattr(doc, field, value)
     refresh_episode_links_for_record(db, profile, "document", doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)

@@ -3091,6 +3091,18 @@ body.theme-dark .detail-field {
   box-shadow: inset 0 0 0 1px rgba(36, 50, 68, 0.75);
 }
 
+body.theme-dark .docs-detail-inline-btn {
+  color: #93c5fd;
+}
+
+body.theme-dark .docs-detail-inline-btn:hover {
+  color: #bfdbfe;
+}
+
+body.theme-dark .docs-detail-help {
+  color: #9cb0c8;
+}
+
 body.theme-dark .detail-item-icon {
   background: #0f172a;
   border-color: transparent;
@@ -7841,6 +7853,72 @@ body.theme-dark .kfeed-manage-link:focus-visible {
   font-size: 0.92rem;
   line-height: 1.36;
   font-weight: 600;
+}
+
+.docs-detail-file-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.14rem;
+}
+
+.docs-detail-inline-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #2563eb;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.docs-detail-inline-btn:hover {
+  color: #1d4ed8;
+}
+
+.docs-detail-filename-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.46rem;
+}
+
+.docs-detail-filename-input {
+  min-height: 42px;
+}
+
+.docs-detail-help {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.docs-detail-inline-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.docs-detail-inline-actions .primary-btn,
+.docs-detail-inline-actions .secondary-btn {
+  width: 100%;
+  min-height: 40px;
+}
+
+@media (max-width: 640px) {
+  .docs-detail-file-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.28rem;
+  }
+
+  .docs-detail-inline-btn {
+    font-size: 0.72rem;
+  }
+
+  .docs-detail-help {
+    font-size: 0.7rem;
+  }
 }
 
 @media (min-width: 700px) {

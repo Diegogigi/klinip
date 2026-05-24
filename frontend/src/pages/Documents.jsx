@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { getDocuments, uploadDocument, deleteDocument, getActiveHealthProfile, getMfaStatus, isAuthSessionError } from "../api";
+import { getDocuments, uploadDocument, deleteDocument, updateDocument, getActiveHealthProfile, getMfaStatus, isAuthSessionError } from "../api";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { getDocumentFile, getDocumentFileWithStepUp } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
@@ -122,6 +122,9 @@ export default function Documents() {
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const [stepUpPending, setStepUpPending] = useState(null); // { action: "view"|"download", doc }
   const [hasMfa, setHasMfa] = useState(false);
+  const [detailRenameOpen, setDetailRenameOpen] = useState(false);
+  const [detailFilenameDraft, setDetailFilenameDraft] = useState("");
+  const [detailSaving, setDetailSaving] = useState(false);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -376,12 +379,55 @@ export default function Documents() {
 
   const handleOpenDetail = (doc) => {
     setDetailTarget(doc);
+    setDetailRenameOpen(false);
+    setDetailFilenameDraft(getDocumentFilename(doc));
     setDetailOpen(true);
   };
 
   const handleCloseDetail = () => {
+    if (detailSaving) return;
     setDetailOpen(false);
     setDetailTarget(null);
+    setDetailRenameOpen(false);
+    setDetailFilenameDraft("");
+  };
+
+  const syncDocumentState = (updatedDoc) => {
+    if (!updatedDoc?.id) return;
+    setDocs((current) =>
+      current.map((item) => (String(item.id) === String(updatedDoc.id) ? updatedDoc : item))
+    );
+    setDetailTarget((current) =>
+      current && String(current.id) === String(updatedDoc.id) ? updatedDoc : current
+    );
+    setViewerTarget((current) =>
+      current && String(current.id) === String(updatedDoc.id) ? updatedDoc : current
+    );
+  };
+
+  const handleSaveDocumentFilename = async () => {
+    if (!detailTarget?.id || !canEditActiveProfile || detailSaving) return;
+    const nextFilename = detailFilenameDraft.trim();
+    if (!nextFilename) {
+      window.alert("Ingresa un nombre para identificar el archivo.");
+      return;
+    }
+    setDetailSaving(true);
+    try {
+      const updatedDoc = await updateDocument(detailTarget.id, { filename: nextFilename });
+      syncDocumentState(updatedDoc);
+      setDetailFilenameDraft(getDocumentFilename(updatedDoc));
+      setDetailRenameOpen(false);
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["documents", "health-radar"],
+      });
+    } catch (err) {
+      console.error("No se pudo renombrar el documento:", err);
+      window.alert(getErrorDetail(err, "No se pudo actualizar el nombre del archivo."));
+    } finally {
+      setDetailSaving(false);
+    }
   };
 
   const viewerFilename = useMemo(
@@ -620,8 +666,59 @@ export default function Documents() {
               <div className="detail-grid">
                 <div className="detail-field">
                   <div>
-                    <span className="detail-label">Nombre del archivo</span>
-                    <p>{cleanUiText(detailTarget.filename, `documento-${detailTarget.id}`)}</p>
+                    <div className="docs-detail-file-head">
+                      <span className="detail-label">Nombre del archivo</span>
+                      {canEditActiveProfile && !detailRenameOpen ? (
+                        <button
+                          type="button"
+                          className="docs-detail-inline-btn"
+                          onClick={() => {
+                            setDetailFilenameDraft(getDocumentFilename(detailTarget));
+                            setDetailRenameOpen(true);
+                          }}
+                        >
+                          Renombrar
+                        </button>
+                      ) : null}
+                    </div>
+                    {detailRenameOpen ? (
+                      <div className="docs-detail-filename-editor">
+                        <input
+                          className="input-field docs-detail-filename-input"
+                          value={detailFilenameDraft}
+                          onChange={(event) => setDetailFilenameDraft(event.target.value)}
+                          placeholder="Ej: Resultado resonancia rodilla izquierda"
+                          maxLength={200}
+                          autoFocus
+                        />
+                        <span className="docs-detail-help">
+                          La extensión original se conserva al guardar.
+                        </span>
+                        <div className="docs-detail-inline-actions">
+                          <button
+                            type="button"
+                            className="secondary-btn"
+                            onClick={() => {
+                              setDetailRenameOpen(false);
+                              setDetailFilenameDraft(getDocumentFilename(detailTarget));
+                            }}
+                            disabled={detailSaving}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            className="primary-btn"
+                            onClick={handleSaveDocumentFilename}
+                            disabled={detailSaving}
+                          >
+                            {detailSaving ? "Guardando..." : "Guardar nombre"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p>{cleanUiText(detailTarget.filename, `documento-${detailTarget.id}`)}</p>
+                    )}
                   </div>
                 </div>
                 <div className="detail-field">

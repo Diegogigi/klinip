@@ -494,6 +494,7 @@ class DocumentUpdate(BaseModel):
     date: Optional[datetime] = None
     center: Optional[str] = None
     notes: Optional[str] = None
+    filename: Optional[str] = None
 
 
 class MedicationBase(BaseModel):
