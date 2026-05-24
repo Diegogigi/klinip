@@ -446,17 +446,17 @@ export default function Calendar() {
         </div>
 
         <div className="calendar-overview-grid">
-          <article className="calendar-overview-card tone-blue">
+          <article className="calendar-overview-card tone-blue is-month">
             <span className="calendar-overview-label">Mes actual</span>
             <strong className="calendar-overview-value">{monthLabel}</strong>
             <span className="calendar-overview-meta">Seguimiento clínico mensual</span>
           </article>
-          <article className="calendar-overview-card tone-white">
+          <article className="calendar-overview-card tone-white is-events">
             <span className="calendar-overview-label">Agenda visible</span>
             <strong className="calendar-overview-value">{currentMonthEventCount}</strong>
             <span className="calendar-overview-meta">Eventos del mes en vista</span>
           </article>
-          <article className="calendar-overview-card tone-green">
+          <article className="calendar-overview-card tone-green is-medication">
             <span className="calendar-overview-label">Medicación</span>
             <strong className="calendar-overview-value">{medicationMonthCount}</strong>
             <span className="calendar-overview-meta">Tomas estimadas en el periodo</span>

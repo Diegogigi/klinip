@@ -37443,6 +37443,7 @@ body.theme-dark .records-mobile-title-group span,
   border: 1px solid #deebfb;
   background: #ffffff;
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  min-width: 0;
 }
 
 .appointments-stat-card.tone-blue,
@@ -37487,6 +37488,8 @@ body.theme-dark .records-mobile-title-group span,
   font-weight: 800;
   line-height: 1.05;
   color: #0f172a;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .appointments-stat-card.tone-blue .appointments-stat-value,
@@ -38144,16 +38147,48 @@ body.theme-dark .calendar-summary-pill.is-green {
     width: 100%;
   }
 
-  .appointments-hero-stats,
-  .calendar-overview-grid {
+  .appointments-hero-stats {
     grid-template-columns: 1fr;
     gap: 0.72rem;
+  }
+
+  .calendar-overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
   }
 
   .appointments-stat-card,
   .calendar-overview-card {
     padding: 0.95rem 1rem;
     border-radius: 20px;
+  }
+
+  .calendar-overview-card {
+    padding: 0.78rem 0.72rem;
+    border-radius: 18px;
+  }
+
+  .calendar-overview-label {
+    font-size: 0.67rem;
+    line-height: 1.15;
+  }
+
+  .calendar-overview-value {
+    margin-top: 0.22rem;
+    font-size: 1.04rem;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+  }
+
+  .calendar-overview-meta {
+    margin-top: 0.18rem;
+    font-size: 0.67rem;
+    line-height: 1.18;
+  }
+
+  .calendar-overview-card.is-month .calendar-overview-value {
+    font-size: 0.94rem;
+    line-height: 1.12;
   }
 
   .appointments-intro .card-title,
