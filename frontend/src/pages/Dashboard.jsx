@@ -821,7 +821,32 @@ export default function Dashboard({
   const futureAppointments = openAppointments.filter(
     (item) => parseDate(item.date_time).getTime() >= now - 15 * 60 * 1000
   );
-  const nextAppointment = futureAppointments[0] || openAppointments[0] || null;
+  const nextAppointment = futureAppointments[0] || null;
+  const nextAppointmentDate = nextAppointment ? parseDate(nextAppointment.date_time) : null;
+  const nextAppointmentHero = nextAppointmentDate
+    ? {
+        label: toRelativeDayLabelSafe(nextAppointmentDate) || "En agenda",
+        title: cleanUiText(
+          nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad de salud",
+          "Actividad de salud"
+        ),
+        detail: cleanUiText(
+          [
+            nextAppointmentDate.toLocaleDateString("es-CL", {
+              weekday: "short",
+              day: "2-digit",
+              month: "short",
+            }),
+            toTimeLabel(nextAppointmentDate),
+            nextAppointment.center || "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          "Revisa el detalle de tu agenda."
+        ),
+        urgent: nextAppointmentDate.toDateString() === new Date().toDateString(),
+      }
+    : null;
 
   const activeMedications = medicationItems.filter((item) => !isMedicationFinished(item));
   const adherenceTotals = activeMedications.reduce(
@@ -2037,6 +2062,19 @@ export default function Dashboard({
                   </div>
                   <p className="home-mobile-clinical-title">{displayHeroState.title}</p>
                   <p className="mobile-hero-health-copy home-mobile-clinical-copy">{displayHeroState.message}</p>
+                  {nextAppointmentHero ? (
+                    <button
+                      type="button"
+                      className="mobile-hero-appointment-card"
+                      onClick={openAppointmentFocus}
+                    >
+                      <span className={`mobile-hero-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
+                        Próxima cita · {nextAppointmentHero.label}
+                      </span>
+                      <strong>{nextAppointmentHero.title}</strong>
+                      <span>{nextAppointmentHero.detail}</span>
+                    </button>
+                  ) : null}
                 </div>
                 <div className="mobile-hero-progress-wrap">
                     <button
@@ -2903,6 +2941,19 @@ export default function Dashboard({
                 </h1>
                 <p className="home-clinical-headline">{displayHeroState.title}</p>
                 <p className="home-greeting-subtitle home-clinical-summary">{displayHeroState.message}</p>
+                {nextAppointmentHero ? (
+                  <button
+                    type="button"
+                    className="home-clinical-appointment-card"
+                    onClick={openAppointmentFocus}
+                  >
+                    <span className={`home-clinical-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
+                      Próxima cita · {nextAppointmentHero.label}
+                    </span>
+                    <strong>{nextAppointmentHero.title}</strong>
+                    <span>{nextAppointmentHero.detail}</span>
+                  </button>
+                ) : null}
                 <div className="home-clinical-actions">
                   <button type="button" className="home-note-primary home-clinical-primary" onClick={displayHeroState.onAction}>
                     {displayHeroState.actionLabel}
