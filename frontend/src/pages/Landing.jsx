@@ -218,9 +218,8 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           <Link className="lp-nav-logo" to="/">
             <BrandLogo
               className="brand-logo-landing brand-logo-keep-name-mobile"
-              markClassName="landing-logo-mark"
-              imgClassName="landing-logo-mark-img"
               nameClassName="lp-nav-logo-name"
+              showMark={false}
               responsive
             />
           </Link>
@@ -510,8 +509,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             <div>
               <BrandLogo
                 className="brand-logo-landing brand-logo-keep-name-mobile"
-                markClassName="landing-logo-mark"
-                imgClassName="landing-logo-mark-img"
+                showMark={false}
                 responsive
               />
               <span>Tu ruta de salud, simplificada</span>

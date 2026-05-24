@@ -88,6 +88,7 @@ export default function BrandLogo({
   nameClassName = "",
   variant = "solid",
   responsive = false,
+  showMark = true,
   showName = true,
   name = "Klinip",
 }) {
@@ -96,16 +97,19 @@ export default function BrandLogo({
       className={joinClasses(
         "brand-wordmark",
         "brand-logo",
+        showMark ? "" : "no-mark",
         responsive ? "responsive" : "",
         className
       )}
       aria-label={name}
     >
-      <BrandMark
-        className={markClassName}
-        imgClassName={imgClassName}
-        variant={variant}
-      />
+      {showMark ? (
+        <BrandMark
+          className={markClassName}
+          imgClassName={imgClassName}
+          variant={variant}
+        />
+      ) : null}
       {showName ? (
         <span
           className={joinClasses(

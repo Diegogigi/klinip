@@ -51493,6 +51493,10 @@ body.theme-dark .main-area {
   min-width: 0;
 }
 
+.brand-logo.no-mark {
+  gap: 0;
+}
+
 .brand-logo-mark {
   width: 42px;
   height: 42px;

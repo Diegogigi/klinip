@@ -102,9 +102,8 @@ export default function Login({ onAuthenticated }) {
             <div className="auth-logo">
               <BrandLogo
                 className="auth-logo-text brand-logo-auth"
-                markClassName="brand-logo-auth-mark"
-                imgClassName="brand-logo-auth-img"
                 nameClassName="brand-logo-auth-name"
+                showMark={false}
               />
             </div>
 
