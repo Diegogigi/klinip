@@ -622,7 +622,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         <head>
           <title>Klinip - Resumen</title>
           <style>
-            body { font-family: Poppins, Arial, sans-serif; padding: 16px; }
+            body { font-family: Nunito, Arial, sans-serif; padding: 16px; }
             h1 { font-size: 20px; margin: 0 0 12px; }
             h2 { font-size: 16px; margin: 12px 0 6px; }
             table { width: 100%; border-collapse: collapse; font-size: 12px; }
