@@ -1,5 +1,7 @@
 import React from "react";
 
+const BRAND_ASSET_VERSION = "20260523a";
+
 function joinClasses(...classes) {
   return classes.filter(Boolean).join(" ");
 }
@@ -11,7 +13,9 @@ export function BrandMark({
   alt = "",
 }) {
   const src =
-    variant === "solid" ? "/icons/new_logo_k_sf.png" : "/icons/new_logo_k.png";
+    variant === "solid"
+      ? `/icons/new_logo_k_sf.png?v=${BRAND_ASSET_VERSION}`
+      : `/icons/new_logo_k.png?v=${BRAND_ASSET_VERSION}`;
 
   return (
     <span

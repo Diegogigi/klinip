@@ -1,12 +1,18 @@
-const CACHE_NAME = "klinip-cache-v24";
+const CACHE_NAME = "klinip-cache-v25";
+const BRAND_ASSET_VERSION = "20260523a";
+const ICON_192 = `/icons/android-chrome-192x192.png?v=${BRAND_ASSET_VERSION}`;
+const ICON_512 = `/icons/android-chrome-512x512.png?v=${BRAND_ASSET_VERSION}`;
+const APPLE_TOUCH_ICON = `/icons/apple-touch-icon.png?v=${BRAND_ASSET_VERSION}`;
+const FAVICON_16 = `/icons/favicon-16x16.png?v=${BRAND_ASSET_VERSION}`;
+const FAVICON_32 = `/icons/favicon-32x32.png?v=${BRAND_ASSET_VERSION}`;
 const ASSETS = [
   "/",
-  "/manifest.webmanifest",
-  "/icons/apple-touch-icon.png",
-  "/icons/android-chrome-192x192.png",
-  "/icons/android-chrome-512x512.png",
-  "/icons/favicon-16x16.png",
-  "/icons/favicon-32x32.png",
+  `/manifest.webmanifest?v=${BRAND_ASSET_VERSION}`,
+  APPLE_TOUCH_ICON,
+  ICON_192,
+  ICON_512,
+  FAVICON_16,
+  FAVICON_32,
   "/icons/favicon.ico",
   "/sounds/notification.mp3"
 ];
@@ -361,8 +367,8 @@ async function checkAndShowPendingNotifications() {
 
       await self.registration.showNotification(notification.title, {
         body: notification.body,
-        icon: notification.icon || "/icons/android-chrome-192x192.png",
-        badge: "/icons/android-chrome-192x192.png",
+        icon: notification.icon || ICON_192,
+        badge: ICON_192,
         tag: notification.tag,
         data: {
           ...(notification.data || {}),
@@ -475,7 +481,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
-  const icon = data.icon || "/icons/android-chrome-192x192.png";
+  const icon = data.icon || ICON_192;
   const priority = data.priority || "normal";
   const sound = data.sound || "default";
 
@@ -500,22 +506,22 @@ self.addEventListener("push", (event) => {
   const notificationOptions = {
     body,
     icon,
-    badge: "/icons/android-chrome-192x192.png",
+    badge: ICON_192,
     vibrate,
     requireInteraction,
     silent: false,
     tag,
     actions: data.kind === "feed"
-      ? [{ action: "open", title: "Ver en el feed", icon: "/icons/android-chrome-192x192.png" }]
+      ? [{ action: "open", title: "Ver en el feed", icon: ICON_192 }]
       : data.kind === "note"
-      ? [{ action: "open", title: "Ver nota", icon: "/icons/android-chrome-192x192.png" }]
+      ? [{ action: "open", title: "Ver nota", icon: ICON_192 }]
       : [
         {
           action: "done",
           title: data.medicationId ? "Realizado" : "Realizada",
-          icon: "/icons/android-chrome-192x192.png"
+          icon: ICON_192
         },
-        { action: "open", title: "Ver detalles", icon: "/icons/android-chrome-192x192.png" }
+        { action: "open", title: "Ver detalles", icon: ICON_192 }
       ],
     data: {
       url,

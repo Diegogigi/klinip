@@ -1704,7 +1704,7 @@ export default function App() {
         reg
           .showNotification("Actualizacion disponible", {
             body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
-            icon: "/icons/android-chrome-192x192.png",
+            icon: "/icons/android-chrome-192x192.png?v=20260523a",
           })
           .then(() => {
             pushNotifiedUpdateKeyRef.current = updateKey;

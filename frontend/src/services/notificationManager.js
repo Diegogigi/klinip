@@ -338,10 +338,12 @@ async function showNotification(title, body, options = {}) {
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
+  const brandIcon = "/icons/android-chrome-192x192.png?v=20260523a";
+
   const {
     id = "",
-    icon = "/icons/android-chrome-192x192.png",
-    badge = "/icons/android-chrome-192x192.png",
+    icon = brandIcon,
+    badge = brandIcon,
     tag = "",
     requireInteraction = true,
     vibrate = [200, 100, 200],
