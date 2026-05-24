@@ -16676,10 +16676,9 @@ body.theme-dark .home-ops-action-icon {
     radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
     conic-gradient(
       from 215deg,
-      #fb7185 0 var(--adherence-critical-end, 0%),
-      #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-      #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-      #dbe5f0 var(--adherence-remaining-start, 0%) 100%
+      #fb7185 0 45%,
+      #facc15 45% 80%,
+      #84cc16 80% 100%
     );
   box-shadow:
     0 18px 34px rgba(11, 35, 96, 0.22),
@@ -22195,10 +22194,9 @@ body.theme-dark .home-clinical-ring-meter {
     radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
     conic-gradient(
       from 215deg,
-      #fb7185 0 var(--adherence-critical-end, 0%),
-      #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-      #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-      rgba(148, 163, 184, 0.42) var(--adherence-remaining-start, 0%) 100%
+      #fb7185 0 45%,
+      #facc15 45% 80%,
+      #84cc16 80% 100%
     );
   box-shadow: none;
 }
@@ -39955,10 +39953,9 @@ body.theme-dark .appointments-sheet-grabber {
     radial-gradient(circle closest-side, #1b4ecf 59%, transparent 60% 100%),
     conic-gradient(
       from 215deg,
-      #fb7185 0 var(--adherence-critical-end, 0%),
-      #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-      #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-      #dbe5f0 var(--adherence-remaining-start, 0%) 100%
+      #fb7185 0 45%,
+      #facc15 45% 80%,
+      #84cc16 80% 100%
     );
   box-shadow:
     0 18px 34px rgba(11, 35, 96, 0.22),
@@ -40942,10 +40939,9 @@ body.theme-dark .adherence-guide-ring {
     radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
     conic-gradient(
       from 215deg,
-      #fb7185 0 var(--adherence-critical-end, 0%),
-      #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-      #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-      rgba(148, 163, 184, 0.42) var(--adherence-remaining-start, 0%) 100%
+      #fb7185 0 45%,
+      #facc15 45% 80%,
+      #84cc16 80% 100%
     );
   box-shadow: none;
 }
@@ -42192,10 +42188,9 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
       radial-gradient(circle closest-side, #1b4ecf 68%, transparent 70% 100%),
       conic-gradient(
         from 215deg,
-        #fb7185 0 var(--adherence-critical-end, 0%),
-        #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-        #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-        #dbe5f0 var(--adherence-remaining-start, 0%) 100%
+        #fb7185 0 45%,
+        #facc15 45% 80%,
+        #84cc16 80% 100%
       );
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   }
@@ -42443,10 +42438,9 @@ body.theme-dark .mobile-dashboard {
       radial-gradient(circle closest-side, #102b69 68%, transparent 70% 100%),
       conic-gradient(
         from 215deg,
-        #fb7185 0 var(--adherence-critical-end, 0%),
-        #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-        #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-        rgba(148, 163, 184, 0.42) var(--adherence-remaining-start, 0%) 100%
+        #fb7185 0 45%,
+        #facc15 45% 80%,
+        #84cc16 80% 100%
       );
   }
 
@@ -43020,10 +43014,9 @@ body.theme-dark .mobile-dashboard {
       radial-gradient(circle closest-side, #102b69 59%, transparent 60% 100%),
       conic-gradient(
         from 215deg,
-        #fb7185 0 var(--adherence-critical-end, 0%),
-        #facc15 var(--adherence-attention-start, 0%) var(--adherence-attention-end, 0%),
-        #84cc16 var(--adherence-stable-start, 0%) var(--adherence-stable-end, 0%),
-        rgba(148, 163, 184, 0.42) var(--adherence-remaining-start, 0%) 100%
+        #fb7185 0 45%,
+        #facc15 45% 80%,
+        #84cc16 80% 100%
       );
     box-shadow: none;
   }

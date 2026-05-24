@@ -124,22 +124,7 @@ function clampPercent(value) {
 }
 
 function buildAdherenceRingStyle(progress) {
-  const safeProgress = clampPercent(progress);
-  const criticalEnd = Math.min(safeProgress, 45);
-  const attentionStart = criticalEnd;
-  const attentionEnd = safeProgress > 45 ? Math.min(safeProgress, 80) : attentionStart;
-  const stableStart = attentionEnd;
-  const stableEnd = safeProgress > 80 ? safeProgress : stableStart;
-
-  return {
-    "--health-progress": `${safeProgress}`,
-    "--adherence-critical-end": `${criticalEnd}%`,
-    "--adherence-attention-start": `${attentionStart}%`,
-    "--adherence-attention-end": `${attentionEnd}%`,
-    "--adherence-stable-start": `${stableStart}%`,
-    "--adherence-stable-end": `${stableEnd}%`,
-    "--adherence-remaining-start": `${safeProgress}%`,
-  };
+  return { "--health-progress": `${clampPercent(progress)}` };
 }
 
 function getAdherenceZone(value) {
