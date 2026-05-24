@@ -221,7 +221,6 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               markClassName="landing-logo-mark"
               imgClassName="landing-logo-mark-img"
               nameClassName="lp-nav-logo-name"
-              variant="outline"
               responsive
             />
           </Link>
@@ -513,7 +512,6 @@ export default function Landing({ theme = "light", onToggleTheme }) {
                 className="brand-logo-landing brand-logo-keep-name-mobile"
                 markClassName="landing-logo-mark"
                 imgClassName="landing-logo-mark-img"
-                variant="outline"
                 responsive
               />
               <span>Tu ruta de salud, simplificada</span>

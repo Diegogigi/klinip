@@ -105,7 +105,6 @@ export default function Login({ onAuthenticated }) {
                 markClassName="brand-logo-auth-mark"
                 imgClassName="brand-logo-auth-img"
                 nameClassName="brand-logo-auth-name"
-                variant="outline"
               />
             </div>
 

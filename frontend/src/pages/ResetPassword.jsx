@@ -61,7 +61,6 @@ export default function ResetPassword() {
                 markClassName="brand-logo-auth-mark"
                 imgClassName="brand-logo-auth-img"
                 nameClassName="brand-logo-auth-name"
-                variant="outline"
               />
             </div>
             <h2 className="auth-welcome">Nueva contraseña</h2>

@@ -469,7 +469,6 @@ export default function Plans({ user }) {
               markClassName="brand-logo-plans-mark"
               imgClassName="plans-page-brand-img"
               nameClassName="pp-nav-logo-name"
-              variant="outline"
               responsive
             />
           </Link>
@@ -663,7 +662,6 @@ export default function Plans({ user }) {
                 className="pp-footer-name brand-logo-plans"
                 markClassName="brand-logo-plans-mark"
                 imgClassName="plans-page-brand-img"
-                variant="outline"
                 responsive
               />
               <div className="pp-footer-tag">Tu ruta de salud, simplificada</div>
