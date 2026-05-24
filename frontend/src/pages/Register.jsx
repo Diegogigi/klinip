@@ -107,6 +107,7 @@ export default function Register({ onRegistered }) {
                 markClassName="brand-logo-auth-mark"
                 imgClassName="brand-logo-auth-img"
                 nameClassName="brand-logo-auth-name"
+                variant="outline"
               />
             </div>
             <h2 className="auth-welcome">¡Crea tu cuenta!</h2>
@@ -278,5 +279,4 @@ export default function Register({ onRegistered }) {
     </div>
   );
 }
-
 
