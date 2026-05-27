@@ -14107,6 +14107,81 @@ def _voice_audio_response_meta(file_path: str | None, fallback_stem: str) -> tup
     return media_type, f"{fallback_stem}{safe_ext or '.webm'}"
 
 
+_VOICE_AUDIO_MOBILE_SAFE_EXTENSIONS = {".m4a", ".mp4", ".aac", ".mp3", ".wav"}
+
+
+def _voice_mobile_audio_variant_path(file_path: str) -> str:
+    source = Path(file_path)
+    return str(source.with_name(f"{source.stem}.mobile.m4a"))
+
+
+def _resolve_voice_audio_stream_path(file_path: str | None) -> str | None:
+    if not file_path or not os.path.isfile(file_path):
+        return None
+
+    source_path = str(file_path)
+    source_ext = Path(source_path).suffix.lower()
+    if source_ext in _VOICE_AUDIO_MOBILE_SAFE_EXTENSIONS:
+        return source_path
+
+    cached_mobile_path = _voice_mobile_audio_variant_path(source_path)
+    try:
+        if os.path.isfile(cached_mobile_path):
+            source_mtime = os.path.getmtime(source_path)
+            cached_mtime = os.path.getmtime(cached_mobile_path)
+            if cached_mtime >= source_mtime and os.path.getsize(cached_mobile_path) > 0:
+                return cached_mobile_path
+    except OSError:
+        pass
+
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+    except ImportError:
+        return source_path
+
+    ffmpeg_exe = get_ffmpeg_exe()
+    temp_output_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as temp_output:
+            temp_output_path = temp_output.name
+
+        command = [
+            ffmpeg_exe,
+            "-y",
+            "-i",
+            source_path,
+            "-vn",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            temp_output_path,
+        ]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            check=False,
+            timeout=240,
+        )
+        if completed.returncode != 0 or not os.path.isfile(temp_output_path) or os.path.getsize(temp_output_path) <= 0:
+            return source_path
+
+        os.replace(temp_output_path, cached_mobile_path)
+        temp_output_path = None
+        return cached_mobile_path
+    except Exception as exc:
+        print(f"WARNING voice audio transcode failed: {exc}")
+        return source_path
+    finally:
+        if temp_output_path and os.path.exists(temp_output_path):
+            try:
+                os.remove(temp_output_path)
+            except OSError:
+                pass
+
+
 def _ai_transcription_timeout_seconds() -> float:
     """Timeout for audio transcription — needs to be much higher than chat completions."""
     raw = (os.getenv("OPENAI_TRANSCRIPTION_TIMEOUT") or "180").strip()
@@ -19055,9 +19130,12 @@ async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
     if not session.audio_session or not os.path.isfile(session.audio_session):
         raise HTTPException(status_code=404, detail="Audio no disponible.")
 
-    media_type, download_name = _voice_audio_response_meta(session.audio_session, f"consulta-{session.id}")
+    stream_path = _resolve_voice_audio_stream_path(session.audio_session)
+    if not stream_path or not os.path.isfile(stream_path):
+        raise HTTPException(status_code=404, detail="Audio no disponible.")
+    media_type, download_name = _voice_audio_response_meta(stream_path, f"consulta-{session.id}")
     return FileResponse(
-        session.audio_session,
+        stream_path,
         media_type=media_type,
         filename=download_name,
     )
@@ -19078,9 +19156,12 @@ async def voice_shared_consent_audio(token: str, db: Session = Depends(auth.get_
     if not session.audio_consent or not os.path.isfile(session.audio_consent):
         raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
 
-    media_type, download_name = _voice_audio_response_meta(session.audio_consent, f"consentimiento-{session.id}")
+    stream_path = _resolve_voice_audio_stream_path(session.audio_consent)
+    if not stream_path or not os.path.isfile(stream_path):
+        raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
+    media_type, download_name = _voice_audio_response_meta(stream_path, f"consentimiento-{session.id}")
     return FileResponse(
-        session.audio_consent,
+        stream_path,
         media_type=media_type,
         filename=download_name,
     )
@@ -19113,9 +19194,12 @@ async def voice_session_audio(
     if not session.audio_session or not os.path.isfile(session.audio_session):
         raise HTTPException(status_code=404, detail="Audio no disponible.")
 
-    media_type, download_name = _voice_audio_response_meta(session.audio_session, f"consulta-{session.id}")
+    stream_path = _resolve_voice_audio_stream_path(session.audio_session)
+    if not stream_path or not os.path.isfile(stream_path):
+        raise HTTPException(status_code=404, detail="Audio no disponible.")
+    media_type, download_name = _voice_audio_response_meta(stream_path, f"consulta-{session.id}")
     return FileResponse(
-        session.audio_session,
+        stream_path,
         media_type=media_type,
         filename=download_name,
     )
@@ -19147,9 +19231,12 @@ async def voice_session_consent_audio(
     if not session.audio_consent or not os.path.isfile(session.audio_consent):
         raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
 
-    media_type, download_name = _voice_audio_response_meta(session.audio_consent, f"consentimiento-{session.id}")
+    stream_path = _resolve_voice_audio_stream_path(session.audio_consent)
+    if not stream_path or not os.path.isfile(stream_path):
+        raise HTTPException(status_code=404, detail="Audio de consentimiento no disponible.")
+    media_type, download_name = _voice_audio_response_meta(stream_path, f"consentimiento-{session.id}")
     return FileResponse(
-        session.audio_consent,
+        stream_path,
         media_type=media_type,
         filename=download_name,
     )
