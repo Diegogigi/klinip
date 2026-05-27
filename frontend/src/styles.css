@@ -51781,3 +51781,311 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
     gap: 0.55rem;
   }
 }
+
+/* ===================================================================
+   DESKTOP & LAPTOP REFINEMENTS
+   ===================================================================
+   Mejoras progresivas para viewports de laptop y escritorio:
+   1024px+  laptop pequeño (sidebar expandida, topbar fluida)
+   1280px+  laptop estándar (max-width crece, tipografía sube)
+   1440px+  laptop HD / monitor mediano (gutters más amplios)
+   1680px+  monitor grande / ultrawide (uso pleno del canvas)
+   =================================================================== */
+
+/* ── 1024px+ ── Reajustes generales del shell de escritorio ── */
+@media (min-width: 1024px) {
+  .main-content {
+    padding: 1.4rem 1.6rem 1.9rem;
+    max-width: 1520px;
+  }
+
+  .main-content.main-content-family {
+    max-width: 1500px;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
+
+  .main-content.main-content-settings {
+    max-width: 1660px;
+    padding-left: 0.85rem;
+    padding-right: 0.85rem;
+  }
+
+  /* Topbar: distribuir mejor las dos columnas y permitir wrap suave */
+  .topbar {
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .topbar-main {
+    flex: 1 1 360px;
+    min-width: 0;
+  }
+  .topbar-actions {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+    padding-left: 0;
+  }
+  .topbar-highlights {
+    flex-wrap: wrap;
+    gap: 0.55rem 0.65rem;
+    margin-top: 0.55rem;
+  }
+  .topbar-highlight-card {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+
+  /* MiSalud: aprovechar el ancho con un layout más amplio */
+  .clp-page {
+    max-width: 1080px;
+    padding: 0.5rem 0 2.2rem;
+    gap: 1.1rem;
+  }
+
+  /* KlinipFeed: el feed sigue siendo vertical para legibilidad pero
+     con un canvas ligeramente más amplio y un poco más de aire */
+  .kfeed-page {
+    max-width: 780px;
+    padding: 1.6rem 1.25rem 4rem;
+    gap: 1rem;
+  }
+
+  /* Mi Salud Hub: ampliar para que la cuadrícula respire */
+  .health-hub-page {
+    max-width: 1280px;
+    gap: 1.3rem;
+  }
+  .health-hub-grid,
+  .health-hub-support-grid {
+    gap: 1rem;
+  }
+  .health-hub-hero {
+    padding: 1.7rem 1.85rem;
+  }
+
+  /* Cards: padding ligeramente mayor */
+  .card {
+    padding: 1.55rem;
+  }
+
+  /* Stats: KPIs con un poco más de aire */
+  .stats-kpi-grid,
+  .stats-rings {
+    gap: 1rem;
+  }
+  .stats-kpi {
+    padding: 1.05rem 1.2rem;
+  }
+}
+
+/* ── 1280px+ ── Laptop estándar / FHD pequeña ── */
+@media (min-width: 1280px) {
+  .main-content {
+    padding: 1.65rem 2.1rem 2.2rem;
+    max-width: 1560px;
+  }
+
+  .main-content.main-content-family {
+    max-width: 1560px;
+    padding-left: 1.45rem;
+    padding-right: 1.45rem;
+  }
+
+  .main-content.main-content-settings {
+    max-width: 1720px;
+    padding-left: 1.05rem;
+    padding-right: 1.05rem;
+  }
+
+  .topbar {
+    padding: 1.1rem 1.3rem;
+    border-radius: 24px;
+  }
+  .topbar-title {
+    font-size: 1.55rem;
+  }
+  .topbar-label {
+    font-size: 0.8rem;
+  }
+
+  /* MiSalud: más ancho aún para evitar columnas vacías */
+  .clp-page {
+    max-width: 1180px;
+  }
+
+  /* KlinipFeed: feed un poco más amplio para desktop */
+  .kfeed-page {
+    max-width: 860px;
+    padding-top: 1.8rem;
+  }
+
+  /* Mi Salud Hub: tipografía y separación más cómoda */
+  .health-hub-page {
+    max-width: 1360px;
+    gap: 1.5rem;
+  }
+  .health-hub-hero h1 {
+    font-size: 1.72rem;
+  }
+  .health-hub-hero p {
+    max-width: 720px;
+  }
+  .health-hub-section-head h2 {
+    font-size: 1.15rem;
+  }
+  .health-hub-card {
+    padding: 1.3rem;
+    min-height: 158px;
+  }
+  .health-hub-card strong {
+    font-size: 1.05rem;
+  }
+
+  /* Stats: estilos más generosos */
+  .stats-hero-title {
+    font-size: 1.4rem;
+  }
+  .stats-hero-sub {
+    font-size: 1.1rem;
+  }
+  .stats-kpi strong {
+    font-size: 2.2rem;
+  }
+
+  /* Reportes clínicos: padding mayor */
+  .clinical-reports-page {
+    gap: 1.25rem;
+  }
+}
+
+/* ── 1440px+ ── HD / monitor mediano ── */
+@media (min-width: 1440px) {
+  .main-content {
+    padding: 1.85rem 2.5rem 2.5rem;
+    max-width: 1640px;
+  }
+
+  .main-content.main-content-family {
+    max-width: 1620px;
+  }
+
+  .main-content.main-content-settings {
+    max-width: 1780px;
+  }
+
+  .topbar {
+    padding: 1.15rem 1.4rem;
+  }
+  .topbar-title {
+    font-size: 1.6rem;
+  }
+
+  .clp-page {
+    max-width: 1240px;
+  }
+
+  .kfeed-page {
+    max-width: 920px;
+  }
+
+  .health-hub-page {
+    max-width: 1440px;
+  }
+  .health-hub-hero {
+    padding: 1.95rem 2.1rem;
+  }
+  .health-hub-hero h1 {
+    font-size: 1.85rem;
+  }
+
+  .card {
+    padding: 1.7rem;
+  }
+}
+
+/* ── 1680px+ ── Monitor grande / ultrawide ── */
+@media (min-width: 1680px) {
+  .main-content {
+    max-width: 1720px;
+    padding-left: 2.7rem;
+    padding-right: 2.7rem;
+  }
+
+  .main-content.main-content-family {
+    max-width: 1700px;
+  }
+
+  .main-content.main-content-settings {
+    max-width: 1840px;
+  }
+
+  .clp-page {
+    max-width: 1320px;
+  }
+
+  .kfeed-page {
+    max-width: 980px;
+  }
+
+  .health-hub-page {
+    max-width: 1520px;
+  }
+}
+
+/* ── Ajustes de tablet/laptop pequeña (769-1023px) ── */
+@media (min-width: 769px) and (max-width: 1023px) {
+  /* Evitar que el contenido se quede demasiado estrecho cuando la
+     sidebar aún está colapsada en modo iconos */
+  .main-content {
+    padding: 1rem 1.1rem 1.5rem;
+  }
+
+  /* Topbar más compacta en esta franja para evitar wraps feos */
+  .topbar {
+    padding: 0.7rem 0.9rem;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+  .topbar-main {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .topbar-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+  .topbar-title {
+    font-size: 1.15rem;
+  }
+
+  /* MiSalud y KlinipFeed: usar todo el ancho disponible */
+  .clp-page {
+    max-width: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .kfeed-page {
+    max-width: 640px;
+  }
+
+  /* Stats: 2x2 en laptops pequeñas para evitar números aplastados */
+  .stats-kpi-grid,
+  .stats-rings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Refinamientos de grids comunes que pueden romperse en desktop ── */
+@media (min-width: 1024px) {
+  /* Reportes clínicos: distribución más cómoda */
+  .clinical-reports-hero {
+    align-items: stretch;
+  }
+  .clinical-reports-hero-summary {
+    min-width: 0;
+    flex: 1 1 480px;
+  }
+}
+
