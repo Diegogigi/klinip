@@ -51654,6 +51654,10 @@ body.theme-dark .main-area {
   image-rendering: auto;
 }
 
+.brand-logo-raster {
+  border-radius: inherit;
+}
+
 .brand-logo-svg {
   overflow: visible;
 }
@@ -51679,6 +51683,11 @@ body.theme-dark .main-area {
 .brand-logo-sidebar-mark {
   width: 42px;
   height: 42px;
+}
+
+.brand-logo-sidebar-mark .brand-logo-raster {
+  transform: scale(1.06);
+  transform-origin: center;
 }
 
 .brand-logo-sidebar-name {
@@ -52165,6 +52174,172 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
   .clinical-reports-hero-summary {
     min-width: 0;
     flex: 1 1 480px;
+  }
+}
+/* Desktop density refinements for shell-heavy screens */
+@media (min-width: 1024px) {
+  .vp2-page {
+    max-width: 1380px;
+    padding: 1rem 0.45rem 1.75rem;
+  }
+
+  .vp2-actions-row {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto;
+    align-items: end;
+    gap: 0.9rem 1.1rem;
+  }
+
+  .vp2-profile-picker {
+    min-width: 0;
+    max-width: 380px;
+  }
+
+  .vp2-grid {
+    grid-template-columns: minmax(330px, 0.9fr) minmax(0, 1.42fr);
+    gap: 1.1rem;
+  }
+
+  .vp2-left,
+  .vp2-right {
+    min-width: 0;
+  }
+
+  .vp2-hist-header {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: end;
+    gap: 0.65rem 1rem;
+  }
+
+  .vp2-hist-title {
+    margin-bottom: 0;
+  }
+
+  .ai-copilot-shell {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 1rem;
+  }
+
+  .ai-context-strip,
+  .ai-source-list,
+  .ai-ctx,
+  .ai-chat-inner,
+  .ai-chat-jump-slot,
+  .ai-input-shell {
+    max-width: 1040px;
+  }
+
+  .ai-landing-center {
+    min-height: 280px;
+    padding: 2.25rem 2rem 1.7rem;
+  }
+
+  .ai-quick-grid {
+    max-width: 760px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ai-info-row {
+    max-width: 900px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ai-message-column {
+    max-width: 780px;
+  }
+
+  .ai-right-panel {
+    min-width: 0;
+    max-width: 320px;
+  }
+}
+
+@media (min-width: 1050px) {
+  .kfeed-layout-wrapper {
+    display: grid;
+    grid-template-columns: minmax(0, 1.52fr) minmax(320px, 0.88fr);
+    align-items: start;
+    gap: 1rem;
+    max-width: 1480px;
+    padding: 0 0.45rem;
+  }
+
+  .kfeed-layout-wrapper .kfeed-page {
+    max-width: none;
+    padding-top: 0.95rem;
+  }
+
+  .kfeed-care-layout {
+    grid-template-columns: minmax(0, 1.16fr) minmax(0, 0.92fr);
+    gap: 0.85rem;
+  }
+
+  .kfeed-sidebar {
+    width: min(100%, 348px);
+    padding-top: 0.95rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .kfeed-layout-wrapper {
+    grid-template-columns: minmax(0, 1.65fr) 340px;
+    gap: 1.15rem;
+    max-width: 1560px;
+  }
+
+  .kfeed-care-layout {
+    grid-template-columns: minmax(0, 1.24fr) minmax(0, 0.94fr);
+  }
+
+  .vp2-page {
+    max-width: 1480px;
+  }
+
+  .vp2-grid {
+    grid-template-columns: minmax(350px, 0.92fr) minmax(0, 1.48fr);
+    gap: 1.2rem;
+  }
+
+  .ai-copilot-shell {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 1.15rem;
+  }
+
+  .ai-context-strip,
+  .ai-source-list,
+  .ai-ctx,
+  .ai-chat-inner,
+  .ai-chat-jump-slot,
+  .ai-input-shell {
+    max-width: 1120px;
+  }
+
+  .ai-message-column {
+    max-width: 840px;
+  }
+
+  .ai-right-panel {
+    max-width: 340px;
+  }
+}
+
+@media (min-width: 1440px) {
+  .kfeed-layout-wrapper {
+    max-width: 1640px;
+  }
+
+  .vp2-page {
+    max-width: 1540px;
+  }
+
+  .ai-context-strip,
+  .ai-source-list,
+  .ai-ctx,
+  .ai-chat-inner,
+  .ai-chat-jump-slot,
+  .ai-input-shell {
+    max-width: 1180px;
   }
 }
 
