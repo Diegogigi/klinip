@@ -51414,8 +51414,8 @@ body.theme-dark .history-folder-item-chevron {
 
 @media (min-width: 1024px) {
   .sidebar {
-    width: 292px;
-    padding: 1.1rem 1rem 1rem;
+    width: 276px;
+    padding: 1rem 0.95rem 0.95rem;
   }
 
   .sidebar-brand {
@@ -51458,23 +51458,33 @@ body.theme-dark .history-folder-item-chevron {
   }
 
   .main-area {
-    margin-left: 292px;
+    margin-left: 276px;
     background:
       radial-gradient(circle at top left, rgba(68, 196, 255, 0.08), transparent 18%),
       linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%);
   }
 
   .main-content {
-    max-width: 1480px;
-    padding: 1.35rem 1.45rem 1.8rem;
+    max-width: 1600px;
+    padding: 1.15rem 1.2rem 1.75rem;
     background: transparent;
   }
 
+  .main-content.main-content-dashboard {
+    max-width: 1660px;
+  }
+
   .topbar {
-    align-items: flex-start;
-    padding: 1rem 1.15rem;
-    margin-bottom: 1.2rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
     border-radius: 22px;
+  }
+
+  .topbar-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.7rem;
   }
 
   .topbar-label {
@@ -51484,34 +51494,35 @@ body.theme-dark .history-folder-item-chevron {
   }
 
   .topbar-row {
-    gap: 0.8rem;
+    gap: 0.7rem;
     flex-wrap: wrap;
   }
 
   .topbar-title {
     margin-top: 0.16rem;
-    font-size: 1.42rem;
+    font-size: 1.34rem;
     line-height: 1.15;
   }
 
   .topbar-chip {
-    padding: 0.3rem 0.68rem;
-    font-size: 0.76rem;
+    padding: 0.26rem 0.62rem;
+    font-size: 0.74rem;
   }
 
   .topbar-actions {
-    gap: 0.6rem;
+    gap: 0.55rem;
     align-self: center;
-    padding-left: 1rem;
+    padding-left: 0;
   }
 
   .topbar-quick {
-    padding: 0.45rem 0.78rem;
+    padding: 0.42rem 0.72rem;
     border-radius: 12px;
   }
 
   .topbar-user {
-    padding: 0.34rem 0.68rem 0.34rem 0.34rem;
+    max-width: 240px;
+    padding: 0.32rem 0.62rem 0.32rem 0.32rem;
     border-radius: 16px;
   }
 
@@ -51522,7 +51533,37 @@ body.theme-dark .history-folder-item-chevron {
   }
 
   .topbar-name {
-    font-size: 0.9rem;
+    max-width: 148px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+  }
+
+  .topbar-highlights {
+    gap: 0.55rem;
+  }
+
+  .topbar-highlight-card {
+    min-width: 0;
+    padding: 0.7rem 0.8rem;
+    border-radius: 16px;
+  }
+
+  .topbar-highlight-value {
+    font-size: 0.88rem;
+  }
+
+  .topbar-highlight-note {
+    font-size: 0.74rem;
+  }
+
+  .clp-page {
+    max-width: 1240px;
+  }
+
+  .health-hub-page {
+    max-width: 1380px;
   }
 }
 
@@ -51795,30 +51836,34 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
 /* ── 1024px+ ── Reajustes generales del shell de escritorio ── */
 @media (min-width: 1024px) {
   .main-content {
-    padding: 1.4rem 1.6rem 1.9rem;
-    max-width: 1520px;
+    padding: 1.22rem 1.35rem 1.8rem;
+    max-width: 1660px;
+  }
+
+  .main-content.main-content-dashboard {
+    max-width: 1720px;
   }
 
   .main-content.main-content-family {
-    max-width: 1500px;
-    padding-left: 1.25rem;
-    padding-right: 1.25rem;
+    max-width: 1640px;
+    padding-left: 1.05rem;
+    padding-right: 1.05rem;
   }
 
   .main-content.main-content-settings {
-    max-width: 1660px;
-    padding-left: 0.85rem;
-    padding-right: 0.85rem;
+    max-width: 1760px;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
 
   /* Topbar: distribuir mejor las dos columnas y permitir wrap suave */
   .topbar {
-    gap: 1rem;
+    gap: 0.85rem;
     flex-wrap: wrap;
     align-items: center;
   }
   .topbar-main {
-    flex: 1 1 360px;
+    flex: 1 1 420px;
     min-width: 0;
   }
   .topbar-actions {
@@ -51829,17 +51874,17 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
   }
   .topbar-highlights {
     flex-wrap: wrap;
-    gap: 0.55rem 0.65rem;
-    margin-top: 0.55rem;
+    gap: 0.5rem 0.6rem;
+    margin-top: 0.35rem;
   }
   .topbar-highlight-card {
-    flex: 1 1 200px;
+    flex: 1 1 180px;
     min-width: 0;
   }
 
   /* MiSalud: aprovechar el ancho con un layout más amplio */
   .clp-page {
-    max-width: 1080px;
+    max-width: 1260px;
     padding: 0.5rem 0 2.2rem;
     gap: 1.1rem;
   }
@@ -51847,14 +51892,14 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
   /* KlinipFeed: el feed sigue siendo vertical para legibilidad pero
      con un canvas ligeramente más amplio y un poco más de aire */
   .kfeed-page {
-    max-width: 780px;
-    padding: 1.6rem 1.25rem 4rem;
+    max-width: 900px;
+    padding: 1.45rem 1rem 4rem;
     gap: 1rem;
   }
 
   /* Mi Salud Hub: ampliar para que la cuadrícula respire */
   .health-hub-page {
-    max-width: 1280px;
+    max-width: 1420px;
     gap: 1.3rem;
   }
   .health-hub-grid,
@@ -51883,48 +51928,74 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
 /* ── 1280px+ ── Laptop estándar / FHD pequeña ── */
 @media (min-width: 1280px) {
   .main-content {
-    padding: 1.65rem 2.1rem 2.2rem;
-    max-width: 1560px;
+    padding: 1.3rem 1.7rem 2.1rem;
+    max-width: 1740px;
+  }
+
+  .main-content.main-content-dashboard {
+    max-width: 1800px;
   }
 
   .main-content.main-content-family {
-    max-width: 1560px;
-    padding-left: 1.45rem;
-    padding-right: 1.45rem;
+    max-width: 1760px;
+    padding-left: 1.15rem;
+    padding-right: 1.15rem;
   }
 
   .main-content.main-content-settings {
-    max-width: 1720px;
-    padding-left: 1.05rem;
-    padding-right: 1.05rem;
+    max-width: 1840px;
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
   }
 
   .topbar {
-    padding: 1.1rem 1.3rem;
+    padding: 0.92rem 1.15rem;
     border-radius: 24px;
   }
+  .topbar-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.95fr);
+    align-items: center;
+    gap: 0.8rem 1rem;
+  }
+  .topbar-highlights {
+    justify-content: flex-end;
+    flex-wrap: nowrap;
+  }
+  .topbar-highlight-card {
+    flex: 1 1 0;
+    max-width: 220px;
+  }
   .topbar-title {
-    font-size: 1.55rem;
+    font-size: 1.4rem;
   }
   .topbar-label {
     font-size: 0.8rem;
   }
 
+  .topbar-user {
+    max-width: 260px;
+  }
+
+  .topbar-name {
+    max-width: 168px;
+  }
+
   /* MiSalud: más ancho aún para evitar columnas vacías */
   .clp-page {
-    max-width: 1180px;
+    max-width: 1360px;
   }
 
   /* KlinipFeed: feed un poco más amplio para desktop */
   .kfeed-page {
-    max-width: 860px;
-    padding-top: 1.8rem;
+    max-width: 1020px;
+    padding-top: 1.55rem;
   }
 
   /* Mi Salud Hub: tipografía y separación más cómoda */
   .health-hub-page {
-    max-width: 1360px;
-    gap: 1.5rem;
+    max-width: 1500px;
+    gap: 1.35rem;
   }
   .health-hub-hero h1 {
     font-size: 1.72rem;
@@ -51963,38 +52034,42 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
 /* ── 1440px+ ── HD / monitor mediano ── */
 @media (min-width: 1440px) {
   .main-content {
-    padding: 1.85rem 2.5rem 2.5rem;
-    max-width: 1640px;
+    padding: 1.45rem 2rem 2.3rem;
+    max-width: 1840px;
+  }
+
+  .main-content.main-content-dashboard {
+    max-width: 1900px;
   }
 
   .main-content.main-content-family {
-    max-width: 1620px;
+    max-width: 1820px;
   }
 
   .main-content.main-content-settings {
-    max-width: 1780px;
+    max-width: 1900px;
   }
 
   .topbar {
-    padding: 1.15rem 1.4rem;
+    padding: 0.98rem 1.2rem;
   }
   .topbar-title {
-    font-size: 1.6rem;
+    font-size: 1.48rem;
   }
 
   .clp-page {
-    max-width: 1240px;
+    max-width: 1480px;
   }
 
   .kfeed-page {
-    max-width: 920px;
+    max-width: 1120px;
   }
 
   .health-hub-page {
-    max-width: 1440px;
+    max-width: 1580px;
   }
   .health-hub-hero {
-    padding: 1.95rem 2.1rem;
+    padding: 1.8rem 1.95rem;
   }
   .health-hub-hero h1 {
     font-size: 1.85rem;
@@ -52008,29 +52083,33 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
 /* ── 1680px+ ── Monitor grande / ultrawide ── */
 @media (min-width: 1680px) {
   .main-content {
-    max-width: 1720px;
-    padding-left: 2.7rem;
-    padding-right: 2.7rem;
+    max-width: 1960px;
+    padding-left: 2.25rem;
+    padding-right: 2.25rem;
+  }
+
+  .main-content.main-content-dashboard {
+    max-width: 2020px;
   }
 
   .main-content.main-content-family {
-    max-width: 1700px;
+    max-width: 1940px;
   }
 
   .main-content.main-content-settings {
-    max-width: 1840px;
+    max-width: 2000px;
   }
 
   .clp-page {
-    max-width: 1320px;
+    max-width: 1600px;
   }
 
   .kfeed-page {
-    max-width: 980px;
+    max-width: 1200px;
   }
 
   .health-hub-page {
-    max-width: 1520px;
+    max-width: 1700px;
   }
 }
 
