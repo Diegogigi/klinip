@@ -19089,10 +19089,18 @@ async def voice_shared_consent_audio(token: str, db: Session = Depends(auth.get_
 @app.get("/voice/{session_id}/audio")
 async def voice_session_audio(
     session_id: int,
+    request: Request,
+    token: str = "",
     db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Authenticated endpoint — streams audio for the session owner."""
+    # Accept auth via query token or Authorization header so the browser audio
+    # element can stream large recordings without downloading the whole blob first.
+    auth_header = request.headers.get("authorization", "")
+    bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    resolved_token = (token or bearer_token or "").strip()
+    if not resolved_token:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    current_user = auth.get_current_user_from_token(resolved_token, db)
     session, profile, _, active_share, can_manage = _voice_session_access_context(
         db,
         current_user,
@@ -19116,10 +19124,17 @@ async def voice_session_audio(
 @app.get("/voice/{session_id}/consent-audio")
 async def voice_session_consent_audio(
     session_id: int,
+    request: Request,
+    token: str = "",
     db: Session = Depends(auth.get_db),
-    current_user: models.User = Depends(auth.get_current_user),
 ):
-    """Authenticated endpoint — streams consent audio for the session owner/manager."""
+    # Same auth resolution as the main session audio endpoint.
+    auth_header = request.headers.get("authorization", "")
+    bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+    resolved_token = (token or bearer_token or "").strip()
+    if not resolved_token:
+        raise HTTPException(status_code=401, detail="Token requerido.")
+    current_user = auth.get_current_user_from_token(resolved_token, db)
     session, profile, _, active_share, can_manage = _voice_session_access_context(
         db,
         current_user,

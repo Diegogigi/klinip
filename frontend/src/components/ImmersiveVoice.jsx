@@ -27,10 +27,8 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const token = localStorage.getItem("token");
-  const src = remoteUrl || voiceAudioUrl(sessionId);
+  const src = allowRemote && sessionId ? (remoteUrl || voiceAudioUrl(sessionId)) : null;
   const [localAudioSrc, setLocalAudioSrc] = useState(null);
-  const [remoteAudioSrc, setRemoteAudioSrc] = useState(null);
 
   function toggle() {
     const a = audioRef.current;
@@ -66,33 +64,13 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
     };
   }, [fallbackBlob]);
 
-  // We need to fetch audio with auth header since the endpoint requires authentication
   useEffect(() => {
-    if (!allowRemote || !sessionId || !token) {
-      setRemoteAudioSrc(null);
-      return undefined;
-    }
+    setPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+  }, [src, localAudioSrc]);
 
-    let cancelled = false;
-    let objectUrl = null;
-
-    (async () => {
-      try {
-        const res = await fetch(src, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setRemoteAudioSrc(objectUrl);
-      } catch { /* ignore */ }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [allowRemote, sessionId, token, src]);
-
-  const audioSrc = remoteAudioSrc || localAudioSrc;
+  const audioSrc = src || localAudioSrc;
 
   if (!audioSrc) return null;
 
@@ -102,6 +80,7 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
         ref={audioRef}
         src={audioSrc}
         preload="metadata"
+        playsInline
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
         onEnded={() => setPlaying(false)}

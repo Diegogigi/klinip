@@ -1104,12 +1104,19 @@ export async function voiceDownloadPdf(sessionId) {
   URL.revokeObjectURL(url);
 }
 
+function buildAuthenticatedApiUrl(path) {
+  const token = localStorage.getItem("token");
+  if (!token) return `${API_URL}${path}`;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${API_URL}${path}${separator}token=${encodeURIComponent(token)}`;
+}
+
 export function voiceAudioUrl(sessionId) {
-  return `${API_URL}/voice/${sessionId}/audio`;
+  return buildAuthenticatedApiUrl(`/voice/${sessionId}/audio`);
 }
 
 export function voiceConsentAudioUrl(sessionId) {
-  return `${API_URL}/voice/${sessionId}/consent-audio`;
+  return buildAuthenticatedApiUrl(`/voice/${sessionId}/consent-audio`);
 }
 
 export async function getSharedVoiceSession(token) {
