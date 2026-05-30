@@ -6,7 +6,10 @@ import {
   getActiveHealthProfile,
   getBiometricDashboard,
 } from "../api";
-import { notifyClinicalDataChanged, subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
+import {
+  notifyClinicalDataChanged,
+  subscribeClinicalDataChanged,
+} from "../utils/clinicalRefresh";
 import { canWriteProfile } from "../utils/profileAccess";
 import {
   BIOMETRIC_METRIC_CONFIG,
@@ -25,8 +28,9 @@ function Sparkline({ points = [], metricType, tone = "blue" }) {
   const values = points
     .map((item) => Number(item?.value_primary))
     .filter((value) => Number.isFinite(value));
+
   if (!values.length) {
-    return <div className="bio-spark-empty">Aun sin datos para graficar.</div>;
+    return <div className="bio-spark-empty">Aún sin datos para graficar.</div>;
   }
 
   if (values.length === 1) {
@@ -46,12 +50,19 @@ function Sparkline({ points = [], metricType, tone = "blue" }) {
     return `${x},${y}`;
   });
   const latest = values[values.length - 1];
+  const lastCoord = coords[coords.length - 1]?.split(",") || ["100", "24"];
 
   return (
     <div className={`bio-spark tone-${tone}`}>
       <svg viewBox="0 0 100 48" preserveAspectRatio="none" aria-hidden="true">
         <defs>
-          <linearGradient id={`bio-spark-${metricType}-${tone}`} x1="0%" x2="100%" y1="0%" y2="0%">
+          <linearGradient
+            id={`bio-spark-${metricType}-${tone}`}
+            x1="0%"
+            x2="100%"
+            y1="0%"
+            y2="0%"
+          >
             <stop offset="0%" stopColor="currentColor" stopOpacity="0.18" />
             <stop offset="100%" stopColor="currentColor" stopOpacity="0.04" />
           </linearGradient>
@@ -69,7 +80,7 @@ function Sparkline({ points = [], metricType, tone = "blue" }) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <circle cx={coords[coords.length - 1].split(",")[0]} cy={coords[coords.length - 1].split(",")[1]} r="2.8" fill="currentColor" />
+        <circle cx={lastCoord[0]} cy={lastCoord[1]} r="2.8" fill="currentColor" />
       </svg>
       <div className="bio-spark-meta">
         <span>{formatBiometricValue({ value_primary: latest }, metricType)}</span>
@@ -100,6 +111,7 @@ function MetricIcon({ metricType }) {
       </svg>
     );
   }
+
   if (metricType === "heart_rate") {
     return (
       <svg {...common}>
@@ -107,6 +119,7 @@ function MetricIcon({ metricType }) {
       </svg>
     );
   }
+
   if (metricType === "temperature") {
     return (
       <svg {...common}>
@@ -115,6 +128,7 @@ function MetricIcon({ metricType }) {
       </svg>
     );
   }
+
   return (
     <svg {...common}>
       <path d="M6.5 12.5h11" />
@@ -174,6 +188,11 @@ export default function Biometrics() {
   const metrics = dashboard?.metrics || [];
   const recentReadings = dashboard?.recent_readings || [];
   const latestMetric = useMemo(() => getBiometricLatestMetric(metrics), [metrics]);
+  const activeMetrics = useMemo(
+    () => metrics.filter((item) => Number(item?.readings_count || 0) > 0),
+    [metrics]
+  );
+  const latestMetricConfig = getBiometricMetricConfig(latestMetric?.metric_type || "glucose");
 
   const handleMetricChange = (metricType) => {
     setForm((prev) => ({
@@ -203,7 +222,7 @@ export default function Biometrics() {
       setForm(buildBiometricEmptyForm(form.metric_type));
       await loadDashboard();
     } catch (error) {
-      window.alert(error?.response?.data?.detail || "No pudimos guardar el registro biometrico.");
+      window.alert(error?.response?.data?.detail || "No pudimos guardar el registro biométrico.");
     } finally {
       setSaving(false);
     }
@@ -245,17 +264,19 @@ export default function Biometrics() {
           <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
           <h1 className="bio-title">Monitorea tus controles frecuentes en un solo panel</h1>
           <p className="bio-subtitle">
-            Registra glucosa, presión arterial, frecuencia cardiaca o temperatura para revisar cambios y compartirlos en consulta.
+            Registra glucosa, presión arterial, frecuencia cardiaca o temperatura para revisar cambios
+            y compartirlos en consulta.
           </p>
           <div className="bio-hero-actions">
             <Link to="/mi-salud" className="bio-ghost-link">
               Volver a Mi salud
             </Link>
-            <Link to="/timeline" className="bio-ghost-link">
+            <Link to="/timeline" className="bio-ghost-link is-muted">
               Ver historial clínico
             </Link>
           </div>
         </div>
+
         <div className="bio-hero-summary">
           <div className="bio-hero-stat">
             <small>Perfil activo</small>
@@ -288,9 +309,48 @@ export default function Biometrics() {
 
       {!canEdit ? (
         <div className="bio-readonly-banner">
-          Estás revisando un perfil en modo lectura. Puedes ver las tendencias, pero no registrar nuevos parámetros desde aquí.
+          Estás revisando un perfil en modo lectura. Puedes ver las tendencias, pero no registrar
+          nuevos parámetros desde aquí.
         </div>
       ) : null}
+
+      <section className="bio-overview-strip">
+        <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
+          <small>Último parámetro visible</small>
+          <strong>
+            {latestMetric?.latest_reading
+              ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
+              : "Aún sin monitoreo activo"}
+          </strong>
+          <span>
+            {latestMetric?.latest_reading
+              ? formatBiometricMeasuredAt(
+                  latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
+                )
+              : "Guarda tu primera medición"}
+          </span>
+        </article>
+
+        <article className="bio-overview-card">
+          <small>Panel listo para consulta</small>
+          <strong>{activeMetrics.length} parámetros con datos</strong>
+          <span>
+            {recentReadings.length
+              ? `${recentReadings.length} registros recientes ordenados por fecha`
+              : "Tus controles aparecerán aquí en cuanto registres valores"}
+          </span>
+        </article>
+
+        <article className="bio-overview-card">
+          <small>Siguiente mejor uso</small>
+          <strong>{canEdit ? "Registrar una medición nueva" : "Revisar tendencia y continuidad"}</strong>
+          <span>
+            {canEdit
+              ? "Usa el formulario para mantener tu seguimiento al día."
+              : "Este panel ya resume los valores más recientes del perfil."}
+          </span>
+        </article>
+      </section>
 
       <section className="bio-top-grid">
         <article className="bio-panel-card bio-form-card">
@@ -301,7 +361,7 @@ export default function Biometrics() {
             </div>
           </div>
 
-          <div className="bio-metric-switch" role="tablist" aria-label="Tipo de parametro">
+          <div className="bio-metric-switch" role="tablist" aria-label="Tipo de parámetro">
             {METRIC_OPTIONS.map((metricType) => {
               const config = getBiometricMetricConfig(metricType);
               return (
@@ -326,7 +386,9 @@ export default function Biometrics() {
                   type="number"
                   step={form.metric_type === "temperature" ? "0.1" : "1"}
                   value={form.value_primary}
-                  onChange={(event) => setForm((prev) => ({ ...prev, value_primary: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, value_primary: event.target.value }))
+                  }
                   placeholder={form.metric_type === "temperature" ? "36.5" : "0"}
                   required
                   disabled={!canEdit || saving}
@@ -340,7 +402,9 @@ export default function Biometrics() {
                     type="number"
                     step="1"
                     value={form.value_secondary}
-                    onChange={(event) => setForm((prev) => ({ ...prev, value_secondary: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, value_secondary: event.target.value }))
+                    }
                     placeholder="0"
                     required
                     disabled={!canEdit || saving}
@@ -363,7 +427,9 @@ export default function Biometrics() {
                 <input
                   type="datetime-local"
                   value={form.measured_at}
-                  onChange={(event) => setForm((prev) => ({ ...prev, measured_at: event.target.value }))}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, measured_at: event.target.value }))
+                  }
                   required
                   disabled={!canEdit || saving}
                 />
@@ -387,7 +453,7 @@ export default function Biometrics() {
                 rows="3"
                 value={form.notes}
                 onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-                placeholder="Agrega una observacion breve si necesitas contexto para la consulta."
+                placeholder="Agrega una observación breve si necesitas contexto para la consulta."
                 disabled={!canEdit || saving}
               />
             </label>
@@ -419,7 +485,8 @@ export default function Biometrics() {
             ))}
           </div>
           <div className="bio-insights-note">
-            Este panel describe tendencias y continuidad de registros. No reemplaza la interpretación de un profesional.
+            Este panel describe tendencias y continuidad de registros. No reemplaza la interpretación
+            de un profesional.
           </div>
         </article>
       </section>
@@ -428,11 +495,9 @@ export default function Biometrics() {
         {metrics.map((metric) => {
           const config = getBiometricMetricConfig(metric.metric_type);
           const latestReading = metric.latest_reading;
+
           return (
-            <article
-              key={metric.metric_type}
-              className={`bio-panel-card bio-metric-card tone-${config.tone}`}
-            >
+            <article key={metric.metric_type} className={`bio-panel-card bio-metric-card tone-${config.tone}`}>
               <div className="bio-metric-card-head">
                 <span className={`bio-metric-icon tone-${config.tone}`}>
                   <MetricIcon metricType={metric.metric_type} />
@@ -444,17 +509,40 @@ export default function Biometrics() {
               </div>
 
               <div className="bio-metric-readout">
-                <strong>{latestReading ? formatBiometricValue(latestReading) : `Sin registros ${config.unit}`.trim()}</strong>
+                <strong>
+                  {latestReading ? formatBiometricValue(latestReading) : `Sin registros ${config.unit}`.trim()}
+                </strong>
                 <span>
                   {latestReading
-                    ? `Ultimo: ${formatBiometricMeasuredAt(
+                    ? `Último: ${formatBiometricMeasuredAt(
                         latestReading.measured_at || latestReading.created_at
                       )}`
-                    : "Aun no has guardado mediciones."}
+                    : "Aún no has guardado mediciones."}
                 </span>
               </div>
 
               <Sparkline points={metric.chart_points} metricType={metric.metric_type} tone={config.tone} />
+
+              <div className="bio-metric-stats">
+                <div className="bio-metric-stat">
+                  <small>Registros</small>
+                  <strong>{metric.readings_count}</strong>
+                </div>
+                <div className="bio-metric-stat">
+                  <small>Promedio reciente</small>
+                  <strong>
+                    {metric.average_primary !== null && metric.average_primary !== undefined
+                      ? formatBiometricValue(
+                          {
+                            value_primary: metric.average_primary,
+                            value_secondary: metric.latest_reading?.value_secondary ?? null,
+                          },
+                          metric.metric_type
+                        )
+                      : "Sin base"}
+                  </strong>
+                </div>
+              </div>
 
               <div className="bio-metric-footer">
                 <span className={`bio-trend-chip tone-${config.tone}`}>
@@ -479,13 +567,17 @@ export default function Biometrics() {
           <div className="bio-recent-list">
             {recentReadings.map((item) => {
               const config = getBiometricMetricConfig(item.metric_type);
+
               return (
                 <div key={item.id} className="bio-recent-row">
                   <span className={`bio-recent-icon tone-${config.tone}`}>
                     <MetricIcon metricType={item.metric_type} />
                   </span>
                   <div className="bio-recent-copy">
-                    <strong>{getBiometricMetricLabel(item.metric_type)}</strong>
+                    <div className="bio-recent-head">
+                      <strong>{getBiometricMetricLabel(item.metric_type)}</strong>
+                      <span className={`bio-recent-pill tone-${config.tone}`}>{config.shortLabel}</span>
+                    </div>
                     <span>{formatBiometricValue(item)}</span>
                     <small>
                       {formatBiometricMeasuredAt(item.measured_at || item.created_at)}
@@ -509,11 +601,11 @@ export default function Biometrics() {
           </div>
         ) : (
           <div className="bio-empty-state">
-            Aun no tienes registros biométricos. Empieza por el parámetro que necesites monitorear con más frecuencia.
+            Aún no tienes registros biométricos. Empieza por el parámetro que necesites monitorear con
+            más frecuencia.
           </div>
         )}
       </section>
     </div>
   );
 }
-
