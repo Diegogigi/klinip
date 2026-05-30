@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   createBiometricReading,
   deleteBiometricReading,
@@ -25,6 +25,13 @@ import {
 } from "../utils/biometrics";
 
 const METRIC_OPTIONS = Object.keys(BIOMETRIC_METRIC_CONFIG);
+const TONE_COLORS = {
+  blue: "#2563eb",
+  violet: "#7c3aed",
+  teal: "#0891b2",
+  amber: "#d97706",
+  slate: "#64748b",
+};
 
 function Sparkline({ points = [], metricType, tone = "blue" }) {
   const values = points
@@ -141,6 +148,23 @@ function MetricIcon({ metricType }) {
   );
 }
 
+function buildMetricShell(metricType, metric = null) {
+  const config = getBiometricMetricConfig(metricType);
+  return (
+    metric || {
+      metric_type: metricType,
+      label: config.label,
+      description: config.description,
+      latest_reading: null,
+      chart_points: [],
+      readings_count: 0,
+      average_primary: null,
+      trend_direction: "stable",
+      trend_summary: `Aún no has registrado ${config.label.toLowerCase()}.`,
+    }
+  );
+}
+
 function getMetricNumericValues(metric) {
   return (metric?.chart_points || [])
     .map((item) => Number(item?.value_primary))
@@ -201,14 +225,136 @@ function splitDisplayValue(reading, metricType) {
   };
 }
 
+function buildUnifiedMetricPath(metric) {
+  const points = getMetricNumericValues(metric);
+  if (!points.length) return null;
+  if (points.length === 1) {
+    return {
+      path: null,
+      points: [{ x: 50, y: 26 }],
+    };
+  }
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const coords = points.map((value, index) => ({
+    x: (index / (points.length - 1)) * 100,
+    y: 54 - ((value - min) / range) * 42,
+  }));
+  return {
+    path: coords.map((point) => `${point.x},${point.y}`).join(" "),
+    points: coords,
+  };
+}
+
+function UnifiedMetricsChart({ metrics = [] }) {
+  const chartMetrics = metrics
+    .map((metric) => {
+      const chart = buildUnifiedMetricPath(metric);
+      return chart
+        ? {
+            metric,
+            chart,
+            color: TONE_COLORS[getBiometricMetricConfig(metric.metric_type).tone] || TONE_COLORS.slate,
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  if (!chartMetrics.length) {
+    return <div className="bio-unified-chart-empty">Registra mediciones para ver el panorama general.</div>;
+  }
+
+  return (
+    <div className="bio-unified-chart">
+      <svg viewBox="0 0 100 64" preserveAspectRatio="none" aria-hidden="true">
+        {[16, 32, 48].map((y) => (
+          <line
+            key={y}
+            x1="0"
+            x2="100"
+            y1={y}
+            y2={y}
+            className="bio-unified-chart-grid"
+          />
+        ))}
+        {chartMetrics.map(({ metric, chart, color }) => (
+          <g key={metric.metric_type}>
+            {chart.path ? (
+              <polyline
+                points={chart.path}
+                fill="none"
+                stroke={color}
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : null}
+            {chart.points.map((point, index) => (
+              <circle
+                key={`${metric.metric_type}-${index}`}
+                cx={point.x}
+                cy={point.y}
+                r={index === chart.points.length - 1 ? 2.3 : 1.5}
+                fill={color}
+              />
+            ))}
+          </g>
+        ))}
+      </svg>
+
+      <div className="bio-unified-chart-legend">
+        {chartMetrics.map(({ metric, color }) => (
+          <div key={metric.metric_type} className="bio-unified-chart-legend-item">
+            <span className="bio-unified-chart-swatch" style={{ backgroundColor: color }} />
+            <div>
+              <strong>{metric.label}</strong>
+              <small>
+                {metric.latest_reading
+                  ? formatBiometricValue(metric.latest_reading, metric.metric_type)
+                  : "Sin registros"}
+              </small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DetailSummaryCards({ metric }) {
+  return (
+    <div className="bio-detail-stats">
+      <div className="bio-detail-stat-card">
+        <small>Promedio reciente</small>
+        <strong>{getMetricAverageLabel(metric)}</strong>
+      </div>
+      <div className="bio-detail-stat-card">
+        <small>Tendencia</small>
+        <strong>{getBiometricTrendLabel(metric?.trend_direction)}</strong>
+      </div>
+      <div className="bio-detail-stat-card">
+        <small>Registros</small>
+        <strong>{metric?.readings_count || 0}</strong>
+      </div>
+    </div>
+  );
+}
+
 export default function Biometrics() {
+  const navigate = useNavigate();
+  const { metricType: routeMetricType } = useParams();
+  const normalizedRouteMetricType = METRIC_OPTIONS.includes(routeMetricType) ? routeMetricType : null;
+  const isMetricDetail = Boolean(normalizedRouteMetricType);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [activeProfile, setActiveProfile] = useState(null);
-  const [form, setForm] = useState(() => buildBiometricEmptyForm());
-  const [selectedMetricType, setSelectedMetricType] = useState("glucose");
+  const [form, setForm] = useState(() =>
+    buildBiometricEmptyForm(normalizedRouteMetricType || "glucose")
+  );
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
 
   const canEdit = canWriteProfile(activeProfile);
@@ -251,67 +397,60 @@ export default function Biometrics() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isEntryModalOpen]);
 
-  useEffect(() => {
-    setForm((prev) => {
-      const config = getBiometricMetricConfig(prev.metric_type);
-      return {
-        ...prev,
-        unit: config.unit,
-      };
-    });
-  }, [form.metric_type]);
-
   const metrics = dashboard?.metrics || [];
   const recentReadings = dashboard?.recent_readings || [];
   const latestMetric = useMemo(() => getBiometricLatestMetric(metrics), [metrics]);
-  const activeMetrics = useMemo(
-    () => metrics.filter((item) => Number(item?.readings_count || 0) > 0),
+  const summaryMetrics = useMemo(
+    () =>
+      METRIC_OPTIONS.map((metricType) =>
+        buildMetricShell(metricType, metrics.find((item) => item.metric_type === metricType))
+      ),
     [metrics]
   );
+  const summaryMetricsWithData = useMemo(
+    () => summaryMetrics.filter((metric) => Number(metric?.readings_count || 0) > 0),
+    [summaryMetrics]
+  );
 
-  const latestMetricConfig = getBiometricMetricConfig(latestMetric?.metric_type || "glucose");
-  const selectedMetric =
-    metrics.find((item) => item.metric_type === selectedMetricType) ||
-    latestMetric ||
-    metrics[0] ||
-    null;
-  const selectedMetricConfig = getBiometricMetricConfig(selectedMetric?.metric_type || "glucose");
+  const selectedMetric = useMemo(() => {
+    const sourceMetricType = normalizedRouteMetricType || latestMetric?.metric_type || "glucose";
+    return buildMetricShell(
+      sourceMetricType,
+      metrics.find((item) => item.metric_type === sourceMetricType)
+    );
+  }, [latestMetric?.metric_type, metrics, normalizedRouteMetricType]);
+
+  const selectedMetricConfig = getBiometricMetricConfig(selectedMetric.metric_type);
   const selectedDisplayValue = splitDisplayValue(
     selectedMetric?.latest_reading || null,
-    selectedMetric?.metric_type || "glucose"
+    selectedMetric.metric_type
   );
+  const filteredRecentReadings = recentReadings.filter(
+    (item) => !isMetricDetail || item.metric_type === normalizedRouteMetricType
+  );
+  const latestMetricConfig = getBiometricMetricConfig(latestMetric?.metric_type || "glucose");
   const formConfig = getBiometricMetricConfig(form.metric_type);
 
   useEffect(() => {
-    if (!latestMetric?.metric_type) return;
-    setSelectedMetricType((prev) =>
-      prev && metrics.some((item) => item.metric_type === prev) ? prev : latestMetric.metric_type
-    );
-  }, [latestMetric?.metric_type, metrics]);
+    if (normalizedRouteMetricType) {
+      setForm((prev) => ({
+        ...buildBiometricEmptyForm(normalizedRouteMetricType),
+        measured_at: prev.measured_at || buildBiometricEmptyForm(normalizedRouteMetricType).measured_at,
+      }));
+      setIsEntryModalOpen(false);
+    }
+  }, [normalizedRouteMetricType]);
 
-  const setMetricForm = useCallback((metricType) => {
-    setForm((prev) => ({
-      ...buildBiometricEmptyForm(metricType),
-      measured_at: prev.measured_at || buildBiometricEmptyForm(metricType).measured_at,
-    }));
-  }, []);
-
-  const handleMetricSelect = useCallback(
+  const openEntryModal = useCallback(
     (metricType) => {
-      setSelectedMetricType(metricType);
-      setMetricForm(metricType);
+      if (!canEdit) return;
+      setForm((prev) => ({
+        ...buildBiometricEmptyForm(metricType),
+        measured_at: prev.measured_at || buildBiometricEmptyForm(metricType).measured_at,
+      }));
+      setIsEntryModalOpen(true);
     },
-    [setMetricForm]
-  );
-
-  const openEntryModalForMetric = useCallback(
-    (metricType) => {
-      handleMetricSelect(metricType);
-      if (canEdit) {
-        setIsEntryModalOpen(true);
-      }
-    },
-    [canEdit, handleMetricSelect]
+    [canEdit]
   );
 
   const closeEntryModal = useCallback(() => {
@@ -379,7 +518,7 @@ export default function Biometrics() {
                 <div>
                   <h3 id="bio-entry-modal-title">Registrar parámetro</h3>
                   <p className="bio-entry-modal-header-copy">
-                    Guarda un valor puntual sin salir del resumen principal.
+                    Guarda un valor puntual sin salir de la vista de detalle.
                   </p>
                 </div>
                 <button
@@ -528,111 +667,223 @@ export default function Biometrics() {
     );
   }
 
-  return (
-    <>
-      <div className="bio-page">
-        <section className="bio-hero-card">
-          <div className="bio-hero-copy">
-            <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
-            <h1 className="bio-title">Monitorea tus controles frecuentes en un solo panel</h1>
-            <p className="bio-subtitle">
-              Registra glucosa, presión arterial, frecuencia cardiaca o temperatura para revisar
-              cambios y compartirlos en consulta.
-            </p>
-            <div className="bio-hero-actions">
-              <Link to="/mi-salud" className="bio-ghost-link">
-                Volver a Mi salud
-              </Link>
-              <Link to="/timeline" className="bio-ghost-link is-muted">
-                Ver historial clínico
-              </Link>
+  if (!isMetricDetail) {
+    return (
+      <>
+        <div className="bio-page">
+          <section className="bio-hero-card bio-summary-hero">
+            <div className="bio-hero-copy">
+              <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
+              <h1 className="bio-title">Elige un parámetro y entra a su seguimiento</h1>
+              <p className="bio-subtitle">
+                Esta vista te muestra el panorama general. Selecciona glucosa, presión arterial,
+                frecuencia cardiaca o temperatura para abrir su detalle y registrar nuevas
+                mediciones sin recargar el inicio del módulo.
+              </p>
+              <div className="bio-hero-actions">
+                <Link to="/mi-salud" className="bio-ghost-link">
+                  Volver a Mi salud
+                </Link>
+                <Link to="/timeline" className="bio-ghost-link is-muted">
+                  Ver historial clínico
+                </Link>
+              </div>
             </div>
-          </div>
 
-          <div className="bio-hero-summary">
-            <div className="bio-hero-stat">
-              <small>Perfil activo</small>
-              <strong>{activeProfile?.full_name || "Mi perfil"}</strong>
+            <div className="bio-hero-summary">
+              <div className="bio-hero-stat">
+                <small>Perfil activo</small>
+                <strong>{activeProfile?.full_name || "Mi perfil"}</strong>
+              </div>
+              <div className="bio-hero-stat">
+                <small>Parámetros con datos</small>
+                <strong>{summaryMetricsWithData.length}</strong>
+              </div>
+              <div className="bio-hero-stat">
+                <small>Último registro</small>
+                <strong>
+                  {latestMetric?.latest_reading
+                    ? formatBiometricMeasuredAt(
+                        latestMetric.latest_reading.measured_at ||
+                          latestMetric.latest_reading.created_at
+                      )
+                    : "Sin registros"}
+                </strong>
+              </div>
+              <div className="bio-hero-stat bio-hero-stat-highlight">
+                <small>Resumen general</small>
+                <strong>
+                  {latestMetric?.latest_reading
+                    ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
+                    : "Comienza tu monitoreo"}
+                </strong>
+              </div>
             </div>
-            <div className="bio-hero-stat">
-              <small>Parámetros en seguimiento</small>
-              <strong>{dashboard?.active_metrics_count || 0}</strong>
+          </section>
+
+          {!canEdit ? (
+            <div className="bio-readonly-banner">
+              Estás revisando un perfil en modo lectura. Puedes revisar tendencias, pero no
+              registrar nuevos parámetros desde este perfil.
             </div>
-            <div className="bio-hero-stat">
-              <small>Último registro</small>
-              <strong>
-                {latestMetric?.latest_reading
-                  ? formatBiometricMeasuredAt(
-                      latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
-                    )
-                  : "Sin registros"}
-              </strong>
-            </div>
-            <div className="bio-hero-stat bio-hero-stat-highlight">
-              <small>Resumen</small>
+          ) : null}
+
+          <section className="bio-summary-layout">
+            <article className="bio-panel-card bio-summary-card">
+              <div className="bio-panel-head">
+                <div>
+                  <h2 className="bio-panel-title">Parámetros biométricos</h2>
+                  <p className="bio-panel-subtitle">
+                    Selecciona uno para entrar a su detalle, ver más contexto y registrar nuevas
+                    mediciones.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bio-parameter-grid">
+                {summaryMetrics.map((metric) => {
+                  const config = getBiometricMetricConfig(metric.metric_type);
+                  return (
+                    <button
+                      key={metric.metric_type}
+                      type="button"
+                      className={`bio-parameter-btn tone-${config.tone}`}
+                      onClick={() => navigate(`/mi-salud/biometricos/${metric.metric_type}`)}
+                    >
+                      <span className={`bio-metric-icon tone-${config.tone}`}>
+                        <MetricIcon metricType={metric.metric_type} />
+                      </span>
+                      <span className="bio-parameter-copy">
+                        <strong>{metric.label}</strong>
+                        <small>
+                          {metric.latest_reading
+                            ? formatBiometricValue(metric.latest_reading, metric.metric_type)
+                            : "Sin registros"}
+                        </small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </article>
+
+            <article className="bio-panel-card bio-summary-card">
+              <div className="bio-panel-head">
+                <div>
+                  <h2 className="bio-panel-title">Panorama combinado</h2>
+                  <p className="bio-panel-subtitle">
+                    El gráfico resume todos los parámetros activos en una sola vista comparativa.
+                  </p>
+                </div>
+              </div>
+
+              <UnifiedMetricsChart metrics={summaryMetricsWithData} />
+              <div className="bio-insights-note bio-unified-chart-note">
+                Cada línea usa la escala propia del parámetro para que puedas comparar continuidad y
+                variación, no valores absolutos entre distintas unidades.
+              </div>
+            </article>
+          </section>
+
+          <section className="bio-overview-strip">
+            <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
+              <small>Último parámetro visible</small>
               <strong>
                 {latestMetric?.latest_reading
                   ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
-                  : "Comienza tu monitoreo"}
+                  : "Aún sin monitoreo activo"}
               </strong>
-            </div>
+              <span>
+                {latestMetric?.latest_reading
+                  ? formatBiometricMeasuredAt(
+                      latestMetric.latest_reading.measured_at ||
+                        latestMetric.latest_reading.created_at
+                    )
+                  : "Guarda tu primera medición"}
+              </span>
+            </article>
+
+            <article className="bio-overview-card">
+              <small>Panel listo para consulta</small>
+              <strong>{recentReadings.length} registros recientes</strong>
+              <span>
+                El detalle por parámetro concentra el registro, el gráfico individual y el historial
+                filtrado.
+              </span>
+            </article>
+
+            <article className="bio-overview-card">
+              <small>Siguiente mejor uso</small>
+              <strong>
+                {canEdit ? "Entrar a un parámetro y registrar un valor" : "Entrar a un parámetro y revisar tendencia"}
+              </strong>
+              <span>
+                {canEdit
+                  ? "Así mantienes el resumen limpio y abres el seguimiento solo cuando lo necesitas."
+                  : "El detalle sigue disponible para lectura clínica ordenada."}
+              </span>
+            </article>
+          </section>
+        </div>
+        {entryModal}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="bio-page bio-page-detail">
+        <section className="bio-detail-topbar">
+          <button
+            type="button"
+            className="bio-back-link"
+            onClick={() => navigate("/mi-salud/biometricos")}
+          >
+            <span aria-hidden="true">←</span>
+            Volver a resumen
+          </button>
+
+          <div className="bio-detail-topbar-copy">
+            <span className="bio-eyebrow">Detalle del parámetro</span>
+            <h1 className="bio-title">{selectedMetric.label}</h1>
+            <p className="bio-subtitle">{selectedMetric.description}</p>
           </div>
+
+          {canEdit ? (
+            <button
+              type="button"
+              className="bio-primary-btn bio-detail-register-btn"
+              onClick={() => openEntryModal(selectedMetric.metric_type)}
+            >
+              Registrar {selectedMetricConfig.shortLabel.toLowerCase()}
+            </button>
+          ) : null}
         </section>
 
-        {!canEdit ? (
-          <div className="bio-readonly-banner">
-            Estás revisando un perfil en modo lectura. Puedes ver las tendencias, pero no registrar
-            nuevos parámetros desde aquí.
-          </div>
-        ) : null}
-
-        <section className="bio-overview-strip">
-          <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
-            <small>Último parámetro visible</small>
-            <strong>
-              {latestMetric?.latest_reading
-                ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
-                : "Aún sin monitoreo activo"}
-            </strong>
-            <span>
-              {latestMetric?.latest_reading
-                ? formatBiometricMeasuredAt(
-                    latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
-                  )
-                : "Guarda tu primera medición"}
-            </span>
-          </article>
-
-          <article className="bio-overview-card">
-            <small>Panel listo para consulta</small>
-            <strong>{activeMetrics.length} parámetros con datos</strong>
-            <span>
-              {recentReadings.length
-                ? `${recentReadings.length} registros recientes ordenados por fecha`
-                : "Tus controles aparecerán aquí en cuanto registres valores"}
-            </span>
-          </article>
-
-          <article className="bio-overview-card">
-            <small>Siguiente mejor uso</small>
-            <strong>
-              {canEdit ? "Registrar una medición nueva" : "Revisar tendencia y continuidad"}
-            </strong>
-            <span>
-              {canEdit
-                ? "Usa el acceso rápido para abrir el registro en una ventana ligera."
-                : "Este panel ya resume los valores más recientes del perfil."}
-            </span>
-          </article>
+        <section className="bio-detail-switcher">
+          {summaryMetrics.map((metric) => {
+            const config = getBiometricMetricConfig(metric.metric_type);
+            return (
+              <button
+                key={metric.metric_type}
+                type="button"
+                className={`bio-detail-switch-btn ${
+                  metric.metric_type === selectedMetric.metric_type ? "is-active" : ""
+                } tone-${config.tone}`}
+                onClick={() => navigate(`/mi-salud/biometricos/${metric.metric_type}`)}
+              >
+                <MetricIcon metricType={metric.metric_type} />
+                <span>{config.shortLabel}</span>
+              </button>
+            );
+          })}
         </section>
 
-        <section className="bio-top-grid">
+        <section className="bio-detail-grid">
           <article className={`bio-panel-card bio-focus-card tone-${selectedMetricConfig.tone}`}>
             <div className="bio-focus-top">
               <div>
-                <small className="bio-focus-label">
-                  {selectedMetric ? getBiometricMetricLabel(selectedMetric.metric_type) : "Parámetro"}
-                </small>
+                <small className="bio-focus-label">{selectedMetric.label}</small>
                 <strong className="bio-focus-timestamp">
                   {selectedMetric?.latest_reading
                     ? formatBiometricMeasuredAt(
@@ -643,7 +894,7 @@ export default function Biometrics() {
                 </strong>
               </div>
               <span className={`bio-focus-icon tone-${selectedMetricConfig.tone}`}>
-                <MetricIcon metricType={selectedMetric?.metric_type || "glucose"} />
+                <MetricIcon metricType={selectedMetric.metric_type} />
               </span>
             </div>
 
@@ -655,7 +906,7 @@ export default function Biometrics() {
               <p className="bio-focus-copy">
                 {selectedMetric?.latest_reading
                   ? selectedMetric.trend_summary
-                  : "Selecciona un parámetro y registra tu primera medición para ver el resumen aquí."}
+                  : `Aún no hay registros de ${selectedMetric.label.toLowerCase()}. Usa el botón superior para guardar la primera medición.`}
               </p>
             </div>
 
@@ -676,15 +927,11 @@ export default function Biometrics() {
             <div className="bio-focus-footer">
               <div className="bio-focus-stat">
                 <small>Promedio reciente</small>
-                <strong>{selectedMetric ? getMetricAverageLabel(selectedMetric) : "Sin base"}</strong>
+                <strong>{getMetricAverageLabel(selectedMetric)}</strong>
               </div>
               <div className="bio-focus-stat">
                 <small>Tendencia</small>
-                <strong>
-                  {selectedMetric
-                    ? getBiometricTrendLabel(selectedMetric.trend_direction)
-                    : "Estable"}
-                </strong>
+                <strong>{getBiometricTrendLabel(selectedMetric?.trend_direction)}</strong>
               </div>
               <div className="bio-focus-stat">
                 <small>Registros</small>
@@ -693,11 +940,33 @@ export default function Biometrics() {
             </div>
           </article>
 
+          <article className="bio-panel-card bio-detail-chart-card">
+            <div className="bio-panel-head">
+              <div>
+                <h2 className="bio-panel-title">Evolución del parámetro</h2>
+                <p className="bio-panel-subtitle">
+                  Aquí se concentra el seguimiento específico de {selectedMetric.label.toLowerCase()}.
+                </p>
+              </div>
+            </div>
+
+            <Sparkline
+              points={selectedMetric.chart_points}
+              metricType={selectedMetric.metric_type}
+              tone={selectedMetricConfig.tone}
+            />
+            <DetailSummaryCards metric={selectedMetric} />
+          </article>
+        </section>
+
+        <section className="bio-detail-bottom-grid">
           <article className="bio-panel-card bio-insights-card">
             <div className="bio-panel-head">
               <div>
                 <h2 className="bio-panel-title">Lectura rápida</h2>
-                <p className="bio-panel-subtitle">Explicación simple para tener tus datos a mano.</p>
+                <p className="bio-panel-subtitle">
+                  Explicación simple enfocada en este parámetro.
+                </p>
               </div>
             </div>
             <div className="bio-insights-list">
@@ -709,141 +978,35 @@ export default function Biometrics() {
               ))}
             </div>
             <div className="bio-insights-note">
-              Este panel describe tendencias y continuidad de registros. No reemplaza la
-              interpretación de un profesional.
+              Este panel describe continuidad y cambios observables. No reemplaza la interpretación
+              de un profesional.
             </div>
           </article>
-        </section>
 
-        <section className="bio-panel-card bio-selector-card">
-          <div className="bio-panel-head">
-            <div>
-              <h2 className="bio-panel-title">
-                {canEdit ? "Registrar nuevo parámetro" : "Parámetros visibles"}
-              </h2>
-              <p className="bio-panel-subtitle">
-                {canEdit
-                  ? "Toca una tarjeta para abrir el formulario en una ventana emergente rápida."
-                  : "Selecciona uno para destacarlo arriba y revisar su evolución."}
-              </p>
+          <article className="bio-panel-card bio-detail-recent-card">
+            <div className="bio-panel-head">
+              <div>
+                <h2 className="bio-panel-title">Historial de {selectedMetricConfig.shortLabel}</h2>
+                <p className="bio-panel-subtitle">
+                  Revisión rápida de las últimas mediciones registradas.
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div
-            className="bio-metric-switch"
-            role={canEdit ? undefined : "tablist"}
-            aria-label={canEdit ? "Registro rápido de parámetro" : "Tipo de parámetro"}
-          >
-            {METRIC_OPTIONS.map((metricType) => {
-              const config = getBiometricMetricConfig(metricType);
-              return (
-                <button
-                  key={metricType}
-                  type="button"
-                  className={`bio-metric-pill${selectedMetricType === metricType ? " is-active" : ""}`}
-                  onClick={() =>
-                    canEdit ? openEntryModalForMetric(metricType) : handleMetricSelect(metricType)
-                  }
-                >
-                  <MetricIcon metricType={metricType} />
-                  <span>{config.shortLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="bio-metrics-grid">
-          {metrics.map((metric) => {
-            const config = getBiometricMetricConfig(metric.metric_type);
-            const latestReading = metric.latest_reading;
-
-            return (
-              <button
-                key={metric.metric_type}
-                type="button"
-                className={`bio-panel-card bio-metric-card tone-${config.tone}${
-                  selectedMetricType === metric.metric_type ? " is-selected" : ""
-                }`}
-                onClick={() => handleMetricSelect(metric.metric_type)}
-              >
-                <div className="bio-metric-card-head">
-                  <span className={`bio-metric-icon tone-${config.tone}`}>
-                    <MetricIcon metricType={metric.metric_type} />
-                  </span>
-                  <div>
-                    <h2 className="bio-panel-title">{metric.label}</h2>
-                    <p className="bio-panel-subtitle">{metric.description}</p>
-                  </div>
-                </div>
-
-                <div className="bio-metric-readout">
-                  <strong>
-                    {latestReading ? formatBiometricValue(latestReading) : `Sin registros ${config.unit}`.trim()}
-                  </strong>
-                  <span>
-                    {latestReading
-                      ? `Último: ${formatBiometricMeasuredAt(
-                          latestReading.measured_at || latestReading.created_at
-                        )}`
-                      : "Aún no has guardado mediciones."}
-                  </span>
-                </div>
-
-                <Sparkline
-                  points={metric.chart_points}
-                  metricType={metric.metric_type}
-                  tone={config.tone}
-                />
-
-                <div className="bio-metric-stats">
-                  <div className="bio-metric-stat">
-                    <small>Registros</small>
-                    <strong>{metric.readings_count}</strong>
-                  </div>
-                  <div className="bio-metric-stat">
-                    <small>Promedio reciente</small>
-                    <strong>{getMetricAverageLabel(metric)}</strong>
-                  </div>
-                </div>
-
-                <div className="bio-metric-footer">
-                  <span className={`bio-trend-chip tone-${config.tone}`}>
-                    {getBiometricTrendLabel(metric.trend_direction)}
-                  </span>
-                  <small>{metric.trend_summary}</small>
-                </div>
-              </button>
-            );
-          })}
-        </section>
-
-        <section className="bio-panel-card bio-recent-card">
-          <div className="bio-panel-head">
-            <div>
-              <h2 className="bio-panel-title">Historial reciente</h2>
-              <p className="bio-panel-subtitle">Tus últimas mediciones para revisar y compartir.</p>
-            </div>
-          </div>
-
-          {recentReadings.length ? (
-            <div className="bio-recent-list">
-              {recentReadings.map((item) => {
-                const config = getBiometricMetricConfig(item.metric_type);
-
-                return (
+            {filteredRecentReadings.length ? (
+              <div className="bio-recent-list">
+                {filteredRecentReadings.map((item) => (
                   <div key={item.id} className="bio-recent-row">
-                    <span className={`bio-recent-icon tone-${config.tone}`}>
+                    <span className={`bio-recent-icon tone-${selectedMetricConfig.tone}`}>
                       <MetricIcon metricType={item.metric_type} />
                     </span>
                     <div className="bio-recent-copy">
                       <div className="bio-recent-head">
-                        <strong>{getBiometricMetricLabel(item.metric_type)}</strong>
-                        <span className={`bio-recent-pill tone-${config.tone}`}>
-                          {config.shortLabel}
+                        <strong>{formatBiometricValue(item)}</strong>
+                        <span className={`bio-recent-pill tone-${selectedMetricConfig.tone}`}>
+                          {selectedMetricConfig.shortLabel}
                         </span>
                       </div>
-                      <span>{formatBiometricValue(item)}</span>
                       <small>
                         {formatBiometricMeasuredAt(item.measured_at || item.created_at)}
                         {item.context ? ` · ${item.context}` : ""}
@@ -861,15 +1024,14 @@ export default function Biometrics() {
                       </button>
                     ) : null}
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="bio-empty-state">
-              Aún no tienes registros biométricos. Empieza por el parámetro que necesites
-              monitorear con más frecuencia.
-            </div>
-          )}
+                ))}
+              </div>
+            ) : (
+              <div className="bio-empty-state">
+                Aún no hay registros de {selectedMetric.label.toLowerCase()} en este perfil.
+              </div>
+            )}
+          </article>
         </section>
       </div>
       {entryModal}

@@ -52522,6 +52522,268 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
   gap: 1rem;
 }
 
+.bio-page-detail {
+  gap: 0.9rem;
+}
+
+.bio-summary-layout,
+.bio-detail-grid,
+.bio-detail-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.bio-summary-card,
+.bio-detail-chart-card,
+.bio-detail-recent-card {
+  min-height: 100%;
+}
+
+.bio-summary-hero {
+  align-items: stretch;
+}
+
+.bio-detail-topbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: 24px;
+  border: 1px solid rgba(191, 219, 254, 0.45);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 255, 0.96));
+  box-shadow: 0 16px 42px rgba(37, 99, 235, 0.08);
+}
+
+.bio-detail-topbar-copy .bio-eyebrow {
+  margin-bottom: 0.22rem;
+}
+
+.bio-detail-topbar-copy .bio-title {
+  margin: 0;
+  font-size: clamp(1.5rem, 2vw, 2rem);
+}
+
+.bio-detail-topbar-copy .bio-subtitle {
+  margin-top: 0.3rem;
+}
+
+.bio-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-height: 40px;
+  padding: 0.58rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.55);
+  background: rgba(248, 250, 255, 0.96);
+  color: #1d4ed8;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.bio-detail-register-btn {
+  justify-self: end;
+}
+
+.bio-parameter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.78rem;
+}
+
+.bio-parameter-btn {
+  border: 1px solid rgba(191, 219, 254, 0.5);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 255, 0.94));
+  border-radius: 20px;
+  min-height: 92px;
+  padding: 0.9rem 0.92rem;
+  display: flex;
+  align-items: center;
+  gap: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.bio-parameter-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.1);
+}
+
+.bio-parameter-btn .bio-metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+}
+
+.bio-parameter-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.bio-parameter-copy strong {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.bio-parameter-copy small {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.bio-unified-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.bio-unified-chart svg {
+  width: 100%;
+  height: 230px;
+  display: block;
+  border-radius: 22px;
+  padding: 0.5rem 0.15rem;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.92));
+}
+
+.bio-unified-chart-grid {
+  stroke: rgba(203, 213, 225, 0.72);
+  stroke-width: 0.8;
+  stroke-dasharray: 3 4;
+}
+
+.bio-unified-chart-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+}
+
+.bio-unified-chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(203, 213, 225, 0.6);
+}
+
+.bio-unified-chart-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.bio-unified-chart-legend-item strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.88rem;
+}
+
+.bio-unified-chart-legend-item small {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.bio-unified-chart-empty {
+  min-height: 220px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #64748b;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(255, 255, 255, 0.92));
+  border: 1px dashed rgba(191, 219, 254, 0.66);
+  padding: 1rem;
+}
+
+.bio-unified-chart-note {
+  margin-top: 0.8rem;
+}
+
+.bio-detail-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.bio-detail-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-height: 38px;
+  padding: 0.56rem 0.88rem;
+  border-radius: 999px;
+  border: 1px solid rgba(191, 219, 254, 0.5);
+  background: rgba(248, 250, 255, 0.94);
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bio-detail-switch-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.bio-detail-switch-btn.is-active.tone-blue {
+  background: rgba(219, 234, 254, 0.9);
+  color: #1d4ed8;
+}
+
+.bio-detail-switch-btn.is-active.tone-violet {
+  background: rgba(237, 233, 254, 0.92);
+  color: #7c3aed;
+}
+
+.bio-detail-switch-btn.is-active.tone-teal {
+  background: rgba(207, 250, 254, 0.92);
+  color: #0891b2;
+}
+
+.bio-detail-switch-btn.is-active.tone-amber {
+  background: rgba(254, 243, 199, 0.92);
+  color: #d97706;
+}
+
+.bio-detail-stats {
+  margin-top: 0.95rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.bio-detail-stat-card {
+  border-radius: 16px;
+  padding: 0.82rem 0.86rem;
+  background: rgba(248, 250, 252, 0.94);
+  border: 1px solid rgba(203, 213, 225, 0.62);
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.bio-detail-stat-card small {
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.bio-detail-stat-card strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
 .bio-overview-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -53490,7 +53752,8 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
 body.theme-dark .home-biometrics-summary,
 body.theme-dark .mobile-biometrics-card,
 body.theme-dark .bio-hero-card,
-body.theme-dark .bio-panel-card {
+body.theme-dark .bio-panel-card,
+body.theme-dark .bio-detail-topbar {
   background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.95));
   border-color: rgba(96, 165, 250, 0.18);
   box-shadow: 0 18px 44px rgba(2, 6, 23, 0.42);
@@ -53499,6 +53762,9 @@ body.theme-dark .bio-panel-card {
 body.theme-dark .home-biometrics-copy strong,
 body.theme-dark .bio-title,
 body.theme-dark .bio-panel-title,
+body.theme-dark .bio-parameter-copy strong,
+body.theme-dark .bio-unified-chart-legend-item strong,
+body.theme-dark .bio-detail-stat-card strong,
 body.theme-dark .bio-recent-copy strong,
 body.theme-dark .mobile-biometrics-copy strong,
 body.theme-dark .bio-metric-readout strong,
@@ -53511,6 +53777,8 @@ body.theme-dark .home-biometrics-copy span,
 body.theme-dark .mobile-biometrics-copy small,
 body.theme-dark .bio-subtitle,
 body.theme-dark .bio-panel-subtitle,
+body.theme-dark .bio-parameter-copy small,
+body.theme-dark .bio-unified-chart-legend-item small,
 body.theme-dark .bio-insight-item p,
 body.theme-dark .bio-insights-note,
 body.theme-dark .bio-recent-copy small,
@@ -53526,9 +53794,29 @@ body.theme-dark .home-biometrics-metric small {
 body.theme-dark .home-biometrics-metric,
 body.theme-dark .bio-hero-stat,
 body.theme-dark .bio-spark,
-body.theme-dark .bio-spark-single {
+body.theme-dark .bio-spark-single,
+body.theme-dark .bio-parameter-btn,
+body.theme-dark .bio-unified-chart svg,
+body.theme-dark .bio-unified-chart-legend-item,
+body.theme-dark .bio-detail-stat-card,
+body.theme-dark .bio-back-link,
+body.theme-dark .bio-detail-switch-btn {
   background: rgba(15, 23, 42, 0.72);
   border-color: rgba(96, 165, 250, 0.16);
+}
+
+body.theme-dark .bio-unified-chart-empty {
+  background: rgba(15, 23, 42, 0.76);
+  border-color: rgba(96, 165, 250, 0.18);
+  color: #cbd5e1;
+}
+
+body.theme-dark .bio-unified-chart-grid {
+  stroke: rgba(100, 116, 139, 0.54);
+}
+
+body.theme-dark .bio-back-link {
+  color: #bfdbfe;
 }
 
 body.theme-dark .bio-field input,
@@ -53662,11 +53950,23 @@ body.theme-dark .bio-metric-card.is-selected {
 }
 
 @media (max-width: 900px) {
+  .bio-summary-layout,
+  .bio-detail-grid,
+  .bio-detail-bottom-grid,
   .bio-overview-strip,
   .bio-hero-card,
   .bio-top-grid,
   .bio-metrics-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bio-detail-topbar {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .bio-detail-register-btn {
+    justify-self: stretch;
   }
 
   .home-biometrics-metrics {
@@ -53678,6 +53978,12 @@ body.theme-dark .bio-metric-card.is-selected {
   .bio-page {
     padding: 0.05rem 0 1.15rem;
     gap: 0.72rem;
+  }
+
+  .bio-detail-topbar {
+    padding: 0.9rem;
+    border-radius: 18px;
+    gap: 0.78rem;
   }
 
   .bio-hero-card,
@@ -53707,6 +54013,26 @@ body.theme-dark .bio-metric-card.is-selected {
 
   .bio-overview-card strong {
     font-size: 0.93rem;
+  }
+
+  .bio-parameter-grid,
+  .bio-unified-chart-legend,
+  .bio-detail-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .bio-unified-chart svg {
+    height: 190px;
+  }
+
+  .bio-detail-switcher {
+    gap: 0.55rem;
+  }
+
+  .bio-detail-switch-btn {
+    min-height: 34px;
+    padding: 0.48rem 0.7rem;
+    font-size: 0.76rem;
   }
 
   .bio-focus-card {
@@ -53788,6 +54114,31 @@ body.theme-dark .bio-metric-card.is-selected {
     font-size: 0.98rem;
   }
 
+  .bio-back-link,
+  .bio-parameter-btn {
+    min-height: 0;
+  }
+
+  .bio-parameter-btn {
+    border-radius: 16px;
+    padding: 0.8rem;
+    gap: 0.68rem;
+  }
+
+  .bio-parameter-btn .bio-metric-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .bio-parameter-copy strong {
+    font-size: 0.92rem;
+  }
+
+  .bio-parameter-copy small {
+    font-size: 0.76rem;
+  }
+
   .bio-selector-card {
     padding-top: 0.9rem;
   }
@@ -53802,6 +54153,11 @@ body.theme-dark .bio-metric-card.is-selected {
 
   .bio-entry-modal-copy p {
     font-size: 0.82rem;
+  }
+
+  .bio-detail-stat-card {
+    border-radius: 14px;
+    padding: 0.7rem 0.74rem;
   }
 
   .bio-modal-action-row {
@@ -53924,12 +54280,26 @@ body.theme-dark .bio-metric-card.is-selected {
     padding: 0.82rem;
   }
 
+  .bio-detail-topbar {
+    padding: 0.82rem;
+  }
+
   .bio-title {
     font-size: 1.18rem;
   }
 
   .bio-subtitle {
     font-size: 0.82rem;
+  }
+
+  .bio-parameter-grid,
+  .bio-unified-chart-legend,
+  .bio-detail-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .bio-unified-chart svg {
+    height: 168px;
   }
 
   .bio-hero-summary,

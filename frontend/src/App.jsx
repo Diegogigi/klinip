@@ -2611,6 +2611,14 @@ export default function App() {
                 }
               />
               <Route
+                path="/mi-salud/biometricos/:metricType"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Biometrics key={`biometrics-detail-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/ai"
                 element={
                   <ProtectedRoute user={user}>

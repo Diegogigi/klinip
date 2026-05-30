@@ -34,7 +34,7 @@ export const BIOMETRIC_METRIC_CONFIG = {
 export function getBiometricMetricConfig(metricType) {
   return (
     BIOMETRIC_METRIC_CONFIG[metricType] || {
-      label: "Parametro",
+      label: "Parámetro",
       unit: "",
       description: "Registro biométrico",
       shortLabel: "Parámetro",
@@ -90,13 +90,19 @@ export function getBiometricTrendLabel(direction) {
 }
 
 export function getBiometricLatestMetric(metrics = []) {
-  return [...metrics]
-    .filter((item) => item?.latest_reading?.measured_at || item?.latest_reading?.created_at)
-    .sort((left, right) => {
-      const leftDate = parseDate(left?.latest_reading?.measured_at || left?.latest_reading?.created_at);
-      const rightDate = parseDate(right?.latest_reading?.measured_at || right?.latest_reading?.created_at);
-      return (rightDate?.getTime?.() || 0) - (leftDate?.getTime?.() || 0);
-    })[0] || null;
+  return (
+    [...metrics]
+      .filter((item) => item?.latest_reading?.measured_at || item?.latest_reading?.created_at)
+      .sort((left, right) => {
+        const leftDate = parseDate(
+          left?.latest_reading?.measured_at || left?.latest_reading?.created_at
+        );
+        const rightDate = parseDate(
+          right?.latest_reading?.measured_at || right?.latest_reading?.created_at
+        );
+        return (rightDate?.getTime?.() || 0) - (leftDate?.getTime?.() || 0);
+      })[0] || null
+  );
 }
 
 export function buildBiometricEmptyForm(metricType = "glucose") {
