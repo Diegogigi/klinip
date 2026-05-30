@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import {
   createBiometricReading,
@@ -6,6 +7,7 @@ import {
   getActiveHealthProfile,
   getBiometricDashboard,
 } from "../api";
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 import {
   notifyClinicalDataChanged,
   subscribeClinicalDataChanged,
@@ -173,6 +175,7 @@ function splitDisplayValue(reading, metricType) {
   if (!reading) {
     return { value: "--", unit: getBiometricMetricConfig(metricType).unit };
   }
+
   if (metricType === "blood_pressure") {
     const systolic = Math.round(Number(reading.value_primary || 0));
     const diastolic =
@@ -184,12 +187,14 @@ function splitDisplayValue(reading, metricType) {
       unit: getBiometricMetricConfig(metricType).unit,
     };
   }
+
   if (metricType === "temperature") {
     return {
       value: Number(reading.value_primary || 0).toFixed(1),
       unit: getBiometricMetricConfig(metricType).unit,
     };
   }
+
   return {
     value: `${Math.round(Number(reading.value_primary || 0))}`,
     unit: getBiometricMetricConfig(metricType).unit,
@@ -204,8 +209,10 @@ export default function Biometrics() {
   const [activeProfile, setActiveProfile] = useState(null);
   const [form, setForm] = useState(() => buildBiometricEmptyForm());
   const [selectedMetricType, setSelectedMetricType] = useState("glucose");
+  const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
 
   const canEdit = canWriteProfile(activeProfile);
+  useMobileOverlayLock(isEntryModalOpen);
 
   const loadDashboard = useCallback(async () => {
     const [profileResponse, dashboardResponse] = await Promise.all([
@@ -234,6 +241,17 @@ export default function Biometrics() {
   }, [loadDashboard]);
 
   useEffect(() => {
+    if (!isEntryModalOpen) return undefined;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsEntryModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isEntryModalOpen]);
+
+  useEffect(() => {
     setForm((prev) => {
       const config = getBiometricMetricConfig(prev.metric_type);
       return {
@@ -250,6 +268,7 @@ export default function Biometrics() {
     () => metrics.filter((item) => Number(item?.readings_count || 0) > 0),
     [metrics]
   );
+
   const latestMetricConfig = getBiometricMetricConfig(latestMetric?.metric_type || "glucose");
   const selectedMetric =
     metrics.find((item) => item.metric_type === selectedMetricType) ||
@@ -261,19 +280,43 @@ export default function Biometrics() {
     selectedMetric?.latest_reading || null,
     selectedMetric?.metric_type || "glucose"
   );
+  const formConfig = getBiometricMetricConfig(form.metric_type);
 
   useEffect(() => {
     if (!latestMetric?.metric_type) return;
-    setSelectedMetricType((prev) => (prev && metrics.some((item) => item.metric_type === prev) ? prev : latestMetric.metric_type));
+    setSelectedMetricType((prev) =>
+      prev && metrics.some((item) => item.metric_type === prev) ? prev : latestMetric.metric_type
+    );
   }, [latestMetric?.metric_type, metrics]);
 
-  const handleMetricChange = (metricType) => {
-    setSelectedMetricType(metricType);
+  const setMetricForm = useCallback((metricType) => {
     setForm((prev) => ({
       ...buildBiometricEmptyForm(metricType),
       measured_at: prev.measured_at || buildBiometricEmptyForm(metricType).measured_at,
     }));
-  };
+  }, []);
+
+  const handleMetricSelect = useCallback(
+    (metricType) => {
+      setSelectedMetricType(metricType);
+      setMetricForm(metricType);
+    },
+    [setMetricForm]
+  );
+
+  const openEntryModalForMetric = useCallback(
+    (metricType) => {
+      handleMetricSelect(metricType);
+      if (canEdit) {
+        setIsEntryModalOpen(true);
+      }
+    },
+    [canEdit, handleMetricSelect]
+  );
+
+  const closeEntryModal = useCallback(() => {
+    setIsEntryModalOpen(false);
+  }, []);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -294,6 +337,7 @@ export default function Biometrics() {
         sources: ["biometrics"],
       });
       setForm(buildBiometricEmptyForm(form.metric_type));
+      setIsEntryModalOpen(false);
       await loadDashboard();
     } catch (error) {
       window.alert(error?.response?.data?.detail || "No pudimos guardar el registro biométrico.");
@@ -320,430 +364,515 @@ export default function Biometrics() {
     }
   };
 
+  const entryModal =
+    isEntryModalOpen && canEdit
+      ? createPortal(
+          <div className="modal-backdrop" onClick={closeEntryModal}>
+            <div
+              className="modal-card bio-entry-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="bio-entry-modal-title"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-card-header bio-entry-modal-header">
+                <div>
+                  <h3 id="bio-entry-modal-title">Registrar parámetro</h3>
+                  <p className="bio-entry-modal-header-copy">
+                    Guarda un valor puntual sin salir del resumen principal.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="modal-card-close"
+                  onClick={closeEntryModal}
+                  aria-label="Cerrar registro de biométricos"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-card-body bio-entry-modal-body">
+                <div className="bio-entry-modal-copy">
+                  <span className={`bio-entry-modal-badge tone-${formConfig.tone}`}>
+                    <MetricIcon metricType={form.metric_type} />
+                    {getBiometricMetricLabel(form.metric_type)}
+                  </span>
+                  <p>
+                    Completa la medición con fecha, contexto y una nota opcional para dejarla lista
+                    para revisión clínica.
+                  </p>
+                </div>
+
+                <form className="bio-form bio-modal-form" onSubmit={handleSubmit}>
+                  <div className="bio-form-grid">
+                    <label className="bio-field">
+                      <span>{form.metric_type === "blood_pressure" ? "Sistólica" : "Valor"}</span>
+                      <input
+                        type="number"
+                        step={form.metric_type === "temperature" ? "0.1" : "1"}
+                        value={form.value_primary}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, value_primary: event.target.value }))
+                        }
+                        placeholder={form.metric_type === "temperature" ? "36.5" : "0"}
+                        required
+                        disabled={saving}
+                      />
+                    </label>
+
+                    {form.metric_type === "blood_pressure" ? (
+                      <label className="bio-field">
+                        <span>Diastólica</span>
+                        <input
+                          type="number"
+                          step="1"
+                          value={form.value_secondary}
+                          onChange={(event) =>
+                            setForm((prev) => ({ ...prev, value_secondary: event.target.value }))
+                          }
+                          placeholder="0"
+                          required
+                          disabled={saving}
+                        />
+                      </label>
+                    ) : (
+                      <label className="bio-field">
+                        <span>Unidad</span>
+                        <input
+                          type="text"
+                          value={form.unit}
+                          onChange={(event) =>
+                            setForm((prev) => ({ ...prev, unit: event.target.value }))
+                          }
+                          disabled={saving}
+                        />
+                      </label>
+                    )}
+
+                    <label className="bio-field">
+                      <span>Fecha y hora</span>
+                      <input
+                        type="datetime-local"
+                        value={form.measured_at}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, measured_at: event.target.value }))
+                        }
+                        required
+                        disabled={saving}
+                      />
+                    </label>
+
+                    <label className="bio-field">
+                      <span>Contexto</span>
+                      <input
+                        type="text"
+                        value={form.context}
+                        onChange={(event) =>
+                          setForm((prev) => ({ ...prev, context: event.target.value }))
+                        }
+                        placeholder="Ej. ayunas, reposo, antes de dormir"
+                        disabled={saving}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="bio-field">
+                    <span>Notas</span>
+                    <textarea
+                      rows="3"
+                      value={form.notes}
+                      onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
+                      placeholder="Agrega una observación breve si necesitas contexto para la consulta."
+                      disabled={saving}
+                    />
+                  </label>
+
+                  <div className="bio-form-actions bio-modal-actions">
+                    <span className="bio-form-hint">
+                      {getBiometricMetricLabel(form.metric_type)} · {formConfig.unit}
+                    </span>
+                    <div className="bio-modal-action-row">
+                      <button
+                        type="button"
+                        className="bio-secondary-btn"
+                        onClick={closeEntryModal}
+                        disabled={saving}
+                      >
+                        Cancelar
+                      </button>
+                      <button type="submit" className="bio-primary-btn" disabled={saving}>
+                        {saving ? "Guardando..." : "Guardar registro"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>,
+          document.getElementById("overlay-root") || document.body
+        )
+      : null;
+
   if (loading) {
     return (
-      <div className="bio-page">
-        <div className="bio-loading">
-          <div className="bio-loading-pulse" />
-          <span>Cargando tu panel de biométricos...</span>
+      <>
+        <div className="bio-page">
+          <div className="bio-loading">
+            <div className="bio-loading-pulse" />
+            <span>Cargando tu panel de biométricos...</span>
+          </div>
         </div>
-      </div>
+        {entryModal}
+      </>
     );
   }
 
   return (
-    <div className="bio-page">
-      <section className="bio-hero-card">
-        <div className="bio-hero-copy">
-          <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
-          <h1 className="bio-title">Monitorea tus controles frecuentes en un solo panel</h1>
-          <p className="bio-subtitle">
-            Registra glucosa, presión arterial, frecuencia cardiaca o temperatura para revisar cambios
-            y compartirlos en consulta.
-          </p>
-          <div className="bio-hero-actions">
-            <Link to="/mi-salud" className="bio-ghost-link">
-              Volver a Mi salud
-            </Link>
-            <Link to="/timeline" className="bio-ghost-link is-muted">
-              Ver historial clínico
-            </Link>
+    <>
+      <div className="bio-page">
+        <section className="bio-hero-card">
+          <div className="bio-hero-copy">
+            <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
+            <h1 className="bio-title">Monitorea tus controles frecuentes en un solo panel</h1>
+            <p className="bio-subtitle">
+              Registra glucosa, presión arterial, frecuencia cardiaca o temperatura para revisar
+              cambios y compartirlos en consulta.
+            </p>
+            <div className="bio-hero-actions">
+              <Link to="/mi-salud" className="bio-ghost-link">
+                Volver a Mi salud
+              </Link>
+              <Link to="/timeline" className="bio-ghost-link is-muted">
+                Ver historial clínico
+              </Link>
+            </div>
           </div>
-        </div>
 
-        <div className="bio-hero-summary">
-          <div className="bio-hero-stat">
-            <small>Perfil activo</small>
-            <strong>{activeProfile?.full_name || "Mi perfil"}</strong>
-          </div>
-          <div className="bio-hero-stat">
-            <small>Parámetros en seguimiento</small>
-            <strong>{dashboard?.active_metrics_count || 0}</strong>
-          </div>
-          <div className="bio-hero-stat">
-            <small>Último registro</small>
-            <strong>
-              {latestMetric?.latest_reading
-                ? formatBiometricMeasuredAt(
-                    latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
-                  )
-                : "Sin registros"}
-            </strong>
-          </div>
-          <div className="bio-hero-stat bio-hero-stat-highlight">
-            <small>Resumen</small>
-            <strong>
-              {latestMetric?.latest_reading
-                ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
-                : "Comienza tu monitoreo"}
-            </strong>
-          </div>
-        </div>
-      </section>
-
-      {!canEdit ? (
-        <div className="bio-readonly-banner">
-          Estás revisando un perfil en modo lectura. Puedes ver las tendencias, pero no registrar
-          nuevos parámetros desde aquí.
-        </div>
-      ) : null}
-
-      <section className="bio-overview-strip">
-        <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
-          <small>Último parámetro visible</small>
-          <strong>
-            {latestMetric?.latest_reading
-              ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
-              : "Aún sin monitoreo activo"}
-          </strong>
-          <span>
-            {latestMetric?.latest_reading
-              ? formatBiometricMeasuredAt(
-                  latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
-                )
-              : "Guarda tu primera medición"}
-          </span>
-        </article>
-
-        <article className="bio-overview-card">
-          <small>Panel listo para consulta</small>
-          <strong>{activeMetrics.length} parámetros con datos</strong>
-          <span>
-            {recentReadings.length
-              ? `${recentReadings.length} registros recientes ordenados por fecha`
-              : "Tus controles aparecerán aquí en cuanto registres valores"}
-          </span>
-        </article>
-
-        <article className="bio-overview-card">
-          <small>Siguiente mejor uso</small>
-          <strong>{canEdit ? "Registrar una medición nueva" : "Revisar tendencia y continuidad"}</strong>
-          <span>
-            {canEdit
-              ? "Usa el formulario para mantener tu seguimiento al día."
-              : "Este panel ya resume los valores más recientes del perfil."}
-          </span>
-        </article>
-      </section>
-
-      <section className="bio-top-grid">
-        <article className={`bio-panel-card bio-focus-card tone-${selectedMetricConfig.tone}`}>
-          <div className="bio-focus-top">
-            <div>
-              <small className="bio-focus-label">
-                {selectedMetric ? getBiometricMetricLabel(selectedMetric.metric_type) : "Parámetro"}
-              </small>
-              <strong className="bio-focus-timestamp">
-                {selectedMetric?.latest_reading
+          <div className="bio-hero-summary">
+            <div className="bio-hero-stat">
+              <small>Perfil activo</small>
+              <strong>{activeProfile?.full_name || "Mi perfil"}</strong>
+            </div>
+            <div className="bio-hero-stat">
+              <small>Parámetros en seguimiento</small>
+              <strong>{dashboard?.active_metrics_count || 0}</strong>
+            </div>
+            <div className="bio-hero-stat">
+              <small>Último registro</small>
+              <strong>
+                {latestMetric?.latest_reading
                   ? formatBiometricMeasuredAt(
-                      selectedMetric.latest_reading.measured_at || selectedMetric.latest_reading.created_at
+                      latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
                     )
                   : "Sin registros"}
               </strong>
             </div>
-            <span className={`bio-focus-icon tone-${selectedMetricConfig.tone}`}>
-              <MetricIcon metricType={selectedMetric?.metric_type || "glucose"} />
+            <div className="bio-hero-stat bio-hero-stat-highlight">
+              <small>Resumen</small>
+              <strong>
+                {latestMetric?.latest_reading
+                  ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
+                  : "Comienza tu monitoreo"}
+              </strong>
+            </div>
+          </div>
+        </section>
+
+        {!canEdit ? (
+          <div className="bio-readonly-banner">
+            Estás revisando un perfil en modo lectura. Puedes ver las tendencias, pero no registrar
+            nuevos parámetros desde aquí.
+          </div>
+        ) : null}
+
+        <section className="bio-overview-strip">
+          <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
+            <small>Último parámetro visible</small>
+            <strong>
+              {latestMetric?.latest_reading
+                ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
+                : "Aún sin monitoreo activo"}
+            </strong>
+            <span>
+              {latestMetric?.latest_reading
+                ? formatBiometricMeasuredAt(
+                    latestMetric.latest_reading.measured_at || latestMetric.latest_reading.created_at
+                  )
+                : "Guarda tu primera medición"}
             </span>
-          </div>
+          </article>
 
-          <div className="bio-focus-main">
-            <div className="bio-focus-value-wrap">
-              <strong className="bio-focus-value">{selectedDisplayValue.value}</strong>
-              <span className="bio-focus-unit">{selectedDisplayValue.unit}</span>
-            </div>
-            <p className="bio-focus-copy">
-              {selectedMetric?.latest_reading
-                ? selectedMetric.trend_summary
-                : "Selecciona un parámetro y registra tu primera medición para ver el resumen aquí."}
-            </p>
-          </div>
+          <article className="bio-overview-card">
+            <small>Panel listo para consulta</small>
+            <strong>{activeMetrics.length} parámetros con datos</strong>
+            <span>
+              {recentReadings.length
+                ? `${recentReadings.length} registros recientes ordenados por fecha`
+                : "Tus controles aparecerán aquí en cuanto registres valores"}
+            </span>
+          </article>
 
-          <div className="bio-focus-scale" aria-hidden="true">
-            <span className="bio-focus-scale-dot" style={{ left: `${getMetricPosition(selectedMetric)}%` }} />
-            <div className="bio-focus-scale-track">
-              <span className="segment short" />
-              <span className="segment mid" />
-              <span className={`segment accent tone-${selectedMetricConfig.tone}`} />
-              <span className="segment long" />
-              <span className="segment tail" />
-            </div>
-          </div>
+          <article className="bio-overview-card">
+            <small>Siguiente mejor uso</small>
+            <strong>
+              {canEdit ? "Registrar una medición nueva" : "Revisar tendencia y continuidad"}
+            </strong>
+            <span>
+              {canEdit
+                ? "Usa el acceso rápido para abrir el registro en una ventana ligera."
+                : "Este panel ya resume los valores más recientes del perfil."}
+            </span>
+          </article>
+        </section>
 
-          <div className="bio-focus-footer">
-            <div className="bio-focus-stat">
-              <small>Promedio reciente</small>
-              <strong>{selectedMetric ? getMetricAverageLabel(selectedMetric) : "Sin base"}</strong>
-            </div>
-            <div className="bio-focus-stat">
-              <small>Tendencia</small>
-              <strong>{selectedMetric ? getBiometricTrendLabel(selectedMetric.trend_direction) : "Estable"}</strong>
-            </div>
-            <div className="bio-focus-stat">
-              <small>Registros</small>
-              <strong>{selectedMetric?.readings_count || 0}</strong>
-            </div>
-          </div>
-        </article>
-
-        <article className="bio-panel-card bio-insights-card">
-          <div className="bio-panel-head">
-            <div>
-              <h2 className="bio-panel-title">Lectura rápida</h2>
-              <p className="bio-panel-subtitle">Explicación simple para tener tus datos a mano.</p>
-            </div>
-          </div>
-          <div className="bio-insights-list">
-            {(dashboard?.insights || []).map((item, index) => (
-              <div key={`${item}-${index}`} className="bio-insight-item">
-                <span className="bio-insight-dot" />
-                <p>{item}</p>
-              </div>
-            ))}
-          </div>
-          <div className="bio-insights-note">
-            Este panel describe tendencias y continuidad de registros. No reemplaza la interpretación
-            de un profesional.
-          </div>
-        </article>
-      </section>
-
-      <section className="bio-panel-card bio-selector-card">
-        <div className="bio-panel-head">
-          <div>
-            <h2 className="bio-panel-title">Parámetros visibles</h2>
-            <p className="bio-panel-subtitle">Selecciona uno para destacarlo arriba y revisar su evolución.</p>
-          </div>
-        </div>
-
-        <div className="bio-metric-switch" role="tablist" aria-label="Tipo de parámetro">
-          {METRIC_OPTIONS.map((metricType) => {
-            const config = getBiometricMetricConfig(metricType);
-            return (
-              <button
-                key={metricType}
-                type="button"
-                className={`bio-metric-pill${selectedMetricType === metricType ? " is-active" : ""}`}
-                onClick={() => handleMetricChange(metricType)}
-              >
-                <MetricIcon metricType={metricType} />
-                <span>{config.shortLabel}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="bio-metrics-grid">
-        {metrics.map((metric) => {
-          const config = getBiometricMetricConfig(metric.metric_type);
-          const latestReading = metric.latest_reading;
-
-          return (
-            <button
-              key={metric.metric_type}
-              type="button"
-              className={`bio-panel-card bio-metric-card tone-${config.tone}${selectedMetricType === metric.metric_type ? " is-selected" : ""}`}
-              onClick={() => handleMetricChange(metric.metric_type)}
-            >
-              <div className="bio-metric-card-head">
-                <span className={`bio-metric-icon tone-${config.tone}`}>
-                  <MetricIcon metricType={metric.metric_type} />
-                </span>
-                <div>
-                  <h2 className="bio-panel-title">{metric.label}</h2>
-                  <p className="bio-panel-subtitle">{metric.description}</p>
-                </div>
-              </div>
-
-              <div className="bio-metric-readout">
-                <strong>
-                  {latestReading ? formatBiometricValue(latestReading) : `Sin registros ${config.unit}`.trim()}
+        <section className="bio-top-grid">
+          <article className={`bio-panel-card bio-focus-card tone-${selectedMetricConfig.tone}`}>
+            <div className="bio-focus-top">
+              <div>
+                <small className="bio-focus-label">
+                  {selectedMetric ? getBiometricMetricLabel(selectedMetric.metric_type) : "Parámetro"}
+                </small>
+                <strong className="bio-focus-timestamp">
+                  {selectedMetric?.latest_reading
+                    ? formatBiometricMeasuredAt(
+                        selectedMetric.latest_reading.measured_at ||
+                          selectedMetric.latest_reading.created_at
+                      )
+                    : "Sin registros"}
                 </strong>
-                <span>
-                  {latestReading
-                      ? `Último: ${formatBiometricMeasuredAt(
-                        latestReading.measured_at || latestReading.created_at
-                      )}`
-                      : "Aún no has guardado mediciones."}
-                </span>
               </div>
-
-              <Sparkline points={metric.chart_points} metricType={metric.metric_type} tone={config.tone} />
-
-              <div className="bio-metric-stats">
-                <div className="bio-metric-stat">
-                  <small>Registros</small>
-                  <strong>{metric.readings_count}</strong>
-                </div>
-                <div className="bio-metric-stat">
-                  <small>Promedio reciente</small>
-                  <strong>{getMetricAverageLabel(metric)}</strong>
-                </div>
-              </div>
-
-              <div className="bio-metric-footer">
-                <span className={`bio-trend-chip tone-${config.tone}`}>
-                  {getBiometricTrendLabel(metric.trend_direction)}
-                </span>
-                <small>{metric.trend_summary}</small>
-              </div>
-            </button>
-          );
-        })}
-      </section>
-
-      <section className="bio-top-grid bio-top-grid-secondary">
-        <article className="bio-panel-card bio-form-card">
-          <div className="bio-panel-head">
-            <div>
-              <h2 className="bio-panel-title">Nuevo registro</h2>
-              <p className="bio-panel-subtitle">Guarda cada medición con fecha, contexto y unidad.</p>
-            </div>
-          </div>
-
-          <form className="bio-form" onSubmit={handleSubmit}>
-            <div className="bio-form-grid">
-              <label className="bio-field">
-                  <span>{form.metric_type === "blood_pressure" ? "Sistólica" : "Valor"}</span>
-                <input
-                  type="number"
-                  step={form.metric_type === "temperature" ? "0.1" : "1"}
-                  value={form.value_primary}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, value_primary: event.target.value }))
-                  }
-                  placeholder={form.metric_type === "temperature" ? "36.5" : "0"}
-                  required
-                  disabled={!canEdit || saving}
-                />
-              </label>
-
-              {form.metric_type === "blood_pressure" ? (
-                <label className="bio-field">
-                    <span>Diastólica</span>
-                  <input
-                    type="number"
-                    step="1"
-                    value={form.value_secondary}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, value_secondary: event.target.value }))
-                    }
-                    placeholder="0"
-                    required
-                    disabled={!canEdit || saving}
-                  />
-                </label>
-              ) : (
-                <label className="bio-field">
-                  <span>Unidad</span>
-                  <input
-                    type="text"
-                    value={form.unit}
-                    onChange={(event) => setForm((prev) => ({ ...prev, unit: event.target.value }))}
-                    disabled={!canEdit || saving}
-                  />
-                </label>
-              )}
-
-              <label className="bio-field">
-                <span>Fecha y hora</span>
-                <input
-                  type="datetime-local"
-                  value={form.measured_at}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, measured_at: event.target.value }))
-                  }
-                  required
-                  disabled={!canEdit || saving}
-                />
-              </label>
-
-              <label className="bio-field">
-                <span>Contexto</span>
-                <input
-                  type="text"
-                  value={form.context}
-                  onChange={(event) => setForm((prev) => ({ ...prev, context: event.target.value }))}
-                  placeholder="Ej. ayunas, reposo, antes de dormir"
-                  disabled={!canEdit || saving}
-                />
-              </label>
-            </div>
-
-            <label className="bio-field">
-              <span>Notas</span>
-              <textarea
-                rows="3"
-                value={form.notes}
-                onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
-                  placeholder="Agrega una observación breve si necesitas contexto para la consulta."
-                disabled={!canEdit || saving}
-              />
-            </label>
-
-            <div className="bio-form-actions">
-              <button type="submit" className="bio-primary-btn" disabled={!canEdit || saving}>
-                {saving ? "Guardando..." : "Guardar registro"}
-              </button>
-              <span className="bio-form-hint">
-                {getBiometricMetricLabel(form.metric_type)} · {getBiometricMetricConfig(form.metric_type).unit}
+              <span className={`bio-focus-icon tone-${selectedMetricConfig.tone}`}>
+                <MetricIcon metricType={selectedMetric?.metric_type || "glucose"} />
               </span>
             </div>
-          </form>
-        </article>
-      </section>
 
-      <section className="bio-panel-card bio-recent-card">
-        <div className="bio-panel-head">
-          <div>
-            <h2 className="bio-panel-title">Historial reciente</h2>
-            <p className="bio-panel-subtitle">Tus últimas mediciones para revisar y compartir.</p>
-          </div>
-        </div>
+            <div className="bio-focus-main">
+              <div className="bio-focus-value-wrap">
+                <strong className="bio-focus-value">{selectedDisplayValue.value}</strong>
+                <span className="bio-focus-unit">{selectedDisplayValue.unit}</span>
+              </div>
+              <p className="bio-focus-copy">
+                {selectedMetric?.latest_reading
+                  ? selectedMetric.trend_summary
+                  : "Selecciona un parámetro y registra tu primera medición para ver el resumen aquí."}
+              </p>
+            </div>
 
-        {recentReadings.length ? (
-          <div className="bio-recent-list">
-            {recentReadings.map((item) => {
-              const config = getBiometricMetricConfig(item.metric_type);
+            <div className="bio-focus-scale" aria-hidden="true">
+              <span
+                className="bio-focus-scale-dot"
+                style={{ left: `${getMetricPosition(selectedMetric)}%` }}
+              />
+              <div className="bio-focus-scale-track">
+                <span className="segment short" />
+                <span className="segment mid" />
+                <span className={`segment accent tone-${selectedMetricConfig.tone}`} />
+                <span className="segment long" />
+                <span className="segment tail" />
+              </div>
+            </div>
 
-              return (
-                <div key={item.id} className="bio-recent-row">
-                  <span className={`bio-recent-icon tone-${config.tone}`}>
-                    <MetricIcon metricType={item.metric_type} />
-                  </span>
-                  <div className="bio-recent-copy">
-                    <div className="bio-recent-head">
-                      <strong>{getBiometricMetricLabel(item.metric_type)}</strong>
-                      <span className={`bio-recent-pill tone-${config.tone}`}>{config.shortLabel}</span>
-                    </div>
-                    <span>{formatBiometricValue(item)}</span>
-                    <small>
-                      {formatBiometricMeasuredAt(item.measured_at || item.created_at)}
-                      {item.context ? ` · ${item.context}` : ""}
-                      {item.notes ? ` · ${item.notes}` : ""}
-                    </small>
-                  </div>
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      className="bio-delete-btn"
-                      onClick={() => handleDelete(item.id)}
-                      disabled={deletingId === item.id}
-                    >
-                      {deletingId === item.id ? "Eliminando..." : "Eliminar"}
-                    </button>
-                  ) : null}
+            <div className="bio-focus-footer">
+              <div className="bio-focus-stat">
+                <small>Promedio reciente</small>
+                <strong>{selectedMetric ? getMetricAverageLabel(selectedMetric) : "Sin base"}</strong>
+              </div>
+              <div className="bio-focus-stat">
+                <small>Tendencia</small>
+                <strong>
+                  {selectedMetric
+                    ? getBiometricTrendLabel(selectedMetric.trend_direction)
+                    : "Estable"}
+                </strong>
+              </div>
+              <div className="bio-focus-stat">
+                <small>Registros</small>
+                <strong>{selectedMetric?.readings_count || 0}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article className="bio-panel-card bio-insights-card">
+            <div className="bio-panel-head">
+              <div>
+                <h2 className="bio-panel-title">Lectura rápida</h2>
+                <p className="bio-panel-subtitle">Explicación simple para tener tus datos a mano.</p>
+              </div>
+            </div>
+            <div className="bio-insights-list">
+              {(dashboard?.insights || []).map((item, index) => (
+                <div key={`${item}-${index}`} className="bio-insight-item">
+                  <span className="bio-insight-dot" />
+                  <p>{item}</p>
                 </div>
+              ))}
+            </div>
+            <div className="bio-insights-note">
+              Este panel describe tendencias y continuidad de registros. No reemplaza la
+              interpretación de un profesional.
+            </div>
+          </article>
+        </section>
+
+        <section className="bio-panel-card bio-selector-card">
+          <div className="bio-panel-head">
+            <div>
+              <h2 className="bio-panel-title">
+                {canEdit ? "Registrar nuevo parámetro" : "Parámetros visibles"}
+              </h2>
+              <p className="bio-panel-subtitle">
+                {canEdit
+                  ? "Toca una tarjeta para abrir el formulario en una ventana emergente rápida."
+                  : "Selecciona uno para destacarlo arriba y revisar su evolución."}
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="bio-metric-switch"
+            role={canEdit ? undefined : "tablist"}
+            aria-label={canEdit ? "Registro rápido de parámetro" : "Tipo de parámetro"}
+          >
+            {METRIC_OPTIONS.map((metricType) => {
+              const config = getBiometricMetricConfig(metricType);
+              return (
+                <button
+                  key={metricType}
+                  type="button"
+                  className={`bio-metric-pill${selectedMetricType === metricType ? " is-active" : ""}`}
+                  onClick={() =>
+                    canEdit ? openEntryModalForMetric(metricType) : handleMetricSelect(metricType)
+                  }
+                >
+                  <MetricIcon metricType={metricType} />
+                  <span>{config.shortLabel}</span>
+                </button>
               );
             })}
           </div>
-        ) : (
-          <div className="bio-empty-state">
-            Aún no tienes registros biométricos. Empieza por el parámetro que necesites monitorear con
-            más frecuencia.
+        </section>
+
+        <section className="bio-metrics-grid">
+          {metrics.map((metric) => {
+            const config = getBiometricMetricConfig(metric.metric_type);
+            const latestReading = metric.latest_reading;
+
+            return (
+              <button
+                key={metric.metric_type}
+                type="button"
+                className={`bio-panel-card bio-metric-card tone-${config.tone}${
+                  selectedMetricType === metric.metric_type ? " is-selected" : ""
+                }`}
+                onClick={() => handleMetricSelect(metric.metric_type)}
+              >
+                <div className="bio-metric-card-head">
+                  <span className={`bio-metric-icon tone-${config.tone}`}>
+                    <MetricIcon metricType={metric.metric_type} />
+                  </span>
+                  <div>
+                    <h2 className="bio-panel-title">{metric.label}</h2>
+                    <p className="bio-panel-subtitle">{metric.description}</p>
+                  </div>
+                </div>
+
+                <div className="bio-metric-readout">
+                  <strong>
+                    {latestReading ? formatBiometricValue(latestReading) : `Sin registros ${config.unit}`.trim()}
+                  </strong>
+                  <span>
+                    {latestReading
+                      ? `Último: ${formatBiometricMeasuredAt(
+                          latestReading.measured_at || latestReading.created_at
+                        )}`
+                      : "Aún no has guardado mediciones."}
+                  </span>
+                </div>
+
+                <Sparkline
+                  points={metric.chart_points}
+                  metricType={metric.metric_type}
+                  tone={config.tone}
+                />
+
+                <div className="bio-metric-stats">
+                  <div className="bio-metric-stat">
+                    <small>Registros</small>
+                    <strong>{metric.readings_count}</strong>
+                  </div>
+                  <div className="bio-metric-stat">
+                    <small>Promedio reciente</small>
+                    <strong>{getMetricAverageLabel(metric)}</strong>
+                  </div>
+                </div>
+
+                <div className="bio-metric-footer">
+                  <span className={`bio-trend-chip tone-${config.tone}`}>
+                    {getBiometricTrendLabel(metric.trend_direction)}
+                  </span>
+                  <small>{metric.trend_summary}</small>
+                </div>
+              </button>
+            );
+          })}
+        </section>
+
+        <section className="bio-panel-card bio-recent-card">
+          <div className="bio-panel-head">
+            <div>
+              <h2 className="bio-panel-title">Historial reciente</h2>
+              <p className="bio-panel-subtitle">Tus últimas mediciones para revisar y compartir.</p>
+            </div>
           </div>
-        )}
-      </section>
-    </div>
+
+          {recentReadings.length ? (
+            <div className="bio-recent-list">
+              {recentReadings.map((item) => {
+                const config = getBiometricMetricConfig(item.metric_type);
+
+                return (
+                  <div key={item.id} className="bio-recent-row">
+                    <span className={`bio-recent-icon tone-${config.tone}`}>
+                      <MetricIcon metricType={item.metric_type} />
+                    </span>
+                    <div className="bio-recent-copy">
+                      <div className="bio-recent-head">
+                        <strong>{getBiometricMetricLabel(item.metric_type)}</strong>
+                        <span className={`bio-recent-pill tone-${config.tone}`}>
+                          {config.shortLabel}
+                        </span>
+                      </div>
+                      <span>{formatBiometricValue(item)}</span>
+                      <small>
+                        {formatBiometricMeasuredAt(item.measured_at || item.created_at)}
+                        {item.context ? ` · ${item.context}` : ""}
+                        {item.notes ? ` · ${item.notes}` : ""}
+                      </small>
+                    </div>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        className="bio-delete-btn"
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                      >
+                        {deletingId === item.id ? "Eliminando..." : "Eliminar"}
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="bio-empty-state">
+              Aún no tienes registros biométricos. Empieza por el parámetro que necesites
+              monitorear con más frecuencia.
+            </div>
+          )}
+        </section>
+      </div>
+      {entryModal}
+    </>
   );
 }
