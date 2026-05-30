@@ -72,6 +72,9 @@ export const deleteDocument = api.deleteDocument;
 export const updateDocument = api.updateDocument;
 
 export const getMedications = api.getMedications;
+export const getBiometricDashboard = api.getBiometricDashboard;
+export const createBiometricReading = api.createBiometricReading;
+export const deleteBiometricReading = api.deleteBiometricReading;
 export const saveMedication = api.saveMedication;
 export const deleteMedication = api.deleteMedication;
 export const recordMedicationIntake = api.recordMedicationIntake;

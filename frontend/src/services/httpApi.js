@@ -753,6 +753,23 @@ export async function getMedications(options = {}) {
   return res.data;
 }
 
+export async function getBiometricDashboard(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/biometrics/dashboard", { params });
+  return res.data;
+}
+
+export async function createBiometricReading(payload) {
+  const res = await api.post("/biometrics", payload);
+  return res.data;
+}
+
+export async function deleteBiometricReading(id) {
+  const res = await api.delete(`/biometrics/${id}`);
+  return res.data;
+}
+
 export async function saveMedication(payload) {
   if (payload.id) {
     const res = await api.put(`/medications/${payload.id}`, payload);

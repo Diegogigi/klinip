@@ -240,6 +240,27 @@ class MedicationIntake(Base):
     medication = relationship("Medication")
 
 
+class BiometricReading(Base):
+    __tablename__ = "biometric_readings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    recorded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    metric_type = Column(String, nullable=False, index=True)
+    value_primary = Column(Float, nullable=False)
+    value_secondary = Column(Float, nullable=True)
+    unit = Column(String, default="")
+    context = Column(String, default="")
+    notes = Column(Text, nullable=True)
+    measured_at = Column(DateTime, default=datetime.now, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User", foreign_keys=[user_id])
+    profile = relationship("HealthProfile")
+    recorded_by_user = relationship("User", foreign_keys=[recorded_by_user_id])
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 

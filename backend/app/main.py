@@ -139,6 +139,33 @@ RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
     or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
 )
 
+BIOMETRIC_METRIC_DEFS = {
+    "glucose": {
+        "label": "Glucosa",
+        "unit": "mg/dL",
+        "description": "Seguimiento de glicemia capilar o venosa.",
+        "delta_threshold": 10.0,
+    },
+    "blood_pressure": {
+        "label": "Presión arterial",
+        "unit": "mmHg",
+        "description": "Registro de presión sistólica y diastólica.",
+        "delta_threshold": 5.0,
+    },
+    "heart_rate": {
+        "label": "Frecuencia cardiaca",
+        "unit": "lpm",
+        "description": "Pulso o frecuencia cardiaca en reposo o actividad.",
+        "delta_threshold": 4.0,
+    },
+    "temperature": {
+        "label": "Temperatura",
+        "unit": "°C",
+        "description": "Temperatura corporal registrada manualmente.",
+        "delta_threshold": 0.3,
+    },
+}
+
 # En produccion el esquema debe llegar por migraciones, no por mutaciones implicitas al arrancar.
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     Base.metadata.create_all(bind=engine)
@@ -749,6 +776,49 @@ def ensure_medication_intake_schema():
 
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_medication_intake_schema()
+
+
+_biometric_schema_ready = False
+
+
+def ensure_biometric_schema(force: bool = False):
+    global _biometric_schema_ready
+    if _biometric_schema_ready:
+        return
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
+    try:
+        inspector = inspect(engine)
+        if not inspector.has_table("biometric_readings"):
+            models.BiometricReading.__table__.create(bind=engine, checkfirst=True)
+        ensure_columns(
+            engine,
+            "biometric_readings",
+            [
+                ("profile_id", "INTEGER NOT NULL", "INTEGER NOT NULL"),
+                ("recorded_by_user_id", "INTEGER", "INTEGER"),
+                ("metric_type", "VARCHAR", "VARCHAR"),
+                ("value_primary", "FLOAT", "REAL"),
+                ("value_secondary", "FLOAT", "REAL"),
+                ("unit", "VARCHAR DEFAULT ''", "VARCHAR DEFAULT ''"),
+                ("context", "VARCHAR DEFAULT ''", "VARCHAR DEFAULT ''"),
+                ("notes", "TEXT"),
+                ("measured_at", "TIMESTAMP", "DATETIME"),
+                ("created_at", "TIMESTAMP", "DATETIME"),
+            ],
+            label="ensure_biometric_schema",
+            extra_indexes=[
+                "CREATE INDEX IF NOT EXISTS ix_biometric_readings_profile_metric_measured_at ON biometric_readings (profile_id, metric_type, measured_at)",
+                "CREATE INDEX IF NOT EXISTS ix_biometric_readings_user_profile ON biometric_readings (user_id, profile_id)",
+            ],
+        )
+        _biometric_schema_ready = True
+    except Exception as exc:
+        print(f"WARNING ensure_biometric_schema: no se pudo ajustar la tabla: {exc}")
+
+
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_biometric_schema()
 
 
 def ensure_voice_session_schema():
@@ -19354,6 +19424,163 @@ def _requested_or_active_profile_only(
     return _get_active_profile_context(db, current_user)
 
 
+def _normalize_biometric_metric(metric_type: str) -> str:
+    normalized = str(metric_type or "").strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "presion": "blood_pressure",
+        "presion_arterial": "blood_pressure",
+        "bloodpressure": "blood_pressure",
+        "fc": "heart_rate",
+        "pulso": "heart_rate",
+        "frecuencia_cardiaca": "heart_rate",
+        "glicemia": "glucose",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in BIOMETRIC_METRIC_DEFS:
+        raise HTTPException(status_code=400, detail="Parámetro biométrico no soportado")
+    return normalized
+
+
+def _biometric_reading_out(item: models.BiometricReading) -> schemas.BiometricReadingOut:
+    return schemas.BiometricReadingOut(
+        id=item.id,
+        user_id=item.user_id,
+        profile_id=item.profile_id,
+        recorded_by_user_id=item.recorded_by_user_id,
+        metric_type=item.metric_type,
+        value_primary=float(item.value_primary or 0),
+        value_secondary=float(item.value_secondary) if item.value_secondary is not None else None,
+        unit=item.unit or "",
+        context=item.context or "",
+        notes=item.notes or "",
+        measured_at=item.measured_at,
+        created_at=item.created_at,
+    )
+
+
+def _biometric_reading_line(item: models.BiometricReading, metric_type: str) -> str:
+    return _biometric_value_line(
+        metric_type,
+        item.value_primary,
+        item.value_secondary,
+        item.unit,
+    )
+
+
+def _biometric_value_line(
+    metric_type: str,
+    value_primary: float | int | None,
+    value_secondary: float | int | None,
+    unit: str | None,
+) -> str:
+    if metric_type == "blood_pressure":
+        secondary = (
+            f"/{int(round(float(value_secondary)))}"
+            if value_secondary is not None
+            else ""
+        )
+        return f"{int(round(float(value_primary or 0)))}{secondary} {unit or 'mmHg'}"
+    if metric_type == "temperature":
+        return f"{float(value_primary or 0):.1f} {unit or '°C'}"
+    return f"{int(round(float(value_primary or 0)))} {unit or BIOMETRIC_METRIC_DEFS.get(metric_type, {}).get('unit', '')}".strip()
+
+
+def _biometric_trend_summary(metric_type: str, items: list[models.BiometricReading]) -> tuple[str, str]:
+    if len(items) < 2:
+        return "stable", "Aún no hay suficientes registros para mostrar una tendencia."
+    latest = items[0]
+    baseline_items = items[1:4] or items[1:]
+    latest_value = float(latest.value_primary or 0)
+    baseline = sum(float(entry.value_primary or 0) for entry in baseline_items) / max(len(baseline_items), 1)
+    threshold = float(BIOMETRIC_METRIC_DEFS.get(metric_type, {}).get("delta_threshold", 1.0))
+    delta = latest_value - baseline
+    if delta > threshold:
+        return "up", "Tu último registro está por encima de tu promedio reciente."
+    if delta < -threshold:
+        return "down", "Tu último registro está por debajo de tu promedio reciente."
+    return "stable", "Tu último registro se mantiene parecido a tus mediciones recientes."
+
+
+def _build_biometric_dashboard(
+    profile: models.HealthProfile,
+    readings: list[models.BiometricReading],
+) -> schemas.BiometricDashboardOut:
+    readings_sorted = sorted(
+        [item for item in readings if item and item.metric_type in BIOMETRIC_METRIC_DEFS],
+        key=lambda item: item.measured_at or item.created_at or datetime.min,
+        reverse=True,
+    )
+    metric_summaries: list[schemas.BiometricMetricSummaryOut] = []
+    latest_recorded_at = (
+        readings_sorted[0].measured_at or readings_sorted[0].created_at
+        if readings_sorted
+        else None
+    )
+
+    for metric_type, metric_def in BIOMETRIC_METRIC_DEFS.items():
+        metric_items = [item for item in readings_sorted if item.metric_type == metric_type]
+        latest_item = metric_items[0] if metric_items else None
+        chart_source = list(reversed(metric_items[:8]))
+        average_primary = (
+            round(
+                sum(float(entry.value_primary or 0) for entry in metric_items[:7]) / len(metric_items[:7]),
+                1,
+            )
+            if metric_items
+            else None
+        )
+        trend_direction, trend_summary = _biometric_trend_summary(metric_type, metric_items)
+        metric_summaries.append(
+            schemas.BiometricMetricSummaryOut(
+                metric_type=metric_type,
+                label=metric_def["label"],
+                unit=metric_def["unit"],
+                description=metric_def["description"],
+                readings_count=len(metric_items),
+                latest_reading=_biometric_reading_out(latest_item) if latest_item else None,
+                average_primary=average_primary,
+                trend_direction=trend_direction,
+                trend_summary=trend_summary,
+                chart_points=[_biometric_reading_out(item) for item in chart_source],
+            )
+        )
+
+    active_metric_summaries = [item for item in metric_summaries if item.readings_count > 0]
+    insights: list[str] = []
+    if active_metric_summaries:
+        latest_metric = max(
+            active_metric_summaries,
+            key=lambda item: item.latest_reading.measured_at or item.latest_reading.created_at or datetime.min,
+        )
+        insights.append(
+            f"Llevas seguimiento activo en {len(active_metric_summaries)} parámetro{'s' if len(active_metric_summaries) != 1 else ''}."
+        )
+        if latest_metric.latest_reading:
+            insights.append(
+                f"Último registro: {latest_metric.label} en {_biometric_value_line(latest_metric.metric_type, latest_metric.latest_reading.value_primary, latest_metric.latest_reading.value_secondary, latest_metric.latest_reading.unit)}."
+            )
+        if len(active_metric_summaries) >= 2:
+            insights.append("Puedes mostrar este panel en consulta para revisar cambios y continuidad.")
+        else:
+            insights.append("Si necesitas un monitoreo más completo, activa otro parámetro según tu control.")
+    else:
+        insights = [
+            "Empieza registrando el parámetro que necesites seguir con más frecuencia.",
+            "Klinip puede ordenar glucosa, presión arterial, frecuencia cardiaca o temperatura en un mismo panel.",
+            "Cada registro queda listo para revisarlo contigo o con un profesional.",
+        ]
+
+    return schemas.BiometricDashboardOut(
+        profile_id=int(profile.id),
+        monitoring_active=bool(active_metric_summaries),
+        active_metrics_count=len(active_metric_summaries),
+        latest_recorded_at=latest_recorded_at,
+        metrics=metric_summaries,
+        recent_readings=[_biometric_reading_out(item) for item in readings_sorted[:12]],
+        insights=insights,
+    )
+
+
 def _get_clinical_episode_or_404(
     db: Session,
     current_user: models.User,
@@ -21407,6 +21634,93 @@ async def delete_medication(
         models.AdherenceSummary.medication_id == medication_id,
     ).delete()
     db.delete(med)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    return {"ok": True}
+
+
+# Biometrics
+@app.get("/biometrics/dashboard", response_model=schemas.BiometricDashboardOut)
+async def get_biometrics_dashboard(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_biometric_schema(force=True)
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    readings = (
+        db.query(models.BiometricReading)
+        .filter(
+            models.BiometricReading.user_id == target_user_id,
+            models.BiometricReading.profile_id == int(profile.id),
+        )
+        .order_by(
+            models.BiometricReading.measured_at.desc(),
+            models.BiometricReading.created_at.desc(),
+        )
+        .all()
+    )
+    return _build_biometric_dashboard(profile, readings)
+
+
+@app.post("/biometrics", response_model=schemas.BiometricReadingOut)
+async def create_biometric_reading(
+    reading_in: schemas.BiometricReadingCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_biometric_schema(force=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    metric_type = _normalize_biometric_metric(reading_in.metric_type)
+    value_primary = float(reading_in.value_primary or 0)
+    value_secondary = (
+        float(reading_in.value_secondary)
+        if reading_in.value_secondary is not None
+        else None
+    )
+    if value_primary <= 0:
+        raise HTTPException(status_code=400, detail="El valor principal debe ser mayor que cero")
+    if metric_type == "blood_pressure" and (value_secondary is None or value_secondary <= 0):
+        raise HTTPException(status_code=400, detail="La presión arterial requiere sistólica y diastólica")
+    reading = models.BiometricReading(
+        user_id=target_user_id,
+        profile_id=int(profile.id),
+        recorded_by_user_id=int(current_user.id),
+        metric_type=metric_type,
+        value_primary=value_primary,
+        value_secondary=value_secondary,
+        unit=(reading_in.unit or BIOMETRIC_METRIC_DEFS[metric_type]["unit"]).strip(),
+        context=(reading_in.context or "").strip(),
+        notes=(reading_in.notes or "").strip(),
+        measured_at=reading_in.measured_at or datetime.now(),
+    )
+    db.add(reading)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(reading)
+    return reading
+
+
+@app.delete("/biometrics/{reading_id}")
+async def delete_biometric_reading(
+    reading_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_biometric_schema(force=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    reading = (
+        db.query(models.BiometricReading)
+        .filter(
+            models.BiometricReading.id == int(reading_id),
+            models.BiometricReading.user_id == target_user_id,
+            models.BiometricReading.profile_id == int(profile.id),
+        )
+        .first()
+    )
+    if not reading:
+        raise HTTPException(status_code=404, detail="Registro biométrico no encontrado")
+    db.delete(reading)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     return {"ok": True}

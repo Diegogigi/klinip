@@ -75,6 +75,7 @@ const Settings = lazyWithRecovery(() => import("./pages/Settings"), "settings");
 const Timeline = lazyWithRecovery(() => import("./pages/Timeline"), "timeline");
 const Stats = lazyWithRecovery(() => import("./pages/Stats"), "stats");
 const MiSalud = lazyWithRecovery(() => import("./pages/MiSalud"), "mi-salud");
+const Biometrics = lazyWithRecovery(() => import("./pages/Biometrics"), "biometrics");
 const AiKlinip = lazyWithRecovery(() => import("./pages/AiKlinip"), "ai-klinip");
 const ClinicalReports = lazyWithRecovery(() => import("./pages/ClinicalReports"), "clinical-reports");
 const Landing = lazyWithRecovery(() => import("./pages/Landing"), "landing");
@@ -189,6 +190,7 @@ const ROUTE_TRANSITION_ORDER = [
   "/voice",
   "/family",
   "/mi-salud",
+  "/mi-salud/biometricos",
   "/appointments",
   "/calendar",
   "/timeline",
@@ -202,6 +204,7 @@ const ROUTE_TRANSITION_ORDER = [
 
 const HEALTH_SECTION_PATHS = [
   "/mi-salud",
+  "/mi-salud/biometricos",
   "/appointments",
   "/calendar",
   "/timeline",
@@ -534,6 +537,7 @@ function Topbar({
     "/feed": "Familia",
     "/voice": "Voz",
     "/mi-salud": "Mi salud",
+    "/mi-salud/biometricos": "Biométricos",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
     "/settings/familia": "Gestionar familia",
@@ -2595,6 +2599,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <MiSalud key={`mi-salud-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/mi-salud/biometricos"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Biometrics key={`biometrics-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

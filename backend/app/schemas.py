@@ -646,6 +646,66 @@ class MedicationIntakeListOut(BaseModel):
     items: list[MedicationIntakeOut] = []
 
 
+class BiometricReadingBase(BaseModel):
+    profile_id: Optional[int] = None
+    metric_type: str
+    value_primary: float
+    value_secondary: Optional[float] = None
+    unit: Optional[str] = ""
+    context: Optional[str] = ""
+    notes: Optional[str] = ""
+    measured_at: Optional[datetime] = None
+
+
+class BiometricReadingCreate(BiometricReadingBase):
+    pass
+
+
+class BiometricReadingOut(BiometricReadingBase):
+    id: int
+    user_id: int
+    recorded_by_user_id: Optional[int] = None
+    created_at: Optional[datetime] = None
+
+    @field_serializer("measured_at", "created_at")
+    def serialize_biometric_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class BiometricMetricSummaryOut(BaseModel):
+    metric_type: str
+    label: str
+    unit: str = ""
+    description: str = ""
+    readings_count: int = 0
+    latest_reading: Optional[BiometricReadingOut] = None
+    average_primary: Optional[float] = None
+    trend_direction: str = "stable"
+    trend_summary: str = ""
+    chart_points: list[BiometricReadingOut] = []
+
+
+class BiometricDashboardOut(BaseModel):
+    profile_id: int
+    monitoring_active: bool = False
+    active_metrics_count: int = 0
+    latest_recorded_at: Optional[datetime] = None
+    metrics: list[BiometricMetricSummaryOut] = []
+    recent_readings: list[BiometricReadingOut] = []
+    insights: list[str] = []
+
+    @field_serializer("latest_recorded_at")
+    def serialize_biometric_dashboard_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
 class ClinicalTaskBase(BaseModel):
     task_type: str = "follow_up"
     title: str

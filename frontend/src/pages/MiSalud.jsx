@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
   getAppointments,
+  getBiometricDashboard,
   getMedications,
   getDocuments,
   getActiveHealthProfile,
@@ -13,6 +14,11 @@ import {
   getNextMedicationDose,
   isMedicationFinished,
 } from "../utils/medicationSchedule";
+import {
+  formatBiometricMeasuredAt,
+  formatBiometricValue,
+  getBiometricLatestMetric,
+} from "../utils/biometrics";
 import {
   notifyClinicalDataChanged,
   subscribeClinicalDataChanged,
@@ -107,6 +113,7 @@ function IcoChevron() { return <svg {...sp} strokeWidth="2"><path d="m9 18 6-6-6
 function IcoCheck() { return <svg {...sp} strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>; }
 function IcoAlert() { return <svg {...sp}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>; }
 function IcoShield() { return <svg {...sp}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>; }
+function IcoBiometric() { return <svg {...sp}><path d="M22 12h-4l-2.2 5L10 7 7.5 12H2"/><path d="M12 18v3"/></svg>; }
 
 const TIMELINE_ICONS = {
   appointment: <IcoCal />,
@@ -125,21 +132,24 @@ export default function MiSalud() {
   const [medications, setMedications] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [timeline, setTimeline] = useState([]);
+  const [biometricDashboard, setBiometricDashboard] = useState(null);
   const [intakeBusy, setIntakeBusy] = useState(null);
 
   const loadPanelData = useCallback(async () => {
-    const [profRes, apptRes, medRes, docRes, tlRes] = await Promise.allSettled([
+    const [profRes, apptRes, medRes, docRes, tlRes, bioRes] = await Promise.allSettled([
       getActiveHealthProfile(),
       getAppointments(),
       getMedications(),
       getDocuments(),
       getAiLifeTimeline(),
+      getBiometricDashboard(),
     ]);
     if (profRes.status === "fulfilled") setProfile(profRes.value || null);
     if (apptRes.status === "fulfilled") setAppointments(ensureArray(apptRes.value));
     if (medRes.status === "fulfilled") setMedications(ensureArray(medRes.value));
     if (docRes.status === "fulfilled") setDocuments(ensureArray(docRes.value));
     if (tlRes.status === "fulfilled") setTimeline(ensureArray(tlRes.value?.events));
+    if (bioRes.status === "fulfilled") setBiometricDashboard(bioRes.value || null);
     setLoading(false);
   }, []);
 
@@ -189,6 +199,9 @@ export default function MiSalud() {
   const doneCount = appointments.filter((a) => a.status === "realizada").length;
 
   const activeMeds = medications.filter((m) => !isMedicationFinished(m, now));
+  const biometricMetrics = ensureArray(biometricDashboard?.metrics);
+  const latestBiometricMetric = getBiometricLatestMetric(biometricMetrics);
+  const biometricRecentCount = ensureArray(biometricDashboard?.recent_readings).length;
 
   const recentEvents = timeline
     .filter((e) => e && e.event_type)
@@ -373,6 +386,47 @@ export default function MiSalud() {
         )}
       </section>
 
+      <section className="clp-card tone-indigo" aria-labelledby="clp-bio-h">
+        <div className="clp-card-head">
+          <span className="clp-card-icon tone-indigo"><IcoBiometric /></span>
+          <div className="clp-card-titles">
+            <h2 className="clp-card-title" id="clp-bio-h">Parámetros biométricos</h2>
+            <p className="clp-card-sub">Glucosa, presión, frecuencia cardiaca y temperatura.</p>
+          </div>
+          <Link to="/mi-salud/biometricos" className="clp-card-link">Abrir panel <IcoChevron /></Link>
+        </div>
+        {latestBiometricMetric?.latest_reading ? (
+          <div className="clp-biometric-body">
+            <div className="clp-biometric-main">
+              <span className="clp-appt-tag">
+                {latestBiometricMetric.readings_count} registro{latestBiometricMetric.readings_count !== 1 ? "s" : ""}
+              </span>
+              <p className="clp-appt-title">{latestBiometricMetric.label}</p>
+              <p className="clp-appt-when">
+                {formatBiometricValue(latestBiometricMetric.latest_reading)} · {formatBiometricMeasuredAt(
+                  latestBiometricMetric.latest_reading.measured_at || latestBiometricMetric.latest_reading.created_at
+                )}
+              </p>
+              <p className="clp-appt-note">{latestBiometricMetric.trend_summary}</p>
+            </div>
+            <div className="clp-appt-stats">
+              <div className="clp-appt-stat">
+                <strong>{biometricDashboard?.active_metrics_count || 0}</strong>
+                <span>parámetros activos</span>
+              </div>
+              <div className="clp-appt-stat">
+                <strong>{biometricRecentCount}</strong>
+                <span>registros recientes</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="clp-empty">
+            Empieza a registrar biométricos para ver tus tendencias y compartirlas en consulta.
+          </div>
+        )}
+      </section>
+
       {/* ═══ ACTIVITY FEED ═══ */}
       {recentEvents.length > 0 && (
         <section className="clp-card tone-indigo" aria-labelledby="clp-activity-h">
@@ -415,6 +469,10 @@ export default function MiSalud() {
           <Link to="/stats" className="clp-quick-item tone-indigo">
             <span className="clp-quick-icon"><IcoChart /></span>
             <span>Indicadores</span>
+          </Link>
+          <Link to="/mi-salud/biometricos" className="clp-quick-item tone-blue">
+            <span className="clp-quick-icon"><IcoBiometric /></span>
+            <span>Biométricos</span>
           </Link>
           <Link to="/timeline" className="clp-quick-item tone-slate">
             <span className="clp-quick-icon"><IcoTimeline /></span>

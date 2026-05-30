@@ -8,6 +8,7 @@ import {
   getAiAdherence,
   getAiHealthRadar,
   getAppointments,
+  getBiometricDashboard,
   createProfileNote,
   deleteProfileNote,
   getDocuments,
@@ -21,6 +22,12 @@ import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { isHandheldViewport } from "../utils/mobileViewport";
 import { cleanUiText } from "../utils/textEncoding";
+import {
+  formatBiometricMeasuredAt,
+  formatBiometricValue,
+  getBiometricLatestMetric,
+  getBiometricMetricConfig,
+} from "../utils/biometrics";
 import {
   getMedicationScheduleSummary,
   getMedicationScheduleTimes,
@@ -41,6 +48,7 @@ const kindToneMap = {
   appointment: "blue",
   document: "teal",
   medication: "amber",
+  biometric: "violet",
 };
 
 function toDayLabel(date) {
@@ -415,6 +423,12 @@ function renderIcon(name) {
           <line x1="8" y1="21" x2="16" y2="21" />
         </svg>
       );
+    case "biometric":
+      return (
+        <svg {...iconProps}>
+          <polyline points="2 12 6.5 12 9 7 13.5 18 16 12 22 12" />
+        </svg>
+      );
     default:
       return (
         <svg {...iconProps}>
@@ -531,6 +545,7 @@ export default function Dashboard({
   const [appointments, setAppointments] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [medications, setMedications] = useState([]);
+  const [biometricDashboard, setBiometricDashboard] = useState(null);
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
   const [healthRadar, setHealthRadar] = useState([]);
@@ -660,12 +675,14 @@ export default function Dashboard({
         appointmentsResponse,
         documentsResponse,
         medicationsResponse,
+        biometricsResponse,
       ] = await Promise.all([
         getActiveHealthProfile().catch(() => null),
         getHealthProfiles().catch(() => []),
         getAppointments().catch(() => []),
         getDocuments().catch(() => []),
         getMedications().catch(() => []),
+        getBiometricDashboard().catch(() => null),
       ]);
       const resolvedProfileId = activeProfileResponse?.id ? Number(activeProfileResponse.id) : null;
       const adherenceResponse = await loadHealthInsights(resolvedProfileId);
@@ -680,6 +697,7 @@ export default function Dashboard({
       setAppointments(ensureArray(appointmentsResponse));
       setDocuments(ensureArray(documentsResponse));
       setMedications(ensureArray(medicationsResponse));
+      setBiometricDashboard(biometricsResponse || null);
       return {
         profileId: resolvedProfileId,
         pendingRefresh: Boolean(adherenceResponse?.pending_refresh),
@@ -809,6 +827,12 @@ export default function Dashboard({
   const safeMenuHealthProfiles = ensureArray(menuHealthProfiles).filter(
     (item) => item && typeof item === "object"
   );
+  const biometricMetrics = ensureArray(biometricDashboard?.metrics).filter(
+    (item) => item && typeof item === "object"
+  );
+  const biometricRecentReadings = ensureArray(biometricDashboard?.recent_readings).filter(
+    (item) => item && typeof item === "object"
+  );
 
   const now = Date.now();
   const validAppointments = [...appointmentItems]
@@ -881,6 +905,13 @@ export default function Dashboard({
     const status = String(item.ocr_status || "").toLowerCase();
     return !status || status === "pending" || status === "processing" || status === "error";
   }).length;
+  const latestBiometricMetric = getBiometricLatestMetric(biometricMetrics);
+  const latestBiometricReading = latestBiometricMetric?.latest_reading || null;
+  const activeBiometricMetricsCount = Number(biometricDashboard?.active_metrics_count || 0);
+  const biometricsMonitoringActive = Boolean(biometricDashboard?.monitoring_active);
+  const latestBiometricConfig = latestBiometricReading
+    ? getBiometricMetricConfig(latestBiometricMetric.metric_type)
+    : getBiometricMetricConfig("glucose");
   const linkedProfiles = Math.max(healthProfileItems.length - 1, 0);
   const adherenceWindowDays = Math.max(1, Number(adherenceSummary?.window_days || 30));
   const adherenceWindowLabel = `${adherenceWindowDays} dia${adherenceWindowDays === 1 ? "" : "s"}`;
@@ -1093,6 +1124,17 @@ export default function Dashboard({
     .slice(0, 3);
 
   const recentActivity = [
+    ...biometricRecentReadings.slice(0, 4).map((item) => ({
+      id: `biometric-${item.id}`,
+      date: parseDate(item.measured_at || item.created_at),
+      kind: "biometric",
+      title: "Biométrico registrado",
+      subtitle: cleanUiText(
+        `${getBiometricMetricConfig(item.metric_type).label} · ${formatBiometricValue(item)}`,
+        "Registro biométrico"
+      ),
+      time: item.measured_at || item.created_at,
+    })),
     ...documentItems.map((item) => ({
       id: `document-${item.id}`,
       date: parseDate(item.date || item.created_at),
@@ -1151,6 +1193,10 @@ export default function Dashboard({
     navigate("/documents");
   }, [navigate]);
 
+  const openBiometricsFocus = useCallback(() => {
+    navigate("/mi-salud/biometricos");
+  }, [navigate]);
+
   const openAlertAssistant = useCallback(
     (alert) => {
       if (!alert) {
@@ -1175,6 +1221,14 @@ export default function Dashboard({
   const topHighAlert = activeHealthAlerts.find((item) => item.severity === "high") || null;
   const topAlert = topHighAlert || activeHealthAlerts[0] || null;
   const topLowAdherenceItem = lowAdherenceItems[0] || null;
+  const biometricsSummaryText = latestBiometricReading
+    ? cleanUiText(
+        `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)} · ${formatBiometricMeasuredAt(
+          latestBiometricReading.measured_at || latestBiometricReading.created_at
+        )}`,
+        "Revisa tu monitoreo reciente."
+      )
+    : "Empieza a registrar glucosa, presión, frecuencia cardiaca o temperatura.";
   const topHighAlertType = String(topHighAlert?.alert_type || "").toLowerCase();
   const highAlertHeroState =
     topHighAlertType === "low_adherence"
@@ -1405,6 +1459,22 @@ export default function Dashboard({
       tone: "teal",
       onClick: openDocumentsFocus,
     },
+    {
+      id: "biometric",
+      icon: "biometric",
+      label: "Ver biométricos",
+      subtitle: latestBiometricReading
+        ? cleanUiText(
+            `${latestBiometricMetric.label} · ${formatBiometricValue(latestBiometricReading)}`,
+            "Monitoreo activo"
+          )
+        : "Activa tu monitoreo clínico",
+      hint: latestBiometricReading
+        ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
+        : "Nuevo",
+      tone: latestBiometricConfig.tone || "violet",
+      onClick: openBiometricsFocus,
+    },
   ];
 
   const mobileQuickActions = quickActions;
@@ -1432,6 +1502,13 @@ export default function Dashboard({
     suggestionItems.unshift({
       id: "suggestion-radar",
       text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
+    });
+  }
+
+  if (!biometricsMonitoringActive) {
+    suggestionItems.push({
+      id: "suggestion-biometric",
+      text: "Si estás controlando exámenes o signos frecuentes, activa el panel de biométricos para seguirlos en un solo lugar.",
     });
   }
 
@@ -2774,6 +2851,33 @@ export default function Dashboard({
             </div>
           </div>
 
+          <div className="mobile-section native-section native-section-delay-2">
+            <div className="mobile-section-header">
+              <h2 className="mobile-section-title">Biométricos</h2>
+              <button type="button" className="mobile-section-link" onClick={openBiometricsFocus}>
+                Ver panel
+              </button>
+            </div>
+            <button type="button" className="mobile-biometrics-card" onClick={openBiometricsFocus}>
+              <span className={`mobile-biometrics-icon tone-${latestBiometricConfig.tone || "violet"}`}>
+                {renderIcon("biometric")}
+              </span>
+              <span className="mobile-biometrics-copy">
+                <strong>
+                  {latestBiometricReading
+                    ? `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)}`
+                    : "Comienza tu monitoreo"}
+                </strong>
+                <small>{biometricsSummaryText}</small>
+              </span>
+              <span className="mobile-biometrics-badge">
+                {activeBiometricMetricsCount > 0
+                  ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
+                  : "Nuevo"}
+              </span>
+            </button>
+          </div>
+
           <div className="mobile-section native-section native-section-delay-3">
             {renderQuickNotesPanel("mobile-note-card")}
           </div>
@@ -2878,14 +2982,19 @@ export default function Dashboard({
                   className="mobile-activity-item"
                   onClick={() => navigate(
                     item.kind === "document" ? "/documents" :
-                    item.kind === "medication" ? "/medications" : "/appointments"
+                    item.kind === "medication" ? "/medications" :
+                    item.kind === "biometric" ? "/mi-salud/biometricos" : "/appointments"
                   )}
                 >
-                  <span className={`mobile-activity-icon tone-${item.kind === "document" ? "teal" : item.kind === "medication" ? "amber" : "blue"}`}>
+                  <span className={`mobile-activity-icon tone-${item.kind === "document" ? "teal" : item.kind === "medication" ? "amber" : item.kind === "biometric" ? "violet" : "blue"}`}>
                     {item.kind === "document" ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    ) : item.kind === "biometric" ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                        <polyline points="2 12 6.5 12 9 7 13.5 18 16 12 22 12" />
                       </svg>
                     ) : item.kind === "medication" ? (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
@@ -3334,11 +3443,11 @@ export default function Dashboard({
             </div>
           </article>
 
-          <article className="home-panel-card home-actions-card">
-            <div className="home-panel-head">
-              <div>
-                <h2 className="home-panel-title">{"Accesos r\u00E1pidos"}</h2>
-                <p className="home-panel-subtitle">Acciones frecuentes de Klinip al alcance de tu mano.</p>
+            <article className="home-panel-card home-actions-card">
+              <div className="home-panel-head">
+                <div>
+                  <h2 className="home-panel-title">{"Accesos r\u00E1pidos"}</h2>
+                  <p className="home-panel-subtitle">Acciones frecuentes de Klinip al alcance de tu mano.</p>
               </div>
             </div>
             <div className="home-actions-grid">
@@ -3352,10 +3461,58 @@ export default function Dashboard({
                   <span className="home-action-icon">{renderIcon(item.icon)}</span>
                   <span className="home-action-label">{item.label}</span>
                 </button>
-              ))}
-            </div>
-          </article>
-        </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="home-panel-card home-biometrics-card">
+              <div className="home-panel-head">
+                <div>
+                  <h2 className="home-panel-title">Biométricos</h2>
+                  <p className="home-panel-subtitle">Resumen permanente de tu monitoreo clínico.</p>
+                </div>
+                <button type="button" className="home-panel-link" onClick={openBiometricsFocus}>
+                  Ver panel
+                </button>
+              </div>
+              <button type="button" className="home-biometrics-summary" onClick={openBiometricsFocus}>
+                <span className={`home-biometrics-icon tone-${latestBiometricConfig.tone || "violet"}`}>
+                  {renderIcon("biometric")}
+                </span>
+                <span className="home-biometrics-copy">
+                  <strong>
+                    {latestBiometricReading
+                      ? `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)}`
+                      : "Comienza tu monitoreo"}
+                  </strong>
+                  <span>{biometricsSummaryText}</span>
+                </span>
+                <span className="home-biometrics-status">
+                  {activeBiometricMetricsCount > 0
+                    ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
+                    : "Nuevo"}
+                </span>
+              </button>
+              <div className="home-biometrics-metrics">
+                {biometricMetrics.filter((item) => item.readings_count > 0).slice(0, 3).map((item) => {
+                  const metricConfig = getBiometricMetricConfig(item.metric_type);
+                  return (
+                    <div key={item.metric_type} className={`home-biometrics-metric tone-${metricConfig.tone}`}>
+                      <small>{item.label}</small>
+                      <strong>
+                        {item.latest_reading ? formatBiometricValue(item.latest_reading) : "Sin datos"}
+                      </strong>
+                    </div>
+                  );
+                })}
+                {!biometricMetrics.some((item) => item.readings_count > 0) ? (
+                  <div className="home-empty-state">
+                    Registra glucosa, presión, frecuencia cardiaca o temperatura para ver tu evolución aquí.
+                  </div>
+                ) : null}
+              </div>
+            </article>
+          </div>
 
         <div className="home-editorial-right">
           <article className="home-panel-card home-recent-card">
