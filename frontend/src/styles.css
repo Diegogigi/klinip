@@ -43933,6 +43933,196 @@ body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:
   }
 }
 
+.documents-ocr-assist,
+.documents-ai-panel {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.documents-ocr-assist-head,
+.documents-ai-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.documents-ocr-kicker {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.1);
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.documents-ocr-assist-head .card-title,
+.documents-ai-panel-head h4 {
+  margin: 0.35rem 0 0;
+}
+
+.documents-ocr-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.documents-ocr-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.42rem 0.72rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.documents-ocr-banner {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.9rem 1rem;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+  border: 1px solid #bfdbfe;
+}
+
+.documents-ocr-banner strong,
+.documents-ai-flag strong {
+  color: #0f172a;
+}
+
+.documents-ocr-banner span,
+.documents-ai-summary,
+.documents-ai-empty,
+.documents-ai-flag span {
+  color: #475569;
+}
+
+.documents-ai-panel {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f4f9ff 100%);
+  border: 1px solid rgba(191, 219, 254, 0.85);
+}
+
+.documents-ai-summary,
+.documents-ai-empty {
+  margin: 0;
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.documents-ai-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.documents-ai-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #334155;
+}
+
+.documents-ai-list li + li {
+  margin-top: 0.32rem;
+}
+
+.documents-ai-flags {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.documents-ai-flag {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.78rem 0.82rem;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+}
+
+body.theme-dark .documents-ocr-kicker {
+  background: rgba(56, 189, 248, 0.16);
+  color: #7dd3fc;
+}
+
+body.theme-dark .documents-ocr-pill {
+  background: rgba(15, 23, 42, 0.85);
+  border-color: rgba(59, 130, 246, 0.38);
+  color: #bfdbfe;
+}
+
+body.theme-dark .documents-ocr-banner,
+body.theme-dark .documents-ai-panel,
+body.theme-dark .documents-ai-flag {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(51, 65, 85, 0.82);
+}
+
+body.theme-dark .documents-ocr-banner strong,
+body.theme-dark .documents-ai-panel-head h4,
+body.theme-dark .documents-ai-flag strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .documents-ocr-banner span,
+body.theme-dark .documents-ai-summary,
+body.theme-dark .documents-ai-empty,
+body.theme-dark .documents-ai-list,
+body.theme-dark .documents-ai-flag span {
+  color: #94a3b8;
+}
+
+@media (max-width: 768px) {
+  .documents-ocr-assist,
+  .documents-ai-panel {
+    gap: 0.68rem;
+  }
+
+  .documents-ocr-assist-head,
+  .documents-ai-panel-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .documents-ocr-pill {
+    min-height: 30px;
+    padding: 0.35rem 0.62rem;
+    font-size: 0.76rem;
+  }
+
+  .documents-ocr-banner,
+  .documents-ai-panel {
+    padding: 0.82rem;
+    border-radius: 16px;
+  }
+
+  .documents-ai-summary,
+  .documents-ai-empty,
+  .documents-ai-list {
+    font-size: 0.84rem;
+  }
+
+  .documents-ai-flags {
+    grid-template-columns: 1fr;
+  }
+
+  .documents-ai-flag {
+    padding: 0.68rem 0.72rem;
+    border-radius: 14px;
+  }
+}
+
 /* Klinip Mi salud: panel visual tipo Inicio */
 .health-hub-page {
   position: relative;
@@ -54566,15 +54756,18 @@ body.theme-dark .bio-metric-card.is-selected {
    =================================================================== */
 
 @media (min-width: 1024px) {
-  /* ── Topbar: sin fondo, sin bordes, sin sombra ── */
+  /* ── Topbar: sin fondo, sin bordes, sin sombra ──
+     Padding horizontal mayor para que el contenido no se pegue a la sidebar
+     ni al borde derecho — alinea con los cards de abajo */
   .topbar {
     background: transparent;
     border: none;
     box-shadow: none;
     border-radius: 0;
-    padding: 0.4rem 0.25rem 0.6rem;
-    margin-bottom: 1.1rem;
+    padding: 0.85rem 0.6rem 1rem;
+    margin-bottom: 0.9rem;
     align-items: center;
+    gap: 1.2rem;
   }
   .main-area > .topbar:has(+ .main-content.main-content-ai) {
     margin-bottom: 0.4rem;
@@ -55366,5 +55559,191 @@ body.theme-dark .bio-overview-card span,
 body.theme-dark .bio-focus-copy,
 body.theme-dark .bio-panel-subtitle,
 body.theme-dark .bio-focus-timestamp {
+  color: #94a3b8;
+}
+
+/* ===================================================================
+   BIOMETRICS — Chart "Panorama combinado" rediseñado
+   =================================================================== */
+
+/* Panel head: distribución limpia con el pill a la derecha */
+.bio-chart-card .bio-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bio-chart-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(13, 71, 247, 0.08);
+  color: #0d47f7;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(13, 71, 247, 0.18);
+}
+
+/* Stage: contenedor del SVG + eje X */
+.bio-unified-chart-stage {
+  position: relative;
+  background: linear-gradient(180deg, #fafcff 0%, #ffffff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 18px;
+  padding: 1.1rem 1rem 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.bio-unified-chart svg {
+  width: 100%;
+  height: 200px;
+  display: block;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.bio-unified-chart-grid {
+  stroke: rgba(203, 213, 225, 0.5);
+  stroke-width: 0.4;
+  stroke-dasharray: 1.5 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Eje X temporal */
+.bio-unified-chart-xaxis {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.2rem 0.2rem;
+  margin-top: 0.4rem;
+  border-top: 1px solid rgba(226, 232, 240, 0.5);
+}
+
+.bio-unified-chart-xaxis span {
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Leyenda: chips horizontales más limpios */
+.bio-unified-chart-legend {
+  margin-top: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.bio-unified-chart-legend-item {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  border-radius: 12px;
+  padding: 0.6rem 0.78rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  box-shadow: none;
+}
+
+.bio-unified-chart-legend-item:hover {
+  border-color: rgba(13, 71, 247, 0.2);
+}
+
+.bio-unified-chart-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.03);
+}
+
+.bio-unified-chart-legend-item strong {
+  font-size: 0.84rem;
+  color: #0b1226;
+  font-weight: 800;
+  display: block;
+}
+
+.bio-unified-chart-legend-item small {
+  font-size: 0.74rem;
+  color: #6b7587;
+  font-weight: 600;
+}
+
+.bio-unified-chart-empty {
+  min-height: 200px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fafcff 0%, #ffffff 100%);
+  border: 1px dashed rgba(191, 219, 254, 0.7);
+  color: #94a3b8;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+/* Desktop: chart más alto y leyenda con más respiro */
+@media (min-width: 1024px) {
+  .bio-unified-chart svg {
+    height: 240px;
+  }
+  .bio-unified-chart-stage {
+    padding: 1.3rem 1.2rem 0.6rem;
+  }
+  .bio-unified-chart-legend {
+    margin-top: 1.1rem;
+    gap: 0.7rem;
+  }
+  .bio-unified-chart-legend-item {
+    padding: 0.72rem 0.9rem;
+  }
+}
+
+/* Mobile: chart compacto */
+@media (max-width: 768px) {
+  .bio-unified-chart svg {
+    height: 170px;
+  }
+  .bio-unified-chart-stage {
+    padding: 0.85rem 0.75rem 0.4rem;
+    border-radius: 14px;
+  }
+  .bio-unified-chart-legend {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+}
+
+/* Dark mode */
+body.theme-dark .bio-unified-chart-stage,
+body.theme-dark .bio-unified-chart-empty {
+  background: rgba(15, 23, 42, 0.45);
+  border-color: rgba(51, 65, 85, 0.55);
+}
+body.theme-dark .bio-unified-chart-grid {
+  stroke: rgba(71, 85, 105, 0.5);
+}
+body.theme-dark .bio-unified-chart-xaxis {
+  border-top-color: rgba(51, 65, 85, 0.55);
+}
+body.theme-dark .bio-unified-chart-xaxis span {
+  color: #64748b;
+}
+body.theme-dark .bio-chart-pill {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.28);
+}
+body.theme-dark .bio-unified-chart-legend-item {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(51, 65, 85, 0.55);
+}
+body.theme-dark .bio-unified-chart-legend-item strong {
+  color: #e2e8f0;
+}
+body.theme-dark .bio-unified-chart-legend-item small {
   color: #94a3b8;
 }

@@ -230,8 +230,9 @@ function buildUnifiedMetricPath(metric) {
   if (!points.length) return null;
   if (points.length === 1) {
     return {
-      path: null,
-      points: [{ x: 50, y: 26 }],
+      linePath: null,
+      areaPath: null,
+      points: [{ x: 50, y: 30 }],
     };
   }
   const min = Math.min(...points);
@@ -239,10 +240,27 @@ function buildUnifiedMetricPath(metric) {
   const range = max - min || 1;
   const coords = points.map((value, index) => ({
     x: (index / (points.length - 1)) * 100,
-    y: 54 - ((value - min) / range) * 42,
+    y: 56 - ((value - min) / range) * 42,
   }));
+
+  // Curva suave con Catmull-Rom convertida a Bezier
+  const smoothPath = coords.reduce((acc, point, i) => {
+    if (i === 0) return `M ${point.x} ${point.y}`;
+    const prev = coords[i - 1];
+    const next = coords[i + 1] || point;
+    const beforePrev = coords[i - 2] || prev;
+    const cp1x = prev.x + (point.x - beforePrev.x) / 6;
+    const cp1y = prev.y + (point.y - beforePrev.y) / 6;
+    const cp2x = point.x - (next.x - prev.x) / 6;
+    const cp2y = point.y - (next.y - prev.y) / 6;
+    return `${acc} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${point.x} ${point.y}`;
+  }, "");
+
+  const areaPath = `${smoothPath} L 100 64 L 0 64 Z`;
+
   return {
-    path: coords.map((point) => `${point.x},${point.y}`).join(" "),
+    linePath: smoothPath,
+    areaPath,
     points: coords,
   };
 }
@@ -265,43 +283,87 @@ function UnifiedMetricsChart({ metrics = [] }) {
     return <div className="bio-unified-chart-empty">Registra mediciones para ver el panorama general.</div>;
   }
 
+  // Etiquetas temporales para el eje X
+  const timeLabels = ["7d", "5d", "3d", "1d", "Hoy"];
+
   return (
     <div className="bio-unified-chart">
-      <svg viewBox="0 0 100 64" preserveAspectRatio="none" aria-hidden="true">
-        {[16, 32, 48].map((y) => (
-          <line
-            key={y}
-            x1="0"
-            x2="100"
-            y1={y}
-            y2={y}
-            className="bio-unified-chart-grid"
-          />
-        ))}
-        {chartMetrics.map(({ metric, chart, color }) => (
-          <g key={metric.metric_type}>
-            {chart.path ? (
-              <polyline
-                points={chart.path}
+      <div className="bio-unified-chart-stage">
+        <svg viewBox="0 0 100 64" preserveAspectRatio="none" aria-hidden="true">
+          <defs>
+            {chartMetrics.map(({ metric, color }) => (
+              <linearGradient
+                key={`grad-${metric.metric_type}`}
+                id={`bio-area-${metric.metric_type}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+                <stop offset="100%" stopColor={color} stopOpacity="0" />
+              </linearGradient>
+            ))}
+          </defs>
+
+          {/* Grid muy sutil */}
+          {[14, 28, 42, 56].map((y) => (
+            <line
+              key={y}
+              x1="0"
+              x2="100"
+              y1={y}
+              y2={y}
+              className="bio-unified-chart-grid"
+            />
+          ))}
+
+          {/* Áreas con gradiente */}
+          {chartMetrics.map(({ metric, chart }) =>
+            chart.areaPath ? (
+              <path
+                key={`area-${metric.metric_type}`}
+                d={chart.areaPath}
+                fill={`url(#bio-area-${metric.metric_type})`}
+              />
+            ) : null
+          )}
+
+          {/* Líneas suaves */}
+          {chartMetrics.map(({ metric, chart, color }) =>
+            chart.linePath ? (
+              <path
+                key={`line-${metric.metric_type}`}
+                d={chart.linePath}
                 fill="none"
                 stroke={color}
-                strokeWidth="2.6"
+                strokeWidth="1.6"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                vectorEffect="non-scaling-stroke"
               />
-            ) : null}
-            {chart.points.map((point, index) => (
-              <circle
-                key={`${metric.metric_type}-${index}`}
-                cx={point.x}
-                cy={point.y}
-                r={index === chart.points.length - 1 ? 2.3 : 1.5}
-                fill={color}
-              />
-            ))}
-          </g>
-        ))}
-      </svg>
+            ) : null
+          )}
+
+          {/* Punto final destacado */}
+          {chartMetrics.map(({ metric, chart, color }) => {
+            const last = chart.points[chart.points.length - 1];
+            if (!last) return null;
+            return (
+              <g key={`last-${metric.metric_type}`}>
+                <circle cx={last.x} cy={last.y} r="2.6" fill="#fff" />
+                <circle cx={last.x} cy={last.y} r="1.8" fill={color} />
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="bio-unified-chart-xaxis">
+          {timeLabels.map((label) => (
+            <span key={label}>{label}</span>
+          ))}
+        </div>
+      </div>
 
       <div className="bio-unified-chart-legend">
         {chartMetrics.map(({ metric, color }) => (
@@ -673,12 +735,10 @@ export default function Biometrics() {
         <div className="bio-page">
           <section className="bio-hero-card bio-summary-hero">
             <div className="bio-hero-copy">
-              <span className="bio-eyebrow">Mi salud · Parámetros biométricos</span>
-              <h1 className="bio-title">Elige un parámetro y entra a su seguimiento</h1>
+              <span className="bio-eyebrow">Mi salud · Biométricos</span>
+              <h1 className="bio-title">Tu panel de parámetros</h1>
               <p className="bio-subtitle">
-                Esta vista te muestra el panorama general. Selecciona glucosa, presión arterial,
-                frecuencia cardiaca o temperatura para abrir su detalle y registrar nuevas
-                mediciones sin recargar el inicio del módulo.
+                Resumen general de tu monitoreo. Toca un parámetro para ver su detalle.
               </p>
               <div className="bio-hero-actions">
                 <Link to="/mi-salud" className="bio-ghost-link">
@@ -732,11 +792,7 @@ export default function Biometrics() {
             <article className="bio-panel-card bio-summary-card">
               <div className="bio-panel-head">
                 <div>
-                  <h2 className="bio-panel-title">Parámetros biométricos</h2>
-                  <p className="bio-panel-subtitle">
-                    Selecciona uno para entrar a su detalle, ver más contexto y registrar nuevas
-                    mediciones.
-                  </p>
+                  <h2 className="bio-panel-title">Parámetros</h2>
                 </div>
               </div>
 
@@ -767,31 +823,25 @@ export default function Biometrics() {
               </div>
             </article>
 
-            <article className="bio-panel-card bio-summary-card">
+            <article className="bio-panel-card bio-summary-card bio-chart-card">
               <div className="bio-panel-head">
                 <div>
                   <h2 className="bio-panel-title">Panorama combinado</h2>
-                  <p className="bio-panel-subtitle">
-                    El gráfico resume todos los parámetros activos en una sola vista comparativa.
-                  </p>
                 </div>
+                <span className="bio-chart-pill">Tendencia</span>
               </div>
 
               <UnifiedMetricsChart metrics={summaryMetricsWithData} />
-              <div className="bio-insights-note bio-unified-chart-note">
-                Cada línea usa la escala propia del parámetro para que puedas comparar continuidad y
-                variación, no valores absolutos entre distintas unidades.
-              </div>
             </article>
           </section>
 
           <section className="bio-overview-strip">
             <article className={`bio-overview-card tone-${latestMetricConfig.tone}`}>
-              <small>Último parámetro visible</small>
+              <small>Último parámetro</small>
               <strong>
                 {latestMetric?.latest_reading
                   ? `${latestMetric.label}: ${formatBiometricValue(latestMetric.latest_reading)}`
-                  : "Aún sin monitoreo activo"}
+                  : "Sin monitoreo activo"}
               </strong>
               <span>
                 {latestMetric?.latest_reading
@@ -804,23 +854,20 @@ export default function Biometrics() {
             </article>
 
             <article className="bio-overview-card">
-              <small>Panel listo para consulta</small>
-              <strong>{recentReadings.length} registros recientes</strong>
-              <span>
-                El detalle por parámetro concentra el registro, el gráfico individual y el historial
-                filtrado.
-              </span>
+              <small>Registros recientes</small>
+              <strong>{recentReadings.length}</strong>
+              <span>Mediciones disponibles</span>
             </article>
 
             <article className="bio-overview-card">
-              <small>Siguiente mejor uso</small>
+              <small>{canEdit ? "Siguiente paso" : "Modo lectura"}</small>
               <strong>
-                {canEdit ? "Entrar a un parámetro y registrar un valor" : "Entrar a un parámetro y revisar tendencia"}
+                {canEdit ? "Registrar una medición" : "Revisar tendencias"}
               </strong>
               <span>
                 {canEdit
-                  ? "Así mantienes el resumen limpio y abres el seguimiento solo cuando lo necesitas."
-                  : "El detalle sigue disponible para lectura clínica ordenada."}
+                  ? "Entra a un parámetro para guardar un valor"
+                  : "Detalle disponible para consulta clínica"}
               </span>
             </article>
           </section>
