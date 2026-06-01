@@ -52344,6 +52344,140 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
   }
 }
 
+/* Desktop cleanup: remove duplicated topbar context and tighten shell */
+@media (min-width: 1024px) {
+  .topbar-highlights {
+    display: none;
+  }
+
+  .topbar-main {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.85rem;
+  }
+
+  .topbar-main > div:first-child {
+    flex: 1 1 auto;
+  }
+
+  .topbar-actions {
+    align-self: center;
+  }
+}
+
+/* Desktop refinement: immersive assistant should use the full canvas */
+@media (min-width: 1024px) {
+  .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+    align-items: stretch;
+    gap: 1rem;
+    padding: 0.85rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-main {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
+    border: 1px solid rgba(191, 219, 254, 0.82);
+    border-radius: 28px;
+    background:
+      radial-gradient(circle at top right, rgba(68, 196, 255, 0.14), transparent 34%),
+      linear-gradient(180deg, #f8fbff 0%, #f8fafc 100%);
+    box-shadow: 0 22px 44px rgba(15, 23, 42, 0.1);
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-mobile-topbar,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-input-zone {
+    border-bottom-left-radius: 28px;
+    border-bottom-right-radius: 28px;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-context-strip,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-source-list,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-ctx,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-inner {
+    width: min(100%, 1180px);
+    max-width: none;
+    padding-left: 1.2rem;
+    padding-right: 1.2rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat {
+    position: relative;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
+    position: sticky;
+    right: auto;
+    bottom: 1rem;
+    width: min(100%, 1180px);
+    max-width: none;
+    margin: 0 auto;
+    padding: 0 1.2rem 0.8rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-message-column {
+    max-width: min(920px, 100%);
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    min-width: 0;
+    max-height: none;
+    height: 100%;
+    border-radius: 28px;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+    z-index: auto;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-right-body {
+    min-height: 0;
+  }
+}
+
+@media (min-width: 1360px) {
+  .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 392px);
+    gap: 1.1rem;
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-context-strip,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-source-list,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-ctx,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-inner,
+  .main-content.main-content-ai.main-content-ai-immersive .ai-chat-jump-slot {
+    width: min(100%, 1260px);
+  }
+
+  .main-content.main-content-ai.main-content-ai-immersive .ai-message-column {
+    max-width: min(980px, 100%);
+  }
+}
+
+body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-copilot-stage {
+  border-color: rgba(36, 50, 68, 0.94);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 36%),
+    linear-gradient(180deg, #0b1224 0%, #0f172a 100%);
+  box-shadow: 0 24px 46px rgba(2, 6, 23, 0.34);
+}
+
+body.theme-dark .main-content.main-content-ai.main-content-ai-immersive .ai-right-panel {
+  box-shadow: 0 20px 42px rgba(2, 6, 23, 0.34);
+}
+
 .clp-biometric-body {
   display: flex;
   flex-direction: column;
