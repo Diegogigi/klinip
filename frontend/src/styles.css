@@ -54556,3 +54556,815 @@ body.theme-dark .bio-metric-card.is-selected {
     border-top-color: rgba(71, 85, 105, 0.7);
   }
 }
+
+/* ===================================================================
+   DESKTOP CLEANUP — Sidebar profesional + Topbar sin fondo blanco
+   ===================================================================
+   Limpia la sidebar de escritorio (quita el ruido de "card-dentro-de-card"
+   y gradientes apilados) y elimina la chrome blanca del topbar para que
+   se integre con el lienzo principal.
+   =================================================================== */
+
+@media (min-width: 1024px) {
+  /* ── Topbar: sin fondo, sin bordes, sin sombra ── */
+  .topbar {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0.4rem 0.25rem 0.6rem;
+    margin-bottom: 1.1rem;
+    align-items: center;
+  }
+  .main-area > .topbar:has(+ .main-content.main-content-ai) {
+    margin-bottom: 0.4rem;
+  }
+
+  /* Topbar interno: que la jerarquía se sostenga sin la caja blanca */
+  .topbar-title {
+    color: #0b1226;
+    font-weight: 900;
+    letter-spacing: -0.015em;
+  }
+  .topbar-label {
+    color: #4f6385;
+  }
+  .topbar-chip {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(191, 215, 255, 0.6);
+    backdrop-filter: blur(6px);
+    color: #0b1226;
+  }
+
+  /* Topbar quick action: chip "blando" en lugar de botón gris */
+  .topbar-quick {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(191, 215, 255, 0.55);
+    backdrop-filter: blur(6px);
+    color: #1e293b;
+  }
+  .topbar-quick:hover {
+    background: rgba(255, 255, 255, 0.92);
+    border-color: rgba(13, 71, 247, 0.32);
+  }
+
+  /* Topbar user: mismo lenguaje cristal */
+  .topbar-user {
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(191, 215, 255, 0.55);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Highlights del topbar: glass cards, no cards opacas */
+  .topbar-highlight-card {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(219, 234, 254, 0.7);
+    backdrop-filter: blur(6px);
+    box-shadow: none;
+  }
+
+  /* ── Sidebar: fondo limpio (sólido, sin gradiente apilado) ── */
+  .sidebar {
+    background: #ffffff;
+    border-right: 1px solid rgba(226, 232, 240, 0.7);
+    box-shadow: none;
+    padding: 1.15rem 0.85rem 1rem;
+  }
+
+  /* ── Plan row: minimalista ── */
+  .sidebar-desktop-panel {
+    gap: 0.95rem;
+    margin-top: 0.85rem;
+  }
+  .sidebar-desktop-plan-row {
+    padding: 0 0.2rem;
+  }
+  .sidebar-desktop-plan-badge {
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    color: #475569;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 0.22rem 0.58rem;
+  }
+  .sidebar-desktop-plan-caption {
+    color: #94a3b8;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  /* ── Profile: sin caja, solo contenido limpio ── */
+  .sidebar-desktop-profile-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0.35rem 0.25rem 0.55rem;
+    gap: 0.7rem;
+  }
+  .sidebar-desktop-profile-head {
+    gap: 0.7rem;
+  }
+  .sidebar-desktop-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
+    font-size: 0.92rem;
+  }
+  .sidebar-desktop-profile-label {
+    color: #94a3b8;
+    font-size: 0.64rem;
+    letter-spacing: 0.1em;
+  }
+  .sidebar-desktop-profile-name {
+    color: #0b1226;
+    font-size: 0.95rem;
+    font-weight: 800;
+    margin-top: 0.1rem;
+  }
+
+  /* Quitamos los "pills" de rol/email — eran ruido visual */
+  .sidebar-desktop-profile-meta {
+    display: none;
+  }
+
+  /* Select de perfil: discreto, no parece botón */
+  .sidebar-desktop-profile-select {
+    min-height: 36px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    box-shadow: none;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.42rem 0.6rem;
+    color: #1e293b;
+  }
+  .sidebar-desktop-profile-select:focus-visible {
+    border-color: #93c5fd;
+    outline: 2px solid rgba(13, 71, 247, 0.18);
+    outline-offset: 1px;
+  }
+
+  /* ── Métricas: flat, sin caja con sombra ── */
+  .sidebar-desktop-metrics {
+    gap: 0.5rem;
+  }
+  .sidebar-desktop-metric {
+    background: #f8fafc;
+    border: 1px solid rgba(226, 232, 240, 0.7);
+    border-radius: 12px;
+    box-shadow: none;
+    padding: 0.62rem 0.7rem;
+    gap: 0.12rem;
+  }
+  .sidebar-desktop-metric-value {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #0b1226;
+  }
+  .sidebar-desktop-metric-label {
+    color: #64748b;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Sección de nav: label más sutil ── */
+  .sidebar-section-label {
+    color: #94a3b8;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    padding: 0.4rem 1rem 0.25rem;
+  }
+
+  /* ── Settings link (footer): igual que un nav-link, no como card ── */
+  .sidebar-desktop-footer {
+    padding-top: 0.6rem;
+    margin-top: 0.8rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.7);
+  }
+  .sidebar-desktop-settings-link {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    border-radius: 12px;
+    padding: 0.62rem 0.75rem;
+    gap: 0.65rem;
+    color: #334155;
+  }
+  .sidebar-desktop-settings-link:hover {
+    background: rgba(13, 71, 247, 0.05);
+    border: none;
+    box-shadow: none;
+    transform: none;
+  }
+  .sidebar-desktop-settings-title {
+    color: #0b1226;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .sidebar-desktop-settings-subtitle {
+    color: #94a3b8;
+    font-size: 0.72rem;
+  }
+
+  /* ── Nav links: refinar el look para que combine con el resto ── */
+  .sidebar-link {
+    padding: 0.78rem 0.9rem;
+    border-radius: 12px;
+    color: #475569;
+  }
+  .sidebar-link:hover {
+    background: rgba(13, 71, 247, 0.06);
+    transform: none;
+    box-shadow: none;
+  }
+  .sidebar-link.active {
+    background: linear-gradient(135deg, #1f7aff 0%, #0d47f7 100%);
+    box-shadow: 0 10px 22px rgba(13, 71, 247, 0.24);
+  }
+  .sidebar-label {
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  /* Main area: pequeño retoque para que combine con la sidebar plana */
+  .main-area {
+    background:
+      radial-gradient(circle at top right, rgba(77, 163, 255, 0.06), transparent 22%),
+      linear-gradient(180deg, #f9fbff 0%, #f5f8fc 100%);
+  }
+}
+
+/* Dark mode: mantener la limpieza */
+@media (min-width: 1024px) {
+  body.theme-dark .sidebar {
+    background: #0b1224;
+    border-right-color: rgba(51, 65, 85, 0.55);
+  }
+  body.theme-dark .sidebar-desktop-profile-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+  body.theme-dark .sidebar-desktop-metric {
+    background: rgba(15, 23, 42, 0.6);
+    border-color: rgba(51, 65, 85, 0.6);
+  }
+  body.theme-dark .sidebar-desktop-settings-link:hover {
+    background: rgba(56, 189, 248, 0.08);
+  }
+  body.theme-dark .topbar-chip,
+  body.theme-dark .topbar-quick,
+  body.theme-dark .topbar-user,
+  body.theme-dark .topbar-highlight-card {
+    background: rgba(15, 23, 42, 0.55);
+    border-color: rgba(51, 65, 85, 0.6);
+    color: #e2e8f0;
+  }
+  body.theme-dark .topbar-title {
+    color: #e2e8f0;
+  }
+}
+
+/* ===================================================================
+   BIOMETRICS — Rediseño limpio, moderno y profesional
+   ===================================================================
+   Aplica un look más editorial al panel de biométricos:
+   - Cards con menos chrome (sin gradientes apilados)
+   - Tipografía confiada para los valores
+   - Mejor uso del espacio en escritorio (canvas más amplio)
+   - Mobile: jerarquía clara, menos ruido visual
+   =================================================================== */
+
+/* ── Canvas base — más ancho, mejor espaciado ── */
+.bio-page {
+  max-width: 1240px;
+  padding: 0.5rem 0 2.4rem;
+  gap: 1.2rem;
+}
+
+/* ── Hero card: minimalista, sin gradiente apilado ── */
+.bio-hero-card.bio-summary-hero {
+  background: linear-gradient(135deg, #ffffff 0%, #f7faff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.05);
+  border-radius: 24px;
+  padding: 1.6rem 1.7rem;
+}
+
+/* ── Hero summary stats: chips planos, no boxes con gradient ── */
+.bio-hero-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.bio-hero-stat {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 14px;
+  padding: 0.8rem 0.9rem;
+  box-shadow: none;
+}
+
+.bio-hero-stat small {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+}
+
+.bio-hero-stat strong {
+  font-size: 0.98rem;
+  color: #0b1226;
+  font-weight: 800;
+}
+
+.bio-hero-stat-highlight {
+  background: linear-gradient(135deg, rgba(13, 71, 247, 0.06) 0%, rgba(77, 163, 255, 0.04) 100%);
+  border-color: rgba(13, 71, 247, 0.18);
+}
+.bio-hero-stat-highlight strong { color: #0d47f7; }
+
+/* ── Panel cards: chrome reducido ── */
+.bio-panel-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  border-radius: 22px;
+  padding: 1.4rem 1.5rem;
+}
+
+.bio-panel-title {
+  font-size: 1.1rem;
+  color: #0b1226;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.bio-panel-subtitle {
+  font-size: 0.84rem;
+  color: #6b7587;
+  line-height: 1.45;
+}
+
+/* ── Parameter buttons: más limpios, sin gradientes pesados ── */
+.bio-parameter-btn {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.75);
+  border-radius: 16px;
+  min-height: 88px;
+  padding: 0.95rem 1rem;
+  box-shadow: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.bio-parameter-btn:hover {
+  transform: translateY(-2px);
+  border-color: rgba(13, 71, 247, 0.25);
+  box-shadow: 0 12px 28px rgba(13, 71, 247, 0.08);
+}
+
+.bio-parameter-btn .bio-metric-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+
+.bio-parameter-copy strong {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #0b1226;
+}
+
+.bio-parameter-copy small {
+  font-size: 0.82rem;
+  color: #6b7587;
+  font-weight: 600;
+}
+
+/* ── Overview strip: cards más respirados ── */
+.bio-overview-card {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  border-radius: 18px;
+  padding: 1.1rem 1.15rem;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.bio-overview-card small {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+}
+
+.bio-overview-card strong {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #0b1226;
+  margin-top: 0.2rem;
+}
+
+.bio-overview-card span {
+  font-size: 0.82rem;
+  color: #6b7587;
+  line-height: 1.5;
+}
+
+/* ── Detail topbar: menos chrome ── */
+.bio-detail-topbar {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  padding: 1.1rem 1.25rem;
+  border-radius: 20px;
+}
+
+.bio-back-link {
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  color: #475569;
+  font-weight: 700;
+}
+.bio-back-link:hover {
+  background: #f1f5f9;
+  border-color: rgba(13, 71, 247, 0.25);
+  color: #0d47f7;
+}
+
+/* ── Detail switcher (pills de métricas): más limpios ── */
+.bio-detail-switch-btn {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.82rem;
+  box-shadow: none;
+}
+.bio-detail-switch-btn:hover {
+  border-color: rgba(13, 71, 247, 0.25);
+  background: #f8fafc;
+}
+
+/* ── Focus card (el card grande con el "95") — estilo editorial ── */
+.bio-focus-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05);
+  border-radius: 24px;
+  padding: 1.6rem 1.7rem;
+}
+
+.bio-focus-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: #94a3b8;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.bio-focus-timestamp {
+  font-size: 0.84rem;
+  color: #6b7587;
+  font-weight: 700;
+  margin-top: 0.2rem;
+}
+
+.bio-focus-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  box-shadow: none;
+}
+
+/* Big bold number — el corazón del card */
+.bio-focus-value {
+  font-size: clamp(3.2rem, 5vw, 4.4rem);
+  font-weight: 900;
+  color: #0b1226;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.bio-focus-unit {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #6b7587;
+  margin-left: 0.4rem;
+}
+
+.bio-focus-copy {
+  color: #475569;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-top: 0.5rem;
+}
+
+/* Footer stats del focus card — limpios */
+.bio-focus-stat {
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+  padding: 0.7rem 0.85rem;
+}
+.bio-focus-stat small {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  color: #94a3b8;
+}
+.bio-focus-stat strong {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #0b1226;
+}
+
+/* ── Detail stat cards (debajo de la sparkline) ── */
+.bio-detail-stat-card {
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid rgba(226, 232, 240, 0.6);
+  border-radius: 12px;
+}
+.bio-detail-stat-card small {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+}
+.bio-detail-stat-card strong {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #0b1226;
+}
+
+/* ── Sparkline: fondo limpio ── */
+.bio-unified-chart svg {
+  background: linear-gradient(180deg, #fafcff 0%, #ffffff 100%);
+  border-radius: 18px;
+  height: 240px;
+}
+
+.bio-unified-chart-legend-item {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  border-radius: 14px;
+  padding: 0.65rem 0.78rem;
+}
+
+/* ===================================================================
+   BIOMETRICS — DESKTOP (≥1024px) — aprovechar el ancho
+   =================================================================== */
+@media (min-width: 1024px) {
+  .bio-page {
+    max-width: 1480px;
+    padding: 0.8rem 0 2.8rem;
+    gap: 1.4rem;
+  }
+
+  .bio-hero-card.bio-summary-hero {
+    padding: 1.9rem 2.1rem;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 2rem;
+  }
+
+  /* Hero summary: 2x2 limpio en escritorio */
+  .bio-hero-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+
+  /* Layout principal: parámetros más amplios, chart respira mejor */
+  .bio-summary-layout {
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 1.3rem;
+  }
+
+  .bio-panel-card {
+    padding: 1.55rem 1.75rem;
+  }
+
+  /* Parámetros en 2 columnas pero con cards más generosas */
+  .bio-parameter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+  }
+  .bio-parameter-btn {
+    min-height: 100px;
+    padding: 1.1rem 1.15rem;
+  }
+  .bio-parameter-btn .bio-metric-icon {
+    width: 52px;
+    height: 52px;
+  }
+
+  /* Overview strip: respiro entre cards */
+  .bio-overview-strip {
+    gap: 1.1rem;
+  }
+  .bio-overview-card {
+    padding: 1.25rem 1.35rem;
+  }
+
+  /* Detail topbar: usar todo el ancho */
+  .bio-detail-topbar {
+    padding: 1.3rem 1.6rem;
+  }
+
+  /* Detail grid: focus + chart — el chart se lleva más espacio */
+  .bio-detail-grid {
+    grid-template-columns: 0.85fr 1.15fr;
+    gap: 1.3rem;
+  }
+
+  .bio-focus-card {
+    padding: 1.9rem 2rem;
+  }
+  .bio-focus-value {
+    font-size: clamp(3.8rem, 5.5vw, 5.2rem);
+  }
+  .bio-focus-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+  }
+
+  /* Bottom grid: insights + lecciones rápidas */
+  .bio-detail-bottom-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1.3rem;
+  }
+}
+
+/* ===================================================================
+   BIOMETRICS — Pantallas grandes (≥1440px) — más espacio aún
+   =================================================================== */
+@media (min-width: 1440px) {
+  .bio-page {
+    max-width: 1600px;
+  }
+
+  /* Parámetros en 3 columnas para pantallas grandes */
+  .bio-parameter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .bio-overview-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.2rem;
+  }
+
+  .bio-focus-value {
+    font-size: clamp(4.2rem, 6vw, 5.8rem);
+  }
+}
+
+/* ===================================================================
+   BIOMETRICS — Mobile (≤768px) — limpieza visual
+   =================================================================== */
+@media (max-width: 768px) {
+  .bio-page {
+    padding: 0.4rem 0 6rem;
+    gap: 0.9rem;
+  }
+
+  .bio-hero-card.bio-summary-hero {
+    padding: 1.2rem 1.25rem;
+    border-radius: 20px;
+  }
+
+  .bio-title {
+    font-size: 1.3rem;
+    line-height: 1.2;
+  }
+
+  .bio-subtitle {
+    font-size: 0.88rem;
+    line-height: 1.5;
+  }
+
+  /* Hero summary: una sola columna en mobile, más respiro */
+  .bio-hero-summary {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
+  }
+  .bio-hero-stat {
+    padding: 0.7rem 0.85rem;
+  }
+
+  /* Layout principal: full-width, sin tantas filas anidadas */
+  .bio-summary-layout,
+  .bio-detail-grid,
+  .bio-detail-bottom-grid {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+
+  .bio-panel-card {
+    padding: 1.1rem 1.15rem;
+    border-radius: 18px;
+  }
+
+  /* Parameter buttons: full width en mobile, más altos */
+  .bio-parameter-grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+  .bio-parameter-btn {
+    min-height: 76px;
+    padding: 0.85rem 0.95rem;
+    border-radius: 14px;
+  }
+
+  /* Overview strip: column en mobile */
+  .bio-overview-strip {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+  .bio-overview-card {
+    padding: 0.95rem 1rem;
+    border-radius: 16px;
+  }
+
+  /* Focus card: número MUY visible en mobile */
+  .bio-focus-card {
+    padding: 1.3rem 1.35rem;
+    border-radius: 20px;
+  }
+  .bio-focus-value {
+    font-size: 3.4rem;
+    line-height: 1;
+  }
+  .bio-focus-unit {
+    font-size: 0.98rem;
+  }
+  .bio-focus-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+  }
+
+  /* Detail topbar: compacto */
+  .bio-detail-topbar {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+  }
+
+  .bio-detail-register-btn {
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  /* Switcher: scrollable horizontal en mobile */
+  .bio-detail-switcher {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.3rem;
+    -webkit-overflow-scrolling: touch;
+    gap: 0.5rem;
+  }
+  .bio-detail-switcher::-webkit-scrollbar { display: none; }
+  .bio-detail-switch-btn {
+    flex-shrink: 0;
+    padding: 0.48rem 0.78rem;
+  }
+}
+
+/* ── Dark mode: respetar los cambios ── */
+body.theme-dark .bio-panel-card,
+body.theme-dark .bio-hero-card.bio-summary-hero,
+body.theme-dark .bio-overview-card,
+body.theme-dark .bio-detail-topbar,
+body.theme-dark .bio-focus-card,
+body.theme-dark .bio-parameter-btn {
+  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
+  border-color: rgba(51, 65, 85, 0.55);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.2);
+}
+
+body.theme-dark .bio-hero-stat,
+body.theme-dark .bio-focus-stat,
+body.theme-dark .bio-detail-stat-card {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(51, 65, 85, 0.55);
+}
+
+body.theme-dark .bio-parameter-copy strong,
+body.theme-dark .bio-overview-card strong,
+body.theme-dark .bio-focus-value,
+body.theme-dark .bio-panel-title,
+body.theme-dark .bio-hero-stat strong,
+body.theme-dark .bio-detail-stat-card strong,
+body.theme-dark .bio-focus-stat strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .bio-parameter-copy small,
+body.theme-dark .bio-overview-card span,
+body.theme-dark .bio-focus-copy,
+body.theme-dark .bio-panel-subtitle,
+body.theme-dark .bio-focus-timestamp {
+  color: #94a3b8;
+}

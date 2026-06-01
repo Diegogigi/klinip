@@ -49,3 +49,8 @@ uploaded_docs/
 backend/app/__pycache__/
 backend/mirutasalud.db
 
+# Materiales de marketing (presentaciones, carruseles, assets locales)
+presentacion_klinip_*.html
+instagram_carrusel_*.html
+assets_lebu/
+
