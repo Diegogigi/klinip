@@ -6378,6 +6378,383 @@ def _extract_medication_from_text(text: str) -> dict | None:
     return None
 
 
+def _resolve_document_profile_for_ocr(
+    db: Session,
+    doc: models.Document,
+) -> models.HealthProfile | None:
+    profile = None
+    if getattr(doc, "profile_id", None):
+        profile = (
+            db.query(models.HealthProfile)
+            .filter(
+                models.HealthProfile.id == int(doc.profile_id),
+                models.HealthProfile.is_archived.is_(False),
+            )
+            .first()
+        )
+    if profile is None:
+        profile = _resolve_profile_for_user_learning(db, int(doc.user_id))
+        if profile and not getattr(doc, "profile_id", None):
+            doc.profile_id = int(profile.id)
+    return profile
+
+
+def _extract_general_prescription_meds(text: str) -> list[dict]:
+    entities = _extract_prescription_entities(text)
+    if not entities:
+        med = _extract_medication_from_text(text)
+        if med and (med.get("name") or med.get("dose") or med.get("frequency")):
+            return [med]
+        return []
+
+    duration_days_pattern = re.compile(r"(\d+)\s*d[ií]as?", re.IGNORECASE)
+    weeks_pattern = re.compile(r"(\d+)\s*semanas?", re.IGNORECASE)
+    frequency_pattern = re.compile(
+        r"(cada\s*\d+\s*(?:h|hr|hrs|hora|horas|dia|dias)|\d+\s+veces\s+al\s+dia|1-0-1|1-1-1|1-0-0|0-0-1|0-1-0|1-1-0|0-1-1)",
+        re.IGNORECASE,
+    )
+    route_pattern = re.compile(
+        r"(oral|sublingual|topica|t[oó]pica|intramuscular|intravenosa|subcutanea|subcutánea|inhalatoria)",
+        re.IGNORECASE,
+    )
+
+    medications: list[dict] = []
+    seen: set[tuple[str, str, str]] = set()
+    for entity in entities:
+        name = _safe_text(entity.get("entity_name") or "")
+        source_text = _safe_text(entity.get("source_text") or "")
+        detail_text = _safe_text(entity.get("entity_value") or "")
+        merged_text = " ".join(part for part in [source_text, detail_text] if part).strip()
+        parsed = _extract_medication_from_text(
+            f"{name} {merged_text}".strip() if name else merged_text
+        ) or {}
+
+        duration_days = parsed.get("duration_days")
+        if not duration_days and merged_text:
+            duration_match = duration_days_pattern.search(merged_text)
+            if duration_match:
+                duration_days = int(duration_match.group(1))
+            else:
+                weeks_match = weeks_pattern.search(merged_text)
+                if weeks_match:
+                    duration_days = int(weeks_match.group(1)) * 7
+
+        frequency = _safe_text(parsed.get("frequency") or "")
+        if not frequency and merged_text:
+            frequency_match = frequency_pattern.search(merged_text)
+            if frequency_match:
+                frequency = _safe_text(frequency_match.group(1))
+
+        route = _safe_text(parsed.get("route") or "")
+        if not route and merged_text:
+            route_match = route_pattern.search(merged_text)
+            if route_match:
+                route = _safe_text(route_match.group(1))
+
+        dose = _safe_text(parsed.get("dose") or entity.get("unit") or "")
+        med_name = _safe_text(parsed.get("name") or name)
+        if not med_name:
+            continue
+
+        dedupe_key = (_normalize_text(med_name), dose.lower(), frequency.lower())
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        medications.append(
+            {
+                "name": med_name,
+                "dose": dose,
+                "frequency": frequency,
+                "duration_days": duration_days,
+                "route": route,
+                "raw": source_text or merged_text,
+            }
+        )
+    return medications
+
+
+def _create_medication_from_document_ocr(
+    db: Session,
+    *,
+    doc: models.Document,
+    profile: models.HealthProfile | None,
+    med: dict,
+) -> models.Medication:
+    start_date = doc.date or datetime.now()
+    end_date = None
+    duration_days = med.get("duration_days")
+    if duration_days:
+        end_date = start_date + timedelta(days=duration_days)
+    duration_label = f"{duration_days} dias" if duration_days else ""
+
+    med_notes_parts = [
+        med.get("raw"),
+        med.get("route"),
+        med.get("form"),
+    ]
+    med_notes = " ".join([part for part in med_notes_parts if part]).strip()
+
+    medication = models.Medication(
+        user_id=doc.user_id,
+        profile_id=int(getattr(doc, "profile_id", 0) or 0) or (
+            int(profile.id) if profile else None
+        ),
+        episode_id=getattr(doc, "episode_id", None),
+        name=med.get("name") or "Medicamento",
+        dose=med.get("dose") or "",
+        frequency=med.get("frequency") or "",
+        duration=duration_label,
+        start_at=start_date,
+        end_date=end_date,
+        notes=med_notes,
+        document_id=doc.id,
+    )
+    db.add(medication)
+    db.flush()
+    if profile:
+        refresh_episode_links_for_record(db, profile, "medication", medication)
+    return medication
+
+
+def _create_appointment_from_document_ocr(
+    db: Session,
+    *,
+    doc: models.Document,
+    profile: models.HealthProfile | None,
+    specialty: str,
+    date_time: datetime | None,
+) -> models.Appointment:
+    appointment = models.Appointment(
+        user_id=doc.user_id,
+        profile_id=int(getattr(doc, "profile_id", 0) or 0) or (
+            int(profile.id) if profile else None
+        ),
+        episode_id=getattr(doc, "episode_id", None),
+        type=models.AppointmentType.examen,
+        specialty=specialty or "Examen",
+        center=doc.center or "",
+        date_time=date_time,
+        status=(
+            models.AppointmentStatus.agendada
+            if date_time
+            else models.AppointmentStatus.pendiente
+        ),
+        notes=doc.notes or "",
+    )
+    db.add(appointment)
+    db.flush()
+    if profile:
+        refresh_episode_links_for_record(db, profile, "appointment", appointment)
+    doc.appointment_id = appointment.id
+    return appointment
+
+
+def _document_looks_like_order(text: str) -> bool:
+    normalized = _normalize_text(text)
+    if "resultado" in normalized:
+        return False
+    order_tokens = (
+        "fecha y hora citacion",
+        "citacion",
+        "toma de muestra",
+        "tipo de atencion",
+        "ecografia",
+        "ultrasonido",
+        "radiografia",
+        "rayos x",
+        "scanner",
+        "resonancia",
+        "mamografia",
+        "colonoscopia",
+        "endoscopia",
+        "favor realizar",
+        "orden medica",
+        "orden de examen",
+    )
+    return any(token in normalized for token in order_tokens)
+
+
+def _append_document_medication_summary(doc: models.Document, med: dict, *, is_electronic: bool) -> None:
+    if is_electronic and med.get("raw"):
+        med_summary = f"Detalle medicamento: {med.get('raw')}"
+    else:
+        med_summary = (
+            f"Medicamento: {med.get('name', 'Medicamento')}: "
+            f"{med.get('dose', '')} - {med.get('frequency', '')}"
+        )
+    if doc.notes:
+        if med.get("name") and med.get("name") in doc.notes:
+            return
+        doc.notes = f"{doc.notes}\n\n{med_summary}"
+    else:
+        doc.notes = med_summary
+
+
+def _apply_document_ocr_automations(
+    db: Session,
+    doc: models.Document,
+) -> list[dict]:
+    text = (doc.ocr_text or "").strip()
+    if not text:
+        return []
+
+    profile = _resolve_document_profile_for_ocr(db, doc)
+    detected_meds_for_email: list[dict] = []
+
+    if not doc.center:
+        guess_center = _guess_center(text)
+        if guess_center:
+            doc.center = guess_center
+    if not doc.date:
+        guess_date = _guess_date(text)
+        if guess_date:
+            doc.date = guess_date
+    if doc.doc_type == models.DocumentType.otro:
+        guess_type = _guess_doc_type(text)
+        if not guess_type:
+            guess_type = _classify_document_type_from_ocr(text, doc.filename or "")
+        if guess_type == "examen":
+            guess_type = "resultado"
+        if guess_type:
+            doc.doc_type = models.DocumentType(guess_type)
+    if not doc.notes:
+        guess_notes = _guess_notes(text)
+        if guess_notes:
+            doc.notes = guess_notes
+
+    if doc.doc_type == models.DocumentType.receta:
+        is_electronic = _is_electronic_prescription(text)
+        if is_electronic:
+            ruts = _extract_rut(text)
+            doctor_name = _extract_doctor_name(text)
+            if not doc.center and doctor_name:
+                center_parts = [doctor_name]
+                if ruts["doctor_rut"]:
+                    center_parts.append(f"RUT: {ruts['doctor_rut']}")
+                doc.center = " | ".join(center_parts)
+            if ruts["patient_rut"] or ruts["doctor_rut"]:
+                rut_info_parts = []
+                if ruts["patient_rut"]:
+                    rut_info_parts.append(f"Paciente RUT: {ruts['patient_rut']}")
+                if doctor_name:
+                    rut_info_parts.append(f"Profesional: {doctor_name}")
+                if ruts["doctor_rut"]:
+                    rut_info_parts.append(f"Profesional RUT: {ruts['doctor_rut']}")
+                if ruts["doctor_registry"]:
+                    rut_info_parts.append(f"Registro: {ruts['doctor_registry']}")
+                rut_info = " | ".join(rut_info_parts)
+                if not doc.notes:
+                    doc.notes = f"Receta Electronica MINSAL\n{rut_info}"
+                elif "Receta Electronica" not in doc.notes:
+                    doc.notes = f"Receta Electronica MINSAL\n{rut_info}\n\n{doc.notes}"
+
+        existing_meds = (
+            db.query(models.Medication)
+            .filter(models.Medication.document_id == doc.id)
+            .all()
+        )
+        if not existing_meds:
+            medications_to_add = []
+            if is_electronic:
+                medications_to_add = _extract_electronic_prescription_meds(text)
+            if not medications_to_add:
+                medications_to_add = _extract_general_prescription_meds(text)
+            if not medications_to_add:
+                med = _extract_medication_from_text(text)
+                if med and (med.get("name") or med.get("dose") or med.get("frequency")):
+                    medications_to_add = [med]
+
+            for med in medications_to_add:
+                _create_medication_from_document_ocr(
+                    db,
+                    doc=doc,
+                    profile=profile,
+                    med=med,
+                )
+                detected_meds_for_email.append(
+                    {
+                        "name": med.get("name") or "Medicamento",
+                        "dose": med.get("dose") or "",
+                        "frequency": med.get("frequency") or "",
+                    }
+                )
+                _append_document_medication_summary(doc, med, is_electronic=is_electronic)
+
+        return detected_meds_for_email
+
+    if doc.doc_type == models.DocumentType.orden and not doc.appointment_id:
+        schedule = _extract_order_schedule(text) or {}
+        date_time = schedule.get("date_time")
+        specialty = schedule.get("specialty") or doc.notes or "Examen"
+        appointment = _create_appointment_from_document_ocr(
+            db,
+            doc=doc,
+            profile=profile,
+            specialty=specialty,
+            date_time=date_time,
+        )
+        if appointment.date_time:
+            date_label = appointment.date_time.strftime("%d/%m/%Y %H:%M")
+            if doc.notes:
+                if date_label not in doc.notes:
+                    doc.notes = f"{doc.notes}\nFecha: {date_label}"
+            else:
+                doc.notes = f"Fecha: {date_label}"
+        else:
+            missing_msg = "Falta fecha u hora, agregar manualmente en Citas."
+            if doc.notes:
+                if missing_msg not in doc.notes:
+                    doc.notes = f"{doc.notes}\n{missing_msg}"
+            else:
+                doc.notes = missing_msg
+        return detected_meds_for_email
+
+    if doc.doc_type == models.DocumentType.otro and not doc.appointment_id:
+        label_med = _extract_label_medication(text)
+        if label_med:
+            doc.doc_type = models.DocumentType.receta
+            medication = _create_medication_from_document_ocr(
+                db,
+                doc=doc,
+                profile=profile,
+                med=label_med,
+            )
+            detected_meds_for_email.append(
+                {
+                    "name": medication.name or "Medicamento",
+                    "dose": medication.dose or "",
+                    "frequency": medication.frequency or "",
+                }
+            )
+            _append_document_medication_summary(doc, label_med, is_electronic=False)
+            return detected_meds_for_email
+
+        if _document_looks_like_order(text):
+            doc.doc_type = models.DocumentType.orden
+            schedule = _extract_order_schedule(text) or {}
+            date_time = schedule.get("date_time")
+            specialty = schedule.get("specialty") or ""
+            if not specialty:
+                normalized = _normalize_text(text)
+                if "ecografia" in normalized:
+                    specialty = "Ecografia"
+                elif "ultrasonido" in normalized:
+                    specialty = "Ultrasonido"
+                elif "radiografia" in normalized:
+                    specialty = "Radiografia"
+                else:
+                    specialty = "Examen"
+            _create_appointment_from_document_ocr(
+                db,
+                doc=doc,
+                profile=profile,
+                specialty=specialty,
+                date_time=date_time,
+            )
+
+    return detected_meds_for_email
+
+
 def _extract_ocr_text(data: bytes, filename: str) -> str:
     if not pytesseract or not Image:
         raise RuntimeError("tesseract_not_available")
@@ -6475,264 +6852,7 @@ def _run_document_ocr(document_id: int):
         doc.ocr_text = text
         doc.ocr_status = "done"
         doc.ocr_lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
-
-        if not doc.center:
-            guess_center = _guess_center(text)
-            if guess_center:
-                doc.center = guess_center
-        if not doc.date:
-            guess_date = _guess_date(text)
-            if guess_date:
-                doc.date = guess_date
-        if doc.doc_type == models.DocumentType.otro:
-            guess_type = _guess_doc_type(text)
-            if guess_type:
-                doc.doc_type = models.DocumentType(guess_type)
-        if not doc.notes:
-            guess_notes = _guess_notes(text)
-            if guess_notes:
-                doc.notes = guess_notes
-
-        if doc.doc_type == models.DocumentType.receta:
-            # Detectar si es receta electrónica chilena
-            is_electronic = _is_electronic_prescription(text)
-
-            if is_electronic:
-                # Extraer RUTs y nombre del profesional
-                ruts = _extract_rut(text)
-                doctor_name = _extract_doctor_name(text)
-
-                # Si no hay centro de salud, usar el nombre del profesional
-                if not doc.center and doctor_name:
-                    center_parts = [doctor_name]
-                    if ruts["doctor_rut"]:
-                        center_parts.append(f"RUT: {ruts['doctor_rut']}")
-                    doc.center = " | ".join(center_parts)
-
-                # Construir información para las notas
-                if ruts["patient_rut"] or ruts["doctor_rut"]:
-                    rut_info_parts = []
-
-                    if ruts["patient_rut"]:
-                        rut_info_parts.append(f"Paciente RUT: {ruts['patient_rut']}")
-
-                    if doctor_name:
-                        rut_info_parts.append(f"Profesional: {doctor_name}")
-
-                    if ruts["doctor_rut"]:
-                        rut_info_parts.append(f"Profesional RUT: {ruts['doctor_rut']}")
-
-                    if ruts["doctor_registry"]:
-                        rut_info_parts.append(f"Registro: {ruts['doctor_registry']}")
-
-                    rut_info = " | ".join(rut_info_parts)
-
-                    if not doc.notes:
-                        doc.notes = f"Receta Electronica MINSAL\n{rut_info}"
-                    elif "Receta Electronica" not in doc.notes:
-                        doc.notes = (
-                            f"Receta Electronica MINSAL\n{rut_info}\n\n{doc.notes}"
-                        )
-
-            # Verificar si ya existen medicamentos
-            existing_meds = (
-                db.query(models.Medication)
-                .filter(models.Medication.document_id == doc.id)
-                .all()
-            )
-
-            if not existing_meds:
-                medications_to_add = []
-
-                # Intentar primero con extractor de recetas electrónicas
-                if is_electronic:
-                    medications_to_add = _extract_electronic_prescription_meds(text)
-
-                # Si no se encontraron medicamentos o no es receta electrónica, usar método general
-                if not medications_to_add:
-                    med = _extract_medication_from_text(text)
-                    if med and (
-                        med.get("name") or med.get("dose") or med.get("frequency")
-                    ):
-                        medications_to_add = [med]
-
-                # Agregar medicamentos encontrados
-                for med in medications_to_add:
-                    start_date = doc.date or datetime.now()
-                    end_date = None
-                    duration_days = med.get("duration_days")
-                    if duration_days:
-                        end_date = start_date + timedelta(days=duration_days)
-                    duration_label = f"{duration_days} dias" if duration_days else ""
-
-                    # Para recetas electrónicas, usar el campo "raw" que tiene todos los detalles estructurados
-                    # Para otras recetas, construir las notas con la info disponible
-                    if is_electronic and med.get("raw"):
-                        med_notes = med.get("raw")
-                    else:
-                        med_notes_parts = [
-                            med.get("raw"),
-                            med.get("route"),
-                            med.get("form"),
-                        ]
-                        med_notes = " ".join([p for p in med_notes_parts if p]).strip()
-
-                    medication = models.Medication(
-                        user_id=doc.user_id,
-                        name=med.get("name") or "Medicamento",
-                        dose=med.get("dose") or "",
-                        frequency=med.get("frequency") or "",
-                        duration=duration_label,
-                        end_date=end_date,
-                        notes=med_notes,
-                        document_id=doc.id,
-                    )
-                    db.add(medication)
-                    detected_meds_for_email.append(
-                        {
-                            "name": med.get("name") or "Medicamento",
-                            "dose": med.get("dose") or "",
-                            "frequency": med.get("frequency") or "",
-                        }
-                    )
-
-                    # Agregar info detallada del medicamento a las notas del documento
-                    # Para recetas electrónicas, usar el formato estructurado completo
-                    if is_electronic and med.get("raw"):
-                        med_summary = f"Detalle medicamento: {med.get('raw')}"
-                    else:
-                        med_summary = (
-                            f"Medicamento: {med.get('name', 'Medicamento')}: "
-                            f"{med.get('dose', '')} - {med.get('frequency', '')}"
-                        )
-
-                    if doc.notes:
-                        # Evitar duplicados verificando si el nombre del medicamento ya está
-                        if med.get("name") not in doc.notes:
-                            doc.notes = f"{doc.notes}\n\n{med_summary}"
-                    else:
-                        doc.notes = med_summary
-
-        if doc.doc_type == models.DocumentType.orden:
-            if not doc.appointment_id:
-                schedule = _extract_order_schedule(text) or {}
-                date_time = schedule.get("date_time")
-                specialty = schedule.get("specialty") or doc.notes or "Examen"
-                status = (
-                    models.AppointmentStatus.agendada
-                    if date_time
-                    else models.AppointmentStatus.pendiente
-                )
-                appointment = models.Appointment(
-                    user_id=doc.user_id,
-                    type=models.AppointmentType.examen,
-                    specialty=specialty,
-                    center=doc.center or "",
-                    date_time=date_time,
-                    status=status,
-                    notes=doc.notes or "",
-                )
-                db.add(appointment)
-                db.flush()
-                doc.appointment_id = appointment.id
-                if date_time:
-                    date_label = date_time.strftime("%d/%m/%Y %H:%M")
-                    if doc.notes:
-                        if date_label not in doc.notes:
-                            doc.notes = f"{doc.notes}\nFecha: {date_label}"
-                    else:
-                        doc.notes = f"Fecha: {date_label}"
-                else:
-                    missing_msg = "Falta fecha u hora, agregar manualmente en Citas."
-                    if doc.notes:
-                        if missing_msg not in doc.notes:
-                            doc.notes = f"{doc.notes}\n{missing_msg}"
-                    else:
-                        doc.notes = missing_msg
-        elif (
-            not doc.appointment_id
-            and doc.doc_type in (models.DocumentType.otro, models.DocumentType.informe)
-        ):
-            label_med = _extract_label_medication(text)
-            if label_med:
-                start_date = doc.date or datetime.now()
-                end_date = None
-                duration_days = label_med.get("duration_days")
-                if duration_days:
-                    end_date = start_date + timedelta(days=duration_days)
-                duration_label = f"{duration_days} dias" if duration_days else ""
-
-                medication = models.Medication(
-                    user_id=doc.user_id,
-                    name=label_med.get("name") or "Medicamento",
-                    dose=label_med.get("dose") or "",
-                    frequency=label_med.get("frequency") or "",
-                    duration=duration_label,
-                    end_date=end_date,
-                    notes=label_med.get("notes") or "",
-                )
-                db.add(medication)
-                db.flush()
-                detected_meds_for_email.append(
-                    {
-                        "name": label_med.get("name") or "Medicamento",
-                        "dose": label_med.get("dose") or "",
-                        "frequency": label_med.get("frequency") or "",
-                    }
-                )
-
-                # Eliminar el documento para mantenerlo solo como medicamento
-                db.delete(doc)
-                profile = _resolve_profile_for_user_learning(db, medication.user_id)
-                _mark_profile_ai_dirty(db, profile, include_family=True)
-                db.commit()
-                user = db.query(models.User).filter(models.User.id == medication.user_id).first()
-                if user and user.email:
-                    _send_medications_detected_email_safe(
-                        user.email,
-                        user.name or "",
-                        detected_meds_for_email,
-                    )
-                return
-        elif (
-            not doc.appointment_id
-            and doc.doc_type in (models.DocumentType.otro, models.DocumentType.informe)
-        ):
-            normalized = _normalize_text(text)
-            if any(
-                k in normalized
-                for k in ("ecografia", "ultrasonido", "radiografia", "examen")
-            ) and "resultado" not in normalized:
-                doc.doc_type = models.DocumentType.orden
-                schedule = _extract_order_schedule(text) or {}
-                date_time = schedule.get("date_time")
-                specialty = schedule.get("specialty") or ""
-                if not specialty:
-                    if "ecografia" in normalized:
-                        specialty = "Ecografia"
-                    elif "ultrasonido" in normalized:
-                        specialty = "Ultrasonido"
-                    elif "radiografia" in normalized:
-                        specialty = "Radiografia"
-                if not specialty:
-                    specialty = "Examen"
-                status = (
-                    models.AppointmentStatus.agendada
-                    if date_time
-                    else models.AppointmentStatus.pendiente
-                )
-                appointment = models.Appointment(
-                    user_id=doc.user_id,
-                    type=models.AppointmentType.examen,
-                    specialty=specialty,
-                    center=doc.center or "",
-                    date_time=date_time,
-                    status=status,
-                    notes=doc.notes or "",
-                )
-                db.add(appointment)
-                db.flush()
-                doc.appointment_id = appointment.id
+        detected_meds_for_email = _apply_document_ocr_automations(db, doc)
 
         try:
             _upsert_document_intelligence(db, doc)
@@ -6741,7 +6861,7 @@ def _run_document_ocr(document_id: int):
             print(f"WARNING _run_document_ocr memory sync: {exc}")
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
-        profile = _resolve_profile_for_user_learning(db, doc.user_id)
+        profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
         _mark_profile_ai_dirty(db, profile, include_family=True)
         db.commit()
         if user and user.email and detected_meds_for_email:
@@ -9563,13 +9683,22 @@ def _classify_document_type_from_ocr(text: str, filename: str) -> str:
         return "receta"
     if any(w in combined for w in ["resultado", "laboratorio", "hemograma", "glucosa", "colesterol", "examen de sangre",
                                     "creatinina", "hematocrito", "leucocitos", "plaquetas", "glicemia"]):
-        return "examen"
+        return "resultado"
     if any(w in combined for w in ["informe", "epicrisis", "alta medica", "resumen clinico", "diagnostico principal",
                                     "evolucion clinica", "anamnesis", "antecedentes"]):
         return "informe"
     if any(w in combined for w in ["orden", "solicitud de examen", "solicito", "se solicita", "indicacion", "indicaciones"]):
         return "orden"
     return "otro"
+
+
+def _normalize_uploaded_document_type(raw_doc_type: str | None) -> models.DocumentType:
+    normalized = _normalize_text(raw_doc_type or "")
+    if normalized in {"", "auto", "autodetectar", "autodetectar con ia", "ia"}:
+        return models.DocumentType.otro
+    if normalized == "examen":
+        return models.DocumentType.resultado
+    return models.DocumentType(normalized)
 
 
 def _extract_chat_attachment_ocr(attachment_payload: dict | None) -> tuple[str, str]:
@@ -9611,6 +9740,7 @@ def _save_document_from_chat_attachment(
         doc_type_map = {
             "receta": models.DocumentType.receta,
             "examen": models.DocumentType.resultado,
+            "resultado": models.DocumentType.resultado,
             "informe": models.DocumentType.informe,
             "orden": models.DocumentType.orden,
         }
@@ -22431,6 +22561,10 @@ async def upload_document(
             parsed_date = datetime.fromisoformat(date)
         except ValueError:
             parsed_date = None
+    try:
+        resolved_doc_type = _normalize_uploaded_document_type(doc_type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Tipo de documento no válido")
 
     # Guardar el archivo directamente en la base de datos como BLOB
     file_path_placeholder = (
@@ -22441,7 +22575,7 @@ async def upload_document(
         profile_id=int(getattr(profile, "id", 0) or 0) or None,
         appointment_id=appointment_id,
         episode_id=episode_id,
-        doc_type=models.DocumentType(doc_type),
+        doc_type=resolved_doc_type,
         file_data=file_content,
         filename=safe_filename,   # nombre saneado
         file_path=file_path_placeholder,

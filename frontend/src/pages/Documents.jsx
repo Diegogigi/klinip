@@ -1,7 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { getDocuments, uploadDocument, deleteDocument, updateDocument, getActiveHealthProfile, getMfaStatus, isAuthSessionError } from "../api";
+import {
+  getAiDocumentIntelligence,
+  getDocuments,
+  uploadDocument,
+  deleteDocument,
+  updateDocument,
+  getActiveHealthProfile,
+  getMfaStatus,
+  isAuthSessionError,
+} from "../api";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { getDocumentFile, getDocumentFileWithStepUp } from "../services/httpApi";
 import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
@@ -14,6 +23,7 @@ import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 const docLabels = {
   receta: "Receta",
   orden: "Orden",
+  examen: "Resultado",
   resultado: "Resultado",
   informe: "Informe",
   otro: "Otro",
@@ -33,6 +43,17 @@ const ocrLabels = {
   done: "OCR listo",
   skipped_size: "OCR omitido",
 };
+
+const ocrActiveStatuses = new Set(["pending", "processing"]);
+
+const uploadTypeOptions = [
+  { value: "auto", label: "Autodetectar con IA" },
+  { value: "receta", label: "Receta" },
+  { value: "orden", label: "Orden" },
+  { value: "resultado", label: "Resultado" },
+  { value: "informe", label: "Informe" },
+  { value: "otro", label: "Otro" },
+];
 
 function getDocumentFilename(doc) {
   return cleanUiText(doc?.filename, doc?.id ? `documento-${doc.id}` : "documento");
@@ -91,16 +112,53 @@ function getErrorDetail(err, fallback) {
 }
 
 const initialForm = {
-  doc_type: "receta",
+  doc_type: "auto",
   date: "",
   center: "",
   notes: "",
   send_email_backup: false,
 };
 
+function normalizeInsightList(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (typeof item === "string") return cleanUiText(item).trim();
+      if (!item || typeof item !== "object") return "";
+      const label = cleanUiText(item.label || item.title || item.name || item.key || "", "");
+      const value = cleanUiText(item.value || item.summary || item.detail || "", "");
+      return [label, value].filter(Boolean).join(": ").trim();
+    })
+    .filter(Boolean);
+}
+
+function normalizeAbnormalValues(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => {
+      if (typeof item === "string") {
+        return { title: cleanUiText(item).trim(), meta: "" };
+      }
+      if (!item || typeof item !== "object") return null;
+      const name = cleanUiText(item.name || item.label || item.entity_name || "", "");
+      const value = cleanUiText(
+        [item.value || item.entity_value || "", item.unit || ""].filter(Boolean).join(" "),
+        "",
+      );
+      const range = cleanUiText(item.reference_range || item.range || "", "");
+      const flag = cleanUiText(item.flag || "", "");
+      return {
+        title: [name, value].filter(Boolean).join(": ").trim() || "Valor destacado",
+        meta: [range ? `Referencia ${range}` : "", flag].filter(Boolean).join(" - ").trim(),
+      };
+    })
+    .filter(Boolean);
+}
+
 export default function Documents() {
   const navigate = useNavigate();
   const [docs, setDocs] = useState([]);
+  const [documentIntelligence, setDocumentIntelligence] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -125,6 +183,9 @@ export default function Documents() {
   const [detailRenameOpen, setDetailRenameOpen] = useState(false);
   const [detailFilenameDraft, setDetailFilenameDraft] = useState("");
   const [detailSaving, setDetailSaving] = useState(false);
+  const [ocrSyncing, setOcrSyncing] = useState(false);
+  const [uploadNotice, setUploadNotice] = useState("");
+  const loadRef = useRef(null);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -167,7 +228,7 @@ export default function Documents() {
       form.center.trim() ||
       form.notes.trim() ||
       form.send_email_backup ||
-      form.doc_type !== "receta";
+      form.doc_type !== "auto";
     if (hasChanges) {
       const shouldClose = window.confirm("¿Cerrar sin guardar? Se perderán los cambios.");
       if (!shouldClose) return;
@@ -176,13 +237,17 @@ export default function Documents() {
     setShowForm(false);
   };
 
-  async function load() {
+  async function load(options = {}) {
+    const { silent = false } = options;
+    if (silent) setOcrSyncing(true);
     try {
-      const [data, profile] = await Promise.all([
+      const [data, profile, intelligence] = await Promise.all([
         getDocuments(),
         getActiveHealthProfile().catch(() => null),
+        getAiDocumentIntelligence().catch(() => []),
       ]);
       setActiveProfile(profile || null);
+      setDocumentIntelligence(Array.isArray(intelligence) ? intelligence : []);
       setDocs(
         Array.isArray(data)
           ? [...data].sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a))
@@ -193,7 +258,10 @@ export default function Documents() {
         console.error("No se pudieron cargar los documentos", error);
       }
       setActiveProfile(null);
+      setDocumentIntelligence([]);
       setDocs([]);
+    } finally {
+      if (silent) setOcrSyncing(false);
     }
   }
 
@@ -202,7 +270,56 @@ export default function Documents() {
     getMfaStatus().then((s) => setHasMfa(!!s?.mfa_enabled)).catch(() => {});
   }, []);
 
+  loadRef.current = load;
+
   useEffect(() => () => releaseViewerUrl(), [viewerUrl]);
+
+  const hasPendingOcr = useMemo(
+    () => docs.some((item) => ocrActiveStatuses.has(String(item?.ocr_status || "").toLowerCase())),
+    [docs],
+  );
+
+  const pendingOcrCount = useMemo(
+    () => docs.filter((item) => ocrActiveStatuses.has(String(item?.ocr_status || "").toLowerCase())).length,
+    [docs],
+  );
+
+  useEffect(() => {
+    if (!hasPendingOcr) {
+      if (uploadNotice) setUploadNotice("");
+      return undefined;
+    }
+    const intervalId = window.setInterval(() => {
+      if (loadRef.current) {
+        void loadRef.current({ silent: true });
+      }
+    }, 4500);
+    return () => window.clearInterval(intervalId);
+  }, [hasPendingOcr, uploadNotice]);
+
+  const intelligenceByDocumentId = useMemo(() => {
+    const nextMap = new Map();
+    documentIntelligence.forEach((item) => {
+      if (!item?.document_id) return;
+      nextMap.set(String(item.document_id), item);
+    });
+    return nextMap;
+  }, [documentIntelligence]);
+
+  const detailIntelligence = useMemo(() => {
+    if (!detailTarget?.id) return null;
+    return intelligenceByDocumentId.get(String(detailTarget.id)) || null;
+  }, [detailTarget, intelligenceByDocumentId]);
+
+  const detailKeyPoints = useMemo(
+    () => normalizeInsightList(detailIntelligence?.key_points_json).slice(0, 5),
+    [detailIntelligence],
+  );
+
+  const detailAbnormalValues = useMemo(
+    () => normalizeAbnormalValues(detailIntelligence?.abnormal_values_json).slice(0, 4),
+    [detailIntelligence],
+  );
 
   const filteredDocs = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -255,6 +372,9 @@ export default function Documents() {
       });
       window.clearTimeout(timeoutId);
       await load();
+      setUploadNotice(
+        "Documento cargado. Klinip está analizando el archivo y puede crear medicamentos, citas o resúmenes estructurados según lo que detecte.",
+      );
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["documents", "health-radar"],
@@ -516,13 +636,24 @@ export default function Documents() {
   const zoomLabel = `${Math.round(viewerZoom * 100)}%`;
   const viewerImageWidth = `${Math.round(viewerZoom * 100)}%`;
   const viewerIsPdf = viewerKind === "pdf";
+  const detailSummaryText = cleanUiText(
+    detailIntelligence?.patient_friendly_explanation || detailIntelligence?.summary_plain || "",
+    "",
+  );
+  const detailInferredTypeLabel = cleanUiText(
+    docLabels[detailIntelligence?.document_type_inferred] ||
+      detailIntelligence?.document_type_inferred ||
+      "Documento",
+    "Documento",
+  );
+  const activeProfileLabel = cleanUiText(activeProfile?.full_name, "perfil activo");
 
   return (
     <>
       <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Se almacenan de forma segura en Klinip.
+          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip puede leerlos con OCR, completar datos y activar acciones clínicas vinculadas al perfil activo.
         </p>
       </div>
 
@@ -533,6 +664,40 @@ export default function Documents() {
               <strong>Perfil en modo lectura.</strong> Puedes revisar y descargar documentos, pero no subir ni eliminar archivos.
             </p>
           </div>
+        </div>
+      ) : null}
+
+      {canEditActiveProfile ? (
+        <div className="card documents-surface-free documents-ocr-assist">
+          <div className="documents-ocr-assist-head">
+            <div>
+              <span className="documents-ocr-kicker">OCR clínico</span>
+              <h3 className="card-title">Carga inteligente en {activeProfileLabel}</h3>
+            </div>
+            {hasPendingOcr ? (
+              <span className="detail-chip detail-chip-muted">
+                Analizando {pendingOcrCount} documento{pendingOcrCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+          <p className="muted">
+            Si subes una receta, Klinip puede crear medicamentos. Si detecta una orden médica, puede vincular una cita o examen. Los resultados e informes quedan listos para resumen clínico.
+          </p>
+          <div className="documents-ocr-pills" aria-hidden="true">
+            <span className="documents-ocr-pill">Receta → medicamento</span>
+            <span className="documents-ocr-pill">Orden → cita o examen</span>
+            <span className="documents-ocr-pill">Resultado → resumen IA</span>
+          </div>
+          {uploadNotice || hasPendingOcr ? (
+            <div className="documents-ocr-banner">
+              <strong>{uploadNotice || "Klinip está procesando los documentos recientes."}</strong>
+              <span>
+                {ocrSyncing
+                  ? "Actualizando estado del OCR..."
+                  : "Mantén esta pantalla abierta si quieres ver cómo se completan los datos automáticamente."}
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -566,12 +731,15 @@ export default function Documents() {
                     value={form.doc_type}
                     onChange={(event) => setForm({ ...form, doc_type: event.target.value })}
                   >
-                    <option value="receta">Receta</option>
-                    <option value="orden">Orden</option>
-                    <option value="resultado">Resultado</option>
-                    <option value="informe">Informe</option>
-                    <option value="otro">Otro</option>
+                    {uploadTypeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
+                  <span className="tiny-note">
+                    Usa autodetección cuando no quieras clasificarlo manualmente. Klinip puede corregir el tipo después del OCR.
+                  </span>
                 </div>
                 <div className="input-group">
                   <label className="input-label">Fecha del documento</label>
@@ -602,7 +770,7 @@ export default function Documents() {
                   className="textarea-field"
                   value={form.notes}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  placeholder="Ej: Receta vence en 3 meses, control con médico tratante, etc."
+                  placeholder="Ej: receta vence en 3 meses, control con médico tratante, etc."
                 />
               </div>
 
@@ -615,6 +783,9 @@ export default function Documents() {
                   onChange={(event) => setFile(event.target.files?.[0] || null)}
                 />
                 <span className="tiny-note">Puedes cargar imágenes o PDF de hasta 10 MB.</span>
+                <span className="tiny-note">
+                  El archivo se guardará en el perfil activo y el OCR intentará completar centro, fecha y acciones clínicas relacionadas.
+                </span>
               </div>
 
               <label className="auth-consent-label" style={{ marginBottom: "0.75rem" }}>
@@ -743,6 +914,62 @@ export default function Documents() {
                     <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
                   </div>
                 </div>
+              </div>
+              <div className="documents-ai-panel">
+                <div className="documents-ai-panel-head">
+                  <div>
+                    <span className="documents-ocr-kicker">Klinip IA</span>
+                    <h4>Lectura estructurada del documento</h4>
+                  </div>
+                  {detailIntelligence?.requires_review ? (
+                    <span className="detail-chip detail-chip-status pendiente">Revisar</span>
+                  ) : detailIntelligence ? (
+                    <span className="detail-chip detail-chip-type">
+                      {detailInferredTypeLabel}
+                    </span>
+                  ) : null}
+                </div>
+
+                {detailTarget.ocr_status === "pending" || detailTarget.ocr_status === "processing" ? (
+                  <p className="documents-ai-empty">
+                    El OCR sigue en proceso. Cuando termine, aquí aparecerá el resumen clínico y los datos detectados.
+                  </p>
+                ) : detailIntelligence ? (
+                  <>
+                    {detailSummaryText ? (
+                      <p className="documents-ai-summary">{detailSummaryText}</p>
+                    ) : null}
+
+                    {detailKeyPoints.length ? (
+                      <div className="documents-ai-block">
+                        <span className="detail-label">Puntos clave</span>
+                        <ul className="documents-ai-list">
+                          {detailKeyPoints.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {detailAbnormalValues.length ? (
+                      <div className="documents-ai-block">
+                        <span className="detail-label">Valores destacados</span>
+                        <div className="documents-ai-flags">
+                          {detailAbnormalValues.map((item) => (
+                            <article key={`${item.title}-${item.meta}`} className="documents-ai-flag">
+                              <strong>{item.title}</strong>
+                              {item.meta ? <span>{item.meta}</span> : null}
+                            </article>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="documents-ai-empty">
+                    El OCR quedó listo, pero este archivo todavía no tiene un resumen estructurado disponible.
+                  </p>
+                )}
               </div>
             </div>
             <div className="modal-actions docs-detail-actions">
