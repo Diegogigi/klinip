@@ -3256,6 +3256,22 @@ def _build_medication_event_defaults(
                 schedule_dt = min(candidate_slots, key=lambda item: abs(item - reference_dt))
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
+    if normalized_status in {"taken", "late"} and schedule_dt and actual_taken_at:
+        future_margin = timedelta(minutes=15)
+        if schedule_dt > actual_taken_at + future_margin:
+            candidate_slots = _medication_schedule_events_between(
+                med,
+                actual_taken_at - timedelta(days=2),
+                actual_taken_at + timedelta(minutes=90),
+            )
+            due_candidates = [
+                item for item in candidate_slots
+                if item <= actual_taken_at + future_margin
+            ]
+            if due_candidates:
+                schedule_dt = max(due_candidates)
+            else:
+                schedule_dt = actual_taken_at
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
             normalized_status = "late"

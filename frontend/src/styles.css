@@ -8468,7 +8468,7 @@ body.theme-dark .kfeed-manage-link:focus-visible {
 
 .med-form-summary {
   display: grid;
-  gap: 0.26rem;
+  gap: 0.72rem;
   margin-top: 0.9rem;
   padding: 0.8rem 0.9rem;
   border-radius: 16px;
@@ -8481,10 +8481,99 @@ body.theme-dark .kfeed-manage-link:focus-visible {
   line-height: 1.3;
 }
 
-.med-form-summary span {
+.med-form-summary > span {
   color: #64748b;
   font-size: 0.82rem;
   line-height: 1.4;
+}
+
+.med-form-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.med-form-summary-head p {
+  margin: 0.24rem 0 0;
+  color: #475569;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.med-form-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0.24rem 0.68rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.med-form-summary-badge.is-ready {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+.med-form-summary-badge.is-draft {
+  color: #9a3412;
+  background: #ffedd5;
+  border-color: #fdba74;
+}
+
+.med-form-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.med-form-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.26rem;
+  padding: 0.72rem 0.78rem;
+  border-radius: 14px;
+  border: 1px solid rgba(203, 213, 225, 0.82);
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.med-form-summary-label {
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.med-form-summary-item small {
+  color: #64748b;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.med-form-schedule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.med-form-schedule-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0.24rem 0.62rem;
+  border-radius: 999px;
+  background: rgba(219, 234, 254, 0.8);
+  border: 1px solid rgba(147, 197, 253, 0.95);
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .med-form-advanced-toggle {
@@ -9592,10 +9681,42 @@ body.theme-dark .med-form-summary {
   border-color: #334155;
 }
 
-body.theme-dark .med-form-summary span,
+body.theme-dark .med-form-summary > span,
 body.theme-dark .med-form-header-copy,
 body.theme-dark .med-form-helper {
   color: #94a3b8;
+}
+
+body.theme-dark .med-form-summary-head p,
+body.theme-dark .med-form-summary-item small {
+  color: #94a3b8;
+}
+
+body.theme-dark .med-form-summary-item {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: #334155;
+}
+
+body.theme-dark .med-form-summary-label {
+  color: #7dd3fc;
+}
+
+body.theme-dark .med-form-summary-badge.is-ready {
+  color: #bbf7d0;
+  background: rgba(20, 83, 45, 0.55);
+  border-color: rgba(74, 222, 128, 0.3);
+}
+
+body.theme-dark .med-form-summary-badge.is-draft {
+  color: #fed7aa;
+  background: rgba(124, 45, 18, 0.5);
+  border-color: rgba(251, 146, 60, 0.32);
+}
+
+body.theme-dark .med-form-schedule-chip {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: rgba(56, 189, 248, 0.35);
+  color: #bae6fd;
 }
 
 body.theme-dark .med-form-advanced-toggle {
@@ -26960,6 +27081,18 @@ body.theme-dark .records-mobile-card.is-focused-reminder {
     padding: 0.72rem 0.78rem;
   }
 
+  .med-form-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .med-form-summary-head {
+    flex-direction: column;
+  }
+
+  .med-form-summary-badge {
+    white-space: normal;
+  }
+
   .med-form-advanced-toggle {
     min-height: 38px;
     font-size: 0.8rem;
@@ -31480,6 +31613,17 @@ body.theme-dark .clinical-report-tag {
   line-height: 1.45;
 }
 
+.medication-intake-summary {
+  margin-top: 0.45rem;
+  padding: 0.6rem 0.72rem;
+  border-radius: 12px;
+  background: rgba(239, 246, 255, 0.9);
+  border: 1px solid rgba(191, 219, 254, 0.95);
+  color: #1e3a8a;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .medication-intake-actions {
   display: flex;
   flex-wrap: wrap;
@@ -31602,6 +31746,12 @@ body.theme-dark .medication-intake-status-chip.status-skipped {
   color: #fca5a5;
 }
 
+body.theme-dark .medication-intake-summary {
+  background: rgba(15, 23, 42, 0.9);
+  border-color: rgba(56, 189, 248, 0.24);
+  color: #bfdbfe;
+}
+
 body.theme-dark .ai-filter-select {
   background: #0f172a;
   border-color: #243244;
@@ -31634,6 +31784,11 @@ body.theme-dark .ai-radar-card small {
 
   .medication-intake-moment {
     padding: 0.68rem 0.72rem;
+  }
+
+  .medication-intake-summary {
+    padding: 0.58rem 0.66rem;
+    font-size: 0.8rem;
   }
 
   .med-detail-dose-summary {

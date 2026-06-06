@@ -55,6 +55,8 @@ const DURATION_PRESETS = [
   { label: "14 días", value: "14 días" },
 ];
 const MEDICATIONS_PAGE_SIZE = 8;
+const INTAKE_SOON_TOLERANCE_MINUTES = 15;
+const INTAKE_ON_TIME_WINDOW_MINUTES = 90;
 
 function getNewestMedicationRank(item) {
   const createdAt = parseDate(item?.created_at);
@@ -183,6 +185,114 @@ function formatIntakeEventDateTime(value) {
   return `${formatIntakeEventDate(parsed)} a las ${formatIntakeEventTime(parsed)}`;
 }
 
+function getMedicationDoseContext(med, now = new Date()) {
+  if (!med) {
+    return {
+      kind: "manual",
+      actionableAt: null,
+      headline: "Sin información suficiente",
+      helper: "Completa el horario para que Klinip ordene las tomas.",
+      actionLabel: "Registrar una toma manual",
+    };
+  }
+
+  if (isMedicationFinished(med, now)) {
+    return {
+      kind: "finished",
+      actionableAt: null,
+      headline: "Tratamiento finalizado",
+      helper: "Este tratamiento ya no necesita nuevas tomas.",
+      actionLabel: "Registrar una toma manual",
+    };
+  }
+
+  const toleranceMs = INTAKE_SOON_TOLERANCE_MINUTES * 60 * 1000;
+  const onTimeWindowMs = INTAKE_ON_TIME_WINDOW_MINUTES * 60 * 1000;
+  const persistedNextDose = parseDate(med?.next_dose_at || null);
+
+  if (persistedNextDose) {
+    const delayMs = now.getTime() - persistedNextDose.getTime();
+    if (delayMs >= -toleranceMs && delayMs <= onTimeWindowMs) {
+      return {
+        kind: "due_now",
+        actionableAt: persistedNextDose,
+        headline: `Toca ahora: ${formatMedicationDateTime(persistedNextDose)}`,
+        helper: "Si ya la tomaste, regístrala con este horario.",
+        actionLabel: "Registrar esta toma",
+      };
+    }
+    if (delayMs > onTimeWindowMs) {
+      return {
+        kind: "overdue",
+        actionableAt: persistedNextDose,
+        headline: `Quedó pendiente desde ${formatMedicationDateTime(persistedNextDose)}`,
+        helper: "Puedes registrar esta toma si sí ocurrió o dejarla como no tomada en el historial.",
+        actionLabel: "Registrar toma pendiente",
+      };
+    }
+    if (persistedNextDose.getTime() > now.getTime() + toleranceMs) {
+      return {
+        kind: "upcoming",
+        actionableAt: null,
+        headline: `Siguiente dosis: ${formatMedicationDateTime(persistedNextDose)}`,
+        helper: "Todavía no corresponde esa toma. Si necesitas dejar constancia de una dosis extra, usa el registro manual.",
+        actionLabel: "Registrar una toma manual",
+      };
+    }
+  }
+
+  const scheduleEvents = buildMedicationScheduleEventsBetween(
+    med,
+    new Date(now.getTime() - 36 * 60 * 60 * 1000),
+    new Date(now.getTime() + 45 * 24 * 60 * 60 * 1000)
+  );
+  const dueOrRecentEvents = scheduleEvents.filter(
+    (item) => item.getTime() <= now.getTime() + toleranceMs
+  );
+  const actionableAt = dueOrRecentEvents.length
+    ? dueOrRecentEvents[dueOrRecentEvents.length - 1]
+    : null;
+  const nextDose = scheduleEvents.find((item) => item.getTime() > now.getTime() + toleranceMs) || null;
+
+  if (actionableAt) {
+    const delayMs = now.getTime() - actionableAt.getTime();
+    if (delayMs <= onTimeWindowMs) {
+      return {
+        kind: "due_now",
+        actionableAt,
+        headline: `Toca ahora: ${formatMedicationDateTime(actionableAt)}`,
+        helper: "Si ya la tomaste, regístrala con este horario.",
+        actionLabel: "Registrar esta toma",
+      };
+    }
+    return {
+      kind: "overdue",
+      actionableAt,
+      headline: `Quedó pendiente desde ${formatMedicationDateTime(actionableAt)}`,
+      helper: "Puedes registrar esta toma si sí ocurrió o dejarla como no tomada en el historial.",
+      actionLabel: "Registrar toma pendiente",
+    };
+  }
+
+  if (nextDose) {
+    return {
+      kind: "upcoming",
+      actionableAt: null,
+      headline: `Siguiente dosis: ${formatMedicationDateTime(nextDose)}`,
+      helper: "Todavía no corresponde esa toma. Si necesitas dejar constancia de una dosis extra, usa el registro manual.",
+      actionLabel: "Registrar una toma manual",
+    };
+  }
+
+  return {
+    kind: "manual",
+    actionableAt: null,
+    headline: "Sin un horario calculado todavía",
+    helper: "Completa la frecuencia y la primera toma para que Klinip organice el día.",
+    actionLabel: "Registrar una toma manual",
+  };
+}
+
 export default function Medications() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -240,6 +350,7 @@ export default function Medications() {
   const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
   const [endDateAuto, setEndDateAuto] = useState(true);
+  const [scheduleTimeManuallyEdited, setScheduleTimeManuallyEdited] = useState(false);
   const [draggedParticipantId, setDraggedParticipantId] = useState("");
   const [dismissedRouteReminderId, setDismissedRouteReminderId] = useState("");
   const [registerPurchaseNow, setRegisterPurchaseNow] = useState(false);
@@ -476,6 +587,7 @@ export default function Medications() {
   const resetForm = () => {
     setShowAdvancedForm(false);
     setEndDateAuto(true);
+    setScheduleTimeManuallyEdited(false);
     setDraggedParticipantId("");
     setRegisterPurchaseNow(false);
     setFormPurchaseNewStock("");
@@ -672,7 +784,11 @@ export default function Medications() {
 
   const handleEdit = (med) => {
     if (!canEditActiveProfile) return;
+    const startInputValue = toLocalInputValue(med.start_at || med.created_at || "");
+    const startTimeValue = startInputValue ? startInputValue.slice(11, 16) : "";
+    const scheduleTimeValue = med.schedule_time || "";
     setEndDateAuto(!Boolean(med.end_date));
+    setScheduleTimeManuallyEdited(Boolean(scheduleTimeValue && scheduleTimeValue !== startTimeValue));
     setDraggedParticipantId("");
     setShowAdvancedForm(
       Boolean(
@@ -691,8 +807,8 @@ export default function Medications() {
       frequency: med.frequency,
       frequency_initial: med.frequency || "",
       duration: med.duration,
-      start_at: toLocalInputValue(med.start_at || med.created_at || ""),
-      schedule_time: med.schedule_time || "",
+      start_at: startInputValue,
+      schedule_time: scheduleTimeValue,
       completed: Boolean(med.completed),
       end_date: med.end_date ? med.end_date.slice(0, 10) : "",
       notes: med.notes || "",
@@ -1298,6 +1414,21 @@ export default function Medications() {
   const schedulePreviewSummary = getMedicationScheduleSummary(formPreviewMedication);
   const endPreviewDate = getMedicationEffectiveEndAt(formPreviewMedication);
   const computedEndDateInput = endPreviewDate ? toLocalInputValue(endPreviewDate).slice(0, 10) : "";
+  const schedulePreviewCountLabel = schedulePreviewTimes.length
+    ? schedulePreviewTimes.length === 1
+      ? "1 toma al día"
+      : `${schedulePreviewTimes.length} tomas al día`
+    : "Sin horario calculado";
+  const schedulePreviewHeadline = frequencyValue
+    ? schedulePreviewSummary
+      ? `Klinip la repetirá a las ${schedulePreviewSummary}.`
+      : "Klinip calculará el horario cuando tenga una hora de inicio."
+    : "Primero indica cada cuánto se toma para calcular el horario.";
+  const schedulePreviewHelper = form.start_at
+    ? scheduleTimeManuallyEdited
+      ? "La hora base quedó fijada manualmente. Si cambias el inicio, Klinip mantendrá esa hora hasta que la vuelvas a sincronizar."
+      : "Mientras no cambies la hora base manualmente, si ajustas el inicio Klinip actualizará todo el plan diario."
+    : "La fecha y la hora de inicio sirven para ordenar las siguientes tomas.";
   const refillParticipantIds = Array.isArray(form.refill_participant_user_ids)
     ? form.refill_participant_user_ids
     : [];
@@ -1344,7 +1475,7 @@ export default function Medications() {
     safeMedicationPage * MEDICATIONS_PAGE_SIZE,
     filteredMeds.length
   );
-  const detailNextDose = detailTarget ? getNextMedicationDose(detailTarget) : null;
+  const detailDoseContext = detailTarget ? getMedicationDoseContext(detailTarget) : null;
   const detailTakenDoses = Number(detailTarget?.taken_doses || 0);
   const detailExpectedDoses = Number(detailTarget?.expected_doses || 0);
   const detailDoseProgress = getDoseProgressLabel(detailTakenDoses, detailExpectedDoses);
@@ -1470,14 +1601,46 @@ export default function Medications() {
     setDraggedParticipantId("");
   };
 
-  const formatTimelineStamp = (value) => formatIntakeEventDateTime(value);
-
   const getIntakeStatusLabel = (status) => {
     const normalized = String(status || "taken").toLowerCase();
-    if (normalized === "late") return "Tomado tarde";
-    if (normalized === "missed") return "No registrado";
-    if (normalized === "skipped") return "Omitido";
-    return "Tomado";
+    if (normalized === "late") return "Tomada fuera de horario";
+    if (normalized === "missed") return "Pendiente de confirmar";
+    if (normalized === "skipped") return "No tomada";
+    return "Tomada";
+  };
+
+  const getIntakeHeadline = (item) => {
+    const normalized = String(item?.status || "taken").toLowerCase();
+    if (normalized === "late") return "La toma se confirmó más tarde";
+    if (normalized === "missed") return "Esta dosis sigue sin confirmación";
+    if (normalized === "skipped") return "Esta dosis quedó como no tomada";
+    return "La toma quedó confirmada";
+  };
+
+  const getIntakeStatusSummary = (item) => {
+    const normalized = String(item?.status || "taken").toLowerCase();
+    if (normalized === "late") {
+      return "Se registró después de la hora planificada.";
+    }
+    if (normalized === "missed") {
+      return "Klinip detectó esta dosis, pero todavía nadie la confirmó.";
+    }
+    if (normalized === "skipped") {
+      return "Se dejó constancia de que esta dosis no se tomó.";
+    }
+    const scheduledAt = parseDate(item?.scheduled_at);
+    const takenAt = parseDate(item?.taken_at);
+    if (scheduledAt && takenAt) {
+      const diffMinutes = Math.round(Math.abs(takenAt.getTime() - scheduledAt.getTime()) / 60000);
+      if (diffMinutes <= 15) {
+        return "Quedó registrada dentro del horario esperado.";
+      }
+      return "Quedó registrada con una hora distinta a la planificada.";
+    }
+    if (takenAt) {
+      return "La dosis se registró manualmente.";
+    }
+    return "";
   };
 
   const handleTimelineStatusUpdate = async (item, nextStatus) => {
@@ -1489,8 +1652,8 @@ export default function Medications() {
         scheduled_at: item.scheduled_at || item.taken_at || item.created_at || new Date().toISOString(),
         notes:
           nextStatus === "late"
-            ? "Actualizado desde la línea de tiempo como tomado tarde."
-            : "Actualizado desde la línea de tiempo como omitido.",
+            ? "Actualizado desde la línea de tiempo como tomada fuera de horario."
+            : "Actualizado desde la línea de tiempo como no tomada.",
       });
       await Promise.all([load(), loadDetailIntakeItems(detailTarget.id)]);
       notifyClinicalDataChanged({
@@ -1499,8 +1662,8 @@ export default function Medications() {
       });
       setIntakeFeedback(
         nextStatus === "late"
-          ? "success:Evento actualizado como tomado tarde."
-          : "info:Evento actualizado como omitido."
+          ? "success:Evento actualizado como tomada fuera de horario."
+          : "info:Evento actualizado como no tomada."
       );
       if (feedbackTimer.current) {
         clearTimeout(feedbackTimer.current);
@@ -1753,7 +1916,7 @@ export default function Medications() {
                   </div>
 
                   <div className="input-group">
-                    <label className="input-label">Frecuencia</label>
+                    <label className="input-label">Cada cuánto lo toma</label>
                     <input
                       className="input-field"
                       value={form.frequency}
@@ -1761,7 +1924,7 @@ export default function Medications() {
                       placeholder="Ej: Cada 8 horas"
                     />
                     <small className="muted med-form-helper">
-                      Puedes escribir la indicación tal como aparece en la receta o elegir una opción rápida.
+                      Escribe la indicación tal como aparece en la receta o toca una opción sugerida para que Klinip arme el plan automáticamente.
                     </small>
                     <div className="med-form-chip-row" role="group" aria-label="Frecuencias sugeridas">
                       {FREQUENCY_PRESETS.map((preset) => (
@@ -1779,7 +1942,7 @@ export default function Medications() {
 
                   <div className="form-row">
                     <div className="input-group">
-                      <label className="input-label">Primera toma</label>
+                      <label className="input-label">Cuándo empieza</label>
                       <input
                         className="input-field"
                         type="datetime-local"
@@ -1791,14 +1954,14 @@ export default function Medications() {
                             ...current,
                             start_at: nextStartAt,
                             schedule_time:
-                              (current.schedule_time || !nextStartAt)
+                              !nextStartAt || scheduleTimeManuallyEdited
                                 ? current.schedule_time
                                 : nextStartAt.slice(11, 16),
                           }));
                         }}
                       />
                       <small className="muted med-form-helper">
-                        Si indicas frecuencia, esta fecha y hora se usa como punto de partida para los recordatorios.
+                        Esta fecha y hora marcan la primera dosis. Desde aquí Klinip calcula las siguientes.
                       </small>
                     </div>
                     <div className="input-group">
@@ -1825,19 +1988,47 @@ export default function Medications() {
                   </div>
 
                   <div className="med-form-summary" aria-live="polite">
-                    <strong>{medicationPreviewName}{medicationPreviewDose ? ` · ${medicationPreviewDose}` : ""}</strong>
-                    <span>{frequencyValue ? `Frecuencia: ${frequencyValue}` : "Aún no indicas la frecuencia."}</span>
-                    <span>{medicationStartPreview ? `Primera toma: ${medicationStartPreview}` : "Falta indicar la primera toma."}</span>
-                    <span>
-                      {schedulePreviewSummary
-                        ? `Horarios estimados: ${schedulePreviewSummary}`
-                        : "Los horarios se calcularán desde la primera toma."}
-                    </span>
-                    <span>
-                      {endPreviewDate
-                        ? `Última toma estimada: ${formatMedicationDateTime(endPreviewDate)}`
-                        : "La fecha de término se estima cuando indicas una duración."}
-                    </span>
+                    <div className="med-form-summary-head">
+                      <div>
+                        <strong>{medicationPreviewName}{medicationPreviewDose ? ` · ${medicationPreviewDose}` : ""}</strong>
+                        <p>{schedulePreviewHeadline}</p>
+                      </div>
+                      <span className={`med-form-summary-badge ${remindersReady ? "is-ready" : "is-draft"}`}>
+                        {remindersReady ? "Listo para recordatorios" : "Faltan datos"}
+                      </span>
+                    </div>
+                    <div className="med-form-summary-grid">
+                      <div className="med-form-summary-item">
+                        <span className="med-form-summary-label">Inicio</span>
+                        <strong>{medicationStartPreview || "Pendiente"}</strong>
+                        <small>{medicationStartPreview ? "Esta será la primera dosis registrada por el plan." : "Elige día y hora para comenzar."}</small>
+                      </div>
+                      <div className="med-form-summary-item">
+                        <span className="med-form-summary-label">Plan diario</span>
+                        <strong>{schedulePreviewCountLabel}</strong>
+                        <small>{schedulePreviewSummary || "Klinip mostrará aquí los horarios cuando tenga datos suficientes."}</small>
+                      </div>
+                      <div className="med-form-summary-item">
+                        <span className="med-form-summary-label">Frecuencia</span>
+                        <strong>{frequencyValue || "Pendiente"}</strong>
+                        <small>{frequencyIntervalHours ? `Equivale a una toma cada ${frequencyIntervalHours} horas.` : "Puedes escribirla libremente si no coincide con una opción sugerida."}</small>
+                      </div>
+                      <div className="med-form-summary-item">
+                        <span className="med-form-summary-label">Término estimado</span>
+                        <strong>{endPreviewDate ? formatMedicationDateTime(endPreviewDate) : "Pendiente"}</strong>
+                        <small>{endPreviewDate ? "Klinip lo recalcula si cambias el inicio, la frecuencia o la duración." : "Aparece cuando defines la duración o la fecha de término."}</small>
+                      </div>
+                    </div>
+                    {schedulePreviewTimes.length ? (
+                      <div className="med-form-schedule-chips" aria-label="Horarios calculados">
+                        {schedulePreviewTimes.map((slot) => (
+                          <span key={slot} className="med-form-schedule-chip">
+                            {slot}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    <span>{schedulePreviewHelper}</span>
                   </div>
                 </section>
 
@@ -1889,16 +2080,34 @@ export default function Medications() {
                         ) : null}
                       </div>
                       <div className="input-group">
-                        <label className="input-label">Hora inicial</label>
+                        <label className="input-label">Hora base del plan</label>
                         <input
                           className="input-field"
                           type="time"
                           value={form.schedule_time}
-                          onChange={(e) => setForm({ ...form, schedule_time: e.target.value })}
+                          onChange={(e) => {
+                            setScheduleTimeManuallyEdited(Boolean(e.target.value));
+                            setForm({ ...form, schedule_time: e.target.value });
+                          }}
                         />
                         <small className="muted med-form-helper">
-                          Si no la cambias, Klinip usa la hora de la primera toma para repartir el resto del día.
+                          Si no la cambias, Klinip usa la hora del inicio. Solo modifícala si quieres desplazar todo el plan diario.
                         </small>
+                        {form.start_at ? (
+                          <button
+                            type="button"
+                            className="secondary-btn med-inline-helper-btn"
+                            onClick={() => {
+                              setScheduleTimeManuallyEdited(false);
+                              setForm((current) => ({
+                                ...current,
+                                schedule_time: current.start_at ? current.start_at.slice(11, 16) : "",
+                              }));
+                            }}
+                          >
+                            Usar la hora del inicio
+                          </button>
+                        ) : null}
                       </div>
                     </div>
 
@@ -2553,14 +2762,9 @@ export default function Medications() {
                   <div>
                     <span className="med-detail-dose-summary-label">Qué corresponde ahora</span>
                     <h4>
-                      {detailNextDose
-                        ? `Próxima dosis: ${formatMedicationDateTime(detailNextDose)}`
-                        : "No hay una próxima dosis pendiente"}
+                      {detailDoseContext?.headline || "Sin un horario claro todavía"}
                     </h4>
-                    <p>
-                      {detailTarget.dose || "Sin dosis definida"}
-                      {detailTarget.frequency ? ` · ${detailTarget.frequency}` : ""}
-                    </p>
+                    <p>{detailDoseContext?.helper || "Completa la frecuencia y el inicio para ordenar las tomas."}</p>
                   </div>
                   <div className="med-detail-dose-summary-side">
                     <span>{detailDoseProgress}</span>
@@ -2571,11 +2775,11 @@ export default function Medications() {
                         onClick={() =>
                           handleRecordIntake(detailTarget, {
                             source: "manual_detail",
-                            scheduledAt: detailNextDose || detailTarget.start_at || null,
+                            scheduledAt: detailDoseContext?.actionableAt || null,
                           })
                         }
                       >
-                        Marcar esta dosis ahora
+                        {detailDoseContext?.actionLabel || "Registrar una toma manual"}
                       </button>
                     ) : null}
                   </div>
@@ -2583,7 +2787,7 @@ export default function Medications() {
                 <div className="medication-intake-timeline-head">
                   <div>
                     <h4>Historial de tomas</h4>
-                    <p>Cada tarjeta muestra cuándo te tocaba la dosis y cuándo quedó registrada.</p>
+                    <p>Cada tarjeta separa la hora programada de la hora en que la toma quedó confirmada.</p>
                   </div>
                   <span className="medication-intake-timeline-count">
                     {detailIntakes.length} eventos
@@ -2604,7 +2808,7 @@ export default function Medications() {
                           <div className={`medication-intake-dot status-${normalizedStatus}`} aria-hidden />
                           <div className="medication-intake-copy">
                             <div className="medication-intake-top">
-                              <strong>Estado de esta dosis</strong>
+                              <strong>{getIntakeHeadline(item)}</strong>
                               <span className={`medication-intake-status-chip status-${normalizedStatus}`}>
                                 {getIntakeStatusLabel(item.status)}
                               </span>
@@ -2612,20 +2816,20 @@ export default function Medications() {
                             <div className="medication-intake-moments">
                               {scheduledLabel ? (
                                 <div className="medication-intake-moment">
-                                  <span className="medication-intake-moment-label">Te tocaba</span>
+                                  <span className="medication-intake-moment-label">Programada para</span>
                                   <strong>{formatIntakeEventDate(item.scheduled_at)}</strong>
                                   <span>{formatIntakeEventTime(item.scheduled_at)}</span>
                                 </div>
                               ) : null}
                               {takenLabel ? (
                                 <div className="medication-intake-moment">
-                                  <span className="medication-intake-moment-label">Se registró</span>
+                                  <span className="medication-intake-moment-label">Confirmada el</span>
                                   <strong>{formatIntakeEventDate(item.taken_at)}</strong>
                                   <span>{formatIntakeEventTime(item.taken_at)}</span>
                                 </div>
                               ) : !scheduledLabel && fallbackLabel ? (
                                 <div className="medication-intake-moment">
-                                  <span className="medication-intake-moment-label">Registro</span>
+                                  <span className="medication-intake-moment-label">Registrada el</span>
                                   <strong>{formatIntakeEventDate(item.created_at)}</strong>
                                   <span>{formatIntakeEventTime(item.created_at)}</span>
                                 </div>
@@ -2634,9 +2838,14 @@ export default function Medications() {
                             <div className="medication-intake-meta">
                               <span>Origen: {getIntakeSourceLabel(item.source)}</span>
                               {scheduledLabel && takenLabel && item.scheduled_at !== item.taken_at ? (
-                                <span>La hora programada y la hora registrada fueron distintas.</span>
+                                <span>Programación y confirmación quedaron en horas distintas.</span>
                               ) : null}
                             </div>
+                            {getIntakeStatusSummary(item) ? (
+                              <div className="medication-intake-summary">
+                                {getIntakeStatusSummary(item)}
+                              </div>
+                            ) : null}
                             {intakeNote ? <p>{intakeNote}</p> : null}
                             {canEditActiveProfile ? (
                               <div className="medication-intake-actions">
@@ -2646,7 +2855,7 @@ export default function Medications() {
                                   onClick={() => handleTimelineStatusUpdate(item, "late")}
                                   disabled={normalizedStatus === "late"}
                                 >
-                                  Tomado tarde
+                                  La tomó más tarde
                                 </button>
                                 <button
                                   type="button"
@@ -2654,7 +2863,7 @@ export default function Medications() {
                                   onClick={() => handleTimelineStatusUpdate(item, "skipped")}
                                   disabled={normalizedStatus === "skipped"}
                                 >
-                                  Omitido
+                                  No la tomó
                                 </button>
                               </div>
                             ) : null}
@@ -3036,6 +3245,7 @@ export default function Medications() {
 
             <div className="records-mobile-list medications-mobile-list">
               {paginatedMeds.map((m) => {
+                const doseContext = getMedicationDoseContext(m);
                 const nextDose = getNextMedicationDose(m);
                 const taken = Number(m.taken_doses || 0);
                 const expected = Number(m.expected_doses || 0);
@@ -3124,14 +3334,12 @@ export default function Medications() {
                       <strong>
                         {finished
                           ? "Tratamiento finalizado"
-                          : nextDose
-                          ? `Te toca el ${formatMedicationDateTime(nextDose)}`
-                          : "Aún no hay una próxima dosis calculada"}
+                          : doseContext.headline}
                       </strong>
                       <p>
                         {finished
                           ? "Este tratamiento ya no requiere nuevas tomas."
-                          : "Cuando tomes esta dosis, usa el botón azul para dejarla registrada."}
+                          : doseContext.helper}
                       </p>
                     </div>
 
@@ -3203,11 +3411,11 @@ export default function Medications() {
                             event.stopPropagation();
                             handleRecordIntake(m, {
                               source: "manual_card",
-                              scheduledAt: nextDose || m.start_at || null,
+                              scheduledAt: doseContext.actionableAt || null,
                             });
                           }}
                         >
-                          Marcar esta dosis
+                          {doseContext.actionLabel}
                         </button>
                       ) : null}
                       <button
