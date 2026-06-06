@@ -2800,7 +2800,9 @@ export default function Medications() {
                     {detailIntakes.map((item) => {
                       const normalizedStatus = String(item.status || "taken").toLowerCase();
                       const scheduledLabel = item.scheduled_at ? formatIntakeEventDateTime(item.scheduled_at) : "";
-                      const takenLabel = item.taken_at ? formatIntakeEventDateTime(item.taken_at) : "";
+                      const hasConfirmedDose = normalizedStatus === "taken" || normalizedStatus === "late";
+                      const takenLabel =
+                        hasConfirmedDose && item.taken_at ? formatIntakeEventDateTime(item.taken_at) : "";
                       const fallbackLabel = item.created_at ? formatIntakeEventDateTime(item.created_at) : "";
                       const intakeNote = getIntakeNoteLabel(item);
                       return (
@@ -2827,9 +2829,15 @@ export default function Medications() {
                                   <strong>{formatIntakeEventDate(item.taken_at)}</strong>
                                   <span>{formatIntakeEventTime(item.taken_at)}</span>
                                 </div>
-                              ) : !scheduledLabel && fallbackLabel ? (
+                              ) : fallbackLabel ? (
                                 <div className="medication-intake-moment">
-                                  <span className="medication-intake-moment-label">Registrada el</span>
+                                  <span className="medication-intake-moment-label">
+                                    {normalizedStatus === "missed"
+                                      ? "Detectada el"
+                                      : normalizedStatus === "skipped"
+                                      ? "Marcada el"
+                                      : "Registrada el"}
+                                  </span>
                                   <strong>{formatIntakeEventDate(item.created_at)}</strong>
                                   <span>{formatIntakeEventTime(item.created_at)}</span>
                                 </div>

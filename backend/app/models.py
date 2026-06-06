@@ -230,7 +230,7 @@ class MedicationIntake(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     medication_id = Column(Integer, ForeignKey("medications.id"))
     scheduled_at = Column(DateTime, nullable=True)
-    taken_at = Column(DateTime, nullable=True, default=datetime.now)
+    taken_at = Column(DateTime, nullable=True)
     status = Column(String, default="taken", index=True)
     source = Column(String, default="manual")
     notes = Column(Text, default="")

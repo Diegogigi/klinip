@@ -3278,6 +3278,22 @@ def _build_medication_event_defaults(
     return schedule_dt, actual_taken_at, normalized_status
 
 
+def _medication_intake_to_response_payload(item) -> dict:
+    normalized_status = _normalize_adherence_status(getattr(item, "status", "taken"))
+    include_taken_at = normalized_status in {"taken", "late"}
+    return {
+        "id": int(getattr(item, "id", 0) or 0),
+        "medication_id": int(getattr(item, "medication_id", 0) or 0),
+        "user_id": int(getattr(item, "user_id", 0) or 0),
+        "scheduled_at": getattr(item, "scheduled_at", None),
+        "taken_at": getattr(item, "taken_at", None) if include_taken_at else None,
+        "status": normalized_status,
+        "source": getattr(item, "source", "") or "manual",
+        "notes": getattr(item, "notes", "") or "",
+        "created_at": getattr(item, "created_at", None),
+    }
+
+
 def _materialize_medication_adherence_events(db: Session, user: models.User, horizon_days: int = 2):
     now = datetime.now(_resolve_user_tz(user))
     now_naive = now.replace(tzinfo=None)
@@ -3317,7 +3333,7 @@ def _materialize_medication_adherence_events(db: Session, user: models.User, hor
                     source="scheduler",
                     notes="Evento generado automaticamente por falta de registro.",
                 )
-                )
+            )
 
 
 def _medication_remaining_doses(
@@ -21434,7 +21450,7 @@ async def record_medication_intake(
                 medication_id=medication_id,
             )
         intake.scheduled_at = scheduled_at
-        intake.taken_at = taken_at
+        intake.taken_at = taken_at if normalized_status in {"taken", "late"} else None
         intake.status = normalized_status
         intake.source = _safe_text(getattr(payload, "source", "") or "manual")[:40] or "manual"
         intake.notes = _clip_text(getattr(payload, "notes", "") or "", 240)
@@ -21446,7 +21462,7 @@ async def record_medication_intake(
             print(f"WARNING medication intake: no se pudo marcar refresh de IA: {ai_exc}")
         db.commit()
         db.refresh(intake)
-        return intake
+        return _medication_intake_to_response_payload(intake)
 
     def _is_medication_intake_schema_error(exc: Exception) -> bool:
         detail = str(getattr(exc, "orig", exc) or "").lower()
@@ -21601,7 +21617,10 @@ async def list_medication_intakes(
         .limit(max(1, min(int(limit or 40), 120)))
         .all()
     )
-    return {"medication_id": medication_id, "items": items}
+    return {
+        "medication_id": medication_id,
+        "items": [_medication_intake_to_response_payload(item) for item in items],
+    }
 
 
 @app.get("/medications/purchases", response_model=List[schemas.MedicationPurchaseOut])

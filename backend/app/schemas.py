@@ -4,6 +4,14 @@ from pydantic import BaseModel, EmailStr, field_serializer
 from .models import AppointmentType, AppointmentStatus, ClinicalEpisodeStatus, DocumentType
 
 
+def _serialize_datetime_preserving_offset(dt: Optional[datetime]) -> Optional[str]:
+    if dt is None:
+        return None
+    if getattr(dt, "tzinfo", None) is not None:
+        return dt.isoformat(timespec="seconds")
+    return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
@@ -570,10 +578,7 @@ class MedicationOut(MedicationBase):
 
     @field_serializer('start_at', 'end_date', 'created_at', 'effective_end_date', 'next_dose_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):
-        if dt is None:
-            return None
-        # Serializar en formato ISO sin conversión a UTC
-        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+        return _serialize_datetime_preserving_offset(dt)
 
     class Config:
         from_attributes = True
@@ -625,9 +630,7 @@ class MedicationIntakeOut(BaseModel):
 
     @field_serializer('scheduled_at', 'taken_at', 'created_at')
     def serialize_intake_datetime(self, dt: Optional[datetime], _info):
-        if dt is None:
-            return None
-        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+        return _serialize_datetime_preserving_offset(dt)
 
     class Config:
         from_attributes = True
