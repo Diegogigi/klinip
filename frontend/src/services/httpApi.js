@@ -737,6 +737,11 @@ export async function updateDocument(id, payload) {
   return res.data;
 }
 
+export async function retryDocumentOcr(id) {
+  const res = await api.post(`/documents/${id}/retry-ocr`);
+  return res.data;
+}
+
 export async function getDocumentFile(documentId) {
   const response = await api.get(`/documents/${documentId}/file`, {
     responseType: "blob",

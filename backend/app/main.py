@@ -22724,6 +22724,38 @@ async def update_document(
     return doc
 
 
+@app.post("/documents/{document_id}/retry-ocr", response_model=schemas.DocumentOut)
+async def retry_document_ocr(
+    document_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            *_document_scope_filter(profile, target_user_id),
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    if not doc.file_data:
+        raise HTTPException(status_code=400, detail="El documento no tiene un archivo disponible para OCR")
+
+    doc.ocr_status = "pending"
+    doc.ocr_text = None
+    doc.ocr_lang = OCR_LANG_DEFAULT
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(doc)
+
+    background_tasks.add_task(_run_document_ocr, doc.id)
+    return doc
+
+
 # Endpoint protegido para servir documentos
 @app.get("/documents/{document_id}/file")
 async def get_document_file(

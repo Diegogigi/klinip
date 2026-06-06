@@ -7,6 +7,7 @@ import {
   uploadDocument,
   deleteDocument,
   updateDocument,
+  retryDocumentOcr,
   getActiveHealthProfile,
   getMfaStatus,
   isAuthSessionError,
@@ -45,6 +46,7 @@ const ocrLabels = {
 };
 
 const ocrActiveStatuses = new Set(["pending", "processing"]);
+const OCR_STALLED_MS = 2 * 60 * 1000;
 
 const uploadTypeOptions = [
   { value: "auto", label: "Autodetectar con IA" },
@@ -57,6 +59,43 @@ const uploadTypeOptions = [
 
 function getDocumentFilename(doc) {
   return cleanUiText(doc?.filename, doc?.id ? `documento-${doc.id}` : "documento");
+}
+
+function getOcrStatusLabel(status) {
+  const key = String(status || "").trim().toLowerCase();
+  if (!key) return "Sin OCR";
+  if (ocrLabels[key]) return ocrLabels[key];
+  if (key === "error_no_file") return "Archivo no disponible";
+  if (key.startsWith("error_")) return "OCR con error";
+  return "OCR con error";
+}
+
+function isOcrActiveDocument(doc) {
+  return ocrActiveStatuses.has(String(doc?.ocr_status || "").trim().toLowerCase());
+}
+
+function getDocumentCreatedAtMs(doc) {
+  const createdAt = new Date(doc?.created_at || "");
+  const timestamp = createdAt.getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+function getOcrPendingAgeMs(doc, nowTs = Date.now()) {
+  const createdAtMs = getDocumentCreatedAtMs(doc);
+  if (createdAtMs === null) return null;
+  return Math.max(0, nowTs - createdAtMs);
+}
+
+function isOcrStalled(doc, nowTs = Date.now()) {
+  if (!isOcrActiveDocument(doc)) return false;
+  const ageMs = getOcrPendingAgeMs(doc, nowTs);
+  return ageMs !== null && ageMs >= OCR_STALLED_MS;
+}
+
+function formatOcrPendingTime(ageMs) {
+  if (ageMs === null || ageMs < 60_000) return "menos de 1 minuto";
+  const minutes = Math.max(1, Math.floor(ageMs / 60_000));
+  return minutes === 1 ? "1 minuto" : `${minutes} minutos`;
 }
 
 function inferDocumentMimeType(filename, fallbackType = "") {
@@ -185,6 +224,7 @@ export default function Documents() {
   const [detailSaving, setDetailSaving] = useState(false);
   const [ocrSyncing, setOcrSyncing] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
+  const [retryingOcrIds, setRetryingOcrIds] = useState([]);
   const loadRef = useRef(null);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -274,15 +314,50 @@ export default function Documents() {
 
   useEffect(() => () => releaseViewerUrl(), [viewerUrl]);
 
-  const hasPendingOcr = useMemo(
-    () => docs.some((item) => ocrActiveStatuses.has(String(item?.ocr_status || "").toLowerCase())),
-    [docs],
-  );
+  const pendingOcrDocs = useMemo(() => docs.filter((item) => isOcrActiveDocument(item)), [docs]);
 
-  const pendingOcrCount = useMemo(
-    () => docs.filter((item) => ocrActiveStatuses.has(String(item?.ocr_status || "").toLowerCase())).length,
-    [docs],
-  );
+  const hasPendingOcr = pendingOcrDocs.length > 0;
+
+  const pendingOcrCount = pendingOcrDocs.length;
+
+  const stalledOcrDocs = useMemo(() => {
+    const nowTs = Date.now();
+    return pendingOcrDocs.filter((item) => isOcrStalled(item, nowTs));
+  }, [pendingOcrDocs]);
+
+  const oldestPendingOcrDoc = useMemo(() => {
+    if (!pendingOcrDocs.length) return null;
+    return [...pendingOcrDocs].sort((left, right) => {
+      const leftAge = getOcrPendingAgeMs(left) || 0;
+      const rightAge = getOcrPendingAgeMs(right) || 0;
+      return rightAge - leftAge;
+    })[0] || null;
+  }, [pendingOcrDocs]);
+
+  const ocrBannerModel = useMemo(() => {
+    if (!uploadNotice && !pendingOcrDocs.length) return null;
+    if (stalledOcrDocs.length) {
+      const leadDoc = oldestPendingOcrDoc || stalledOcrDocs[0];
+      const waitLabel = formatOcrPendingTime(getOcrPendingAgeMs(leadDoc));
+      return {
+        tone: "stalled",
+        title:
+          stalledOcrDocs.length === 1
+            ? `El OCR de ${getDocumentFilename(leadDoc)} está tardando más de lo normal.`
+            : `El OCR está tardando más de lo normal en ${stalledOcrDocs.length} documentos.`,
+        body: `El archivo ya se guardó, pero la lectura automática sigue pendiente hace ${waitLabel}. Puedes actualizar el estado o reintentar el OCR.`,
+        retryDoc: stalledOcrDocs.length === 1 ? leadDoc : null,
+      };
+    }
+    return {
+      tone: "active",
+      title: uploadNotice || "Klinip está procesando los documentos recientes.",
+      body: ocrSyncing
+        ? "Actualizando estado del OCR..."
+        : "El archivo ya quedó guardado. En unos segundos deberían aparecer el resumen y los datos detectados.",
+      retryDoc: null,
+    };
+  }, [ocrSyncing, oldestPendingOcrDoc, pendingOcrDocs.length, stalledOcrDocs, uploadNotice]);
 
   useEffect(() => {
     if (!hasPendingOcr) {
@@ -525,6 +600,30 @@ export default function Documents() {
     );
   };
 
+  const handleRefreshOcrState = async () => {
+    if (loadRef.current) {
+      await loadRef.current({ silent: true });
+    }
+  };
+
+  const handleRetryDocumentOcr = async (doc) => {
+    if (!doc?.id || !canEditActiveProfile) return;
+    const docId = String(doc.id);
+    if (retryingOcrIds.includes(docId)) return;
+    setRetryingOcrIds((current) => [...current, docId]);
+    try {
+      const updatedDoc = await retryDocumentOcr(doc.id);
+      syncDocumentState(updatedDoc);
+      setUploadNotice("Reintento iniciado. Klinip volverá a leer el archivo.");
+      await load();
+    } catch (err) {
+      console.error("No se pudo reintentar el OCR:", err);
+      window.alert(getErrorDetail(err, "No se pudo reintentar el OCR."));
+    } finally {
+      setRetryingOcrIds((current) => current.filter((item) => item !== docId));
+    }
+  };
+
   const handleSaveDocumentFilename = async () => {
     if (!detailTarget?.id || !canEditActiveProfile || detailSaving) return;
     const nextFilename = detailFilenameDraft.trim();
@@ -688,14 +787,35 @@ export default function Documents() {
             <span className="documents-ocr-pill">Orden → cita o examen</span>
             <span className="documents-ocr-pill">Resultado → resumen IA</span>
           </div>
-          {uploadNotice || hasPendingOcr ? (
-            <div className="documents-ocr-banner">
-              <strong>{uploadNotice || "Klinip está procesando los documentos recientes."}</strong>
-              <span>
-                {ocrSyncing
-                  ? "Actualizando estado del OCR..."
-                  : "Mantén esta pantalla abierta si quieres ver cómo se completan los datos automáticamente."}
-              </span>
+          {ocrBannerModel ? (
+            <div className={`documents-ocr-banner${ocrBannerModel.tone === "stalled" ? " is-stalled" : ""}`}>
+              <div className="documents-ocr-banner-head">
+                <strong>{ocrBannerModel.title}</strong>
+              </div>
+              <span>{ocrBannerModel.body}</span>
+              {hasPendingOcr ? (
+                <div className="documents-ocr-banner-actions">
+                  <button
+                    className="secondary-btn documents-ocr-banner-btn"
+                    type="button"
+                    onClick={() => void handleRefreshOcrState()}
+                  >
+                    Actualizar estado
+                  </button>
+                  {ocrBannerModel.retryDoc ? (
+                    <button
+                      className="secondary-btn documents-ocr-banner-btn"
+                      type="button"
+                      onClick={() => void handleRetryDocumentOcr(ocrBannerModel.retryDoc)}
+                      disabled={retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))}
+                    >
+                      {retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))
+                        ? "Reintentando..."
+                        : "Reintentar OCR"}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -831,7 +951,7 @@ export default function Documents() {
                   {docLabels[detailTarget.doc_type] || cleanUiText(detailTarget.doc_type, "Documento")}
                 </span>
                 <span className="detail-chip detail-chip-muted">
-                  {ocrLabels[detailTarget.ocr_status] || (detailTarget.ocr_status ? "OCR con error" : "Sin OCR")}
+                  {getOcrStatusLabel(detailTarget.ocr_status)}
                 </span>
               </div>
               <div className="detail-grid">
@@ -930,10 +1050,35 @@ export default function Documents() {
                   ) : null}
                 </div>
 
-                {detailTarget.ocr_status === "pending" || detailTarget.ocr_status === "processing" ? (
-                  <p className="documents-ai-empty">
-                    El OCR sigue en proceso. Cuando termine, aquí aparecerá el resumen clínico y los datos detectados.
-                  </p>
+                {isOcrActiveDocument(detailTarget) ? (
+                  <div className={`documents-ai-empty-block${isOcrStalled(detailTarget) ? " is-stalled" : ""}`}>
+                    <p className="documents-ai-empty">
+                      {isOcrStalled(detailTarget)
+                        ? `La lectura automática sigue pendiente hace ${formatOcrPendingTime(getOcrPendingAgeMs(detailTarget))}. El archivo ya quedó guardado, pero Klinip todavía no termina de interpretarlo.`
+                        : "El OCR sigue en proceso. Cuando termine, aquí aparecerán el resumen clínico y los datos detectados."}
+                    </p>
+                    <div className="documents-ocr-banner-actions">
+                      <button
+                        className="secondary-btn documents-ocr-banner-btn"
+                        type="button"
+                        onClick={() => void handleRefreshOcrState()}
+                      >
+                        Actualizar estado
+                      </button>
+                      {canEditActiveProfile && isOcrStalled(detailTarget) ? (
+                        <button
+                          className="secondary-btn documents-ocr-banner-btn"
+                          type="button"
+                          onClick={() => void handleRetryDocumentOcr(detailTarget)}
+                          disabled={retryingOcrIds.includes(String(detailTarget.id))}
+                        >
+                          {retryingOcrIds.includes(String(detailTarget.id))
+                            ? "Reintentando..."
+                            : "Reintentar OCR"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : detailIntelligence ? (
                   <>
                     {detailSummaryText ? (
@@ -1175,7 +1320,7 @@ export default function Documents() {
                     </td>
                     <td>
                       <span className="badge">
-                        {ocrLabels[doc.ocr_status] || (doc.ocr_status ? "OCR con error" : "Sin OCR")}
+                        {getOcrStatusLabel(doc.ocr_status)}
                       </span>
                     </td>
                     <td>
@@ -1241,7 +1386,7 @@ export default function Documents() {
                   </div>
                   <div className="records-mobile-head-side">
                     <span className="badge">
-                      {ocrLabels[doc.ocr_status] || (doc.ocr_status ? "OCR con error" : "Sin OCR")}
+                      {getOcrStatusLabel(doc.ocr_status)}
                     </span>
                     <div onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu

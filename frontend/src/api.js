@@ -70,6 +70,7 @@ export const getDocuments = api.getDocuments;
 export const uploadDocument = api.uploadDocument;
 export const deleteDocument = api.deleteDocument;
 export const updateDocument = api.updateDocument;
+export const retryDocumentOcr = api.retryDocumentOcr;
 
 export const getMedications = api.getMedications;
 export const getBiometricDashboard = api.getBiometricDashboard;
