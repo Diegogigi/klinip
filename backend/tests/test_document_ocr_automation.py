@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from fastapi import BackgroundTasks
+from sqlalchemy.orm import sessionmaker
+
 from app import main, models
 
 
@@ -180,3 +183,71 @@ def test_upload_document_type_normalizer_accepts_auto_aliases():
     assert main._normalize_uploaded_document_type("auto") == models.DocumentType.otro
     assert main._normalize_uploaded_document_type("Autodetectar con IA") == models.DocumentType.otro
     assert main._normalize_uploaded_document_type("examen") == models.DocumentType.resultado
+
+
+def test_queue_document_post_upload_tasks_prioritizes_ocr(db_session):
+    user, profile, episode = _seed_profile_context(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        episode_id=episode.id,
+        doc_type=models.DocumentType.receta,
+        filename="receta.jpg",
+        file_data=b"fake-image",
+        ocr_status="pending",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    tasks = BackgroundTasks()
+    main._queue_document_post_upload_tasks(
+        tasks,
+        doc=doc,
+        current_user=user,
+        send_email_backup=True,
+        file_content=b"fake-image",
+        original_filename="receta.jpg",
+    )
+
+    task_names = [task.func.__name__ for task in tasks.tasks]
+
+    assert task_names[0] == "_run_document_ocr"
+    assert "_send_medical_order_uploaded_email_safe" in task_names[1:]
+    assert "_send_document_backup_email_safe" in task_names[1:]
+
+
+def test_run_document_ocr_persists_done_status_when_automations_fail(db_session, monkeypatch):
+    user, profile, episode = _seed_profile_context(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        episode_id=episode.id,
+        doc_type=models.DocumentType.receta,
+        filename="receta.jpg",
+        file_data=b"fake-image",
+        ocr_status="pending",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    test_session_local = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db_session.get_bind(),
+    )
+    monkeypatch.setattr(main, "SessionLocal", test_session_local)
+    monkeypatch.setattr(main, "_extract_ocr_text", lambda *_args, **_kwargs: "Paracetamol 500 mg")
+
+    def _raise_automation_error(_db, _doc):
+        raise RuntimeError("automation exploded")
+
+    monkeypatch.setattr(main, "_apply_document_ocr_automations", _raise_automation_error)
+
+    main._run_document_ocr(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.query(models.Document).filter(models.Document.id == doc.id).first()
+
+    assert refreshed is not None
+    assert refreshed.ocr_status == "done"
+    assert refreshed.ocr_text == "Paracetamol 500 mg"

@@ -6852,18 +6852,43 @@ def _run_document_ocr(document_id: int):
         doc.ocr_text = text
         doc.ocr_status = "done"
         doc.ocr_lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
-        detected_meds_for_email = _apply_document_ocr_automations(db, doc)
+        db.commit()
+        db.refresh(doc)
 
+        try:
+            detected_meds_for_email = _apply_document_ocr_automations(db, doc)
+            db.commit()
+            db.refresh(doc)
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING _run_document_ocr automations: {exc}")
+            doc = (
+                db.query(models.Document).filter(models.Document.id == document_id).first()
+            )
+            if not doc:
+                return
+
+        profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
         try:
             _upsert_document_intelligence(db, doc)
             _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
         except Exception as exc:
+            db.rollback()
             print(f"WARNING _run_document_ocr memory sync: {exc}")
+            doc = (
+                db.query(models.Document).filter(models.Document.id == document_id).first()
+            )
+            if not doc:
+                return
+            profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
-        profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
-        _mark_profile_ai_dirty(db, profile, include_family=True)
-        db.commit()
+        try:
+            _mark_profile_ai_dirty(db, profile, include_family=True)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING _run_document_ocr profile sync: {exc}")
         if user and user.email and detected_meds_for_email:
             _send_medications_detected_email_safe(
                 user.email,
@@ -6872,6 +6897,47 @@ def _run_document_ocr(document_id: int):
             )
     finally:
         db.close()
+
+
+def _queue_document_post_upload_tasks(
+    background_tasks: BackgroundTasks | None,
+    *,
+    doc: models.Document,
+    current_user: models.User,
+    send_email_backup: bool = False,
+    file_content: bytes | None = None,
+    original_filename: str = "",
+) -> None:
+    if background_tasks is None:
+        return
+
+    # Prioritize OCR first so uploads do not stay pending behind slow email tasks.
+    background_tasks.add_task(_run_document_ocr, doc.id)
+
+    if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
+        background_tasks.add_task(
+            _send_medical_order_uploaded_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
+                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            },
+        )
+
+    if send_email_backup and current_user.email and file_content is not None:
+        background_tasks.add_task(
+            _send_document_backup_email_safe,
+            current_user.email,
+            current_user.name or "",
+            {
+                "document_type": str(doc.doc_type.value if hasattr(doc.doc_type, "value") else doc.doc_type),
+                "center": doc.center or "",
+                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            },
+            doc.filename or original_filename,
+            file_content,
+        )
 
 
 # ── CORS ─────────────────────────────────────────────────────────────────
@@ -9962,18 +10028,11 @@ def _create_document_from_workflow(
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
-    if background_tasks is not None:
-        if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
-            background_tasks.add_task(
-                _send_medical_order_uploaded_email_safe,
-                current_user.email,
-                current_user.name or "",
-                {
-                    "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
-                    "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-                },
-            )
-        background_tasks.add_task(_run_document_ocr, doc.id)
+    _queue_document_post_upload_tasks(
+        background_tasks,
+        doc=doc,
+        current_user=current_user,
+    )
     return doc
 
 
@@ -22591,31 +22650,14 @@ async def upload_document(
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
-    if current_user.email and doc.doc_type in (models.DocumentType.receta, models.DocumentType.orden):
-        background_tasks.add_task(
-            _send_medical_order_uploaded_email_safe,
-            current_user.email,
-            current_user.name or "",
-            {
-                "document_type": "Orden medica" if doc.doc_type == models.DocumentType.orden else "Receta medica",
-                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-            },
-        )
-    if send_email_backup and current_user.email:
-        background_tasks.add_task(
-            _send_document_backup_email_safe,
-            current_user.email,
-            current_user.name or "",
-            {
-                "document_type": str(doc.doc_type.value if hasattr(doc.doc_type, "value") else doc.doc_type),
-                "center": doc.center or "",
-                "uploaded_at": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
-            },
-            doc.filename or original_filename,
-            file_content,
-        )
-    if background_tasks is not None:
-        background_tasks.add_task(_run_document_ocr, doc.id)
+    _queue_document_post_upload_tasks(
+        background_tasks,
+        doc=doc,
+        current_user=current_user,
+        send_email_backup=send_email_backup,
+        file_content=file_content,
+        original_filename=original_filename,
+    )
     return doc
 
 
