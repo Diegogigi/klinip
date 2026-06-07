@@ -14,16 +14,17 @@
               <td style="padding:28px 32px;background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:#ffffff;">
                 <div style="margin-bottom:16px;"><span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#ffffff;font-family:'Poppins','Inter',system-ui,sans-serif;">Klinip</span></div>
                 <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Recordatorio automático</div>
-                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Tu cita está próxima</h1>
+                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">La cita está próxima</h1>
               </td>
             </tr>
             <tr>
               <td style="padding:32px;">
                 <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
                 <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
-                  Te recordamos tu próxima atención médica para que puedas organizarte con tiempo.
+                  Te recordamos la próxima atención de <strong>{{ patient_name }}</strong> para que puedas organizarte con tiempo.
                 </p>
                 <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Perfil:</strong> {{ patient_name }}</p>
                   <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Cuándo:</strong> {{ offset_label }}</p>
                   <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Atención:</strong> {{ specialty }}</p>
                   <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Centro:</strong> {{ center }}</p>

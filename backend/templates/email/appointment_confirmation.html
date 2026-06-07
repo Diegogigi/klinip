@@ -21,9 +21,10 @@
               <td style="padding:32px;">
                 <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
                 <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
-                  Tu cita médica fue registrada correctamente. Aquí tienes el detalle:
+                  Se registró correctamente una cita para <strong>{{ patient_name }}</strong>. Aquí tienes el detalle:
                 </p>
                 <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Perfil:</strong> {{ patient_name }}</p>
                   <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Centro:</strong> {{ center }}</p>
                   <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Especialidad:</strong> {{ specialty }}</p>
                   <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Fecha y hora:</strong> {{ date_label }}</p>
@@ -42,7 +43,7 @@
                   Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
                 </p>
                 <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
-                  {{ app_name }} | Confirmacion de agenda | {{ year }}
+                  {{ app_name }} | Confirmación de agenda | {{ year }}
                 </p>
               </td>
             </tr>

@@ -2330,8 +2330,9 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
             template_name="appointment_confirmation.html",
             context={
                 "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu perfil de salud",
                 "center": payload.get("center") or "Centro de salud",
-                "specialty": payload.get("specialty") or "Atencion medica",
+                "specialty": payload.get("specialty") or "Atención médica",
                 "date_label": payload.get("date_label") or "Pendiente",
                 "notes": payload.get("notes") or "",
                 "year": datetime.utcnow().year,
@@ -2350,8 +2351,51 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
             template_name="appointment_reminder.html",
             context={
                 "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu perfil de salud",
                 "offset_label": payload.get("offset_label") or "",
-                "specialty": payload.get("specialty") or "Atencion medica",
+                "specialty": payload.get("specialty") or "Atención médica",
+                "center": payload.get("center") or "Centro de salud",
+                "date_label": payload.get("date_label") or "",
+                "notes": payload.get("notes") or "",
+                "year": datetime.utcnow().year,
+            },
+        )
+    except Exception as exc:
+        print(f"ERROR sending appointment reminder email async: {exc}")
+
+
+def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject="Cita confirmada",
+            template_name="appointment_confirmation.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu perfil de salud",
+                "center": payload.get("center") or "Centro de salud",
+                "specialty": payload.get("specialty") or "Atención médica",
+                "date_label": payload.get("date_label") or "Pendiente",
+                "notes": payload.get("notes") or "",
+                "year": datetime.utcnow().year,
+            },
+        )
+        print(f"DEBUG appointment email: enviado a {to_email}")
+    except Exception as exc:
+        print(f"ERROR sending appointment confirmation email async: {exc}")
+
+
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+    try:
+        _send_templated_email(
+            to_email=to_email,
+            subject=f"Recordatorio de cita - {payload.get('offset_label') or 'próxima cita'}",
+            template_name="appointment_reminder.html",
+            context={
+                "user_name": user_name or "Usuario",
+                "patient_name": payload.get("patient_name") or "tu perfil de salud",
+                "offset_label": payload.get("offset_label") or "",
+                "specialty": payload.get("specialty") or "Atención médica",
                 "center": payload.get("center") or "Centro de salud",
                 "date_label": payload.get("date_label") or "",
                 "notes": payload.get("notes") or "",
@@ -2872,6 +2916,227 @@ def _appointment_offsets_for_user(user: models.User):
         if key and bool(custom.get(key, True)):
             selected.append(item)
     return selected or all_offsets
+
+
+def _user_allows_appointment_reminders(user: models.User | None) -> bool:
+    if not user:
+        return False
+    settings = _user_notification_settings(user)
+    return bool(settings.get("appointmentReminders", True))
+
+
+def _user_has_push_subscription(db: Session, user_id: int | None) -> bool:
+    if not user_id:
+        return False
+    return (
+        db.query(models.PushSubscription.id)
+        .filter(models.PushSubscription.user_id == int(user_id))
+        .first()
+        is not None
+    )
+
+
+def _load_profile_for_appointment_notifications(
+    db: Session,
+    profile_id: int | None,
+) -> models.HealthProfile | None:
+    if not profile_id:
+        return None
+    return (
+        db.query(models.HealthProfile)
+        .filter(
+            models.HealthProfile.id == int(profile_id),
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .first()
+    )
+
+
+def _appointment_notification_recipients(
+    db: Session,
+    *,
+    profile_id: int | None,
+    fallback_user_id: int | None = None,
+    for_email: bool = False,
+) -> list[dict]:
+    profile = _load_profile_for_appointment_notifications(db, profile_id)
+    include_viewers = False
+    recipient_specs: list[tuple[int, str, bool]] = []
+
+    if profile:
+        settings = _profile_automation_settings(profile)
+        include_viewers = bool(settings.get("auto_email_caregivers", False)) if for_email else False
+        recipient_specs.append((int(profile.owner_user_id), "admin", True))
+        rows = (
+            db.query(models.ProfileRelationship)
+            .filter(
+                models.ProfileRelationship.profile_id == int(profile.id),
+                models.ProfileRelationship.status == "accepted",
+            )
+            .order_by(
+                models.ProfileRelationship.accepted_at.asc(),
+                models.ProfileRelationship.created_at.asc(),
+            )
+            .all()
+        )
+        for row in rows:
+            user_id = int(getattr(row, "user_id", 0) or 0)
+            if not user_id:
+                continue
+            role = _normalize_role(getattr(row, "role", "viewer"))
+            if user_id != int(profile.owner_user_id):
+                if not include_viewers and role not in {"admin", "caregiver"}:
+                    continue
+                recipient_specs.append((user_id, role, False))
+    elif fallback_user_id:
+        recipient_specs.append((int(fallback_user_id), "admin", True))
+
+    ordered_user_ids: list[int] = []
+    recipient_meta: dict[int, dict] = {}
+    for user_id, role, is_owner in recipient_specs:
+        if user_id not in recipient_meta:
+            ordered_user_ids.append(user_id)
+            recipient_meta[user_id] = {
+                "role": role,
+                "is_owner": is_owner,
+            }
+            continue
+        recipient_meta[user_id]["is_owner"] = bool(recipient_meta[user_id]["is_owner"] or is_owner)
+        if recipient_meta[user_id]["role"] == "viewer" and role in {"caregiver", "admin"}:
+            recipient_meta[user_id]["role"] = role
+
+    if not ordered_user_ids:
+        return []
+
+    users = (
+        db.query(models.User)
+        .filter(
+            models.User.id.in_(ordered_user_ids),
+            models.User.deleted.is_(False),
+        )
+        .all()
+    )
+    users_by_id = {int(user.id): user for user in users}
+
+    recipients = []
+    for user_id in ordered_user_ids:
+        user = users_by_id.get(int(user_id))
+        if not user:
+            continue
+        meta = recipient_meta.get(int(user_id), {})
+        recipients.append(
+            {
+                "user_id": int(user.id),
+                "user": user,
+                "name": (user.name or user.email or f"Usuario #{user.id}").strip(),
+                "email": (user.email or "").strip(),
+                "role": meta.get("role", "viewer"),
+                "is_owner": bool(meta.get("is_owner", False)),
+            }
+        )
+    return recipients
+
+
+def _profile_has_family_appointment_recipients(
+    db: Session,
+    profile: models.HealthProfile | None,
+) -> bool:
+    if not profile:
+        return False
+    settings = _profile_automation_settings(profile)
+    if not bool(settings.get("upcoming_appointment_alerts", True)):
+        return False
+    recipients = _appointment_notification_recipients(
+        db,
+        profile_id=int(profile.id),
+        fallback_user_id=int(profile.owner_user_id),
+        for_email=True,
+    )
+    for item in recipients:
+        user = item.get("user")
+        if not user or int(item.get("user_id") or 0) == int(profile.owner_user_id):
+            continue
+        if not _user_allows_appointment_reminders(user):
+            continue
+        if bool(getattr(user, "email_reminders_enabled", False)) or _user_has_push_subscription(db, int(user.id)):
+            return True
+    return False
+
+
+def _appointment_patient_name(
+    db: Session,
+    appt: models.Appointment,
+) -> str:
+    profile_id = int(getattr(appt, "profile_id", 0) or 0)
+    if profile_id:
+        profile = _load_profile_for_appointment_notifications(db, profile_id)
+        if profile and getattr(profile, "full_name", None):
+            return str(profile.full_name).strip()
+    user_id = int(getattr(appt, "user_id", 0) or 0)
+    if user_id:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+        if user and getattr(user, "name", None):
+            return str(user.name).strip()
+    return "tu perfil de salud"
+
+
+def _queue_appointment_creation_notifications(
+    db: Session,
+    appt: models.Appointment,
+    background_tasks: BackgroundTasks | None,
+    include_owner_push: bool = True,
+) -> None:
+    patient_name = _appointment_patient_name(db, appt)
+    if background_tasks is not None:
+        payload = {
+            "patient_name": patient_name,
+            "center": appt.center or "",
+            "specialty": appt.specialty or appt.type.value,
+            "date_label": appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente",
+            "notes": appt.notes or "",
+        }
+        for recipient in _appointment_notification_recipients(
+            db,
+            profile_id=getattr(appt, "profile_id", None),
+            fallback_user_id=getattr(appt, "user_id", None),
+            for_email=True,
+        ):
+            if recipient.get("email"):
+                background_tasks.add_task(
+                    _send_appointment_confirmation_email_safe,
+                    recipient["email"],
+                    recipient.get("name") or "",
+                    payload,
+                )
+
+    try:
+        category = _appointment_type_label(appt.type)
+        when_text = appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente"
+        for recipient in _appointment_notification_recipients(
+            db,
+            profile_id=getattr(appt, "profile_id", None),
+            fallback_user_id=getattr(appt, "user_id", None),
+            for_email=False,
+        ):
+            recipient_user_id = int(recipient["user_id"])
+            if not include_owner_push and bool(recipient.get("is_owner")):
+                continue
+            _send_push_to_user(
+                db,
+                recipient_user_id,
+                {
+                    "title": f"{category} agendada",
+                    "body": f"{appt.specialty or appt.type.value} en {appt.center or 'Centro mÃ©dico'}\n{when_text}",
+                    "url": "/appointments",
+                    "priority": "normal",
+                    "sound": "appointment",
+                    "appointmentId": appt.id,
+                    "userId": recipient_user_id,
+                    "tag": f"appointment-created-{appt.id}-user-{recipient_user_id}",
+                },
+            )
+    except Exception as exc:
+        print(f"WARNING push appointment created {appt.id}: {exc}")
 
 
 def _derive_dose_hours(frequency_text: str = ""):
@@ -4350,6 +4615,7 @@ def _load_notification_users(
         .all()
     )
     enabled_users = []
+    enabled_user_ids: set[int] = set()
     for user in rows:
         settings = _user_notification_settings(user)
         if kind == "appointment" and not bool(settings.get("appointmentReminders", True)):
@@ -4357,8 +4623,45 @@ def _load_notification_users(
         if kind == "medication" and not bool(settings.get("medicationReminders", True)):
             continue
         enabled_users.append(user)
+        enabled_user_ids.add(int(user.id))
         if limit and len(enabled_users) >= max(1, int(limit)):
             break
+    if kind == "appointment" and (not limit or len(enabled_users) < max(1, int(limit))):
+        candidate_profiles = (
+            db.query(models.HealthProfile)
+            .join(
+                models.ProfileRelationship,
+                models.ProfileRelationship.profile_id == models.HealthProfile.id,
+            )
+            .filter(
+                models.HealthProfile.is_archived.is_(False),
+                models.ProfileRelationship.status == "accepted",
+            )
+            .order_by(models.HealthProfile.owner_user_id.asc(), models.HealthProfile.id.asc())
+            .all()
+        )
+        seen_owner_ids: set[int] = set(enabled_user_ids)
+        for profile in candidate_profiles:
+            owner_user_id = int(getattr(profile, "owner_user_id", 0) or 0)
+            if not owner_user_id or owner_user_id in seen_owner_ids:
+                continue
+            if not _profile_has_family_appointment_recipients(db, profile):
+                continue
+            owner_user = (
+                db.query(models.User)
+                .filter(
+                    models.User.id == owner_user_id,
+                    models.User.deleted.is_(False),
+                )
+                .first()
+            )
+            if not owner_user:
+                continue
+            enabled_users.append(owner_user)
+            enabled_user_ids.add(owner_user_id)
+            seen_owner_ids.add(owner_user_id)
+            if limit and len(enabled_users) >= max(1, int(limit)):
+                break
     return enabled_users
 
 
@@ -4466,13 +4769,11 @@ def _job_send_appointment_reminders(
                     if not _is_due(now, trigger_at):
                         continue
                     label = offset["label"]
-                    tag = f"appointment-{appt.id}-{label}-user-{user_id}"
-                    if _notification_already_sent(db, tag):
-                        continue
                     category = _appointment_type_label(appt.type)
                     title = f"{category} - Recordatorio: {label}"
                     when_text = appt_dt.strftime("%d/%m/%Y %H:%M")
                     center = appt.center or "Centro medico"
+                    patient_name = _appointment_patient_name(db, appt)
                     body_lines = [
                         f"{appt.specialty or appt.type} en {center}",
                         when_text,
@@ -4480,35 +4781,78 @@ def _job_send_appointment_reminders(
                     if appt.notes:
                         body_lines.append(appt.notes)
                     body = "\n".join(body_lines)
-                    ok = False
-                    if push_enabled:
-                        ok = bool(_send_push_to_user(
-                            db,
-                            user_id,
-                            {
-                                "title": title,
-                                "body": body,
-                                "url": "/appointments",
-                                "priority": offset["priority"],
-                                "sound": "appointment",
-                                "appointmentId": appt.id,
-                                "userId": user_id,
-                                "tag": tag,
-                            },
-                        ))
-                    if ok:
-                        _record_sent(db, user_id, tag, "appointment", trigger_at, now)
-                        metrics["push_sent"] += 1
-                    email_tag = f"appointment-email-{appt.id}-{label}"
-                    if (
-                        user.email
-                        and bool(getattr(user, "email_reminders_enabled", False))
-                        and not _notification_already_sent(db, email_tag)
-                    ):
+                    profile = _load_profile_for_appointment_notifications(db, getattr(appt, "profile_id", None))
+                    family_alerts_enabled = True
+                    if profile:
+                        family_alerts_enabled = bool(
+                            _profile_automation_settings(profile).get("upcoming_appointment_alerts", True)
+                        )
+
+                    push_recipients = _appointment_notification_recipients(
+                        db,
+                        profile_id=getattr(appt, "profile_id", None),
+                        fallback_user_id=getattr(appt, "user_id", None),
+                        for_email=False,
+                    )
+                    email_recipients = _appointment_notification_recipients(
+                        db,
+                        profile_id=getattr(appt, "profile_id", None),
+                        fallback_user_id=getattr(appt, "user_id", None),
+                        for_email=True,
+                    )
+                    if not family_alerts_enabled:
+                        push_recipients = [item for item in push_recipients if item.get("is_owner")]
+                        email_recipients = [item for item in email_recipients if item.get("is_owner")]
+
+                    for recipient in push_recipients:
+                        recipient_user = recipient.get("user")
+                        recipient_user_id = int(recipient.get("user_id") or 0)
+                        if not recipient_user_id or not _user_allows_appointment_reminders(recipient_user):
+                            continue
+                        tag = f"appointment-{appt.id}-{label}-user-{recipient_user_id}"
+                        if _notification_already_sent(db, tag):
+                            continue
+                        ok = False
+                        if push_enabled:
+                            ok = bool(
+                                _send_push_to_user(
+                                    db,
+                                    recipient_user_id,
+                                    {
+                                        "title": title,
+                                        "body": body,
+                                        "url": "/appointments",
+                                        "priority": offset["priority"],
+                                        "sound": "appointment",
+                                        "appointmentId": appt.id,
+                                        "userId": recipient_user_id,
+                                        "tag": tag,
+                                    },
+                                )
+                            )
+                        if ok:
+                            _record_sent(db, recipient_user_id, tag, "appointment", trigger_at, now)
+                            metrics["push_sent"] += 1
+
+                    for recipient in email_recipients:
+                        recipient_user = recipient.get("user")
+                        recipient_user_id = int(recipient.get("user_id") or 0)
+                        if (
+                            not recipient_user
+                            or not recipient_user_id
+                            or not recipient.get("email")
+                            or not bool(getattr(recipient_user, "email_reminders_enabled", False))
+                            or not _user_allows_appointment_reminders(recipient_user)
+                        ):
+                            continue
+                        email_tag = f"appointment-email-{appt.id}-{label}-user-{recipient_user_id}"
+                        if _notification_already_sent(db, email_tag):
+                            continue
                         _send_appointment_reminder_email_safe(
-                            user.email,
-                            user.name or "",
+                            recipient["email"],
+                            recipient.get("name") or "",
                             {
+                                "patient_name": patient_name,
                                 "offset_label": label,
                                 "specialty": appt.specialty or appt.type,
                                 "center": center,
@@ -4518,7 +4862,7 @@ def _job_send_appointment_reminders(
                         )
                         _record_sent(
                             db,
-                            user_id,
+                            recipient_user_id,
                             email_tag,
                             "appointment_email",
                             trigger_at,
@@ -9919,6 +10263,7 @@ def _create_appointment_from_workflow(
             date_time_value = None
     appt = models.Appointment(
         user_id=target_user_id,
+        profile_id=int(getattr(profile, "id", 0) or 0) or None,
         type=models.AppointmentType(values.get("type") or models.AppointmentType.cita.value),
         specialty=(values.get("specialty") or "").strip(),
         center=(values.get("center") or "").strip(),
@@ -9928,21 +10273,12 @@ def _create_appointment_from_workflow(
         checklist=[],
     )
     db.add(appt)
+    db.flush()
+    refresh_episode_links_for_record(db, profile, "appointment", appt)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
-    if background_tasks is not None and current_user.email:
-        background_tasks.add_task(
-            _send_appointment_confirmation_email_safe,
-            current_user.email,
-            current_user.name or "",
-            {
-                "center": appt.center or "",
-                "specialty": appt.specialty or appt.type.value,
-                "date_label": appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente",
-                "notes": appt.notes or "",
-            },
-        )
+    _queue_appointment_creation_notifications(db, appt, background_tasks)
     return appt
 
 
@@ -21073,18 +21409,7 @@ async def create_appointment(
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(appt)
-    if current_user.email:
-        background_tasks.add_task(
-            _send_appointment_confirmation_email_safe,
-            current_user.email,
-            current_user.name or "",
-            {
-                "center": appt.center or "",
-                "specialty": appt.specialty or appt.type.value,
-                "date_label": appt.date_time.strftime("%d/%m/%Y %H:%M") if appt.date_time else "Pendiente",
-                "notes": appt.notes or "",
-            },
-        )
+    _queue_appointment_creation_notifications(db, appt, background_tasks, include_owner_push=False)
     # Push inmediato: confirmar que la cita fue agendada
     try:
         category = _appointment_type_label(appt.type)
