@@ -53,11 +53,14 @@ _rl_lock = threading.Lock()
 
 # máx intentos / ventana en segundos por endpoint
 _RATE_LIMITS: dict = {
-    "login":            {"max": 10, "window": 60},
-    "register":         {"max":  5, "window": 60},
-    "forgot-password":  {"max":  5, "window": 60},
-    "stepup-email":     {"max":  5, "window": 600},
-    "ai-transcribe":    {"max": 12, "window": 60},
+    "login":                {"max": 10, "window": 60},
+    "register":             {"max":  5, "window": 60},
+    "forgot-password":      {"max":  5, "window": 60},
+    "stepup-email":         {"max":  5, "window": 600},
+    "ai-transcribe":        {"max": 12, "window": 60},
+    "ai-chat":              {"max": 20, "window": 3600},        # 20 chats por hora
+    "ai-clinical-report":   {"max":  5, "window": 3600},        # 5 reportes por hora
+    "ai-health-radar":      {"max": 10, "window": 3600},        # 10 scans por hora
 }
 
 # Bloqueo de cuenta por intentos fallidos
@@ -7363,6 +7366,18 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-XSS-Protection"]         = "1; mode=block"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]        = "camera=(), microphone=(self), geolocation=()"
+    # Content-Security-Policy: bloquea XSS, solo permite recursos del mismo origen
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self' https://api.openai.com; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    )
     if is_production:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -17928,9 +17943,11 @@ def admin_intent_shadow_metrics(
 async def ai_chat(
     payload: schemas.AiChatRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _check_rate_limit(request, "ai-chat")
     total_started_at = time.perf_counter()
     message = (payload.message or "").strip()
     if not message:
@@ -21179,10 +21196,12 @@ async def get_ai_health_radar(
 
 @app.post("/ai/health-radar/run", response_model=List[schemas.HealthAlertOut])
 async def run_ai_health_radar(
+    request: Request,
     profile_id: int | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _check_rate_limit(request, "ai-health-radar")
     context = _requested_or_active_profile_context(
         db,
         current_user,
@@ -21237,10 +21256,12 @@ async def get_ai_document_intelligence(
 @app.post("/ai/reports/generate", response_model=schemas.ClinicalReportOut)
 async def generate_ai_clinical_report(
     payload: schemas.ClinicalReportRequest,
+    request: Request,
     profile_id: int | None = None,
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    _check_rate_limit(request, "ai-clinical-report")
     context = _requested_or_active_profile_context(db, current_user, profile_id)
     profile, _ = _get_profile_access_or_404(db, current_user, int(context["profile"]["id"]))
     report_payload = _build_clinical_report_payload(

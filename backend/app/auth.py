@@ -217,12 +217,16 @@ def verify_totp(stored_secret: str, code: str) -> bool:
     if not stored_secret:
         return False
     secret = decrypt_field(stored_secret)
+    if not secret or secret.startswith("enc:"):
+        print(f"ERROR: MFA secret descifrado falló. El secret puede estar corrupto o la clave de cifrado es incorrecta.")
+        return False
     try:
         import pyotp
         totp = pyotp.TOTP(secret)
         # valid_window=1 acepta el código anterior y el siguiente (30s cada ventana)
         return totp.verify(code.strip(), valid_window=1)
-    except Exception:
+    except Exception as e:
+        print(f"ERROR verificando TOTP: {e}")
         return False
 
 
@@ -287,13 +291,22 @@ def _get_fernet():
     if _FERNET is not None:
         return _FERNET
     if not FIELD_ENCRYPTION_KEY:
+        # En producción, FIELD_ENCRYPTION_KEY es obligatorio
+        if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"):
+            raise RuntimeError(
+                "FIELD_ENCRYPTION_KEY no está configurado en producción. "
+                "Los secretos de MFA DEBEN cifrarse. "
+                "Genera una clave con: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        # En desarrollo, permitir sin cifrado (pero avisar)
+        print("⚠️  ADVERTENCIA: FIELD_ENCRYPTION_KEY no configurado. MFA secrets se almacenan SIN cifrar (development only).")
         return None
     try:
         from cryptography.fernet import Fernet
         _FERNET = Fernet(FIELD_ENCRYPTION_KEY.encode() if isinstance(FIELD_ENCRYPTION_KEY, str) else FIELD_ENCRYPTION_KEY)
         return _FERNET
-    except Exception:
-        return None
+    except Exception as e:
+        raise RuntimeError(f"FIELD_ENCRYPTION_KEY inválido o corrupto: {e}")
 
 
 def encrypt_field(value: str) -> str:
