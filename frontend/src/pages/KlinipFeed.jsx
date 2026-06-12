@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
+import BrandLogo from "../components/BrandLogo";
 import {
   getFamilyFeed,
   createFeedPost,
@@ -1841,46 +1842,64 @@ export default function KlinipFeed({ user }) {
       ? "Sin alertas críticas."
       : "Activa tu equipo para coordinar el cuidado.";
   const feedClinicalPosts = posts.filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type));
+  const headerProfileName = primaryProfile?.full_name || user?.name || "Perfil activo";
+  const headerProfileMeta = primaryProfile?.relation_with_owner || "Grupo activo";
 
   return (
     <div className="kfeed-layout-wrapper">
       <div className="kfeed-page">
         <div className="kfeed-page-header">
+          <div className="kfeed-scene-topbar">
+            <BrandLogo
+              className="kfeed-scene-brand"
+              markClassName="kfeed-scene-brand-mark"
+              imgClassName="kfeed-scene-brand-img"
+              nameClassName="kfeed-scene-brand-name"
+            />
+            {profiles.length > 0 && (
+              <button
+                type="button"
+                className="kfeed-family-panel-btn"
+                onClick={() => setFamilySidebarOpen(true)}
+                title="Ver equipo"
+                aria-label="Abrir panel del equipo de cuidado"
+              >
+                <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
+              </button>
+            )}
+          </div>
+          <div className="kfeed-scene-profile-row">
+            <div className="kfeed-scene-profile">
+              <Avatar name={headerProfileName} size={40} avatarUrl={primaryProfile?.avatar_url || userAvatarUrl} />
+              <div className="kfeed-scene-profile-copy">
+                <strong>{headerProfileName}</strong>
+                <span>{headerProfileMeta}</span>
+              </div>
+            </div>
+            <Link className="kfeed-manage-link" to="/settings/familia">
+              Gestionar
+            </Link>
+          </div>
           <div className="kfeed-brand-row">
             <div className="kfeed-brand-copy">
               <p className="kfeed-section-kicker">Familia</p>
-              <h1 className="kfeed-page-title">Resumen familiar</h1>
-              <p className="kfeed-page-subtitle">{familySummary}</p>
-            </div>
-            <div className="kfeed-actions-right">
-              {profiles.length > 0 && (
-                <button
-                  type="button"
-                  className="kfeed-family-panel-btn"
-                  onClick={() => setFamilySidebarOpen(true)}
-                  title="Ver equipo"
-                  aria-label="Abrir panel del equipo de cuidado"
-                >
-                  <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
-                </button>
-              )}
-              <Link className="kfeed-manage-link" to="/settings/familia">
-                Gestionar
-              </Link>
+              <h1 className="kfeed-page-title">Familia</h1>
+              <p className="kfeed-page-subtitle">Cuidado compartido, con privacidad y control.</p>
+              <p className="kfeed-page-caption">{familySummary}</p>
             </div>
           </div>
           <section className="kfeed-care-overview" aria-label="Resumen del grupo familiar">
             <article className="kfeed-care-overview-item tone-red">
-              <span>Alertas</span>
+              <span>alertas</span>
               <strong>{activeAlertsTotal}</strong>
             </article>
             <article className="kfeed-care-overview-item tone-blue">
-              <span>Citas</span>
+              <span>citas</span>
               <strong>{upcomingAppointments}</strong>
             </article>
             <article className="kfeed-care-overview-item tone-teal">
-              <span>Equipo</span>
-              <strong>{careTeamTotal}</strong>
+              <span>integrantes</span>
+              <strong>{collaborativeProfiles}</strong>
             </article>
           </section>
         </div>
@@ -1917,7 +1936,7 @@ export default function KlinipFeed({ user }) {
             <div className="kfeed-care-panel-head">
               <h2 className="kfeed-section-title">Permisos</h2>
               <Link className="kfeed-inline-link" to="/settings/familia">
-                Ajustar
+                Gestionar
               </Link>
             </div>
             <div className="kfeed-permission-grid">

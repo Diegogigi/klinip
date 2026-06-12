@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
 import {
   getAppointments,
   getBiometricDashboard,
@@ -219,7 +220,6 @@ export default function MiSalud() {
     if (activeMeds.length === 0 && medications.length > 0)
       warnings.push("Todos los tratamientos finalizados");
   }
-
   /* ── render ── */
   if (loading) {
     return (
@@ -236,11 +236,22 @@ export default function MiSalud() {
     <div className="clp-page">
 
       {/* ═══ PATIENT HEADER ═══ */}
-      <header className="clp-patient">
+      <header className="clp-scene-header">
+        <div className="clp-scene-topbar">
+          <BrandLogo
+            className="clp-scene-brand"
+            markClassName="clp-scene-brand-mark"
+            imgClassName="clp-scene-brand-img"
+            nameClassName="clp-scene-brand-name"
+          />
+          <Link to="/documents" className="clp-scene-action" aria-label="Abrir documentos">
+            <IcoDoc />
+          </Link>
+        </div>
         <div className="clp-patient-icon"><IcoShield /></div>
         <div className="clp-patient-copy">
-          <p className="clp-patient-greet">Hola,</p>
-          <p className="clp-patient-name">{profile?.full_name || "Mi salud"}</p>
+          <p className="clp-patient-greet">{profile?.full_name || "Perfil activo"}</p>
+          <p className="clp-patient-name">Mi Salud</p>
           <p className="clp-patient-meta">
             {hasData
               ? `${appointments.length} citas · ${activeMeds.length} medicamentos · ${documents.length} documentos`
@@ -253,6 +264,29 @@ export default function MiSalud() {
           </span>
         )}
       </header>
+      <section className="clp-summary-strip" aria-label="Resumen rápido">
+        <article className="clp-summary-item">
+          <span className="clp-summary-icon"><IcoCal /></span>
+          <div>
+            <strong>{nextAppt ? 1 : 0}</strong>
+            <span>{nextAppt ? relativeDay(parseDate(nextAppt.date_time)) : "Sin cita"}</span>
+          </div>
+        </article>
+        <article className="clp-summary-item">
+          <span className="clp-summary-icon"><IcoPill /></span>
+          <div>
+            <strong>{activeMeds.length}</strong>
+            <span>medicamentos activos</span>
+          </div>
+        </article>
+        <article className="clp-summary-item">
+          <span className="clp-summary-icon"><IcoDoc /></span>
+          <div>
+            <strong>{documents.length}</strong>
+            <span>{documents.length === 1 ? "documento pendiente" : "documentos pendientes"}</span>
+          </div>
+        </article>
+      </section>
 
       {/* ═══ STATUS STRIP ═══ */}
       {warnings.length > 0 && (

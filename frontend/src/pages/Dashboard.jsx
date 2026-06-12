@@ -35,13 +35,14 @@ import {
   isMedicationFinished,
 } from "../utils/medicationSchedule";
 import { ensureArray } from "../utils/arrays";
+import BrandLogo from "../components/BrandLogo";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
 const typeLabels = {
   cita: "Cita",
   examen: "Examen",
-  tramite: "Trámite",
+  tramite: "TrÃ¡mite",
 };
 
 const kindToneMap = {
@@ -74,8 +75,8 @@ function toRelativeDayLabel(date) {
   const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.round((startDate - startNow) / 86400000);
   if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Mañana";
-  if (diffDays > 1) return `En ${diffDays} días`;
+  if (diffDays === 1) return "MaÃ±ana";
+  if (diffDays > 1) return `En ${diffDays} dÃ­as`;
   return "Reciente";
 }
 
@@ -122,9 +123,9 @@ function getAlertTone(severity) {
 
 function getAdherenceFriendlyValue(adherence, hasMedications) {
   if (!hasMedications) return "sin datos";
-  if (adherence >= 80) return `Muy bien · ${adherence}%`;
-  if (adherence >= 45) return `Regular · ${adherence}%`;
-  return `Bajo · ${adherence}%`;
+  if (adherence >= 80) return `Muy bien Â· ${adherence}%`;
+  if (adherence >= 45) return `Regular Â· ${adherence}%`;
+  return `Bajo Â· ${adherence}%`;
 }
 
 function clampPercent(value) {
@@ -269,7 +270,7 @@ const friendlyAlertTitleMap = {
   medication_running_out: "Medicamento por terminarse",
   low_adherence: "Tienes dosis sin tomar",
   missed_appointment_followup: "Tienes una cita sin confirmar",
-  missing_lab_result: "Faltan resultados de exámenes",
+  missing_lab_result: "Faltan resultados de exÃ¡menes",
   incomplete_treatment: "Tratamiento sin cerrar",
 };
 
@@ -280,15 +281,15 @@ function getFriendlyAlertTitle(alert) {
 
 const alertDetailMap = {
   medication_running_out:
-    "Tu medicamento está próximo a terminarse. Revisa si tienes stock suficiente para los próximos días. Si necesitas renovar la receta, agenda una consulta con tu médico antes de que se acabe.",
+    "Tu medicamento estÃ¡ prÃ³ximo a terminarse. Revisa si tienes stock suficiente para los prÃ³ximos dÃ­as. Si necesitas renovar la receta, agenda una consulta con tu mÃ©dico antes de que se acabe.",
   low_adherence:
-    "Estás tomando menos dosis de las que corresponden. Revisa tus recordatorios y asegúrate de que estén activos. Si tienes dificultades para seguir el tratamiento, coméntalo con tu médico.",
+    "EstÃ¡s tomando menos dosis de las que corresponden. Revisa tus recordatorios y asegÃºrate de que estÃ©n activos. Si tienes dificultades para seguir el tratamiento, comÃ©ntalo con tu mÃ©dico.",
   missed_appointment_followup:
-    "Tienes una cita registrada que no fue marcada como realizada. Si ya la realizaste, actualiza su estado en tu agenda. Si no fue así, considera reagendarla.",
+    "Tienes una cita registrada que no fue marcada como realizada. Si ya la realizaste, actualiza su estado en tu agenda. Si no fue asÃ­, considera reagendarla.",
   missing_lab_result:
-    "Hay órdenes médicas sin resultados asociados. Sube los documentos de tus exámenes para que queden registrados en tu historial clínico.",
+    "Hay Ã³rdenes mÃ©dicas sin resultados asociados. Sube los documentos de tus exÃ¡menes para que queden registrados en tu historial clÃ­nico.",
   incomplete_treatment:
-    "Un tratamiento pasó su fecha estimada de término y sigue marcado como activo. Revisa si aún lo estás tomando o si ya finalizó para actualizar tu historial.",
+    "Un tratamiento pasÃ³ su fecha estimada de tÃ©rmino y sigue marcado como activo. Revisa si aÃºn lo estÃ¡s tomando o si ya finalizÃ³ para actualizar tu historial.",
 };
 
 function getAlertDetail(alert) {
@@ -299,7 +300,7 @@ function getAlertDetail(alert) {
 const TYPE_LABELS_SAFE = {
   cita: "Cita",
   examen: "Examen",
-  tramite: "Trámite",
+  tramite: "TrÃ¡mite",
 };
 
 function toRelativeDayLabelSafe(date) {
@@ -309,8 +310,8 @@ function toRelativeDayLabelSafe(date) {
   const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.round((startDate - startNow) / 86400000);
   if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "Mañana";
-  if (diffDays > 1) return `En ${diffDays} días`;
+  if (diffDays === 1) return "MaÃ±ana";
+  if (diffDays > 1) return `En ${diffDays} dÃ­as`;
   return "Reciente";
 }
 
@@ -319,15 +320,15 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
   if (highAlerts.length > 0 || (activeMedications.length > 0 && adherence < 45)) {
     return {
       level: "alert",
-      title: "Necesita tu atención hoy",
-      message: "Revisa las alertas a continuación y toca cualquiera para recibir orientación de Klinip IA.",
+      title: "Necesita tu atenciÃ³n hoy",
+      message: "Revisa las alertas a continuaciÃ³n y toca cualquiera para recibir orientaciÃ³n de Klinip IA.",
     };
   }
   if (activeHealthAlerts.length > 0 || (activeMedications.length > 0 && adherence < 80)) {
     return {
       level: "warn",
       title: "Hay cosas para revisar",
-      message: "Toca cualquier alerta para ver qué hacer. Klinip IA puede ayudarte.",
+      message: "Toca cualquier alerta para ver quÃ© hacer. Klinip IA puede ayudarte.",
     };
   }
   if (activeMedications.length === 0) {
@@ -339,8 +340,8 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
   }
   return {
     level: "ok",
-    title: "¡Tu salud está al día!",
-    message: "No hay alertas activas y estás tomando tus medicamentos correctamente.",
+    title: "Â¡Tu salud estÃ¡ al dÃ­a!",
+    message: "No hay alertas activas y estÃ¡s tomando tus medicamentos correctamente.",
   };
 }
 
@@ -475,11 +476,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (activeMedications.length > 0 && adherence > 0) {
     if (adherence >= 80) {
-      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos a tiempo — ¡excelente seguimiento!`);
+      msgs.push(`Est?s tomando el ${adherence}% de tus medicamentos a tiempo - excelente seguimiento.`);
     } else if (adherence >= 50) {
-      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos. Puedes mejorar un poco más.`);
+      msgs.push(`EstÃ¡s tomando el ${adherence}% de tus medicamentos. Puedes mejorar un poco mÃ¡s.`);
     } else {
-      msgs.push(`Solo estás tomando el ${adherence}% de tus medicamentos. ¡No olvides tus dosis de hoy!`);
+      msgs.push(`Solo estÃ¡s tomando el ${adherence}% de tus medicamentos. Â¡No olvides tus dosis de hoy!`);
     }
   }
 
@@ -487,8 +488,8 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
     const apptDate = parseDate(nextAppointment.date_time);
     if (apptDate) {
       const rel = toRelativeDayLabel(apptDate);
-      const specialty = cleanUiText(nextAppointment.specialty || typeLabels[nextAppointment.type] || "Cita médica");
-      msgs.push(`Tienes una cita próxima: ${specialty} — ${rel}.`);
+      const specialty = cleanUiText(nextAppointment.specialty || typeLabels[nextAppointment.type] || "Cita mÃ©dica");
+      msgs.push(`Tienes una cita pr?xima: ${specialty} - ${rel}.`);
     }
   }
 
@@ -499,11 +500,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (lowAdherenceItems.length > 0) {
     const med = cleanUiText(lowAdherenceItems[0]?.name || "");
-    if (med) msgs.push(`${med} tiene dosis sin tomar. ¿Necesitas ajustar el recordatorio?`);
+    if (med) msgs.push(`${med} tiene dosis sin tomar. Â¿Necesitas ajustar el recordatorio?`);
   }
 
   if (pendingDocuments > 0) {
-    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisión.`);
+    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisiÃ³n.`);
   }
 
   if (activeMedications.length === 0) {
@@ -511,8 +512,8 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
   }
 
   if (msgs.length === 0) {
-    const timeGreet = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
-    msgs.push(`${timeGreet}, ${firstName}. Tu historial de salud está al día.`);
+    const timeGreet = hour < 12 ? "Buenos dÃ­as" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+    msgs.push(`${timeGreet}, ${firstName}. Tu historial de salud estÃ¡ al dÃ­a.`);
   }
 
   return msgs;
@@ -865,7 +866,7 @@ export default function Dashboard({
             nextAppointment.center || "",
           ]
             .filter(Boolean)
-            .join(" · "),
+            .join(" Â· "),
           "Revisa el detalle de tu agenda."
         ),
         urgent: nextAppointmentDate.toDateString() === new Date().toDateString(),
@@ -966,7 +967,7 @@ export default function Dashboard({
                 type="button"
                 className="adherence-guide-close"
                 onClick={() => setAdherenceGuideOpen(false)}
-                aria-label="Cerrar explicación del gráfico"
+                aria-label="Cerrar explicaciÃ³n del grÃ¡fico"
               >
                 x
               </button>
@@ -981,7 +982,7 @@ export default function Dashboard({
                   <span>{adherencePercentLabel}</span>
                 </div>
                 <div className="adherence-guide-copy">
-                  <h3 id="adherence-guide-title">Qué significa este gráfico</h3>
+                  <h3 id="adherence-guide-title">QuÃ© significa este grÃ¡fico</h3>
                   <p>{adherenceGuide.summary}</p>
                 </div>
               </div>
@@ -1055,7 +1056,7 @@ export default function Dashboard({
       label: "Citas",
       value: nextAppointment
         ? `${toRelativeDayLabel(parseDate(nextAppointment.date_time)).toLowerCase()}`
-        : "sin citas próximas",
+        : "sin citas prÃ³ximas",
       onClick: () => navigate("/appointments"),
     },
     {
@@ -1063,14 +1064,14 @@ export default function Dashboard({
       icon: "document",
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
-      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al día",
+      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al dÃ­a",
       onClick: () => navigate("/documents"),
     },
     {
       key: "adherence",
       icon: "adherence",
       tone: activeMedications.length > 0 ? getRadarToneFromAdherence(adherence) : "warn",
-      label: "¿Tomas a tiempo?",
+      label: "Â¿Tomas a tiempo?",
       value: getAdherenceFriendlyValue(adherence, activeMedications.length > 0),
       onClick: () => navigate("/medications"),
     },
@@ -1128,10 +1129,10 @@ export default function Dashboard({
       id: `biometric-${item.id}`,
       date: parseDate(item.measured_at || item.created_at),
       kind: "biometric",
-      title: "Biométrico registrado",
+      title: "BiomÃ©trico registrado",
       subtitle: cleanUiText(
-        `${getBiometricMetricConfig(item.metric_type).label} · ${formatBiometricValue(item)}`,
-        "Registro biométrico"
+        `${getBiometricMetricConfig(item.metric_type).label} Â· ${formatBiometricValue(item)}`,
+        "Registro biomÃ©trico"
       ),
       time: item.measured_at || item.created_at,
     })),
@@ -1202,7 +1203,7 @@ export default function Dashboard({
       if (!alert) {
         navigate("/ai", {
           state: {
-            autoPrompt: "Ayúdame a revisar mis alertas y pendientes de salud de hoy.",
+            autoPrompt: "AyÃºdame a revisar mis alertas y pendientes de salud de hoy.",
           },
         });
         return;
@@ -1211,7 +1212,7 @@ export default function Dashboard({
         state: {
           autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(
             getFriendlyAlertTitle(alert)
-          )}". ${cleanUiText(alert.description)} ¿Qué debo hacer hoy paso a paso?`,
+          )}". ${cleanUiText(alert.description)} Â¿QuÃ© debo hacer hoy paso a paso?`,
         },
       });
     },
@@ -1223,12 +1224,12 @@ export default function Dashboard({
   const topLowAdherenceItem = lowAdherenceItems[0] || null;
   const biometricsSummaryText = latestBiometricReading
     ? cleanUiText(
-        `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)} · ${formatBiometricMeasuredAt(
+        `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)} Â· ${formatBiometricMeasuredAt(
           latestBiometricReading.measured_at || latestBiometricReading.created_at
         )}`,
         "Revisa tu monitoreo reciente."
       )
-    : "Empieza a registrar glucosa, presión, frecuencia cardiaca o temperatura.";
+    : "Empieza a registrar glucosa, presiÃ³n, frecuencia cardiaca o temperatura.";
   const topHighAlertType = String(topHighAlert?.alert_type || "").toLowerCase();
   const highAlertHeroState =
     topHighAlertType === "low_adherence"
@@ -1259,7 +1260,7 @@ export default function Dashboard({
         title: cleanUiText(getFriendlyAlertTitle(topHighAlert)),
         message: cleanUiText(
           topHighAlert.description,
-          "Tienes una alerta clínica que conviene revisar hoy."
+          "Tienes una alerta clÃ­nica que conviene revisar hoy."
         ),
         actionLabel: "Revisar alerta",
         onAction: () => openAlertAssistant(topHighAlert),
@@ -1273,11 +1274,11 @@ export default function Dashboard({
           : "Conviene revisar tu adherencia",
         message: nextMedicationEvent?.urgent
           ? cleanUiText(
-              `${nextMedicationEvent.title}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
+              `${nextMedicationEvent.title}${nextMedicationEvent.meta ? ` Â· ${nextMedicationEvent.meta}` : ""}`,
               "Revisa tu dosis pendiente."
             )
           : cleanUiText(
-              `${topLowAdherenceItem?.name || "Un medicamento"} necesita más constancia esta semana.`,
+              `${topLowAdherenceItem?.name || "Un medicamento"} necesita mÃ¡s constancia esta semana.`,
               "Revisa tus recordatorios."
             ),
         actionLabel: "Tomar medicamento",
@@ -1286,15 +1287,15 @@ export default function Dashboard({
     : nextAppointment
     ? {
         tone: "warn",
-        badge: "Próxima cita",
-        title: "Tu siguiente cita ya está en agenda",
+        badge: "PrÃ³xima cita",
+        title: "Tu siguiente cita ya estÃ¡ en agenda",
         message: cleanUiText(
-          `${nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad"} · ${
-            toRelativeDayLabelSafe(parseDate(nextAppointment.date_time)) || "Próximamente"
+          `${nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad"} Â· ${
+            toRelativeDayLabelSafe(parseDate(nextAppointment.date_time)) || "PrÃ³ximamente"
           }`,
-          "Revisa el detalle de tu próxima cita."
+          "Revisa el detalle de tu prÃ³xima cita."
         ),
-        actionLabel: "Ver próxima cita",
+        actionLabel: "Ver prÃ³xima cita",
         onAction: openAppointmentFocus,
       }
     : pendingDocuments > 0
@@ -1304,17 +1305,17 @@ export default function Dashboard({
         title: "Tienes documentos por revisar",
         message: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} necesita${
           pendingDocuments > 1 ? "n" : ""
-        } tu atención.`,
+        } tu atenciÃ³n.`,
         actionLabel: "Subir documento",
         onAction: openDocumentsFocus,
       }
     : {
         tone: "ok",
         badge: "Todo en orden",
-        title: "Tu control diario está al día",
+        title: "Tu control diario estÃ¡ al dÃ­a",
         message: activeMedications.length
-          ? "No hay alertas críticas. Klinip dejó listos tus próximos pasos."
-          : "Activa tu seguimiento para empezar a ver recordatorios y prioridades clínicas.",
+          ? "No hay alertas crÃ­ticas. Klinip dejÃ³ listos tus prÃ³ximos pasos."
+          : "Activa tu seguimiento para empezar a ver recordatorios y prioridades clÃ­nicas.",
         actionLabel: activeMedications.length ? "Ver medicamentos" : "Agregar medicamento",
         onAction: openMedicationFocus,
       };
@@ -1349,7 +1350,7 @@ export default function Dashboard({
     },
     {
       id: "next",
-      label: nextAppointmentEvent ? "Próximo paso" : "Documentos",
+      label: nextAppointmentEvent ? "PrÃ³ximo paso" : "Documentos",
       value: nextAppointmentEvent
         ? toRelativeDayLabelSafe(nextAppointmentEvent.date) || "En agenda"
         : pendingDocuments > 0
@@ -1373,7 +1374,7 @@ export default function Dashboard({
           title: cleanUiText(getFriendlyAlertTitle(topAlert)),
           detail: cleanUiText(
             topAlert.description,
-            "Toca para ver qué hacer con Klinip IA."
+            "Toca para ver quÃ© hacer con Klinip IA."
           ),
           actionLabel: "Abrir IA",
           onClick: () => openAlertAssistant(topAlert),
@@ -1386,7 +1387,7 @@ export default function Dashboard({
           eyebrow: nextMedicationEvent.urgent ? "Dosis de hoy" : "Medicamento",
           title: cleanUiText(nextMedicationEvent.title),
           detail: cleanUiText(
-            `${toRelativeDayLabelSafe(nextMedicationEvent.date)}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
+            `${toRelativeDayLabelSafe(nextMedicationEvent.date)}${nextMedicationEvent.meta ? ` Â· ${nextMedicationEvent.meta}` : ""}`,
             "Revisa tu recordatorio."
           ),
           actionLabel: "Tomar medicamento",
@@ -1400,7 +1401,7 @@ export default function Dashboard({
           eyebrow: "Agenda",
           title: cleanUiText(nextAppointmentEvent.title),
           detail: cleanUiText(
-            `${toRelativeDayLabelSafe(nextAppointmentEvent.date)}${nextAppointmentEvent.meta ? ` · ${nextAppointmentEvent.meta}` : ""}`,
+            `${toRelativeDayLabelSafe(nextAppointmentEvent.date)}${nextAppointmentEvent.meta ? ` Â· ${nextAppointmentEvent.meta}` : ""}`,
             "Revisa el detalle de tu agenda."
           ),
           actionLabel: "Ver cita",
@@ -1439,10 +1440,10 @@ export default function Dashboard({
     {
       id: "appointment",
       icon: "appointment",
-      label: "Ver próxima cita",
+      label: "Ver prÃ³xima cita",
       subtitle: nextAppointmentEvent
         ? cleanUiText(nextAppointmentEvent.title, "Revisa tu agenda")
-        : "Agenda tu próximo control",
+        : "Agenda tu prÃ³ximo control",
       hint: nextAppointmentEvent ? toRelativeDayLabelSafe(nextAppointmentEvent.date) : "Sin cita",
       tone: "blue",
       onClick: openAppointmentFocus,
@@ -1454,7 +1455,7 @@ export default function Dashboard({
       subtitle:
         pendingDocuments > 0
           ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""} por revisar`
-          : "Guarda exámenes e informes",
+          : "Guarda exÃ¡menes e informes",
       hint: pendingDocuments > 0 ? "Pendiente" : "Nuevo",
       tone: "teal",
       onClick: openDocumentsFocus,
@@ -1462,13 +1463,13 @@ export default function Dashboard({
     {
       id: "biometric",
       icon: "biometric",
-      label: "Ver biométricos",
+      label: "Ver biomÃ©tricos",
       subtitle: latestBiometricReading
         ? cleanUiText(
-            `${latestBiometricMetric.label} · ${formatBiometricValue(latestBiometricReading)}`,
+            `${latestBiometricMetric.label} Â· ${formatBiometricValue(latestBiometricReading)}`,
             "Monitoreo activo"
           )
-        : "Activa tu monitoreo clínico",
+        : "Activa tu monitoreo clÃ­nico",
       hint: latestBiometricReading
         ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
         : "Nuevo",
@@ -1483,7 +1484,7 @@ export default function Dashboard({
   if (!futureAppointments.length) {
     suggestionItems.push({
       id: "suggestion-appointment",
-      text: "No tienes citas próximas registradas. Agenda tu próximo control.",
+      text: "No tienes citas prÃ³ximas registradas. Agenda tu prÃ³ximo control.",
     });
   }
   if (pendingDocuments > 0) {
@@ -1501,14 +1502,14 @@ export default function Dashboard({
   if (activeHealthAlerts.length) {
     suggestionItems.unshift({
       id: "suggestion-radar",
-      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
+      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. RevÃ­salas con Klinip IA.`,
     });
   }
 
   if (!biometricsMonitoringActive) {
     suggestionItems.push({
       id: "suggestion-biometric",
-      text: "Si estás controlando exámenes o signos frecuentes, activa el panel de biométricos para seguirlos en un solo lugar.",
+      text: "Si estÃ¡s controlando exÃ¡menes o signos frecuentes, activa el panel de biomÃ©tricos para seguirlos en un solo lugar.",
     });
   }
 
@@ -1623,7 +1624,7 @@ export default function Dashboard({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan Básico";
+      : "Plan BÃ¡sico";
   const quickNotesActionLabel = canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura";
   const openQuickNotesPanel = () => {
     if (composerOpen) {
@@ -1828,15 +1829,15 @@ export default function Dashboard({
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Notas rápidas"
+            aria-label="Notas rÃ¡pidas"
           >
             <button
               type="button"
               className="home-notes-dialog-close"
               onClick={closeNotesHub}
-              aria-label="Cerrar notas rápidas"
+              aria-label="Cerrar notas rÃ¡pidas"
             >
-              ×
+              x
             </button>
             {renderQuickNotesPanel("home-notes-dialog-card")}
           </div>
@@ -1849,7 +1850,7 @@ export default function Dashboard({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan Básico";
+      : "Plan BÃ¡sico";
 
   const renderAttentionContent = (itemClassName, tagClassName = "") =>
     attentionItems.length ? (
@@ -1881,7 +1882,7 @@ export default function Dashboard({
       ))
     ) : (
       <div className="home-empty-state">
-        Tu día está ordenado. Usa las acciones rápidas para registrar nuevos movimientos.
+        Tu dÃ­a estÃ¡ ordenado. Usa las acciones rÃ¡pidas para registrar nuevos movimientos.
       </div>
     );
 
@@ -1905,7 +1906,7 @@ export default function Dashboard({
   const newMobileHome = (() => {
     const greetingIntro =
       new Date().getHours() < 12
-        ? "Buenos días"
+        ? "Buenos dÃ­as"
         : new Date().getHours() < 18
         ? "Buenas tardes"
         : "Buenas noches";
@@ -2012,7 +2013,7 @@ export default function Dashboard({
                   <path d="M21 12H9" />
                 </svg>
               </span>
-              <span>Cerrar sesión</span>
+              <span>Cerrar sesiÃ³n</span>
             </button>
           </div>,
           document.getElementById("overlay-root") || document.body
@@ -2029,7 +2030,7 @@ export default function Dashboard({
                   <button
                     type="button"
                     className="mobile-hero-avatar"
-                    aria-label="Abrir menú de usuario"
+                    aria-label="Abrir menÃº de usuario"
                     aria-expanded={profileMenuOpen}
                     aria-haspopup="menu"
                     onClick={() => {
@@ -2146,7 +2147,7 @@ export default function Dashboard({
                       onClick={openAppointmentFocus}
                     >
                       <span className={`mobile-hero-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                        Próxima cita · {nextAppointmentHero.label}
+                        PrÃ³xima cita Â· {nextAppointmentHero.label}
                       </span>
                       <strong>{nextAppointmentHero.title}</strong>
                       <span>{nextAppointmentHero.detail}</span>
@@ -2192,7 +2193,7 @@ export default function Dashboard({
                   {displayHeroState.actionLabel}
                 </button>
                 <button type="button" className="home-mobile-notes-btn" onClick={openNotesHub}>
-                  Notas rápidas
+                  Notas rÃ¡pidas
                 </button>
               </div>
             </div>
@@ -2216,7 +2217,7 @@ export default function Dashboard({
 
             <div className="mobile-section native-section native-section-delay-1">
               <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Atención de hoy</h2>
+                <h2 className="mobile-section-title">AtenciÃ³n de hoy</h2>
                 <button type="button" className="mobile-section-link" onClick={() => openAlertAssistant(topAlert)}>
                   Abrir IA
                 </button>
@@ -2228,7 +2229,7 @@ export default function Dashboard({
 
             <div className="mobile-section native-section native-section-delay-2">
               <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Acciones rápidas</h2>
+                <h2 className="mobile-section-title">Acciones rÃ¡pidas</h2>
                 <button type="button" className="mobile-section-link" onClick={openNotesHub}>
                   Notas
                 </button>
@@ -2274,14 +2275,14 @@ export default function Dashboard({
     }
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Phase 0 → 1: after title finishes typing
+  // Phase 0 -> 1: after title finishes typing
   useEffect(() => {
     if (!titleTyper.done || greetPhase !== 0 || !greetStarted) return;
     const t = window.setTimeout(() => setGreetPhase(1), 350);
     return () => window.clearTimeout(t);
   }, [titleTyper.done, greetPhase, greetStarted]);
 
-  // Phase 1 → 2: after subtitle finishes typing
+  // Phase 1 -> 2: after subtitle finishes typing
   useEffect(() => {
     if (!subtitleTyper.done || greetPhase !== 1 || !contextMessages.length) return;
     const t = window.setTimeout(() => setGreetPhase(2), 900);
@@ -2305,731 +2306,8 @@ export default function Dashboard({
 
   if (isMobile) {
     return newMobileHome;
-    const isCompactLandscape = Boolean(
-      window.matchMedia?.("(pointer: coarse) and (orientation: landscape) and (max-height: 600px)").matches
-    );
-    const quickSlideBasis = isCompactLandscape ? "29%" : "46%";
-    const quickSlideRatio = isCompactLandscape ? "1 / 0.88" : "1 / 0.9";
-    const greetingIntro =
-      new Date().getHours() < 12
-        ? "Buenos días"
-        : new Date().getHours() < 18
-        ? "Buenas tardes"
-        : "Buenas noches";
-    const adherenceTone = overallStatus.level === "ok" || overallStatus.level === "neutral" ? "" : overallStatus.level === "warn" ? "is-warn" : "is-alert";
-    const adherenceBadgeLabel = overallStatus.level === "ok" ? "Todo al día" : overallStatus.level === "neutral" ? "Sin datos" : overallStatus.level === "warn" ? "Revisar" : "Atención";
-    const adherenceHelperText = activeMedications.length
-      ? adherence < 80
-        ? "Recuerda tomar tus medicamentos a tiempo."
-        : "Vas bien con tus medicamentos."
-      : "Registra tus medicamentos para activar el seguimiento.";
-    const assistantInsightTitle = activeHealthAlerts.length ? "Asistente de salud" : "Seguimiento inteligente";
-    const assistantInsightText = activeHealthAlerts.length
-      ? "Hay alertas importantes para revisar hoy."
-      : lowAdherenceItems.length
-      ? "Detectamos baja adherencia esta semana. ¿Necesitas ayuda?"
-      : "Tu información principal está ordenada para hoy.";
-
-    const mobileProfileMenu = profileMenuOpen
-      ? createPortal(
-      <div
-        ref={profileMenuOverlayRef}
-        className="topbar-user-menu mobile-hero-profile-overlay"
-        role="menu"
-        style={{
-          position: "fixed",
-          top: `${profileMenuStyle.top}px`,
-          left: `${profileMenuStyle.left}px`,
-          right: "auto",
-          width: `${profileMenuStyle.width}px`,
-        }}
-      >
-        <div className="topbar-user-menu-head">
-          <span className="topbar-user-menu-avatar">{userInitial}</span>
-          <div>
-            <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
-            <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
-          </div>
-        </div>
-        <div className="topbar-user-menu-profile-card">
-          <div className="topbar-user-menu-profile-head">
-            <span className="topbar-user-menu-profile-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="8" r="3.2" />
-                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-              </svg>
-            </span>
-            <span className="topbar-user-menu-plan">{planLabel}</span>
-          </div>
-          <p className="topbar-user-menu-profile-name">
-            {activeMenuProfile
-              ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
-              : user?.name || "Perfil personal"}
-          </p>
-          {canSwitchProfiles ? (
-            <select
-              className="topbar-user-menu-profile-select"
-              value={activeProfileId || ""}
-              onChange={(event) => onSwitchProfile?.(event.target.value)}
-              disabled={!!switchingProfile}
-            >
-              {safeMenuHealthProfiles.map((item) => (
-                <option value={item.id} key={item.id}>
-                  {item.full_name}
-                  {` (${getHealthProfileAccessLabel(item, user?.id)})`}
-                </option>
-              ))}
-            </select>
-          ) : null}
-        </div>
-        <div className="topbar-user-menu-actions">
-          <button
-            type="button"
-            className="topbar-user-menu-item"
-            role="menuitem"
-            onClick={() => {
-              setProfileMenuOpen(false);
-              navigate("/settings");
-            }}
-          >
-            <span className="topbar-user-menu-item-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="8" r="3.2" />
-                <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-              </svg>
-            </span>
-            <span>Mi perfil</span>
-          </button>
-          <button
-            type="button"
-            className="topbar-user-menu-item"
-            role="menuitem"
-          >
-            <span className="topbar-user-menu-item-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="4" />
-                <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-              </svg>
-            </span>
-            <span className="topbar-user-theme-text">
-              {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-            </span>
-            <label className="switch topbar-user-theme-switch">
-              <input
-                type="checkbox"
-                checked={theme === "dark"}
-                onChange={() => onToggleTheme?.()}
-              />
-              <span className="switch-slider" />
-            </label>
-          </button>
-        </div>
-        <div className="topbar-user-menu-divider" />
-        <button
-          type="button"
-          className="topbar-user-menu-item is-danger"
-          role="menuitem"
-          onClick={() => {
-            setProfileMenuOpen(false);
-            onLogout?.();
-          }}
-        >
-          <span className="topbar-user-menu-item-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <path d="M16 17l5-5-5-5" />
-              <path d="M21 12H9" />
-            </svg>
-          </span>
-          <span>Cerrar sesión</span>
-        </button>
-      </div>,
-      document.getElementById("overlay-root") || document.body
-    )
-      : null;
-
-    return (
-      <div className="mobile-dashboard native-mobile-scene">
-        {/* ── HERO ── */}
-        <div className="mobile-hero native-surface native-surface-hero">
-          <div className="mobile-hero-topbar">
-            <div className="mobile-hero-user">
-              <div className="topbar-user-wrap mobile-hero-avatar-wrap" ref={profileMenuRef}>
-                <button
-                  type="button"
-                  className="mobile-hero-avatar"
-                  aria-label="Abrir menú de usuario"
-                  aria-expanded={profileMenuOpen}
-                  aria-haspopup="menu"
-                  onClick={() => {
-                    setNotificationsOpen(false);
-                    setProfileMenuOpen((prev) => !prev);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <circle cx="12" cy="8" r="4"/>
-                    <path d="M6 20a6 6 0 0 1 12 0"/>
-                  </svg>
-                </button>
-                {mobileProfileMenu}
-              </div>
-              <div className="mobile-hero-user-info" data-greeting={greetingIntro}>
-                <p className="mobile-hero-greeting-sub">
-                  {(() => {
-                    const h = new Date().getHours();
-                    if (h < 12) return "Buenos días";
-                    if (h < 18) return "Buenas tardes";
-                    return "Buenas noches";
-                  })()}
-                </p>
-                <h1 className="mobile-hero-greeting-name">
-                  Hola, <em>{firstName}</em>
-                </h1>
-              </div>
-            </div>
-            <div className="mobile-hero-tools">
-              <div className="mobile-hero-notifications" ref={notificationsRef}>
-                <button
-                  type="button"
-                  className="mobile-hero-action-btn"
-                  aria-label="Ver notificaciones"
-                  aria-expanded={notificationsOpen}
-                  onClick={() => {
-                    setProfileMenuOpen(false);
-                    setNotificationsOpen((prev) => !prev);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  {notifications.length > 0 && (
-                    <span className="notification-badge">{notifications.length}</span>
-                  )}
-                </button>
-                {notificationsOpen && (
-                  <div className="notifications-dropdown">
-                    <div className="notifications-header">
-                      <span className="notifications-heading">Notificaciones</span>
-                      {notifications.length > 0 && (
-                        <button
-                          className="secondary-btn notifications-clear-btn"
-                          type="button"
-                          onClick={() => {
-                            onClearNotifications?.();
-                            setNotificationsOpen(false);
-                          }}
-                        >
-                          Limpiar
-                        </button>
-                      )}
-                    </div>
-                    {notifications.length ? (
-                      <ul className="notifications-list">
-                        {notifications.slice(0, 6).map((item) => (
-                          <li
-                            key={item.id}
-                            className="notifications-item"
-                            onClick={() => {
-                              onOpenNotification?.(item);
-                              setNotificationsOpen(false);
-                            }}
-                          >
-                            <div className="notifications-title">{item.title || "Recordatorio"}</div>
-                            <div className="notifications-body">{item.body || ""}</div>
-                            <div className="notifications-meta">
-                              {item.timestamp ? new Date(item.timestamp).toLocaleString() : ""}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <div className="notifications-empty">Sin notificaciones recientes</div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="topbar-user-wrap mobile-hero-user-wrap" aria-hidden="true" style={{ display: "none" }}>
-                <button
-                  type="button"
-                  className="mobile-hero-profile-chip"
-                  aria-label="Abrir menú de usuario"
-                  aria-expanded={profileMenuOpen}
-                  aria-haspopup="menu"
-                  onClick={() => {
-                    setNotificationsOpen(false);
-                    setProfileMenuOpen((prev) => !prev);
-                  }}
-                >
-                  <span className="mobile-hero-profile-initial">{userInitial}</span>
-                </button>
-                {profileMenuOpen && (
-                  <div className="topbar-user-menu" role="menu">
-                    <div className="topbar-user-menu-head">
-                      <span className="topbar-user-menu-avatar">{userInitial}</span>
-                      <div>
-                        <p className="topbar-user-menu-name">{user?.name || "Invitado"}</p>
-                        <p className="topbar-user-menu-email">{user?.email || "sin-correo"}</p>
-                      </div>
-                    </div>
-                    <div className="topbar-user-menu-profile-card">
-                      <div className="topbar-user-menu-profile-head">
-                        <span className="topbar-user-menu-profile-icon" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <circle cx="12" cy="8" r="3.2" />
-                            <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-                          </svg>
-                        </span>
-                        <span className="topbar-user-menu-plan">{planLabel}</span>
-                      </div>
-                      <p className="topbar-user-menu-profile-name">
-                        {activeMenuProfile
-                          ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
-                          : user?.name || "Perfil personal"}
-                      </p>
-                      {canSwitchProfiles ? (
-                        <select
-                          className="topbar-user-menu-profile-select"
-                          value={activeProfileId || ""}
-                          onChange={(event) => onSwitchProfile?.(event.target.value)}
-                          disabled={!!switchingProfile}
-                        >
-                          {menuHealthProfiles.map((item) => (
-                            <option value={item.id} key={item.id}>
-                              {item.full_name}
-                              {` (${getHealthProfileAccessLabel(item, user?.id)})`}
-                            </option>
-                          ))}
-                        </select>
-                      ) : null}
-                    </div>
-                    <div className="topbar-user-menu-actions">
-                      <button
-                        type="button"
-                        className="topbar-user-menu-item"
-                        role="menuitem"
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          navigate("/settings");
-                        }}
-                      >
-                        <span className="topbar-user-menu-item-icon" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <circle cx="12" cy="8" r="3.2" />
-                            <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
-                          </svg>
-                        </span>
-                        <span>Mi perfil</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="topbar-user-menu-item"
-                        role="menuitem"
-                      >
-                        <span className="topbar-user-menu-item-icon" aria-hidden="true">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                            <circle cx="12" cy="12" r="4" />
-                            <path d="M12 2v2.5M12 19.5V22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M2 12h2.5M19.5 12H22M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
-                          </svg>
-                        </span>
-                        <span className="topbar-user-theme-text">
-                          {theme === "dark" ? "Modo oscuro" : "Modo claro"}
-                        </span>
-                        <label className="switch topbar-user-theme-switch">
-                          <input
-                            type="checkbox"
-                            checked={theme === "dark"}
-                            onChange={() => onToggleTheme?.()}
-                          />
-                          <span className="switch-slider" />
-                        </label>
-                      </button>
-                    </div>
-                    <div className="topbar-user-menu-divider" />
-                    <button
-                      type="button"
-                      className="topbar-user-menu-item is-danger"
-                      role="menuitem"
-                      onClick={() => {
-                        setProfileMenuOpen(false);
-                        onLogout?.();
-                      }}
-                    >
-                      <span className="topbar-user-menu-item-icon" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                          <path d="M16 17l5-5-5-5" />
-                          <path d="M21 12H9" />
-                        </svg>
-                      </span>
-                      <span>Cerrar sesión</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="mobile-hero-greeting" style={{ display: "none" }}></div>
-
-          <div className="mobile-hero-health-card">
-            <div className="mobile-hero-stat-label">
-              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-              Adherencia de medicamentos
-            </div>
-            <div className="mobile-hero-health-main">
-              <div>
-                <div className="mobile-hero-stat-row">
-                  <span className="mobile-hero-stat-value">
-                    {adherencePercentLabel}
-                  </span>
-                  <span className={`mobile-hero-stat-badge ${adherenceTone}`}>
-                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      {overallStatus.level === "ok" || overallStatus.level === "neutral" ? (
-                        <polyline points="20 6 9 17 4 12"/>
-                      ) : (
-                        <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
-                      )}
-                    </svg>
-                    {adherenceBadgeLabel}
-                  </span>
-                </div>
-                <div className="mobile-hero-badges">
-                  <span className="mobile-hero-profile-badge">
-                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="8" r="3"/>
-                      <path d="M6 19.5a6 6 0 0 1 12 0"/>
-                    </svg>
-                    {activeProfileName}
-                  </span>
-                  {nextAppointment && (
-                    <span className="mobile-hero-profile-badge">
-                      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="4" width="18" height="18" rx="2"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                      </svg>
-                      {toRelativeDayLabel(parseDate(nextAppointment.date_time))}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div className="mobile-hero-progress-wrap">
-                <button
-                  type="button"
-                  className="mobile-hero-progress"
-                  style={{ "--health-progress": `${adherenceRingProgress}%` }}
-                  aria-label={`${adherenceRingTitle} ${adherencePercentLabel}. Presiona para ver el detalle.`}
-                  title="Presiona el aro para ver el detalle"
-                  onClick={openAdherenceGuide}
-                >
-                  <span className="adherence-ring-marker" aria-hidden="true" />
-                  <span>{adherencePercentLabel}</span>
-                </button>
-                <span className="mobile-hero-progress-title">{adherenceRingTitle}</span>
-                <span className="mobile-hero-progress-hint">Ver detalle</span>
-              </div>
-            </div>
-            <div className="mobile-hero-health-footer">
-              <p className="mobile-hero-health-copy">{adherenceHelperText}</p>
-              <button
-                type="button"
-                className="mobile-hero-recommendation-btn"
-                onClick={() =>
-                  navigate("/ai", {
-                    state: {
-                      autoPrompt: "Ayúdame a revisar mi adherencia de medicamentos y dime qué debo hacer hoy.",
-                    },
-                  })
-                }
-              >
-                Ver recomendación
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── ACTION BAR ── */}
-        <div className="mobile-action-bar">
-          <button type="button" className="mobile-action-btn" onClick={() => navigate("/appointments")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <rect x="3" y="4" width="18" height="18" rx="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            Agenda
-          </button>
-          <button type="button" className="mobile-action-btn is-center" onClick={() => navigate("/ai")} aria-label="Asistente">
-            <span className="mobile-ai-k">K</span>
-            <span className="mobile-ai-label">IA</span>
-          </button>
-          <button type="button" className="mobile-action-btn" onClick={() => navigate("/medications")}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-              <g transform="rotate(-35 12 12)">
-                <rect x="5" y="8" width="14" height="8" rx="4"/>
-                <path d="M12 8v8"/>
-              </g>
-            </svg>
-            Medicamentos
-          </button>
-        </div>
-
-        {/* ── WHITE SHEET ── */}
-        <div className="mobile-sheet">
-          <div className="mobile-sheet-handle" />
-
-          <button
-            type="button"
-            className="mobile-intelligence-card native-section native-section-delay-1"
-            onClick={() =>
-              navigate("/ai", {
-                state: {
-                  autoPrompt: "Ayúdame a revisar mis alertas y pendientes de salud de hoy.",
-                },
-              })
-            }
-          >
-            <span className="mobile-intelligence-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z" />
-                <path d="M19 14l.9 2.1L22 17l-2.1.9L19 20l-.9-2.1L16 17l2.1-.9L19 14z" />
-                <path d="M5 15l.8 1.7L7.5 17.5l-1.7.8L5 20l-.8-1.7-1.7-.8 1.7-.8L5 15z" />
-              </svg>
-            </span>
-            <span className="mobile-intelligence-copy">
-              <strong>{assistantInsightTitle}</strong>
-              <small>{assistantInsightText}</small>
-            </span>
-            <span className="mobile-intelligence-cta">Actualizar</span>
-          </button>
-
-          {/* Acceso rápido */}
-          <div className="mobile-section native-section native-section-delay-2">
-            <div className="mobile-section-header">
-              <h2 className="mobile-section-title">Acceso rápido</h2>
-              <span className="mobile-quick-counter">
-                {activeQuickActionIndex + 1}/{mobileQuickActions.length}
-              </span>
-            </div>
-            <div
-              ref={quickCarouselRef}
-              className="mobile-quick-carousel"
-              onScroll={(event) => syncQuickCarouselIndex(event.currentTarget)}
-              style={{
-                display: "flex",
-                flexWrap: "nowrap",
-                alignItems: "stretch",
-                overflowX: "auto",
-                overflowY: "hidden",
-                gap: "0.55rem",
-                scrollSnapType: "x mandatory",
-                WebkitOverflowScrolling: "touch",
-              }}
-            >
-              {mobileQuickActions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`mobile-quick-item mobile-quick-slide tone-${item.tone}${item.featured ? " is-featured is-glow" : ""}${item.spotlight ? " is-spotlight" : ""}`}
-                  onClick={item.onClick}
-                  style={{
-                    flex: `0 0 ${quickSlideBasis}`,
-                    maxWidth: quickSlideBasis,
-                    aspectRatio: quickSlideRatio,
-                  }}
-                >
-                  <span className="mobile-quick-icon">{renderIcon(item.icon)}</span>
-                  <p className="mobile-quick-label">{item.label}</p>
-                  {item.highlight ? (
-                    <span className="mobile-quick-highlight">{item.highlight}</span>
-                  ) : null}
-                  <p className="mobile-quick-sub">{item.subtitle}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mobile-section native-section native-section-delay-2">
-            <div className="mobile-section-header">
-              <h2 className="mobile-section-title">Biométricos</h2>
-              <button type="button" className="mobile-section-link" onClick={openBiometricsFocus}>
-                Ver panel
-              </button>
-            </div>
-            <button type="button" className="mobile-biometrics-card" onClick={openBiometricsFocus}>
-              <span className={`mobile-biometrics-icon tone-${latestBiometricConfig.tone || "violet"}`}>
-                {renderIcon("biometric")}
-              </span>
-              <span className="mobile-biometrics-copy">
-                <strong>
-                  {latestBiometricReading
-                    ? `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)}`
-                    : "Comienza tu monitoreo"}
-                </strong>
-                <small>{biometricsSummaryText}</small>
-              </span>
-              <span className="mobile-biometrics-badge">
-                {activeBiometricMetricsCount > 0
-                  ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
-                  : "Nuevo"}
-              </span>
-            </button>
-          </div>
-
-          <div className="mobile-section native-section native-section-delay-3">
-            {renderQuickNotesPanel("mobile-note-card")}
-          </div>
-
-          {/* Alertas de salud */}
-          {activeHealthAlerts.length > 0 && (
-            <div className="mobile-section native-section native-section-delay-3">
-              <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Alertas de salud</h2>
-                <button type="button" className="mobile-section-link" onClick={() => navigate("/ai")}>
-                  Abrir IA
-                </button>
-              </div>
-              {activeHealthAlerts.slice(0, 2).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`mobile-activity-item ${item.severity === "high" ? "is-critical" : "is-elevated"}`}
-                  onClick={() => navigate("/ai")}
-                  style={{ borderLeft: `3px solid ${item.severity === "high" ? "#ef4444" : "#f59e0b"}` }}
-                >
-                  <span
-                    className="mobile-activity-icon"
-                    style={{
-                      background: item.severity === "high" ? "#fef2f2" : "#fffbeb",
-                      color: item.severity === "high" ? "#ef4444" : "#d97706",
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M12 9v4m0 4h.01M12 3L2 21h20L12 3z"/>
-                    </svg>
-                  </span>
-                  <div className="mobile-activity-info">
-                    <p className="mobile-activity-title">{getFriendlyAlertTitle(item)}</p>
-                    <p className="mobile-activity-sub">Toca para orientación con Klinip IA</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Próxima actividad */}
-          {upcomingEvents.length > 0 && (
-            <div className="mobile-section native-section native-section-delay-3">
-              <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Próxima actividad</h2>
-                <button type="button" className="mobile-section-link" onClick={() => navigate("/calendar")}>
-                  Ver todo
-                </button>
-              </div>
-              {upcomingEvents.slice(0, 3).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`mobile-activity-item ${item.urgent ? "is-critical" : "is-elevated"}`}
-                  onClick={() => navigate(item.kind === "medication" ? "/medications" : "/appointments")}
-                >
-                  <span className={`mobile-activity-icon tone-${item.kind === "medication" ? "amber" : item.kind === "exam" ? "teal" : "blue"}`}>
-                    {item.kind === "medication" ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <g transform="rotate(-35 12 12)">
-                          <rect x="5" y="8" width="14" height="8" rx="4"/>
-                          <path d="M12 8v8"/>
-                        </g>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                      </svg>
-                    )}
-                  </span>
-                  <div className="mobile-activity-info">
-                    <p className="mobile-activity-title">{item.title}</p>
-                    <p className="mobile-activity-sub">
-                      {item.urgent ? "Hoy" : toDayLabel(item.date)}{item.meta ? ` · ${item.meta}` : ""}
-                    </p>
-                  </div>
-                  <span className={`mobile-activity-tag tone-${item.kind === "medication" ? "amber" : "blue"}`}>
-                    {item.urgent ? "HOY" : item.tag}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Actividad reciente */}
-          {recentActivity.length > 0 && (
-            <div className="mobile-section native-section native-section-delay-4">
-              <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Actividad reciente</h2>
-                <button type="button" className="mobile-section-link" onClick={() => navigate("/timeline")}>
-                  Ver todo
-                </button>
-              </div>
-              {recentActivity.slice(0, 3).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="mobile-activity-item"
-                  onClick={() => navigate(
-                    item.kind === "document" ? "/documents" :
-                    item.kind === "medication" ? "/medications" :
-                    item.kind === "biometric" ? "/mi-salud/biometricos" : "/appointments"
-                  )}
-                >
-                  <span className={`mobile-activity-icon tone-${item.kind === "document" ? "teal" : item.kind === "medication" ? "amber" : item.kind === "biometric" ? "violet" : "blue"}`}>
-                    {item.kind === "document" ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                    ) : item.kind === "biometric" ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <polyline points="2 12 6.5 12 9 7 13.5 18 16 12 22 12" />
-                      </svg>
-                    ) : item.kind === "medication" ? (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <g transform="rotate(-35 12 12)">
-                          <rect x="5" y="8" width="14" height="8" rx="4"/>
-                          <path d="M12 8v8"/>
-                        </g>
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2"/>
-                        <line x1="16" y1="2" x2="16" y2="6"/>
-                        <line x1="8" y1="2" x2="8" y2="6"/>
-                        <line x1="3" y1="10" x2="21" y2="10"/>
-                      </svg>
-                    )}
-                  </span>
-                  <div className="mobile-activity-info">
-                    <p className="mobile-activity-title">{item.title}</p>
-                    <p className="mobile-activity-sub">{item.subtitle}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {upcomingEvents.length === 0 && recentActivity.length === 0 && !loading && (
-            <div className="mobile-empty-state">
-              Registra citas y medicamentos para ver tu actividad aquí.
-            </div>
-          )}
-        </div>
-      </div>
-    );
   }
+
 
   return (
     <>
@@ -3057,7 +2335,7 @@ export default function Dashboard({
                     onClick={openAppointmentFocus}
                   >
                     <span className={`home-clinical-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                      Próxima cita · {nextAppointmentHero.label}
+                      PrÃ³xima cita Â· {nextAppointmentHero.label}
                     </span>
                     <strong>{nextAppointmentHero.title}</strong>
                     <span>{nextAppointmentHero.detail}</span>
@@ -3068,7 +2346,7 @@ export default function Dashboard({
                     {displayHeroState.actionLabel}
                   </button>
                   <button type="button" className="home-panel-link home-clinical-secondary" onClick={openNotesHub}>
-                    Notas rápidas
+                    Notas rÃ¡pidas
                   </button>
                 </div>
               </div>
@@ -3131,7 +2409,7 @@ export default function Dashboard({
             <article className="home-panel-card home-attention-card">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">Atención de hoy</h2>
+                  <h2 className="home-panel-title">AtenciÃ³n de hoy</h2>
                   <p className="home-panel-subtitle">Lo que realmente importa resolver primero.</p>
                 </div>
                 <button type="button" className="home-panel-link" onClick={() => openAlertAssistant(topAlert)}>
@@ -3148,8 +2426,8 @@ export default function Dashboard({
             <article className="home-panel-card home-actions-card home-actions-card-compact">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">Acciones rápidas</h2>
-                  <p className="home-panel-subtitle">Tres atajos para resolver tu día de salud.</p>
+                  <h2 className="home-panel-title">Acciones rÃ¡pidas</h2>
+                  <p className="home-panel-subtitle">Tres atajos para resolver tu dÃ­a de salud.</p>
                 </div>
                 <button type="button" className="home-panel-link home-notes-trigger" onClick={openNotesHub}>
                   Abrir notas
@@ -3240,7 +2518,7 @@ export default function Dashboard({
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Voz</h2>
-                <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
+                <p className="home-panel-subtitle">Graba tu prÃ³xima consulta mÃ©dica.</p>
               </div>
             </div>
             <div className="voice-body">
@@ -3258,7 +2536,7 @@ export default function Dashboard({
                     <path d="M9.5 20.5h5" />
                   </svg>
                 </span>
-                <span className="home-voice-btn-label">Iniciar grabación</span>
+                <span className="home-voice-btn-label">Iniciar grabaciÃ³n</span>
               </button>
             </div>
           </article>
@@ -3331,12 +2609,12 @@ export default function Dashboard({
                         <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
                         <span>{cleanUiText(item.description)}</span>
                         <span className="home-radar-alert-nav">
-                          {expandedAlertId === item.id ? "Presiona para cerrar" : "Presiona aquí para ver qué hacer"}
+                          {expandedAlertId === item.id ? "Presiona para cerrar" : "Presiona aquÃ­ para ver quÃ© hacer"}
                         </span>
                       </button>
                       {expandedAlertId === item.id ? (
                         <div className="home-radar-alert-detail">
-                          <strong>¿Qué puedo hacer?</strong>
+                          <strong>Â¿QuÃ© puedo hacer?</strong>
                           <p>{cleanUiText(getAlertDetail(item))}</p>
                           <button
                             type="button"
@@ -3345,7 +2623,7 @@ export default function Dashboard({
                               e.stopPropagation();
                               navigate("/ai", {
                                 state: {
-                                  autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(getFriendlyAlertTitle(item))}". ${cleanUiText(item.description)} ¿Qué debo hacer paso a paso?`,
+                                  autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(getFriendlyAlertTitle(item))}". ${cleanUiText(item.description)} Â¿QuÃ© debo hacer paso a paso?`,
                                 },
                               });
                             }}
@@ -3357,12 +2635,12 @@ export default function Dashboard({
                     </React.Fragment>
                   ))
                 ) : (
-                  <div className="home-empty-state">No hay alertas activas. ¡Tu salud está al día!</div>
+                  <div className="home-empty-state">No hay alertas activas. Â¡Tu salud estÃ¡ al dÃ­a!</div>
                 )}
               </div>
               {lowAdherenceItems.length ? (
                 <div className="home-radar-pattern">
-                  <strong>Estos medicamentos necesitan atención</strong>
+                  <strong>Estos medicamentos necesitan atenciÃ³n</strong>
                   <span>
                     {cleanUiText(
                       lowAdherenceItems
@@ -3468,8 +2746,8 @@ export default function Dashboard({
             <article className="home-panel-card home-biometrics-card">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">Biométricos</h2>
-                  <p className="home-panel-subtitle">Resumen permanente de tu monitoreo clínico.</p>
+                  <h2 className="home-panel-title">BiomÃ©tricos</h2>
+                  <p className="home-panel-subtitle">Resumen permanente de tu monitoreo clÃ­nico.</p>
                 </div>
                 <button type="button" className="home-panel-link" onClick={openBiometricsFocus}>
                   Ver panel
@@ -3507,7 +2785,7 @@ export default function Dashboard({
                 })}
                 {!biometricMetrics.some((item) => item.readings_count > 0) ? (
                   <div className="home-empty-state">
-                    Registra glucosa, presión, frecuencia cardiaca o temperatura para ver tu evolución aquí.
+                    Registra glucosa, presiÃ³n, frecuencia cardiaca o temperatura para ver tu evoluciÃ³n aquÃ­.
                   </div>
                 ) : null}
               </div>

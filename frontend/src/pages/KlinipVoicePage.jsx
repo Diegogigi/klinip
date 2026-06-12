@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
 import {
   deleteVoiceSession,
   getActiveHealthProfile,
@@ -778,12 +779,31 @@ export default function KlinipVoicePage() {
         />
       )}
 
+      <div className="vp2-scene-topbar">
+        <BrandLogo
+          className="vp2-scene-brand"
+          markClassName="vp2-scene-brand-mark"
+          imgClassName="vp2-scene-brand-img"
+          nameClassName="vp2-scene-brand-name"
+        />
+        <button
+          type="button"
+          className="vp2-scene-action"
+          onClick={() => setLibraryTab((current) => (current === "mine" ? "shared" : "mine"))}
+          aria-label={libraryTab === "mine" ? "Abrir sesiones compartidas" : "Abrir mis grabaciones"}
+        >
+          {libraryTab === "mine" ? <ShareSmallIcon /> : <EyeIcon />}
+        </button>
+      </div>
+
       <div className="vp2-section-intro">
         <span className="vp2-eyebrow">
           <span className="vp2-eyebrow-dot" />
-          AI-powered · Clinical Voice
+          Consulta por voz
         </span>
-        <p className="vp2-section-sub">Consultas grabadas · {profileName}</p>
+        <p className="vp2-section-sub">Consultas grabadas - {profileName}</p>
+        <h1 className="vp2-scene-title">Voz</h1>
+        <p className="vp2-scene-subtitle">Graba, entiende y guarda tu consulta.</p>
       </div>
 
       <div className="vp2-actions-row">

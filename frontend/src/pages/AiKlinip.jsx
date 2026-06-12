@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
 import {
   getActiveHealthProfile,
   generateAiClinicalReport,
@@ -1410,16 +1411,6 @@ export default function AiKlinip() {
     setTimeout(() => inputFieldRef.current?.focus(), 50);
   };
 
-  const handleBackNavigation = () => {
-    setMobilePanelOpen(false);
-    setOpenConversationMenuId("");
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/");
-  };
-
   const renderClinicalSnapshot = (compact = false) => {
     const apptAction = nextAppointment?.status === "pendiente"
       ? { label: "Confirmar", onClick: () => handleConfirmAppointmentFromAssistant(nextAppointment) }
@@ -1573,20 +1564,16 @@ export default function AiKlinip() {
           <div className="ai-copilot-stage" ref={stageRef}>
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-main">
-                <button
-                  type="button"
-                  className="klinip-back-btn ai-mobile-back-btn"
-                  onClick={handleBackNavigation}
-                  aria-label="Volver a la vista anterior"
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m15 18-6-6 6-6" />
-                  </svg>
-                </button>
+                <BrandLogo
+                  className="ai-scene-brand"
+                  markClassName="ai-scene-brand-mark"
+                  imgClassName="ai-scene-brand-img"
+                  nameClassName="ai-scene-brand-name"
+                />
                 <div className="ai-mobile-topbar-copy">
-                  <span>Asistente</span>
-                  <strong>Klinip IA</strong>
-                  <small>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</small>
+                  <span>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</span>
+                  <strong>Asistente</strong>
+                  <small>Klinip IA</small>
                 </div>
               </div>
               <button
@@ -1603,9 +1590,9 @@ export default function AiKlinip() {
             {!hasConversation ? (
               <div className="ai-landing">
                 <div className="ai-landing-center">
-                  <h2 className="ai-landing-title">Tu asistente clínico del día</h2>
+                  <h2 className="ai-landing-title">Asistente</h2>
                   <p className="ai-landing-subtitle">
-                    Antes de escribir ya tengo contexto de tu agenda, tratamientos, alertas y memoria clínica para responder mejor.
+                    Tu apoyo de salud, claro y contextual.
                   </p>
                   <div className="ai-landing-safe">
                     <span className="ai-safe-dot" />
@@ -1625,7 +1612,7 @@ export default function AiKlinip() {
                 </div>
 
                 <section className="ai-quick-section">
-                  <p className="ai-section-kicker">Acciones rápidas</p>
+                  <p className="ai-section-kicker">Acciones sugeridas</p>
                   <div className="ai-quick-grid">
                     {QUICK_ACTIONS.map((item) => (
                       <button key={item.id} type="button" className="ai-quick-card" onClick={() => submitPrompt(item.prompt)}>
