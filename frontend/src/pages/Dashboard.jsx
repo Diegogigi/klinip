@@ -75,8 +75,8 @@ function toRelativeDayLabel(date) {
   const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.round((startDate - startNow) / 86400000);
   if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "MaÃ±ana";
-  if (diffDays > 1) return `En ${diffDays} dÃ­as`;
+  if (diffDays === 1) return "Mañana";
+  if (diffDays > 1) return `En ${diffDays} días`;
   return "Reciente";
 }
 
@@ -1829,13 +1829,13 @@ export default function Dashboard({
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label="Notas rÃ¡pidas"
+            aria-label="Notas rápidas"
           >
             <button
               type="button"
               className="home-notes-dialog-close"
               onClick={closeNotesHub}
-              aria-label="Cerrar notas rÃ¡pidas"
+              aria-label="Cerrar notas rápidas"
             >
               x
             </button>
@@ -1863,26 +1863,26 @@ export default function Dashboard({
         >
           <span className={`home-attention-icon tone-${item.tone}`}>
             {renderIcon(
-              item.eyebrow === "Documentos"
+              cleanUiText(item.eyebrow) === "Documentos"
                 ? "document"
-                : item.eyebrow === "Agenda"
+                : cleanUiText(item.eyebrow) === "Agenda"
                 ? "appointment"
-                : item.eyebrow === "Medicamento" || item.eyebrow === "Dosis de hoy"
+                : cleanUiText(item.eyebrow) === "Medicamento" || cleanUiText(item.eyebrow) === "Dosis de hoy"
                 ? "medication"
                 : "ai"
             )}
           </span>
           <span className="home-attention-copy">
-            <small className="home-attention-eyebrow">{item.eyebrow}</small>
-            <strong>{item.title}</strong>
-            <span>{item.detail}</span>
+            <small className="home-attention-eyebrow">{cleanUiText(item.eyebrow)}</small>
+            <strong>{cleanUiText(item.title)}</strong>
+            <span>{cleanUiText(item.detail)}</span>
           </span>
-          <span className={`home-attention-action ${tagClassName}`.trim()}>{item.actionLabel}</span>
+          <span className={`home-attention-action ${tagClassName}`.trim()}>{cleanUiText(item.actionLabel)}</span>
         </button>
       ))
     ) : (
       <div className="home-empty-state">
-        Tu dÃ­a estÃ¡ ordenado. Usa las acciones rÃ¡pidas para registrar nuevos movimientos.
+        Tu día está ordenado. Usa las acciones rápidas para registrar nuevos movimientos.
       </div>
     );
 
@@ -1896,17 +1896,17 @@ export default function Dashboard({
       >
         <span className="home-action-icon">{renderIcon(item.icon)}</span>
         <span className="home-action-copy">
-          <strong>{item.label}</strong>
-          <small>{item.subtitle}</small>
+          <strong>{cleanUiText(item.label)}</strong>
+          <small>{cleanUiText(item.subtitle)}</small>
         </span>
-        <span className={`home-action-hint ${hintClassName}`.trim()}>{item.hint}</span>
+        <span className={`home-action-hint ${hintClassName}`.trim()}>{cleanUiText(item.hint)}</span>
       </button>
     ));
 
   const newMobileHome = (() => {
     const greetingIntro =
       new Date().getHours() < 12
-        ? "Buenos dÃ­as"
+        ? "Buenos días"
         : new Date().getHours() < 18
         ? "Buenas tardes"
         : "Buenas noches";
@@ -2138,8 +2138,8 @@ export default function Dashboard({
                       </span>
                     ) : null}
                   </div>
-                  <p className="home-mobile-clinical-title">{displayHeroState.title}</p>
-                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{displayHeroState.message}</p>
+                  <p className="home-mobile-clinical-title">{cleanUiText(displayHeroState.title)}</p>
+                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{cleanUiText(displayHeroState.message)}</p>
                   {nextAppointmentHero ? (
                     <button
                       type="button"
@@ -2147,10 +2147,10 @@ export default function Dashboard({
                       onClick={openAppointmentFocus}
                     >
                       <span className={`mobile-hero-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                        PrÃ³xima cita Â· {nextAppointmentHero.label}
+                        Próxima cita · {cleanUiText(nextAppointmentHero.label)}
                       </span>
-                      <strong>{nextAppointmentHero.title}</strong>
-                      <span>{nextAppointmentHero.detail}</span>
+                      <strong>{cleanUiText(nextAppointmentHero.title)}</strong>
+                      <span>{cleanUiText(nextAppointmentHero.detail)}</span>
                     </button>
                   ) : null}
                 </div>
@@ -2190,10 +2190,10 @@ export default function Dashboard({
               </div>
               <div className="home-mobile-hero-actions">
                 <button type="button" className="mobile-hero-recommendation-btn" onClick={displayHeroState.onAction}>
-                  {displayHeroState.actionLabel}
+                  {cleanUiText(displayHeroState.actionLabel)}
                 </button>
                 <button type="button" className="home-mobile-notes-btn" onClick={openNotesHub}>
-                  Notas rÃ¡pidas
+                  Notas rápidas
                 </button>
               </div>
             </div>
@@ -2217,7 +2217,7 @@ export default function Dashboard({
 
             <div className="mobile-section native-section native-section-delay-1">
               <div className="mobile-section-header">
-                <h2 className="mobile-section-title">AtenciÃ³n de hoy</h2>
+                <h2 className="mobile-section-title">Atención de hoy</h2>
                 <button type="button" className="mobile-section-link" onClick={() => openAlertAssistant(topAlert)}>
                   Abrir IA
                 </button>
@@ -2229,7 +2229,7 @@ export default function Dashboard({
 
             <div className="mobile-section native-section native-section-delay-2">
               <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Acciones rÃ¡pidas</h2>
+                <h2 className="mobile-section-title">Acciones rápidas</h2>
                 <button type="button" className="mobile-section-link" onClick={openNotesHub}>
                   Notas
                 </button>
@@ -2326,8 +2326,8 @@ export default function Dashboard({
                 <h1 className="home-greeting-title">
                   Hola, <em>{userName}</em>
                 </h1>
-                <p className="home-clinical-headline">{displayHeroState.title}</p>
-                <p className="home-greeting-subtitle home-clinical-summary">{displayHeroState.message}</p>
+                <p className="home-clinical-headline">{cleanUiText(displayHeroState.title)}</p>
+                <p className="home-greeting-subtitle home-clinical-summary">{cleanUiText(displayHeroState.message)}</p>
                 {nextAppointmentHero ? (
                   <button
                     type="button"
@@ -2335,18 +2335,18 @@ export default function Dashboard({
                     onClick={openAppointmentFocus}
                   >
                     <span className={`home-clinical-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                      PrÃ³xima cita Â· {nextAppointmentHero.label}
+                      Próxima cita · {cleanUiText(nextAppointmentHero.label)}
                     </span>
-                    <strong>{nextAppointmentHero.title}</strong>
-                    <span>{nextAppointmentHero.detail}</span>
+                    <strong>{cleanUiText(nextAppointmentHero.title)}</strong>
+                    <span>{cleanUiText(nextAppointmentHero.detail)}</span>
                   </button>
                 ) : null}
                 <div className="home-clinical-actions">
                   <button type="button" className="home-note-primary home-clinical-primary" onClick={displayHeroState.onAction}>
-                    {displayHeroState.actionLabel}
+                    {cleanUiText(displayHeroState.actionLabel)}
                   </button>
                   <button type="button" className="home-panel-link home-clinical-secondary" onClick={openNotesHub}>
-                    Notas rÃ¡pidas
+                    Notas rápidas
                   </button>
                 </div>
               </div>
@@ -2381,10 +2381,10 @@ export default function Dashboard({
                 <div className="home-clinical-meta">
                   {heroHighlights.map((item) => (
                     <div key={item.id} className={`home-clinical-metric tone-${item.tone}`}>
-                      <small>{item.label}</small>
-                      <strong>{item.value}</strong>
-                    </div>
-                  ))}
+                          <small>{cleanUiText(item.label)}</small>
+                          <strong>{cleanUiText(item.value)}</strong>
+                        </div>
+                      ))}
                 </div>
                 <button type="button" className="home-greeting-profile" onClick={() => navigate("/settings")}>
                   <span className="home-greeting-profile-dot">{profileInitials(activeProfileName)}</span>
@@ -2409,7 +2409,7 @@ export default function Dashboard({
             <article className="home-panel-card home-attention-card">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">AtenciÃ³n de hoy</h2>
+                  <h2 className="home-panel-title">Atención de hoy</h2>
                   <p className="home-panel-subtitle">Lo que realmente importa resolver primero.</p>
                 </div>
                 <button type="button" className="home-panel-link" onClick={() => openAlertAssistant(topAlert)}>
@@ -2426,8 +2426,8 @@ export default function Dashboard({
             <article className="home-panel-card home-actions-card home-actions-card-compact">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">Acciones rÃ¡pidas</h2>
-                  <p className="home-panel-subtitle">Tres atajos para resolver tu dÃ­a de salud.</p>
+                  <h2 className="home-panel-title">Acciones rápidas</h2>
+                  <p className="home-panel-subtitle">Tres atajos para resolver tu día de salud.</p>
                 </div>
                 <button type="button" className="home-panel-link home-notes-trigger" onClick={openNotesHub}>
                   Abrir notas

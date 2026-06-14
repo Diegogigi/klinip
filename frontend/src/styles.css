@@ -44155,6 +44155,12 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .muted {
   }
 }
 
+@media (max-width: 430px) {
+  .home-mobile-action-stack {
+    grid-template-columns: 1fr;
+  }
+}
+
 body.theme-dark .mobile-dashboard {
   background: #07111f;
 }
@@ -57766,6 +57772,11 @@ body.theme-dark .bio-unified-chart-legend-item small {
     border-color: rgba(71, 85, 105, 0.55);
   }
 
+  .home-mobile-action-item .home-action-hint,
+  .home-attention-action.is-mobile {
+    white-space: nowrap;
+  }
+
   .kfeed-page,
   .clp-page,
   .vp2-page {
@@ -58297,6 +58308,17 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .home-mobile-action-item {
     min-width: 0;
     overflow: hidden;
+  }
+
+  .home-mobile-action-item .home-action-copy strong,
+  .home-mobile-action-item .home-action-copy small,
+  .home-mobile-focus-item .home-attention-copy strong,
+  .home-mobile-focus-item .home-attention-copy span,
+  .mobile-activity-item .home-attention-copy strong,
+  .mobile-activity-item .home-attention-copy span {
+    overflow-wrap: normal;
+    word-break: normal;
+    hyphens: none;
   }
 
   .kfeed-care-panel-head,

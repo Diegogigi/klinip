@@ -1,5 +1,14 @@
-# No usar archivos de configuración antiguos
 Procfile
 start.sh
 railway.json
 
+# Dependencias locales y entornos que no deben viajar al build
+backend/venv/
+backend/venv_old/
+frontend/node_modules/
+
+# Archivos locales ajenos al deploy
+.claude/
+.vscode/
+uploaded_docs/
+*.log
