@@ -5621,6 +5621,29 @@ def _extract_center_from_electronic_prescription(text: str) -> str | None:
     return None
 
 
+# Marcas de prestadores/laboratorios chilenos que el keyword-matching genérico
+# no captura (no contienen "clínica"/"hospital"/etc.). Clave normalizada → display.
+_PROVIDER_BRANDS = {
+    "integramedica": "IntegraMédica",
+    "redsalud": "RedSalud",
+    "red salud": "RedSalud",
+    "megasalud": "Megasalud",
+    "vidaintegra": "Vidaintegra",
+    "vida integra": "Vidaintegra",
+    "uc christus": "UC Christus",
+    "clinica alemana": "Clínica Alemana",
+    "clinica las condes": "Clínica Las Condes",
+    "clinica santa maria": "Clínica Santa María",
+    "clinica davila": "Clínica Dávila",
+    "clinica indisa": "Clínica Indisa",
+    "clinica biobio": "Clínica Biobío",
+    "radix": "RADIX",
+    "synlab": "Synlab",
+    "blanco lacto": "Laboratorio Blanco",
+    "bupa": "Bupa",
+}
+
+
 def _guess_center(text: str) -> str | None:
     """
     Detecta el centro de salud del documento
@@ -5630,6 +5653,12 @@ def _guess_center(text: str) -> str | None:
         center = _extract_center_from_electronic_prescription(text)
         if center:
             return center
+
+    # Marcas conocidas (IntegraMédica, RADIX, etc.) que no traen palabra clave.
+    normalized_all = _normalize_text(text or "")
+    for key, display in _PROVIDER_BRANDS.items():
+        if key in normalized_all:
+            return display
 
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
     center_inline = re.compile(
@@ -5661,9 +5690,14 @@ def _guess_center(text: str) -> str | None:
                 return cleaned[:120]
     for line in lines:
         lower = _normalize_text(line)
-        if any(k in lower for k in secondary_keywords):
+        # El tipo de institución debe ir al INICIO del nombre (ej. "Clínica X",
+        # "Laboratorio Y"), no al final de una frase ("evaluación clínica").
+        early_hit = any(
+            (pos := lower.find(k)) != -1 and pos <= 20 for k in secondary_keywords
+        )
+        if early_hit:
             cleaned = _clean_center_line(line)
-            if cleaned:
+            if cleaned and len(cleaned.split()) <= 8:
                 return cleaned[:120]
     # NO buscar en las primeras líneas para recetas electrónicas
     # porque puede capturar direcciones
@@ -5675,18 +5709,41 @@ def _guess_date(text: str) -> datetime | None:
         return None
 
     lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+
+    def _date_from_line(line, idx):
+        token = _extract_date_token(line)
+        if not token and idx + 1 < len(lines):
+            token = _extract_date_token(lines[idx + 1])
+        if not token:
+            return None
+        try:
+            day, month, year = token.split("/")
+            return datetime(int(year), int(month), int(day))
+        except Exception:
+            return None
+
+    # 1) Fecha del DOCUMENTO/EVENTO con etiqueta prioritaria — nunca la de nacimiento.
+    priority_labels = (
+        "toma de muestra", "t. de muestra", "fecha de muestra", "muestra",
+        "fecha de emision", "emision", "atencion", "ingreso", "realizado",
+    )
+    for label in priority_labels:
+        for idx, line in enumerate(lines):
+            normalized = _normalize_text(line)
+            if "nac" in normalized:  # excluir fecha de nacimiento
+                continue
+            if label in normalized:
+                dt = _date_from_line(line, idx)
+                if dt:
+                    return dt
+
+    # 2) Línea con "fecha" (excluyendo nacimiento)
     for idx, line in enumerate(lines):
         normalized = _normalize_text(line)
-        if "fecha" in normalized:
-            token = _extract_date_token(line)
-            if not token and idx + 1 < len(lines):
-                token = _extract_date_token(lines[idx + 1])
-            if token:
-                try:
-                    day, month, year = token.split("/")
-                    return datetime(int(year), int(month), int(day))
-                except Exception:
-                    pass
+        if "fecha" in normalized and "nac" not in normalized:
+            dt = _date_from_line(line, idx)
+            if dt:
+                return dt
 
     # Patrón específico para recetas electrónicas chilenas
     # Formato: "Fecha de emisión: 2 de septiembre, 2025"
@@ -5722,30 +5779,14 @@ def _guess_date(text: str) -> datetime | None:
         except Exception:
             pass
 
-    # Patrones numéricos tradicionales
-    patterns = [
-        r"(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})",
-        r"(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text)
-        if not match:
+    # Último recurso: primera fecha legible por línea (admite mes abreviado como
+    # "4/feb/2026"), saltando líneas de nacimiento para no tomar la fecha de nac.
+    for idx, line in enumerate(lines):
+        if "nac" in _normalize_text(line):
             continue
-        parts = match.groups()
-        try:
-            if len(parts[0]) == 4:
-                year = int(parts[0])
-                month = int(parts[1])
-                day = int(parts[2])
-            else:
-                day = int(parts[0])
-                month = int(parts[1])
-                year = int(parts[2])
-                if year < 100:
-                    year += 2000
-            return datetime(year, month, day)
-        except Exception:
-            continue
+        dt = _date_from_line(line, idx)
+        if dt:
+            return dt
     return None
 
 
@@ -6974,6 +7015,237 @@ def _append_document_medication_summary(doc: models.Document, med: dict, *, is_e
         doc.notes = med_summary
 
 
+# Nombres de archivo genéricos (cámara, capturas, descargas) que conviene
+# reemplazar por un título legible generado del contenido.
+_GENERIC_FILENAME_RE = re.compile(
+    r"^(image|img|photo|foto|imagen|documento|document|doc|scan|escaneo|whatsapp|"
+    r"wa|screenshot|screen|captura|pantallazo|untitled|sin[\s_-]?titulo|file|"
+    r"archivo|adjunto|download|descarga|pxl|dsc|jpeg|jpg|png|pdf)\b",
+    re.IGNORECASE,
+)
+
+# Vocabulario de exámenes para titular resultados/órdenes/informes.
+_EXAM_TITLE_KEYWORDS = {
+    "hemograma": "Hemograma",
+    "perfil lipidico": "Perfil lipídico",
+    "perfil hepatico": "Perfil hepático",
+    "perfil bioquimico": "Perfil bioquímico",
+    "glucosa": "Glucosa",
+    "glicemia": "Glicemia",
+    "curva de tolerancia": "Test de tolerancia a la glucosa",
+    "tolerancia a la glucosa": "Test de tolerancia a la glucosa",
+    "creatinina": "Creatinina",
+    "orina completa": "Orina completa",
+    "urocultivo": "Urocultivo",
+    "tiempo de protrombina": "Tiempo de protrombina",
+    "protrombina": "Tiempo de protrombina",
+    "grupo sanguineo": "Grupo sanguíneo",
+    "nitrogeno ureico": "Nitrógeno ureico",
+    "uremia": "Uremia",
+    "electrocardiograma": "Electrocardiograma",
+    "ecotomografia": "Ecotomografía",
+    "ecografia": "Ecografía",
+    "radiografia": "Radiografía",
+    "tomografia": "Tomografía",
+    "cone beam": "Tomografía Cone Beam",
+    "scanner": "Scanner",
+    "resonancia": "Resonancia magnética",
+    "mamografia": "Mamografía",
+    "densitometria": "Densitometría",
+}
+
+
+def _filename_looks_generic(filename: str) -> bool:
+    """True si el nombre no aporta información (cámara, captura, solo números)."""
+    name = (filename or "").strip()
+    stem = name.rsplit(".", 1)[0].strip() if "." in name else name
+    if not stem:
+        return True
+    if _GENERIC_FILENAME_RE.match(stem):
+        return True
+    if re.fullmatch(r"[0-9\s_\-.]+", stem):
+        return True
+    if re.fullmatch(r"[a-z]{1,4}[\s_\-]?\d{3,}", stem, re.IGNORECASE):  # IMG_1234, DSC0001
+        return True
+    return False
+
+
+def _detect_exam_title(text: str) -> str | None:
+    if not text:
+        return None
+    for line in text.splitlines():
+        normalized = _normalize_text(line)
+        if normalized.startswith("examen") and ":" in line:
+            value = line.split(":", 1)[1].strip()
+            if value and len(value) > 3:
+                return _safe_text(value)[:60]
+    normalized_all = _normalize_text(text)
+    for key, label in _EXAM_TITLE_KEYWORDS.items():
+        if key in normalized_all:
+            return label
+    return None
+
+
+def _document_display_title(doc: models.Document, entities: list) -> str | None:
+    """Título corto y legible según tipo y contenido (respaldo determinístico)."""
+    doc_type = doc.doc_type.value if doc.doc_type else "otro"
+    meds = [e for e in entities if e.entity_type == "medication_instruction" and e.entity_name]
+    if doc_type == "receta":
+        if meds:
+            names: list[str] = []
+            for med in meds[:2]:
+                if med.entity_name not in names:
+                    names.append(med.entity_name)
+            return "Receta - " + ", ".join(names)
+        return "Receta"
+    if doc_type == "resultado":
+        return _detect_exam_title(doc.ocr_text) or "Resultado de examen"
+    if doc_type == "orden":
+        title = _detect_exam_title(doc.ocr_text)
+        return f"Orden - {title}" if title else "Orden médica"
+    if doc_type == "informe":
+        title = _detect_exam_title(doc.ocr_text)
+        return f"Informe - {title}" if title else "Informe médico"
+    return None
+
+
+def _compose_document_notes_deterministic(doc, summary, entities: list) -> str | None:
+    """Nota concisa armada desde las entidades extraídas (respaldo sin LLM)."""
+    doc_type = doc.doc_type.value if doc.doc_type else "otro"
+    meds = [e for e in entities if e.entity_type == "medication_instruction"]
+    labs = [e for e in entities if e.entity_type == "lab_value"]
+    if doc_type == "receta" and meds:
+        parts = []
+        for med in meds[:6]:
+            seg = med.entity_name or "Medicamento"
+            if med.entity_value:
+                seg += f" — {med.entity_value}"
+            parts.append(seg)
+        return "Indicaciones:\n• " + "\n• ".join(parts)
+    if doc_type == "resultado" and labs:
+        flagged = [l for l in labs if (l.flag or "") in {"high", "low", "critical", "abnormal"}]
+        if flagged:
+            segs = []
+            for lab in flagged[:6]:
+                seg = lab.entity_name or "Valor"
+                if lab.entity_value:
+                    seg += f" {lab.entity_value}"
+                if lab.unit:
+                    seg += f" {lab.unit}"
+                segs.append(seg.strip())
+            return "Valores para revisar: " + ", ".join(segs) + "."
+        return "Todos los valores detectados están dentro de rango."
+    if summary and (getattr(summary, "patient_friendly_explanation", "") or "").strip():
+        return summary.patient_friendly_explanation.strip()[:400]
+    return None
+
+
+def _parse_json_object(raw: str) -> dict | None:
+    if not raw:
+        return None
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        obj = json.loads(text[start : end + 1])
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
+def _ai_document_metadata(doc: models.Document, entities: list) -> tuple[str, str] | None:
+    """Pide a un LLM un título de archivo + una nota breve enfocada en lo importante.
+    Devuelve (titulo, nota) o None si no hay LLM disponible o falla."""
+    text = (doc.ocr_text or "").strip()
+    if not text:
+        return None
+    doc_type = doc.doc_type.value if doc.doc_type else "otro"
+    ent_lines = []
+    for ent in entities[:12]:
+        seg = ent.entity_name or ""
+        if ent.entity_value:
+            seg += f": {ent.entity_value}"
+        if ent.unit:
+            seg += f" {ent.unit}"
+        if (ent.flag or "") in {"high", "low", "critical", "abnormal"}:
+            seg += " (fuera de rango)"
+        if seg.strip():
+            ent_lines.append(seg.strip())
+    system_prompt = (
+        "Eres un asistente que organiza documentos de salud en español de Chile. "
+        "Respondes EXCLUSIVAMENTE con un JSON válido de dos campos: "
+        '"titulo" = nombre de archivo corto y claro (2 a 5 palabras, sin extensión, '
+        'ej: "Receta Celecoxib", "Hemograma", "Orden Scanner Maxilar"); '
+        '"nota" = resumen breve y simple de lo más importante (máximo 3 frases). '
+        "Si es receta, indica medicamentos con dosis, frecuencia y duración. "
+        "Si es resultado de examen, menciona los valores fuera de rango. "
+        "Usa lenguaje cercano para el paciente. No diagnostiques ni recomiendes "
+        "tratamientos: solo describe lo que dice el documento. "
+        "No agregues texto fuera del JSON."
+    )
+    message = (
+        f"Tipo detectado: {doc_type}\n"
+        f"Datos ya extraídos: {'; '.join(ent_lines) if ent_lines else '(ninguno)'}\n\n"
+        f"Texto del documento (OCR):\n{_clip_text(text, 2200)}"
+    )
+    try:
+        result = _call_openai_ai(system_prompt, [], message)
+    except Exception as exc:
+        print(f"WARNING _ai_document_metadata: {exc}")
+        return None
+    if not result:
+        return None
+    data = _parse_json_object(result[0])
+    if not data:
+        return None
+    titulo = _safe_text(str(data.get("titulo") or ""))[:80]
+    nota = _safe_text(str(data.get("nota") or ""))[:600]
+    if not titulo and not nota:
+        return None
+    return titulo, nota
+
+
+def _enrich_document_metadata(db: Session, doc: models.Document, original_user_note: str) -> None:
+    """Mejora nombre y notas tras la extracción: usa LLM si está disponible y cae
+    a una versión determinística desde las entidades. Nunca pisa una nota escrita
+    por el usuario ni rompe el pipeline."""
+    entities = (
+        db.query(models.DocumentClinicalEntity)
+        .filter(models.DocumentClinicalEntity.document_id == doc.id)
+        .order_by(models.DocumentClinicalEntity.id.asc())
+        .all()
+    )
+    summary = (
+        db.query(models.DocumentSummary)
+        .filter(models.DocumentSummary.document_id == doc.id)
+        .first()
+    )
+
+    ai = _ai_document_metadata(doc, entities)
+    ai_title, ai_note = ai if ai else (None, None)
+
+    # Nombre de archivo: solo si el actual es genérico.
+    if _filename_looks_generic(doc.filename or ""):
+        title = (ai_title or "").strip() or _document_display_title(doc, entities)
+        if title:
+            ext = ""
+            current = doc.filename or ""
+            if "." in current:
+                candidate = current.rsplit(".", 1)[1]
+                if 1 <= len(candidate) <= 5 and candidate.isalnum():
+                    ext = "." + candidate
+            doc.filename = _safe_text(title)[:80] + ext
+
+    # Notas: solo si el usuario no escribió una nota propia al subir.
+    if not (original_user_note or "").strip():
+        note = (ai_note or "").strip() or _compose_document_notes_deterministic(doc, summary, entities)
+        if note:
+            doc.notes = note[:600]
+
+
 def _apply_document_ocr_automations(
     db: Session,
     doc: models.Document,
@@ -7248,6 +7520,8 @@ def _run_document_ocr(document_id: int):
         )
         if not doc:
             return
+        # Nota escrita por el usuario al subir (si la hay): no debe ser pisada.
+        original_user_note = (doc.notes or "").strip()
         doc.ocr_status = "processing"
         db.commit()
         if not doc.file_data:
@@ -7298,6 +7572,11 @@ def _run_document_ocr(document_id: int):
             if not doc:
                 return
             profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
+
+        try:
+            _enrich_document_metadata(db, doc, original_user_note)
+        except Exception as exc:
+            print(f"WARNING _run_document_ocr enrich: {exc}")
 
         user = db.query(models.User).filter(models.User.id == doc.user_id).first()
         try:
