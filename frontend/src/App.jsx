@@ -323,20 +323,15 @@ function Sidebar({
   const sidebarInitial = (user?.name || "Klinip").slice(0, 1).toUpperCase();
   const mobileSidebarShellStyle = isMobile
     ? {
-        left: "0.82rem",
-        right: "0.82rem",
-        bottom: "calc(0.72rem + env(safe-area-inset-bottom))",
-        width: "auto",
+        left: "50%",
+        right: "auto",
+        bottom: "calc(0.82rem + env(safe-area-inset-bottom))",
+        width: "min(calc(100vw - 2.6rem), 22rem)",
+        maxWidth: "22rem",
         height: "auto",
-        padding: "0.62rem 0.56rem calc(0.74rem + env(safe-area-inset-bottom))",
-        borderRadius: "2.2rem",
-        border: "1px solid rgba(181, 198, 233, 0.24)",
-        background:
-          "linear-gradient(180deg, rgba(12, 18, 32, 0.78), rgba(26, 31, 46, 0.72)), rgba(15, 23, 42, 0.64)",
-        boxShadow:
-          "0 18px 40px rgba(15, 23, 42, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.06)",
-        backdropFilter: "blur(24px) saturate(1.12)",
-        WebkitBackdropFilter: "blur(24px) saturate(1.12)",
+        padding: "0.52rem 0.54rem 0.56rem",
+        borderRadius: "2rem",
+        transform: "translateX(-50%)",
         overflow: "hidden",
         isolation: "isolate",
       }
