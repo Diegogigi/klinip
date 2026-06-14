@@ -203,6 +203,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     role: "viewer",
     relationship_type: "",
   });
+  const [familyStandalonePanel, setFamilyStandalonePanel] = useState(null);
   const plan = planInfo?.plan_type || "basico";
   const familyRoleLabel = (role) => {
     const normalizedRole = String(role || "viewer").trim().toLowerCase();
@@ -246,7 +247,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
   const isFamilyStandalone = (initialSection || "perfil") === "familia";
   const familyNameInputRef = useRef(null);
+  const familyInviteEmailRef = useRef(null);
   const familyCreateCardRef = useRef(null);
+  const familyInviteCardRef = useRef(null);
   const familyRolesCardRef = useRef(null);
 
   const normalizeCaregivers = (items) => {
@@ -389,6 +392,10 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     !!activeHealthProfile && (isActiveHealthProfileOwner || ["admin", "caregiver"].includes(activeHealthProfileRole));
   const canManageActiveFamilyProfile =
     !!activeHealthProfile && (isActiveHealthProfileOwner || activeHealthProfileRole === "admin");
+  const shouldLoadFamilyAnalytics = !isFamilyStandalone;
+  const shouldLoadFamilyActivity = !isFamilyStandalone;
+  const shouldLoadFamilyAutomation = !isFamilyStandalone;
+  const shouldLoadFamilyNotes = !isFamilyStandalone;
   const visibleProfileNotes = showAllProfileNotes ? profileNotes : profileNotes.slice(0, 3);
   const canToggleProfileNotes = profileNotes.length > 3;
   const hasRelevantFamilyAiSignals = Boolean(
@@ -448,6 +455,10 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   }, [activeFamilyProfileId]);
 
   useEffect(() => {
+    setFamilyStandalonePanel(null);
+  }, [activeFamilyProfileId]);
+
+  useEffect(() => {
     let mounted = true;
     const loadFamilyContext = async () => {
       if (!profile?.id) return;
@@ -482,9 +493,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       try {
         const [cards, alerts, report, aiContext, pendingForMe] = await Promise.all([
           getFamilyPanel(),
-          getFamilyAlerts().catch(() => []),
-          getFamilyReportSummary(30).catch(() => null),
-          getAiFamilyContext(30).catch(() => null),
+          shouldLoadFamilyAnalytics ? getFamilyAlerts().catch(() => []) : Promise.resolve([]),
+          shouldLoadFamilyAnalytics ? getFamilyReportSummary(30).catch(() => null) : Promise.resolve(null),
+          shouldLoadFamilyAnalytics ? getAiFamilyContext(30).catch(() => null) : Promise.resolve(null),
           getMyPendingProfileInvitations().catch(() => []),
         ]);
         if (mounted) setFamilyPanelCards(ensureArray(cards));
@@ -515,9 +526,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         const [careList, invList, actList, autoCfg, notesList] = await Promise.all([
           getProfileCaregivers(activeFamilyProfileId),
           getProfileInvitations(activeFamilyProfileId).catch(() => []),
-          getHealthProfileActivity(activeFamilyProfileId),
-          getProfileAutomation(activeFamilyProfileId).catch(() => null),
-          getProfileNotes(activeFamilyProfileId).catch(() => []),
+          shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
+          shouldLoadFamilyAutomation ? getProfileAutomation(activeFamilyProfileId).catch(() => null) : Promise.resolve(null),
+          shouldLoadFamilyNotes ? getProfileNotes(activeFamilyProfileId).catch(() => []) : Promise.resolve([]),
         ]);
         if (!mounted) return;
         setCaregivers(normalizeCaregivers(careList));
@@ -538,7 +549,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     return () => {
       mounted = false;
     };
-  }, [profile?.id, activeFamilyProfileId, planInfo?.plan_type]);
+  }, [
+    profile?.id,
+    activeFamilyProfileId,
+    planInfo?.plan_type,
+    shouldLoadFamilyActivity,
+    shouldLoadFamilyAnalytics,
+    shouldLoadFamilyAutomation,
+    shouldLoadFamilyNotes,
+  ]);
 
   useEffect(() => {
     if (activeSection === "seguridad") {
@@ -960,6 +979,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       const cards = await getFamilyPanel().catch(() => []);
       setPlanInfo(plan || null);
       setFamilyPanelCards(ensureArray(cards));
+      setFamilyStandalonePanel(null);
       setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -969,9 +989,17 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   };
 
   const focusAssistedFamilyForm = () => {
+    setFamilyStandalonePanel("profile");
     setTimeout(() => {
       familyCreateCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       familyNameInputRef.current?.focus();
+    }, 10);
+  };
+  const focusInviteCaregiverForm = () => {
+    setFamilyStandalonePanel("invite");
+    setTimeout(() => {
+      familyInviteCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      familyInviteEmailRef.current?.focus();
     }, 10);
   };
   const focusFamilyRoles = () => {
@@ -1000,13 +1028,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       const [careList, invList, actList] = await Promise.all([
         getProfileCaregivers(activeFamilyProfileId),
         getProfileInvitations(activeFamilyProfileId).catch(() => []),
-        getHealthProfileActivity(activeFamilyProfileId),
+        shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
       ]);
       setCaregivers(normalizeCaregivers(careList));
       setInvitations(ensureArray(invList));
       setActivityLog(ensureArray(actList));
       setInviteForm({ email: "", role: "viewer", relationship_type: "" });
-      setFamilyStatus("Invitacion/provision de acceso creada correctamente");
+      setFamilyStandalonePanel(null);
+      setFamilyStatus("Invitación creada correctamente");
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo crear la invitación");
@@ -1030,7 +1059,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setActiveFamilyProfileId(active?.id || activeFamilyProfileId);
       setFamilyPanelCards(ensureArray(cards));
       setMyPendingInvitations(ensureArray(pendingForMe));
-      setFamilyStatus("Invitacion aceptada correctamente");
+      setFamilyStatus("Invitación aceptada correctamente");
       setActiveSection("familia");
       navigate("/settings/familia");
       if (isMobileSettings) {
@@ -1065,7 +1094,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       await updateProfileRelationship(activeFamilyProfileId, relationshipId, { role: nextRole });
       const [careList, actList] = await Promise.all([
         getProfileCaregivers(activeFamilyProfileId),
-        getHealthProfileActivity(activeFamilyProfileId),
+        shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
       ]);
       setCaregivers(normalizeCaregivers(careList));
       setActivityLog(ensureArray(actList));
@@ -1079,12 +1108,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
   const handleRemoveCaregiver = async (relationshipId) => {
     if (!activeFamilyProfileId) return;
-    if (!window.confirm("Deseas quitar este colaborador del perfil?")) return;
+    if (!window.confirm("¿Deseas quitar este colaborador del perfil?")) return;
     try {
       await removeProfileRelationship(activeFamilyProfileId, relationshipId);
       const [careList, actList] = await Promise.all([
         getProfileCaregivers(activeFamilyProfileId),
-        getHealthProfileActivity(activeFamilyProfileId),
+        shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
       ]);
       setCaregivers(normalizeCaregivers(careList));
       setActivityLog(ensureArray(actList));
@@ -1102,11 +1131,11 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       await revokeProfileInvitation(activeFamilyProfileId, invitationId);
       const [invList, actList] = await Promise.all([
         getProfileInvitations(activeFamilyProfileId).catch(() => []),
-        getHealthProfileActivity(activeFamilyProfileId),
+        shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
       ]);
       setInvitations(ensureArray(invList));
       setActivityLog(ensureArray(actList));
-      setFamilyStatus("Invitacion revocada");
+      setFamilyStatus("Invitación revocada");
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo revocar la invitación");
@@ -1233,6 +1262,382 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     ]
       .filter(Boolean)
       .join(" ");
+
+  const renderFamilyStandaloneSection = () => (
+    <>
+      <div className="family-page-header family-page-header-minimal">
+        <div>
+          <h2 className="card-title">Mi familia</h2>
+          <p className="muted">Perfiles y accesos en un solo lugar.</p>
+        </div>
+      </div>
+
+      <div className="family-standalone-actions">
+        {canManageActiveFamilyProfile ? (
+          <button
+            className={`secondary-btn family-standalone-cta ${familyStandalonePanel === "invite" ? "is-open" : ""}`}
+            type="button"
+            onClick={() => {
+              if (familyStandalonePanel === "invite") {
+                setFamilyStandalonePanel(null);
+                return;
+              }
+              focusInviteCaregiverForm();
+            }}
+          >
+            {familyStandalonePanel === "invite" ? "Cerrar invitación" : "Invitar colaborador"}
+          </button>
+        ) : null}
+        <button
+          className={`secondary-btn family-standalone-cta ${familyStandalonePanel === "profile" ? "is-open" : ""}`}
+          type="button"
+          disabled={familySlotsRemaining === 0}
+          onClick={() => {
+            if (familyStandalonePanel === "profile") {
+              setFamilyStandalonePanel(null);
+              return;
+            }
+            focusAssistedFamilyForm();
+          }}
+        >
+          {familySlotsRemaining > 0 ? "Agregar perfil" : "Sin cupos disponibles"}
+        </button>
+      </div>
+
+      {canManageActiveFamilyProfile && familyStandalonePanel === "invite" ? (
+        <div ref={familyInviteCardRef} className="family-create-card family-management-card family-inline-panel">
+          <div className="family-card-head">
+            <div>
+              <p className="family-card-kicker family-title-teal">Invitar colaborador</p>
+              <p className="family-inline-muted">Envía acceso a otra persona para ayudar con este perfil.</p>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="input-group">
+              <label className="input-label">Correo</label>
+              <input
+                className="input-field"
+                ref={familyInviteEmailRef}
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div className="input-group">
+              <label className="input-label">Rol</label>
+              <select
+                className="select-field"
+                value={inviteForm.role}
+                onChange={(e) => setInviteForm((prev) => ({ ...prev, role: e.target.value }))}
+              >
+                <option value="admin">Administrador</option>
+                <option value="caregiver">Editor</option>
+                <option value="viewer">Lector</option>
+              </select>
+            </div>
+            <div className="input-group">
+              <label className="input-label">Relación</label>
+              <input
+                className="input-field"
+                value={inviteForm.relationship_type}
+                onChange={(e) => setInviteForm((prev) => ({ ...prev, relationship_type: e.target.value }))}
+                placeholder="Ej: Hijo, Hermana, Cuidador"
+              />
+            </div>
+          </div>
+          <button className="secondary-btn" type="button" onClick={handleInviteCaregiver}>
+            Enviar invitación
+          </button>
+        </div>
+      ) : null}
+
+      {familyStandalonePanel === "profile" ? (
+        planInfo?.max_profiles > (planInfo?.current_profiles ?? 0) ? (
+          <div
+            ref={familyCreateCardRef}
+            className="family-create-card family-management-card family-inline-panel"
+          >
+            <div className="family-card-head">
+              <div>
+                <p className="family-card-kicker family-title-blue">Agregar perfil asistido</p>
+                <p className="family-inline-muted">Crea un perfil nuevo con lo esencial para empezar.</p>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="input-group">
+                <label className="input-label">Nombre completo</label>
+                <input
+                  className="input-field"
+                  ref={familyNameInputRef}
+                  value={newFamilyProfile.full_name}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, full_name: e.target.value }))
+                  }
+                  placeholder="Ej: María González"
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Relación</label>
+                <input
+                  className="input-field"
+                  value={newFamilyProfile.relation_with_owner}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, relation_with_owner: e.target.value }))
+                  }
+                  placeholder="Ej: Madre, Padre, Hijo/a"
+                />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Sexo/Género (opcional)</label>
+                <input
+                  className="input-field"
+                  value={newFamilyProfile.gender}
+                  onChange={(e) =>
+                    setNewFamilyProfile((prev) => ({ ...prev, gender: e.target.value }))
+                  }
+                  placeholder="Ej: Femenino"
+                />
+              </div>
+            </div>
+            <button className="secondary-btn" type="button" onClick={handleCreateFamilyProfile}>
+              Crear perfil
+            </button>
+          </div>
+        ) : (
+          <div className="family-create-card family-management-card family-inline-panel family-inline-panel-limit">
+            <p className="muted">Alcanzaste el límite de perfiles de tu plan.</p>
+            <button className="secondary-btn" type="button" onClick={() => navigate("/planes/familiar")}>
+              Ver planes
+            </button>
+          </div>
+        )
+      ) : null}
+
+      <div className="family-member-grid family-member-grid-minimal">
+        {familyMemberCards.map((item) => (
+          <article
+            className={`family-member-card family-member-card-minimal ${item.id === activeFamilyProfileId ? "is-active" : ""}`}
+            key={item.id}
+          >
+            <div
+              className="family-member-accent"
+              style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
+            />
+            <div className="family-member-head">
+              <span
+                className="family-member-avatar"
+                style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
+              >
+                {item.initials}
+              </span>
+              <div>
+                <p className="family-member-name">{item.full_name}</p>
+                <p className="family-member-meta">{item.relationshipLabel}</p>
+              </div>
+            </div>
+            <div className="family-member-summary-row">
+              <span
+                className={`family-member-badge ${item.isOwner ? "is-owner" : "is-managed"}`}
+                style={
+                  item.isOwner
+                    ? undefined
+                    : { background: item.tone.soft, borderColor: item.tone.border, color: item.tone.start }
+                }
+              >
+                {item.badgeLabel}
+              </span>
+              <span className="family-member-summary-text">{item.accessSummary}</span>
+            </div>
+            <button
+              className="family-member-btn family-member-btn-outline family-member-btn-single"
+              type="button"
+              onClick={() => handleSetActiveProfile(item.id)}
+            >
+              {item.id === activeFamilyProfileId ? "Perfil activo" : "Activar perfil"}
+            </button>
+          </article>
+        ))}
+
+        {collaboratorCards.map((item) => (
+          <article className="family-member-card family-member-card-collaborator family-member-card-minimal" key={item.id}>
+            <div
+              className="family-member-accent"
+              style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
+            />
+            <div className="family-member-head">
+              <span
+                className="family-member-avatar"
+                style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
+              >
+                {item.initials}
+              </span>
+              <div>
+                <p className="family-member-name">{item.name}</p>
+                <p className="family-member-meta">
+                  {item.relationshipLabel}
+                  {item.email ? ` · ${item.email}` : ""}
+                </p>
+              </div>
+            </div>
+            <div className="family-member-summary-row">
+              <span
+                className="family-member-badge is-managed"
+                style={{ background: item.tone.soft, borderColor: item.tone.border, color: item.tone.start }}
+              >
+                {item.accessLabel}
+              </span>
+              <span className="family-member-summary-text">{item.permissionSummary}</span>
+            </div>
+            <button
+              className="family-member-btn family-member-btn-outline family-member-btn-single"
+              type="button"
+              onClick={focusFamilyRoles}
+            >
+              Gestionar acceso
+            </button>
+          </article>
+        ))}
+      </div>
+
+      <section
+        className="family-collab-card family-canvas-card family-roles-card family-roles-card-standalone"
+        ref={familyRolesCardRef}
+      >
+        <div className="family-card-head">
+          <div>
+            <p className="family-card-kicker family-title-teal">Roles y accesos</p>
+            <p className="family-inline-muted">Administra permisos e invitaciones del perfil activo.</p>
+          </div>
+        </div>
+
+        <div className="family-roles-list">
+          <article className="family-role-row">
+            <span className="family-role-avatar is-blue">{profileInitial}</span>
+            <div className="family-role-body">
+              <p className="family-role-name">{profileDisplayName}</p>
+              <p className="family-role-meta">{profileDisplayEmail} · cuenta principal</p>
+            </div>
+            <div className="family-role-actions">
+              <select className="select-field" value="admin" disabled>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+          </article>
+
+          {caregivers.map((row, index) => (
+            <article className="family-role-row" key={row.id}>
+              <span className={`family-role-avatar ${index % 2 === 0 ? "is-violet" : "is-sky"}`}>
+                {(row.user_name || row.user_email || "CU")
+                  .split(" ")
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .map((part) => part[0]?.toUpperCase() || "")
+                  .join("") || "CU"}
+              </span>
+              <div className="family-role-body">
+                <p className="family-role-name">
+                  {row.user_name || row.user_email || `Usuario #${row.user_id}`}
+                </p>
+                <p className="family-role-meta">
+                  {row.user_email || "Sin correo"} · {row.relationship_type || "Sin relación"}
+                </p>
+              </div>
+              <div className="family-role-actions">
+                <select
+                  className="select-field"
+                  value={row.role || "viewer"}
+                  onChange={(e) => handleRoleChange(row.id, e.target.value)}
+                >
+                  <option value="admin">Administrador</option>
+                  <option value="caregiver">Editor</option>
+                  <option value="viewer">Lector</option>
+                </select>
+                {row.user_id !== profile?.id ? (
+                  <button
+                    className="secondary-btn danger"
+                    type="button"
+                    onClick={() => handleRemoveCaregiver(row.id)}
+                  >
+                    Quitar
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <div className="family-invitations-block">
+          <p className="family-subsection-label">Invitaciones</p>
+          <div className="family-invitations-list">
+            {invitations.length ? (
+              invitations.map((inv) => (
+                <article className="family-inv-row" key={inv.id}>
+                  <div className="family-role-body">
+                    <p className="family-role-name">{inv.invitee_email}</p>
+                    <p className="family-role-meta">Rol: {familyRoleLabel(inv.role)}</p>
+                  </div>
+                  <div className="family-role-actions">
+                    <span
+                      className={`family-status-pill ${
+                        inv.status === "accepted"
+                          ? "is-accepted"
+                          : inv.status === "revoked"
+                          ? "is-revoked"
+                          : "is-pending"
+                      }`}
+                    >
+                      {inv.status === "accepted"
+                        ? "Aceptada"
+                        : inv.status === "revoked"
+                        ? "Revocada"
+                        : "Pendiente"}
+                    </span>
+                    {inv.status === "pending" || inv.status === "accepted" ? (
+                      <button
+                        className="secondary-btn danger"
+                        type="button"
+                        onClick={() => handleRevokeInvitation(inv.id)}
+                      >
+                        Quitar
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ))
+            ) : null}
+
+            {myPendingInvitations.map((inv) => (
+              <article className="family-inv-row" key={`pending-${inv.id}`}>
+                <div className="family-role-body">
+                  <p className="family-role-name">{inv.profile_name}</p>
+                  <p className="family-role-meta">
+                    Invitado por {inv.inviter_name || `Usuario #${inv.inviter_user_id}`} · Rol: {familyRoleLabel(inv.role)}
+                  </p>
+                </div>
+                <div className="family-role-actions">
+                  <span className="family-status-pill is-pending">Pendiente</span>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    onClick={() => handleAcceptInvitation(inv.token)}
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              </article>
+            ))}
+
+            {!invitations.length && !myPendingInvitations.length ? (
+              <p className="muted">No hay invitaciones registradas para este perfil.</p>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {familyStatus ? <p className="muted family-standalone-status">{familyStatus}</p> : null}
+    </>
+  );
 
   return (
     <>
@@ -1527,30 +1932,21 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
       {activeSection === "familia" && (
       <div className={getSettingsSectionClassName("familia", isFamilyStandalone ? "family-section-standalone" : "")}>
-        {isFamilyStandalone && (
-          <div className="family-page-header">
-            <div>
-              <h2 className="card-title">Mi familia</h2>
-              <p className="muted">Gestiona perfiles, accesos y colaboración de forma centralizada.</p>
+        {isFamilyStandalone ? (
+          renderFamilyStandaloneSection()
+        ) : (
+          <>
+            <div className="family-page-header">
+              <div>
+                <h2 className="card-title">Mi familia</h2>
+                <p className="muted">Gestiona perfiles de salud vinculados según tu plan actual.</p>
+              </div>
+              <div className="family-page-plan-chip">
+                {planInfo?.plan_type || "basico"}
+              </div>
             </div>
-            <div className="family-page-plan-chip">
-              {planInfo?.plan_type || "basico"}
-            </div>
-          </div>
-        )}
-        {!isFamilyStandalone && (
-          <div className="family-page-header">
-            <div>
-              <h2 className="card-title">Mi familia</h2>
-              <p className="muted">Gestiona perfiles de salud vinculados según tu plan actual.</p>
-            </div>
-            <div className="family-page-plan-chip">
-              {planInfo?.plan_type || "basico"}
-            </div>
-          </div>
-        )}
 
-        <div className="family-klinip-banner">
+            <div className="family-klinip-banner">
           <div className="family-klinip-banner-copy">
             <span className="family-klinip-banner-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -2343,6 +2739,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         </div>
 
         {familyStatus && <p className="muted" style={{ marginTop: "0.75rem" }}>{familyStatus}</p>}
+          </>
+        )}
       </div>
       )}
 

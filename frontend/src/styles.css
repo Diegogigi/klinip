@@ -3502,6 +3502,12 @@ body.theme-dark .family-link-btn {
   color: #60a5fa;
 }
 
+body.theme-dark .family-standalone-cta.is-open {
+  border-color: rgba(96, 165, 250, 0.34);
+  background: rgba(30, 64, 175, 0.24);
+  color: #bfdbfe;
+}
+
 body.theme-dark .family-link-btn:hover {
   color: #93c5fd;
 }
@@ -3533,6 +3539,10 @@ body.theme-dark .family-note-purpose,
 body.theme-dark .family-note-item-body,
 body.theme-dark .family-timeline-note-preview {
   color: #64748b;
+}
+
+body.theme-dark .family-member-summary-text {
+  color: #94a3b8;
 }
 
 body.theme-dark .family-note-item-meta {
@@ -11164,6 +11174,101 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   align-items: start;
 }
 
+.family-page-header-minimal {
+  padding-bottom: 0;
+}
+
+.family-standalone-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.family-standalone-cta {
+  min-height: 40px;
+  border-radius: 14px;
+  padding-inline: 1rem;
+}
+
+.family-standalone-cta.is-open {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.family-inline-panel {
+  padding: 1rem 1rem 0.95rem;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+}
+
+.family-inline-panel .family-card-head {
+  margin-bottom: 0.8rem;
+}
+
+.family-inline-panel-limit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.family-member-grid-minimal {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.family-member-card-minimal {
+  gap: 0.72rem;
+  padding: 1rem;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.family-member-card-minimal .family-member-head {
+  align-items: center;
+}
+
+.family-member-card-minimal .family-member-meta {
+  margin-top: 0.1rem;
+}
+
+.family-member-summary-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  padding-top: 0.05rem;
+}
+
+.family-member-summary-text {
+  color: #64748b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.family-member-btn-single {
+  width: 100%;
+  justify-content: center;
+}
+
+.family-roles-card-standalone {
+  padding-top: 1rem;
+}
+
+.family-roles-card-standalone .family-role-row,
+.family-roles-card-standalone .family-inv-row {
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+}
+
+.family-roles-card-standalone .family-invitations-block {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+}
+
+.family-standalone-status {
+  margin: 0.1rem 0 0;
+}
+
 .family-lower-left,
 .family-lower-right,
 .family-secondary-stack {
@@ -12029,6 +12134,47 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
 }
 
 @media (max-width: 640px) {
+  .family-standalone-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .family-inline-panel-limit {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .family-member-grid-minimal {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .family-member-card-minimal,
+  .family-inline-panel,
+  .family-roles-card-standalone {
+    border-radius: 18px;
+  }
+
+  .family-member-card-minimal {
+    padding: 0.9rem;
+  }
+
+  .family-member-summary-row {
+    align-items: flex-start;
+  }
+
+  .family-roles-card-standalone .family-role-row,
+  .family-roles-card-standalone .family-inv-row,
+  .family-roles-card-standalone .family-role-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .family-roles-card-standalone .family-role-actions .select-field,
+  .family-roles-card-standalone .family-role-actions .secondary-btn {
+    width: 100%;
+  }
+
   .family-klinip-banner {
     border-radius: 18px;
     padding: 0.95rem;
@@ -43269,6 +43415,52 @@ body.theme-dark .settings-shell-native-scene .settings-logout-btn {
 
 .settings-shell-native-scene .settings-section-familia.family-section-standalone {
   gap: 0.9rem;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-page-header {
+  gap: 0.45rem;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-standalone-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-standalone-cta {
+  min-height: 42px;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-inline-panel,
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-roles-card-standalone {
+  border-color: var(--family-native-border);
+  background: var(--family-native-surface);
+  box-shadow: var(--family-native-shadow);
+  border-radius: 24px;
+  padding: 0.95rem;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-member-grid.family-member-grid-minimal {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.72rem;
+  overflow: visible;
+  padding-bottom: 0;
+  scroll-snap-type: none;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-member-card.family-member-card-minimal {
+  flex: auto;
+  min-height: 0;
+  border-radius: 22px;
+  padding: 0.92rem;
+  scroll-snap-align: unset;
+}
+
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-member-summary-text,
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-inline-panel .muted,
+.settings-shell-native-scene .settings-section-familia.family-section-standalone .family-standalone-status {
+  color: var(--family-native-muted);
 }
 
 .settings-shell-native-scene .settings-section-familia .family-page-header {
