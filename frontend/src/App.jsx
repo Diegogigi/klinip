@@ -329,7 +329,7 @@ function Sidebar({
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute) return null;
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isMobile ? "sidebar-mobile-shell" : ""}`}>
       <div className="sidebar-brand">
         <BrandLogo
           className="brand-wordmark-sidebar brand-logo-sidebar"
@@ -397,7 +397,7 @@ function Sidebar({
         </div>
       )}
 
-      <nav className="sidebar-nav">
+      <nav className={`sidebar-nav ${isMobile ? "sidebar-nav-mobile" : ""}`}>
         {!isMobile && (
           <div className="sidebar-section-label" aria-hidden="true">
             Navegación clínica
@@ -409,18 +409,18 @@ function Sidebar({
                 <Link
                   key={link.to}
                   to={link.to}
-                  className={`sidebar-link ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
+                  className={`sidebar-link sidebar-link-mobile ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
                     link.to === "/ai" ? "is-mobile-ai" : ""
                   } ${link.to === "/voice" ? "is-mobile-voice" : ""}`}
                   onClick={() => setShowMobileMenu(false)}
                 >
-                <span className="sidebar-icon">
+                <span className="sidebar-icon sidebar-icon-mobile">
                   {link.icon}
                 </span>
                 {link.badge > 0 && (
-                  <span className="sidebar-badge">{link.badge}</span>
+                  <span className="sidebar-badge sidebar-badge-mobile">{link.badge}</span>
                 )}
-                <span className="sidebar-label">{link.label}</span>
+                <span className="sidebar-label sidebar-label-mobile">{link.label}</span>
               </Link>
             ))}
             {mobileOverflowLinks.length > 0 && (
