@@ -142,6 +142,13 @@ try:
 except Exception:
     pdfplumber = None
 
+try:
+    import cv2
+    import numpy as np
+except Exception:
+    cv2 = None
+    np = None
+
 RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
     (os.getenv("ENABLE_RUNTIME_SCHEMA_MUTATIONS") or "").strip() == "1"
     or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
@@ -5643,6 +5650,13 @@ _PROVIDER_BRANDS = {
     "bupa": "Bupa",
 }
 
+# Palabras genéricas que por sí solas NO son un nombre de centro útil.
+_GENERIC_CENTER_WORDS = {
+    "clinica", "hospital", "laboratorio", "centro", "instituto", "unidad",
+    "sucursal", "consultorio", "policlinico", "cesfam", "sapu",
+    "centro medico", "centro de salud", "salud",
+}
+
 
 def _guess_center(text: str) -> str | None:
     """
@@ -5697,7 +5711,11 @@ def _guess_center(text: str) -> str | None:
         )
         if early_hit:
             cleaned = _clean_center_line(line)
-            if cleaned and len(cleaned.split()) <= 8:
+            if (
+                cleaned
+                and 1 <= len(cleaned.split()) <= 8
+                and _normalize_text(cleaned) not in _GENERIC_CENTER_WORDS
+            ):
                 return cleaned[:120]
     # NO buscar en las primeras líneas para recetas electrónicas
     # porque puede capturar direcciones
@@ -7026,6 +7044,10 @@ _GENERIC_FILENAME_RE = re.compile(
 
 # Vocabulario de exámenes para titular resultados/órdenes/informes.
 _EXAM_TITLE_KEYWORDS = {
+    "examenes de laboratorio": "Exámenes de laboratorio",
+    "solicitud de examenes": "Exámenes de laboratorio",
+    "examenes de sangre": "Exámenes de sangre",
+    "examen de orina": "Examen de orina",
     "hemograma": "Hemograma",
     "perfil lipidico": "Perfil lipídico",
     "perfil hepatico": "Perfil hepático",
@@ -7135,8 +7157,13 @@ def _compose_document_notes_deterministic(doc, summary, entities: list) -> str |
                 segs.append(seg.strip())
             return "Valores para revisar: " + ", ".join(segs) + "."
         return "Todos los valores detectados están dentro de rango."
+    if doc_type == "orden":
+        title = _detect_exam_title(doc.ocr_text)
+        if title:
+            return f"Orden para realizar {title.lower()}."
+        return "Orden médica con exámenes o trámites indicados."
     if summary and (getattr(summary, "patient_friendly_explanation", "") or "").strip():
-        return summary.patient_friendly_explanation.strip()[:400]
+        return summary.patient_friendly_explanation.strip()[:300]
     return None
 
 
@@ -7179,9 +7206,10 @@ def _ai_document_metadata(doc: models.Document, entities: list) -> tuple[str, st
         "Respondes EXCLUSIVAMENTE con un JSON válido de dos campos: "
         '"titulo" = nombre de archivo corto y claro (2 a 5 palabras, sin extensión, '
         'ej: "Receta Celecoxib", "Hemograma", "Orden Scanner Maxilar"); '
-        '"nota" = resumen breve y simple de lo más importante (máximo 3 frases). '
+        '"nota" = resumen MUY breve de lo más importante (1 a 2 frases, máximo ~30 palabras). '
         "Si es receta, indica medicamentos con dosis, frecuencia y duración. "
-        "Si es resultado de examen, menciona los valores fuera de rango. "
+        "Si es resultado de examen, menciona solo los valores fuera de rango. "
+        "Si es una orden, di qué examen o trámite se solicita. "
         "Usa lenguaje cercano para el paciente. No diagnostiques ni recomiendes "
         "tratamientos: solo describe lo que dice el documento. "
         "No agregues texto fuera del JSON."
@@ -7436,6 +7464,68 @@ def _is_meaningful_text_layer(text: str) -> bool:
     return len(stripped) >= 60 and alpha >= 20
 
 
+def _correct_orientation(pil_img):
+    """Endereza fotos tomadas de lado o al revés (común en adultos mayores).
+    Usa EXIF y luego la detección de orientación de Tesseract (OSD)."""
+    if pil_img is None:
+        return pil_img
+    try:
+        pil_img = ImageOps.exif_transpose(pil_img)
+    except Exception:
+        pass
+    try:
+        osd = pytesseract.image_to_osd(pil_img)
+        match = re.search(r"Rotate:\s*(\d+)", osd)
+        angle = int(match.group(1)) if match else 0
+        if angle in (90, 180, 270):
+            pil_img = pil_img.rotate(-angle, expand=True)
+    except Exception:
+        pass
+    return pil_img
+
+
+def _cv2_binarize(pil_img):
+    """Normaliza iluminación (quita sombras) y binariza con umbral adaptativo.
+    Mucho más robusto que un umbral fijo en fotos con luz despareja.
+    Devuelve None si OpenCV no está disponible (cae al preprocesamiento PIL)."""
+    if cv2 is None or np is None or pil_img is None:
+        return None
+    try:
+        arr = np.array(pil_img.convert("L"))
+        height, width = arr.shape[:2]
+        if width < 1500:
+            scale = 1500.0 / float(width)
+            arr = cv2.resize(
+                arr, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_CUBIC
+            )
+        # Dividir por un fondo difuminado aplana sombras e iluminación despareja.
+        background = cv2.medianBlur(arr, 41)
+        background[background == 0] = 1
+        normalized = cv2.divide(arr, background, scale=255)
+        binary = cv2.adaptiveThreshold(
+            normalized, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 35, 11
+        )
+        binary = cv2.medianBlur(binary, 3)
+        return Image.fromarray(binary)
+    except Exception:
+        return None
+
+
+def _dedup_ocr_lines(text: str) -> str:
+    """Elimina líneas repetidas que generan las múltiples pasadas de OCR
+    (fuente de entidades duplicadas y ruido), preservando el orden."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in (text or "").splitlines():
+        key = _normalize_text(line)
+        if key and key in seen:
+            continue
+        if key:
+            seen.add(key)
+        out.append(line)
+    return "\n".join(out)
+
+
 def _extract_ocr_text(data: bytes, filename: str) -> str:
     # 1) PDFs digitales: usar la capa de texto embebido primero.
     #    Es más preciso que rasterizar+OCR y no depende de Tesseract ni poppler.
@@ -7496,19 +7586,24 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
 
     texts = []
     for img in images:
-        img = _preprocess_image(img)
-        bin_img = _binarize_image(img)
-        try:
-            ocr_texts = _run_ocr(img, lang)
-            ocr_texts += _run_ocr(bin_img, lang)
-            text = "\n".join(ocr_texts)
-        except Exception:
-            # Fallback to English if the language pack is missing.
-            ocr_texts = _run_ocr(img, "eng")
-            ocr_texts += _run_ocr(bin_img, "eng")
-            text = "\n".join(ocr_texts)
-        texts.append(text)
-    return "\n".join(texts)
+        # Enderezar la foto (de lado / al revés) antes de procesar.
+        img = _correct_orientation(img)
+        base = _preprocess_image(img)
+        # Dos candidatos: realce PIL y binarización adaptativa (cv2 si está).
+        candidates = [base]
+        adaptive = _cv2_binarize(img)
+        candidates.append(adaptive if adaptive is not None else _binarize_image(base))
+
+        page_results: list[str] = []
+        for candidate in candidates:
+            results = _run_ocr(candidate, lang)
+            if not results:
+                # Respaldo a inglés si falta el paquete de idioma.
+                results = _run_ocr(candidate, "eng")
+            page_results += results
+        texts.append("\n".join(page_results))
+
+    return _dedup_ocr_lines("\n".join(texts))
 
 
 def _run_document_ocr(document_id: int):
