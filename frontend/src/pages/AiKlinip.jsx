@@ -33,11 +33,30 @@ import {
   isMedicationFinished,
 } from "../utils/medicationSchedule";
 
-const QUICK_ACTIONS = [
-  { id: "document", prompt: "Explícame mi último documento", title: "Último documento", subtitle: "Analizar y explicar", token: "DOC" },
-  { id: "meds", prompt: "¿Qué medicamentos estoy tomando?", title: "Mis medicamentos", subtitle: "Ver plan activo", token: "MED" },
-  { id: "next", prompt: "¿Cuándo es mi próxima cita?", title: "Próxima cita", subtitle: "Fecha y detalles", token: "CIT" },
-  { id: "timeline", prompt: "Resume mi historial clínico", title: "Historial clínico", subtitle: "Resumen general", token: "HIS" },
+const ENTRY_ACTIONS = [
+  { id: "prescription", label: "Explica mi receta", prompt: "Explícame mi receta o indicación médica más reciente en lenguaje simple." },
+  { id: "appointment", label: "Preparar próxima cita", prompt: "Ayúdame a preparar mi próxima cita médica con preguntas clave y pendientes." },
+  { id: "exam", label: "Entender examen", prompt: "Ayúdame a entender mi examen o resultado más reciente en palabras simples." },
+  { id: "today-meds", label: "Medicamentos de hoy", prompt: "¿Qué medicamentos debo tomar hoy y qué debería revisar?" },
+  { id: "symptom", label: "Consultar síntoma", prompt: "Quiero consultar un síntoma de forma segura. Guíame con preguntas claras." },
+];
+
+const ENTRY_SUGGESTIONS = [
+  {
+    id: "medications-plan",
+    title: "¿Qué debo hacer hoy con mis medicamentos?",
+    prompt: "¿Qué debo hacer hoy con mis medicamentos y cuáles son los puntos importantes a vigilar?",
+  },
+  {
+    id: "medical-instruction",
+    title: "Explícame esta indicación médica en simple",
+    prompt: "Explícame mi indicación médica más reciente en lenguaje simple y con pasos concretos.",
+  },
+  {
+    id: "control-questions",
+    title: "Ayúdame a preparar preguntas para mi control",
+    prompt: "Ayúdame a preparar preguntas útiles para mi próximo control médico.",
+  },
 ];
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
@@ -291,6 +310,7 @@ export default function AiKlinip() {
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState("");
   const [conversationTitle, setConversationTitle] = useState("");
+  const [assistantScene, setAssistantScene] = useState("home");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(true);
@@ -325,6 +345,8 @@ export default function AiKlinip() {
   });
   const location = useLocation();
   const autoPromptFiredRef = useRef(false);
+  const initialLoadCompletedRef = useRef(false);
+  const landingInputRef = useRef(null);
   const scrollRef = useRef(null);
   const stageRef = useRef(null);
   const inputZoneRef = useRef(null);
@@ -361,7 +383,7 @@ export default function AiKlinip() {
   const syncInputHeight = () => {
     if (typeof window === "undefined") return;
     window.requestAnimationFrame(() => {
-      const target = inputFieldRef.current;
+      const target = assistantScene === "home" ? landingInputRef.current : inputFieldRef.current;
       if (!target) return;
       target.style.height = "auto";
       target.style.height = `${Math.min(target.scrollHeight, 92)}px`;
@@ -528,20 +550,16 @@ export default function AiKlinip() {
     const loadAll = async () => {
       setHistoryLoading(true);
       try {
-        const safeConversations = await refreshConversations();
+        await refreshConversations();
         if (!mounted) return;
-
-        if (safeConversations.length) {
-          const targetConversationId = safeConversations[0].conversation_id;
-          const historyItems = await getAiHistory(targetConversationId).catch(() => []);
-          if (!mounted) return;
-          setConversationId(targetConversationId);
-          setConversationTitle(safeConversations[0].title || "");
-          setMessages(mapHistoryToMessages(historyItems));
-        } else {
+        if (!initialLoadCompletedRef.current) {
           setConversationId("");
           setConversationTitle("");
           setMessages([INITIAL_MESSAGE]);
+          if (!location.state?.autoPrompt) {
+            setAssistantScene("home");
+          }
+          initialLoadCompletedRef.current = true;
         }
 
         await loadResources();
@@ -549,6 +567,7 @@ export default function AiKlinip() {
         if (!mounted) return;
         console.error("No se pudo cargar Klinip IA", error);
         setMessages([INITIAL_MESSAGE]);
+        setAssistantScene("home");
       } finally {
         if (mounted) setHistoryLoading(false);
       }
@@ -593,7 +612,7 @@ export default function AiKlinip() {
         }
       }
     };
-  }, [radarProfileId]);
+  }, [location.state, radarProfileId]);
 
   useEffect(() => {
     if (!scrollRef.current) return;
@@ -606,6 +625,7 @@ export default function AiKlinip() {
     const prompt = location.state?.autoPrompt;
     if (!prompt || autoPromptFiredRef.current) return;
     autoPromptFiredRef.current = true;
+    setAssistantScene("chat");
     const timer = window.setTimeout(() => {
       submitPrompt(String(prompt));
     }, 800);
@@ -646,7 +666,11 @@ export default function AiKlinip() {
   useEffect(() => {
     const stageElement = stageRef.current;
     const inputElement = inputZoneRef.current;
-    if (!stageElement || !inputElement || typeof window === "undefined") return undefined;
+    if (!stageElement || typeof window === "undefined") return undefined;
+    if (!inputElement) {
+      stageElement.style.setProperty("--ai-input-zone-height", "0px");
+      return undefined;
+    }
 
     const updateInputZoneHeight = () => {
       const nextHeight = Math.ceil(inputElement.getBoundingClientRect().height);
@@ -674,7 +698,7 @@ export default function AiKlinip() {
       window.removeEventListener("resize", updateInputZoneHeight);
       window.removeEventListener("orientationchange", updateInputZoneHeight);
     };
-  }, []);
+  }, [assistantScene]);
 
   useEffect(() => {
     if (!mobilePanelOpen || typeof document === "undefined") return undefined;
@@ -716,6 +740,10 @@ export default function AiKlinip() {
       setVoiceStatus("");
     }
   }, [input, voiceState]);
+
+  useEffect(() => {
+    syncInputHeight();
+  }, [assistantScene, input]);
 
   useEffect(() => {
     if (!clinicalActionState.message) return undefined;
@@ -854,6 +882,56 @@ export default function AiKlinip() {
     };
   }, [activeMedications.length, resources.documents.length, nextAppointment, overallAdherenceRate]);
 
+  const assistantHomeStats = useMemo(() => {
+    const upcomingDays = nextAppointment ? Math.max(daysUntil(nextAppointment.date_time) || 0, 0) : null;
+    const nextDoseLabel = nextMedicationDoseItem
+      ? "1 pendiente"
+      : activeMedications.length
+      ? `${activeMedications.length} activo${activeMedications.length === 1 ? "" : "s"}`
+      : "Sin pendientes";
+    const documentsLabel = resources.documents.length
+      ? `${resources.documents.length} cargado${resources.documents.length === 1 ? "" : "s"}`
+      : "Sin documentos";
+
+    return [
+      {
+        key: "appointment",
+        tone: "blue",
+        label: "Próxima cita",
+        value: nextAppointment ? `En ${upcomingDays} día${upcomingDays === 1 ? "" : "s"}` : "Sin cita",
+        detail: nextAppointment
+          ? cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")
+          : "Agenda disponible",
+      },
+      {
+        key: "medications",
+        tone: "amber",
+        label: "Medicamentos",
+        value: nextDoseLabel,
+        detail: nextMedicationDoseItem
+          ? cleanUiText(nextMedicationDoseItem.medication?.name, "Revisar toma de hoy")
+          : activeMedications.length
+          ? "Tratamientos activos"
+          : "Sin tratamiento activo",
+      },
+      {
+        key: "documents",
+        tone: "violet",
+        label: "Documentos",
+        value: documentsLabel,
+        detail: topDocumentInsights[0]
+          ? cleanUiText(DOC_LABELS[topDocumentInsights[0].document_type_inferred] || "Documento clínico")
+          : "Sin análisis reciente",
+      },
+    ];
+  }, [
+    activeMedications.length,
+    nextAppointment,
+    nextMedicationDoseItem,
+    resources.documents.length,
+    topDocumentInsights,
+  ]);
+
   const sortedConversations = useMemo(() => {
     const pinnedOrder = new Map(pinnedConversationIds.map((id, index) => [id, index]));
     return [...conversations].sort((left, right) => {
@@ -896,6 +974,9 @@ export default function AiKlinip() {
       .filter((item) => (item.role === "user" || item.role === "assistant") && String(item.id) !== "welcome")
       .map((item) => ({ role: item.role, content: item.content }));
 
+    setAssistantScene("chat");
+    setRightTab("chat");
+    setMobilePanelOpen(false);
     setMessages((prev) => [...prev, nextUserMessage]);
     if (clearComposer) {
       setInput("");
@@ -1280,6 +1361,7 @@ export default function AiKlinip() {
     setHistoryLoading(true);
     try {
       await loadConversation(targetConversationId);
+      setAssistantScene("chat");
       setRightTab("chat");
       setMobilePanelOpen(false);
     } catch (error) {
@@ -1405,10 +1487,17 @@ export default function AiKlinip() {
     setConversationId("");
     setConversationTitle("");
     setMessages([INITIAL_MESSAGE]);
+    setAssistantScene("home");
+    setInput("");
+    setAttachedFile(null);
+    setScanVisible(false);
+    setVoiceState("idle");
+    setVoiceStatus("");
+    setVoiceError("");
     setRightTab("chat");
     setMobilePanelOpen(false);
     setOpenConversationMenuId("");
-    setTimeout(() => inputFieldRef.current?.focus(), 50);
+    setTimeout(() => (landingInputRef.current || inputFieldRef.current)?.focus(), 50);
   };
 
   const renderClinicalSnapshot = (compact = false) => {
@@ -1557,6 +1646,11 @@ export default function AiKlinip() {
     );
   };
 
+  const isAssistantHome = assistantScene === "home";
+  const conversationSidebarCopy = isAssistantHome
+    ? "Empieza una conversación nueva o abre un chat guardado."
+    : cleanUiText(conversationTitle, "Conversaciones guardadas de Klinip IA");
+
   return (
     <div className="ai-page ai-copilot-page">
       <section className="ai-copilot-shell">
@@ -1587,20 +1681,57 @@ export default function AiKlinip() {
                 </svg>
               </button>
             </div>
-            {!hasConversation ? (
+            {isAssistantHome ? (
               <div className="ai-landing">
-                <div className="ai-landing-center">
-                  <h2 className="ai-landing-title">Asistente</h2>
-                  <p className="ai-landing-subtitle">
-                    Tu apoyo de salud, claro y contextual.
-                  </p>
-                  <div className="ai-landing-safe">
-                    <span className="ai-safe-dot" />
-                    <span>{cleanUiText(meta.disclaimer)}</span>
+                <div className="ai-landing-center is-entry">
+                  <div className="ai-entry-brandline">
+                    <BrandLogo
+                      className="ai-entry-brand"
+                      markClassName="ai-entry-brand-mark"
+                      imgClassName="ai-entry-brand-img"
+                      nameClassName="ai-entry-brand-name"
+                    />
+                    <span className="ai-entry-brand-separator" aria-hidden="true" />
+                    <span className="ai-entry-brand-product">Asistente Klinip</span>
                   </div>
-                </div>
+                  <p className="ai-section-kicker ai-entry-kicker">Asistente Klinip</p>
+                  <h2 className="ai-landing-title">¿En qué te puedo ayudar hoy?</h2>
+                  <p className="ai-landing-subtitle">
+                    Resuelve dudas sobre tu salud en lenguaje simple y con el contexto activo de tu perfil.
+                  </p>
 
-                {renderClinicalSnapshot()}
+                  <form
+                    className="ai-landing-composer"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      submitPrompt(input);
+                    }}
+                  >
+                    <textarea
+                      ref={landingInputRef}
+                      className="ai-landing-input"
+                      value={input}
+                      onChange={(event) => setInput(event.target.value)}
+                      placeholder="Haz una pregunta a Klinip..."
+                      rows={1}
+                      onInput={(event) => {
+                        const target = event.currentTarget;
+                        target.style.height = "auto";
+                        target.style.height = `${Math.min(target.scrollHeight, 92)}px`;
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="ai-landing-send"
+                      disabled={loading || historyLoading || !input.trim()}
+                      aria-label="Iniciar conversación con Klinip IA"
+                    >
+                      <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 19V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </form>
+                </div>
 
                 <div className="ai-context-strip">
                   {contextTags.map((tag) => (
@@ -1611,55 +1742,69 @@ export default function AiKlinip() {
                   ))}
                 </div>
 
-                <section className="ai-quick-section">
-                  <p className="ai-section-kicker">Acciones sugeridas</p>
-                  <div className="ai-quick-grid">
-                    {QUICK_ACTIONS.map((item) => (
-                      <button key={item.id} type="button" className="ai-quick-card" onClick={() => submitPrompt(item.prompt)}>
-                        <span className="ai-quick-icon">{item.token}</span>
-                        <span className="ai-quick-copy">
-                          <strong>{item.title}</strong>
-                          <small>{item.subtitle}</small>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                <section className="ai-entry-actions">
+                  {ENTRY_ACTIONS.map((item) => (
+                    <button key={item.id} type="button" className="ai-entry-pill" onClick={() => submitPrompt(item.prompt)}>
+                      {item.label}
+                    </button>
+                  ))}
                 </section>
 
-                <section className="ai-info-row">
-                  <button type="button" className="ai-info-card" onClick={() => submitPrompt(nextAppointmentPrompt)}>
-                    <span className="ai-info-label tone-violet">Próxima cita</span>
-                    <strong>{nextAppointment ? cleanUiText(nextAppointment.specialty, "Atención agendada") : "Sin cita próxima"}</strong>
-                    <small>{nextAppointment ? formatDateTime(nextAppointment.date_time) : "Puedo ayudarte a revisar tu agenda clínica."}</small>
-                    <em>
-                      {nextAppointment && daysUntil(nextAppointment.date_time) !== null
-                        ? `En ${Math.max(daysUntil(nextAppointment.date_time), 0)} días`
-                        : "Preparar con IA"}
-                    </em>
-                  </button>
+                <div className="ai-entry-stack">
+                  <section className="ai-entry-panel">
+                    <div className="ai-entry-panel-head">
+                      <div className="ai-entry-panel-icon tone-blue">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+                          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <div>
+                        <strong>Sugerencias para comenzar</strong>
+                        <span>Abre el chat con una consulta frecuente y contextual.</span>
+                      </div>
+                    </div>
+                    <div className="ai-entry-suggestion-list">
+                      {ENTRY_SUGGESTIONS.map((item) => (
+                        <button key={item.id} type="button" className="ai-entry-suggestion" onClick={() => submitPrompt(item.prompt)}>
+                          <span>{item.title}</span>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
 
-                  <button type="button" className="ai-info-card" onClick={() => submitPrompt(medsAlertPrompt)}>
-                    <span className="ai-info-label tone-amber">Revisión sugerida</span>
-                    <strong>{activeMedications.length > 1 ? "Interacciones y adherencia" : "Plan de medicamentos"}</strong>
-                    <small>
-                      {activeMedications.length > 1
-                        ? `${activeMedications.length} medicamentos activos para revisar`
-                        : "Puedo resumir tu tratamiento actual"}
-                    </small>
-                    <em>{activeMedications.length > 1 ? "Ver con IA" : "Generar resumen"}</em>
-                  </button>
+                  <section className="ai-entry-panel">
+                    <div className="ai-entry-panel-head">
+                      <div className="ai-entry-panel-icon tone-teal">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+                          <path d="M12 21s-6.5-4.35-8.5-8.08C1.94 9.88 4.1 6 8.1 6c1.55 0 3.06.75 3.9 1.98A4.75 4.75 0 0 1 15.9 6c4 0 6.16 3.88 4.6 6.92C18.5 16.65 12 21 12 21Z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <div>
+                        <strong>Contexto de tu salud</strong>
+                        <span>Klinip IA arranca con el resumen del perfil que tienes activo.</span>
+                      </div>
+                    </div>
+                    <div className="ai-entry-stats">
+                      {assistantHomeStats.map((item) => (
+                        <article key={item.key} className={`ai-entry-stat tone-${item.tone}`}>
+                          <span className="ai-entry-stat-label">{item.label}</span>
+                          <strong>{item.value}</strong>
+                          <small>{item.detail}</small>
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                </div>
 
-                  <button type="button" className="ai-info-card" onClick={() => handleGenerateReport("consulta_medica", 30)}>
-                    <span className="ai-info-label tone-blue">Reporte clínico</span>
-                    <strong>{clinicalReports[0] ? "Actualizar reporte" : "Generar primer reporte"}</strong>
-                    <small>
-                      {clinicalReports[0]
-                        ? `Último: ${formatShortDate(clinicalReports[0].created_at)}`
-                        : "Genera un PDF para llevar a consulta"}
-                    </small>
-                    <em>{reportBusy ? "Generando..." : "Crear PDF"}</em>
-                  </button>
-                </section>
+                {renderClinicalSnapshot()}
+
+                <div className="ai-landing-safe ai-entry-safe">
+                  <span className="ai-safe-dot" />
+                  <span>{cleanUiText(meta.disclaimer)}</span>
+                </div>
               </div>
             ) : (
               <div className="ai-chat" ref={scrollRef}>
@@ -1722,7 +1867,8 @@ export default function AiKlinip() {
               </div>
             )}
 
-            <div className="ai-input-zone" ref={inputZoneRef}>
+            {!isAssistantHome ? (
+              <div className="ai-input-zone" ref={inputZoneRef}>
               <form className="ai-input-shell" onSubmit={(event) => { event.preventDefault(); submitPrompt(input); }}>
                 {(attachedFile || scanVisible || hasVoiceFeedback) ? (
                   <div className={`ai-upload-strip ${attachedFile ? "has-file" : ""}`}>
@@ -1808,7 +1954,8 @@ export default function AiKlinip() {
                 <span className="ai-safe-dot" />
                 <span>{aiFooterCopy}</span>
               </div>
-            </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -2073,7 +2220,7 @@ export default function AiKlinip() {
               <div className="ai-chat-sidebar-head">
                 <div className="ai-chat-sidebar-copy">
                   <strong>Tus chats</strong>
-                  <span>{cleanUiText(conversationTitle, "Conversaciones guardadas de Klinip IA")}</span>
+                  <span>{conversationSidebarCopy}</span>
                 </div>
                 <div className="ai-chat-sidebar-actions">
                   <button type="button" className="ai-chat-sidebar-new" onClick={() => handleGenerateReport("consulta_medica", 30)}>
