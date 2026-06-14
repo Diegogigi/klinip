@@ -58392,10 +58392,10 @@ body.theme-dark .bio-unified-chart-legend-item small {
     align-items: stretch !important;
     justify-content: flex-start !important;
     min-height: 0 !important;
-    padding-top: 0.32rem !important;
-    padding-right: 0.46rem !important;
-    padding-bottom: 0.28rem !important;
-    padding-left: 0.46rem !important;
+    padding-top: 0.36rem !important;
+    padding-right: 0.54rem !important;
+    padding-bottom: 0.32rem !important;
+    padding-left: 0.54rem !important;
   }
 
   .sidebar.sidebar-mobile-shell {
@@ -58438,7 +58438,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     display: grid !important;
     grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
     grid-auto-rows: min-content !important;
-    gap: 0.12rem !important;
+    gap: 0.16rem !important;
     align-items: start !important;
     align-content: start !important;
     justify-items: stretch !important;
@@ -58456,10 +58456,10 @@ body.theme-dark .bio-unified-chart-legend-item small {
     align-self: start !important;
     max-width: none !important;
     min-width: 0;
-    min-height: 3rem !important;
+    min-height: 3.16rem !important;
     height: auto !important;
-    padding: 0.2rem 0.06rem 0.08rem !important;
-    gap: 0.1rem !important;
+    padding: 0.22rem 0.08rem 0.1rem !important;
+    gap: 0.12rem !important;
     border-radius: 1.05rem;
     color: rgba(79, 97, 132, 0.86);
     background: transparent;
@@ -58476,10 +58476,10 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
   .sidebar-icon.sidebar-icon-mobile,
   .sidebar-link.sidebar-link-mobile.is-mobile-ai .sidebar-icon.sidebar-icon-mobile {
-    width: 2.06rem !important;
-    height: 2.06rem !important;
-    min-width: 2.06rem !important;
-    min-height: 2.06rem !important;
+    width: 2.22rem !important;
+    height: 2.22rem !important;
+    min-width: 2.22rem !important;
+    min-height: 2.22rem !important;
     border-radius: 999px;
     background: transparent;
     color: currentColor;
@@ -58487,8 +58487,8 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar-icon.sidebar-icon-mobile svg {
-    width: 1.14rem !important;
-    height: 1.14rem !important;
+    width: 1.22rem !important;
+    height: 1.22rem !important;
   }
 
   .brand-mark-nav,
@@ -58501,8 +58501,8 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .sidebar-label.sidebar-label-mobile,
   .sidebar-link.sidebar-link-mobile.is-mobile-ai .sidebar-label.sidebar-label-mobile {
     width: auto !important;
-    font-size: 0.58rem !important;
-    line-height: 0.96 !important;
+    font-size: 0.61rem !important;
+    line-height: 0.98 !important;
     font-weight: 700;
     white-space: nowrap !important;
     overflow-wrap: normal !important;
@@ -58560,8 +58560,8 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar-link.sidebar-link-mobile.is-mobile-voice .sidebar-icon.sidebar-icon-mobile {
-    width: 2.06rem !important;
-    height: 2.06rem !important;
+    width: 2.22rem !important;
+    height: 2.22rem !important;
     border-radius: 999px;
     color: currentColor;
     background: transparent;
