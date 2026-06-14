@@ -1886,81 +1886,8 @@ export default function KlinipFeed({ user }) {
               <p className="kfeed-section-kicker">Familia</p>
               <h1 className="kfeed-page-title">Familia</h1>
               <p className="kfeed-page-subtitle">Cuidado compartido, con privacidad y control.</p>
-              <p className="kfeed-page-caption">{familySummary}</p>
             </div>
           </div>
-          <section className="kfeed-care-overview" aria-label="Resumen del grupo familiar">
-            <article className="kfeed-care-overview-item tone-red">
-              <span>alertas</span>
-              <strong>{activeAlertsTotal}</strong>
-            </article>
-            <article className="kfeed-care-overview-item tone-blue">
-              <span>citas</span>
-              <strong>{upcomingAppointments}</strong>
-            </article>
-            <article className="kfeed-care-overview-item tone-teal">
-              <span>integrantes</span>
-              <strong>{collaborativeProfiles}</strong>
-            </article>
-          </section>
-        </div>
-
-        <div className="kfeed-care-layout">
-          <section className="kfeed-care-panel">
-            <div className="kfeed-care-panel-head">
-              <h2 className="kfeed-section-title">Atención hoy</h2>
-              <Link className="kfeed-inline-link" to="/settings/familia">
-                Ver todo
-              </Link>
-            </div>
-            {importantEvents.length ? (
-              <div className="kfeed-care-panel-body">
-                <div className="kfeed-clinical-event-list">
-                  {attentionPreview.map((item) => (
-                    <ClinicalEventCard key={item.key} item={item} />
-                  ))}
-                </div>
-                {remainingAttentionCount > 0 && (
-                  <Link className="kfeed-care-more-link" to="/settings/familia">
-                    Ver {formatUnitLabel(remainingAttentionCount, "caso más", "casos más")}
-                  </Link>
-                )}
-              </div>
-            ) : (
-              <div className="kfeed-care-empty">
-                <strong>Sin señales críticas</strong>
-              </div>
-            )}
-          </section>
-
-          <section className="kfeed-care-panel">
-            <div className="kfeed-care-panel-head">
-              <h2 className="kfeed-section-title">Permisos</h2>
-              <Link className="kfeed-inline-link" to="/settings/familia">
-                Gestionar
-              </Link>
-            </div>
-            <div className="kfeed-permission-grid">
-              <PermissionSummaryCard
-                title="Ver"
-                tone="blue"
-                names={permissionViewNames}
-                emptyText="Solo tú"
-              />
-              <PermissionSummaryCard
-                title="Editar"
-                tone="teal"
-                names={permissionEditNames}
-                emptyText="Solo tú"
-              />
-              <PermissionSummaryCard
-                title="Alertas"
-                tone={alertsEnabled ? "amber" : "slate"}
-                names={alertsEnabled ? alertRecipients : []}
-                emptyText={alertsEnabled ? "Solo tú" : "Desactivadas"}
-              />
-            </div>
-          </section>
         </div>
 
         <div className="kfeed-composer-card">

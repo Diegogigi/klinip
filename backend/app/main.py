@@ -137,6 +137,11 @@ try:
 except Exception:
     convert_from_bytes = None
 
+try:
+    import pdfplumber
+except Exception:
+    pdfplumber = None
+
 RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
     (os.getenv("ENABLE_RUNTIME_SCHEMA_MUTATIONS") or "").strip() == "1"
     or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
@@ -7134,7 +7139,40 @@ def _apply_document_ocr_automations(
     return detected_meds_for_email
 
 
+def _extract_pdf_embedded_text(data: bytes) -> str:
+    """Extrae la capa de texto embebido de un PDF digital (sin OCR ni poppler).
+    Devuelve "" si no hay librería, el PDF es escaneo, o falla la lectura."""
+    if not pdfplumber:
+        return ""
+    try:
+        parts: list[str] = []
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            for page in pdf.pages[:OCR_MAX_PAGES]:
+                parts.append(page.extract_text() or "")
+        return "\n".join(parts).strip()
+    except Exception:
+        return ""
+
+
+def _is_meaningful_text_layer(text: str) -> bool:
+    """True si el texto embebido es suficiente para saltarse el OCR.
+    Un escaneo sin capa de texto devuelve vacío o casi nada."""
+    if not text:
+        return False
+    stripped = text.strip()
+    alpha = sum(1 for ch in stripped if ch.isalpha())
+    return len(stripped) >= 60 and alpha >= 20
+
+
 def _extract_ocr_text(data: bytes, filename: str) -> str:
+    # 1) PDFs digitales: usar la capa de texto embebido primero.
+    #    Es más preciso que rasterizar+OCR y no depende de Tesseract ni poppler.
+    if filename.lower().endswith(".pdf"):
+        embedded = _extract_pdf_embedded_text(data)
+        if _is_meaningful_text_layer(embedded):
+            return embedded
+
+    # 2) Escaneos e imágenes: OCR con Tesseract (requiere pytesseract + Pillow).
     if not pytesseract or not Image:
         raise RuntimeError("tesseract_not_available")
     lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
@@ -11360,67 +11398,176 @@ def _load_adherence_summary_cached(
     }
 
 
+# Rangos de referencia estándar de respaldo, usados SOLO cuando el documento
+# no imprime su propio rango. Conservadores y para adultos. (low, high, unit)
+_LAB_FALLBACK_RANGES: dict[str, tuple[float, float, str]] = {
+    "hemoglobina": (12.0, 17.5, "g/dL"),
+    "hematocrito": (36.0, 50.0, "%"),
+    "glicemia": (70.0, 100.0, "mg/dL"),
+    "glucosa": (70.0, 100.0, "mg/dL"),
+    "colesterol total": (0.0, 200.0, "mg/dL"),
+    # HDL: la preocupación es el valor BAJO (<40); el alto no se marca.
+    "colesterol hdl": (40.0, 200.0, "mg/dL"),
+    "hdl": (40.0, 200.0, "mg/dL"),
+    # "vldl" antes que "ldl": "vldl" contiene "ldl" como substring.
+    "vldl": (0.0, 30.0, "mg/dL"),
+    "colesterol ldl": (0.0, 130.0, "mg/dL"),
+    "ldl": (0.0, 130.0, "mg/dL"),
+    "trigliceridos": (0.0, 150.0, "mg/dL"),
+    "creatinina": (0.6, 1.3, "mg/dL"),
+    "urea": (15.0, 45.0, "mg/dL"),
+    "potasio": (3.5, 5.1, "mEq/L"),
+    "sodio": (135.0, 145.0, "mEq/L"),
+}
+
+# Etiquetas de tiempo que el OCR puede capturar como "unidad" en exámenes
+# por tiempos (ej. PTGO: "GLUCOSA 120 MIN"). Nunca son unidades de un valor.
+_LAB_TIME_UNITS = {"min", "mins", "minuto", "minutos"}
+
+# Umbrales de valor crítico ("pánico"). Muy conservadores: solo se marca
+# flag="critical" cuando el valor está claramente en zona peligrosa.
+# (low_critico, high_critico) — None desactiva ese extremo.
+_LAB_CRITICAL_THRESHOLDS: dict[str, tuple[float | None, float | None]] = {
+    "glicemia": (50.0, 400.0),
+    "glucosa": (50.0, 400.0),
+    "potasio": (2.8, 6.2),
+    "sodio": (120.0, 160.0),
+    "hemoglobina": (7.0, 20.0),
+    "creatinina": (None, 6.0),
+}
+
+
+def _match_lab_reference(name: str, table: dict):
+    """Busca en `table` la primera clave que aparezca en el nombre normalizado."""
+    normalized = _normalize_text(name)
+    for key, payload in table.items():
+        if key in normalized:
+            return payload
+    return None
+
+
+# Formato real de laboratorios chilenos (CMDS, Synlab, etc.):
+#   NOMBRE [*|**] VALOR [UNIDAD] [rango]
+# El laboratorio marca por sí mismo: * = fuera de rango, ** = valor crítico.
+_LAB_ANALYTE_PATTERN = re.compile(
+    r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ][A-Za-zÁÉÍÓÚÑáéíóúñ0-9()\./\- ]{2,55}?)\s+"
+    r"(?P<marker>\*{1,2})?\s*"
+    r"(?P<value>[<>]?\d+(?:[.,]\d+)?)"
+    r"(?:\s+(?P<unit>[A-Za-zµ%][A-Za-zµ%0-9/\^.\-]{0,14}))?"
+    r"(?:\s*\[\s*(?P<rlow>\d+(?:[.,]\d+)?)\s*[-–a]\s*(?P<rhigh>\d+(?:[.,]\d+)?))?",
+    re.IGNORECASE,
+)
+
+# Patrón heredado para layouts "Nombre: valor unidad rango" (otros laboratorios).
+_LAB_LEGACY_PATTERN = re.compile(
+    r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ0-9/%().,\- ]{3,80}?):\s+"
+    r"(?P<value>[<>]?\d+(?:[.,]\d+)?)"
+    r"(?:\s+(?P<unit>[A-Za-z/%µ0-9.-]{1,24}))?"
+    r"(?:\s+(?:ref\.?|rango|vr)?\s*(?P<rlow>\d+(?:[.,]\d+)?)\s*[-–a]\s*(?P<rhigh>\d+(?:[.,]\d+)?))?$",
+    re.IGNORECASE,
+)
+
+
 def _extract_document_lab_entities(text: str) -> list[dict]:
     entities: list[dict] = []
     if not text:
         return entities
     lines = [_safe_text(ln) for ln in text.splitlines() if _safe_text(ln)]
-    patterns = [
-        re.compile(
-            r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ0-9/%().,\- ]{3,80}?)[:\s]+"
-            r"(?P<value>[<>]?\d+(?:[.,]\d+)?)"
-            r"(?:\s+(?P<unit>[A-Za-z/%µ0-9.-]{1,24}))?"
-            r"(?:\s+(?P<range>(?:ref\.?|rango|vr)?\s*\d+(?:[.,]\d+)?\s*[-–a]\s*\d+(?:[.,]\d+)?))?$",
-            re.IGNORECASE,
-        ),
-        re.compile(
-            r"^(?P<name>[A-Za-zÁÉÍÓÚÑáéíóúñ0-9/%().,\- ]{3,80}?)\s+"
-            r"(?P<value>[<>]?\d+(?:[.,]\d+)?)\s*"
-            r"(?P<unit>[A-Za-z/%µ0-9.-]{0,24})\s+"
-            r"(?P<range>\d+(?:[.,]\d+)?\s*[-–a]\s*\d+(?:[.,]\d+)?)$",
-            re.IGNORECASE,
-        ),
-    ]
+    seen_names: set[str] = set()
     for line in lines[:120]:
-        match = None
-        for pattern in patterns:
-            match = pattern.match(line)
-            if match:
-                break
+        # Saltar metadata, método y validación (siempre llevan ":").
+        if ":" in line:
+            continue
+        match = _LAB_ANALYTE_PATTERN.match(line) or _LAB_LEGACY_PATTERN.match(line)
         if not match:
             continue
-        name = _safe_text(match.group("name"))
-        value = (match.group("value") or "").replace(",", ".")
-        unit = _safe_text(match.group("unit") or "")
-        reference_range = _safe_text(re.sub(r"^(ref\.?|rango|vr)\s*", "", match.group("range") or "", flags=re.IGNORECASE))
+        groups = match.groupdict()
+        marker = groups.get("marker") or ""
+        unit = _safe_text(groups.get("unit") or "")
+        rlow_raw, rhigh_raw = groups.get("rlow"), groups.get("rhigh")
+        # Guard de precisión: exigir señal real (unidad, marcador o rango impreso)
+        # para no confundir direcciones, teléfonos o fechas con análisis.
+        if not (unit or marker or rlow_raw):
+            continue
+        # Descartar etiquetas de tiempo tomadas como unidad (ej. PTGO "120 MIN").
+        if _normalize_text(unit) in _LAB_TIME_UNITS:
+            continue
+        name = _safe_text(groups.get("name") or "")
+        value = (groups.get("value") or "").replace(",", ".")
+        reference_range = ""
         flag = "unknown"
         try:
             numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
-            if reference_range:
-                low_raw, high_raw = re.split(r"[-–a]", reference_range, maxsplit=1)
-                low_value = float(low_raw.replace(",", ".").strip())
-                high_value = float(high_raw.replace(",", ".").strip())
+            low_value = high_value = None
+            if rlow_raw and rhigh_raw:
+                low_value = float(rlow_raw.replace(",", "."))
+                high_value = float(rhigh_raw.replace(",", "."))
+                reference_range = f"{low_value:g}-{high_value:g}"
+            else:
+                # Sin rango impreso legible: usar respaldo conocido.
+                fallback = _match_lab_reference(name, _LAB_FALLBACK_RANGES)
+                if fallback:
+                    low_value, high_value, fallback_unit = fallback
+                    if not unit:
+                        unit = fallback_unit
+                    reference_range = f"{low_value:g}-{high_value:g} (ref. estándar)"
+            # 1) El marcador del laboratorio manda (fuente médica directa).
+            if marker == "**":
+                flag = "critical"
+            elif marker == "*":
+                if low_value is not None and numeric < low_value:
+                    flag = "low"
+                elif low_value is not None and numeric > high_value:
+                    flag = "high"
+                else:
+                    flag = "abnormal"
+            # 2) Sin marcador: comparar contra rango (impreso o de respaldo).
+            elif low_value is not None and high_value is not None:
                 if numeric < low_value:
                     flag = "low"
                 elif numeric > high_value:
                     flag = "high"
                 else:
                     flag = "normal"
+            # 3) Tier crítico propio solo si el laboratorio no usó marcadores.
+            if not marker:
+                critical = _match_lab_reference(name, _LAB_CRITICAL_THRESHOLDS)
+                if critical:
+                    crit_low, crit_high = critical
+                    if (crit_low is not None and numeric < crit_low) or (
+                        crit_high is not None and numeric > crit_high
+                    ):
+                        flag = "critical"
         except Exception:
             flag = "unknown"
+        key = _normalize_text(name)
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
         entities.append(
             {
                 "entity_type": "lab_value",
                 "entity_name": name,
-                "entity_value": match.group("value") or "",
+                "entity_value": value,
                 "unit": unit,
                 "reference_range": reference_range,
                 "flag": flag,
-                "confidence": 82,
+                "confidence": 88 if marker else 82,
                 "source_text": line[:240],
             }
         )
     return entities[:24]
+
+
+# Medicamentos de receta retenida / controlada (nombres canónicos del mapa).
+# Conservador: solo los inequívocamente controlados en Chile.
+_CONTROLLED_MEDICATIONS = {
+    "Clonazepam",
+    "Alprazolam",
+    "Tramadol",
+    "Pregabalina",
+    "Quetiapina",
+}
 
 
 def _extract_prescription_entities(text: str) -> list[dict]:
@@ -11478,6 +11625,8 @@ def _extract_prescription_entities(text: str) -> list[dict]:
         "Prednisona": ["prednisona", "meticorten"],
         "Pregabalina": ["pregabalina", "lyrica"],
         "Tramadol": ["tramadol", "tradol"],
+        "Celecoxib": ["celecoxib", "celebra", "celecox"],
+        "Meloxicam": ["meloxicam", "mobic"],
     }
     alias_lookup: list[tuple[str, str]] = []
     for canonical_name, aliases in generic_map.items():
@@ -11523,6 +11672,7 @@ def _extract_prescription_entities(text: str) -> list[dict]:
         "prescripcion",
         "receta electronica",
     )
+    seen_meds: set[str] = set()
     for line in lines[:80]:
         normalized_line = re.sub(r"^[\-\u2022*]+\s*", "", line).strip()
         lowered_line = normalized_line.lower()
@@ -11545,11 +11695,25 @@ def _extract_prescription_entities(text: str) -> list[dict]:
         name_fragment = normalized_line[: min(cut_positions)] if cut_positions else normalized_line
         name_fragment = re.sub(r"[:;,]+$", "", name_fragment).strip(" -,:;")
         canonical_name = alias_matches[0][1] if alias_matches else _safe_text(name_fragment)
+        if not alias_matches:
+            # Limpiar ruido OCR al inicio (ej. "z CELECOXIB" -> "CELECOXIB", "= 4" -> "").
+            canonical_name = re.sub(
+                r"^(?:[^A-Za-zÁÉÍÓÚÑáéíóúñ]+|[A-Za-zÁÉÍÓÚÑáéíóúñ]\s+)+",
+                "",
+                canonical_name,
+            ).strip()
+            # Exigir un nombre con al menos 3 letras consecutivas reales.
+            if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", canonical_name):
+                continue
         aliases = sorted({canonical_name, *[canonical for _, canonical in alias_matches], *[alias.title() for alias, _ in alias_matches]})
         if not canonical_name:
             continue
         if len(canonical_name) < 3 and not dose:
             continue
+        dedup_key = _normalize_text(canonical_name)
+        if not dedup_key or dedup_key in seen_meds:
+            continue
+        seen_meds.add(dedup_key)
         summary_parts = [part for part in [dose, frequency, duration] if part]
         entities.append(
             {
@@ -11558,7 +11722,7 @@ def _extract_prescription_entities(text: str) -> list[dict]:
                 "entity_value": ", ".join(summary_parts) if summary_parts else normalized_line[:120],
                 "unit": dose,
                 "reference_range": ", ".join(aliases[:4]) if aliases else "",
-                "flag": "instruction",
+                "flag": "controlled" if canonical_name in _CONTROLLED_MEDICATIONS else "instruction",
                 "confidence": 84 if alias_matches else 74,
                 "source_text": normalized_line[:240],
             }
@@ -11669,7 +11833,7 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
         entities = _extract_diagnosis_entities(text)
     else:
         entities = []
-    abnormal_values = [item for item in entities if item.get("flag") in {"high", "low"}]
+    abnormal_values = [item for item in entities if item.get("flag") in {"high", "low", "critical", "abnormal"}]
     prescription_items = [item for item in entities if item.get("entity_type") == "medication_instruction"]
     diagnosis_items = [item for item in entities if item.get("entity_type") == "diagnosis"]
     key_points: list[str] = []
@@ -22972,6 +23136,46 @@ async def list_documents(
         .all()
     )
     return docs
+
+
+@app.get("/documents/{document_id}/analysis", response_model=schemas.DocumentAnalysisOut)
+async def get_document_analysis(
+    document_id: int,
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Devuelve el análisis del documento (tipo, resumen amigable y entidades
+    clínicas limpias) para mostrar en el asistente de subida."""
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            *_document_scope_filter(profile, target_user_id),
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    summary = (
+        db.query(models.DocumentSummary)
+        .filter(models.DocumentSummary.document_id == doc.id)
+        .first()
+    )
+    entities = (
+        db.query(models.DocumentClinicalEntity)
+        .filter(models.DocumentClinicalEntity.document_id == doc.id)
+        .order_by(models.DocumentClinicalEntity.id.asc())
+        .all()
+    )
+    return schemas.DocumentAnalysisOut(
+        document_id=doc.id,
+        doc_type=doc.doc_type.value if doc.doc_type else "otro",
+        ocr_status=doc.ocr_status,
+        summary=schemas.DocumentSummaryOut.model_validate(summary) if summary else None,
+        entities=[schemas.DocumentClinicalEntityOut.model_validate(e) for e in entities],
+    )
 
 
 @app.post("/documents", response_model=schemas.DocumentOut)

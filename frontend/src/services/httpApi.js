@@ -742,6 +742,13 @@ export async function retryDocumentOcr(id) {
   return res.data;
 }
 
+export async function getDocumentAnalysis(id, profileId) {
+  const res = await api.get(`/documents/${id}/analysis`, {
+    params: profileId ? { profile_id: profileId } : undefined,
+  });
+  return res.data;
+}
+
 export async function getDocumentFile(documentId) {
   const response = await api.get(`/documents/${documentId}/file`, {
     responseType: "blob",

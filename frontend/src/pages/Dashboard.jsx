@@ -18,7 +18,7 @@ import {
   updateProfileNote,
 } from "../api";
 import { parseDate, toLocalInputValue } from "../utils/dates";
-import { subscribeClinicalDataChanged } from "../utils/clinicalRefresh";
+import { subscribeClinicalDataChanged, notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { isHandheldViewport } from "../utils/mobileViewport";
 import { cleanUiText } from "../utils/textEncoding";
@@ -36,6 +36,7 @@ import {
 } from "../utils/medicationSchedule";
 import { ensureArray } from "../utils/arrays";
 import BrandLogo from "../components/BrandLogo";
+import DocumentUploadWizard from "../components/DocumentUploadWizard";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
@@ -430,6 +431,13 @@ function renderIcon(name) {
           <polyline points="2 12 6.5 12 9 7 13.5 18 16 12 22 12" />
         </svg>
       );
+    case "camera":
+      return (
+        <svg {...iconProps}>
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+          <circle cx="12" cy="13" r="4" />
+        </svg>
+      );
     default:
       return (
         <svg {...iconProps}>
@@ -541,6 +549,7 @@ export default function Dashboard({
   const profileMenuRef = useRef(null);
   const profileMenuOverlayRef = useRef(null);
   const quickCarouselRef = useRef(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(() => isHandheldViewport(768));
   const [appointments, setAppointments] = useState([]);
@@ -1424,6 +1433,15 @@ export default function Dashboard({
   ].filter(Boolean);
 
   const quickActions = [
+    {
+      id: "photo",
+      icon: "camera",
+      label: "Tomar foto",
+      subtitle: "Registra un documento con una foto",
+      hint: "Rápido",
+      tone: "blue",
+      onClick: () => setWizardOpen(true),
+    },
     {
       id: "medication",
       icon: "medication",
@@ -2742,6 +2760,18 @@ export default function Dashboard({
                 ))}
               </div>
             </article>
+
+            <DocumentUploadWizard
+              open={wizardOpen}
+              onClose={() => setWizardOpen(false)}
+              profileId={activeProfile?.id}
+              onUploaded={() =>
+                notifyClinicalDataChanged({
+                  profileId: activeProfile?.id,
+                  sources: ["documents", "health-radar"],
+                })
+              }
+            />
 
             <article className="home-panel-card home-biometrics-card">
               <div className="home-panel-head">

@@ -938,6 +938,19 @@ class DocumentSummaryOut(BaseModel):
         from_attributes = True
 
 
+class DocumentAnalysisOut(BaseModel):
+    """Análisis completo de un documento para el asistente de subida (wizard):
+    tipo detectado + resumen amigable + entidades clínicas limpias."""
+    document_id: int
+    doc_type: str = "otro"
+    ocr_status: Optional[str] = None
+    summary: Optional[DocumentSummaryOut] = None
+    entities: list[DocumentClinicalEntityOut] = []
+
+    class Config:
+        from_attributes = True
+
+
 class ProfileHealthFeatureOut(BaseModel):
     profile_id: int
     next_appointment_at: datetime | None = None

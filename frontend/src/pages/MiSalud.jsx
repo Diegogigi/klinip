@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
 import {
   getAppointments,
   getBiometricDashboard,
@@ -113,7 +112,6 @@ function IcoCalGrid() { return <svg {...sp}><rect x="3" y="4" width="18" height=
 function IcoChevron() { return <svg {...sp} strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg>; }
 function IcoCheck() { return <svg {...sp} strokeWidth="2.5"><path d="M20 6 9 17l-5-5"/></svg>; }
 function IcoAlert() { return <svg {...sp}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>; }
-function IcoShield() { return <svg {...sp}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>; }
 function IcoBiometric() { return <svg {...sp}><path d="M22 12h-4l-2.2 5L10 7 7.5 12H2"/><path d="M12 18v3"/></svg>; }
 
 const TIMELINE_ICONS = {
@@ -236,35 +234,49 @@ export default function MiSalud() {
     <div className="clp-page">
 
       {/* ═══ PATIENT HEADER ═══ */}
-      <header className="clp-scene-header">
-        <div className="clp-scene-topbar">
-          <BrandLogo
-            className="clp-scene-brand"
-            markClassName="clp-scene-brand-mark"
-            imgClassName="clp-scene-brand-img"
-            nameClassName="clp-scene-brand-name"
-            showName={false}
-          />
-          <Link to="/documents" className="clp-scene-action" aria-label="Abrir documentos">
-            <IcoDoc />
-          </Link>
-        </div>
-        <div className="clp-patient-icon"><IcoShield /></div>
-        <div className="clp-patient-copy">
-          <p className="clp-patient-greet">{profile?.full_name || "Perfil activo"}</p>
-          <p className="clp-patient-name">Mi Salud</p>
-          <p className="clp-patient-meta">
+      <section className="clp-page-intro" aria-label="Resumen principal">
+        <div className="clp-page-intro-copy">
+          <p className="clp-page-intro-kicker">{profile?.full_name || "Perfil activo"}</p>
+          <h1 className="clp-page-intro-title">Mi Salud</h1>
+          <p className="clp-page-intro-subtitle">
             {hasData
               ? `${appointments.length} citas · ${activeMeds.length} medicamentos · ${documents.length} documentos`
               : "Todavía no tienes información guardada"}
           </p>
         </div>
-        {warnings.length > 0 && (
-          <span className="clp-patient-warn" title={warnings.join(". ")}>
-            <IcoAlert />
-          </span>
-        )}
-      </header>
+      </section>
+      <section className="clp-stat-grid" aria-label="Resumen rápido">
+        <article className="clp-stat-card tone-blue">
+          <span className="clp-stat-icon"><IcoCal /></span>
+          <div className="clp-stat-copy">
+            <span className="clp-stat-label">Agenda</span>
+            <strong>{appointments.length}</strong>
+            <span className="clp-stat-meta">
+              {nextAppt ? `Próxima ${relativeDay(parseDate(nextAppt.date_time)).toLowerCase()}` : "Sin cita agendada"}
+            </span>
+          </div>
+        </article>
+        <article className="clp-stat-card tone-amber">
+          <span className="clp-stat-icon"><IcoPill /></span>
+          <div className="clp-stat-copy">
+            <span className="clp-stat-label">Tratamientos</span>
+            <strong>{activeMeds.length}</strong>
+            <span className="clp-stat-meta">
+              {activeMeds.length === 1 ? "medicamento activo" : "medicamentos activos"}
+            </span>
+          </div>
+        </article>
+        <article className="clp-stat-card tone-violet">
+          <span className="clp-stat-icon"><IcoDoc /></span>
+          <div className="clp-stat-copy">
+            <span className="clp-stat-label">Documentos</span>
+            <strong>{documents.length}</strong>
+            <span className="clp-stat-meta">
+              {documents.length === 1 ? "documento por revisar" : "documentos por revisar"}
+            </span>
+          </div>
+        </article>
+      </section>
       <section className="clp-summary-strip" aria-label="Resumen rápido">
         <article className="clp-summary-item">
           <span className="clp-summary-icon"><IcoCal /></span>

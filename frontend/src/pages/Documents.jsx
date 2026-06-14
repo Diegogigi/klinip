@@ -18,6 +18,7 @@ import { toIsoOrNull, toLocaleDateOrEmpty } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import StepUpModal from "../components/StepUpModal";
+import DocumentUploadWizard from "../components/DocumentUploadWizard";
 import { cleanUiText } from "../utils/textEncoding";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
@@ -200,6 +201,7 @@ export default function Documents() {
   const [documentIntelligence, setDocumentIntelligence] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -823,11 +825,42 @@ export default function Documents() {
 
       {canEditActiveProfile ? (
         <div className="card documents-surface-free documents-create">
-          <button className="primary-btn" type="button" style={{ width: "100%" }} onClick={() => setShowForm(true)}>
-            Agregar documento
+          <button className="primary-btn" type="button" style={{ width: "100%" }} onClick={() => setWizardOpen(true)}>
+            📷 Agregar con una foto
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowForm(true)}
+            style={{
+              width: "100%",
+              marginTop: "0.5rem",
+              background: "none",
+              border: "none",
+              color: "#647488",
+              fontWeight: 700,
+              fontSize: "0.95rem",
+              cursor: "pointer",
+              textDecoration: "underline",
+              fontFamily: "inherit",
+            }}
+          >
+            Agregar manualmente
           </button>
         </div>
       ) : null}
+
+      <DocumentUploadWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        profileId={activeProfile?.id}
+        onUploaded={() => {
+          load();
+          notifyClinicalDataChanged({
+            profileId: activeProfile?.id,
+            sources: ["documents", "health-radar"],
+          });
+        }}
+      />
 
       {showForm && canEditActiveProfile && createPortal(
         <div className="floating-form-backdrop" onClick={handleFormClose}>
