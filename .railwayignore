@@ -1,14 +1,22 @@
 Procfile
 start.sh
 railway.json
+.git/
+.pytest_cache/
 
 # Dependencias locales y entornos que no deben viajar al build
 backend/venv/
 backend/venv_old/
 frontend/node_modules/
+frontend/dist/
 
 # Archivos locales ajenos al deploy
 .claude/
+.project-skills/
 .vscode/
 uploaded_docs/
+assets_lebu/
+presentacion_klinip_*.html
+instagram_carrusel_*.html
 *.log
+*.xlsx
