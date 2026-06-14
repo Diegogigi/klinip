@@ -2323,7 +2323,22 @@ export default function Dashboard({
   }, [isMobile]);
 
   if (isMobile) {
-    return newMobileHome;
+    return (
+      <>
+        {newMobileHome}
+        <DocumentUploadWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          profileId={activeProfile?.id}
+          onUploaded={() =>
+            notifyClinicalDataChanged({
+              profileId: activeProfile?.id,
+              sources: ["documents", "health-radar"],
+            })
+          }
+        />
+      </>
+    );
   }
 
 
