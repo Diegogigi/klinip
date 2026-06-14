@@ -329,7 +329,7 @@ function Sidebar({
         width: "min(calc(100vw - 2.9rem), 21.6rem)",
         maxWidth: "21.6rem",
         height: "auto",
-        padding: "0.34rem 0.42rem 0.3rem",
+        padding: "0.42rem 0.46rem 0.38rem",
         borderRadius: "1.9rem",
         transform: "translateX(-50%)",
         overflow: "hidden",
