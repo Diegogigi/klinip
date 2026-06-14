@@ -66,3 +66,87 @@ export function cleanUiText(value, fallback = "") {
   const cleaned = repairMojibakeText(value).trim();
   return cleaned || fallback;
 }
+
+const REPAIRABLE_ATTRIBUTES = ["aria-label", "placeholder", "title"];
+
+function repairElementAttributes(element) {
+  if (!(element instanceof Element)) return;
+  REPAIRABLE_ATTRIBUTES.forEach((attributeName) => {
+    const current = element.getAttribute(attributeName);
+    if (!current) return;
+    const repaired = repairMojibakeText(current);
+    if (repaired !== current) {
+      element.setAttribute(attributeName, repaired);
+    }
+  });
+}
+
+function repairNodeTree(node) {
+  if (!node) return;
+
+  if (node.nodeType === Node.TEXT_NODE) {
+    const current = node.nodeValue || "";
+    const repaired = repairMojibakeText(current);
+    if (repaired !== current) {
+      node.nodeValue = repaired;
+    }
+    return;
+  }
+
+  if (!(node instanceof Element)) return;
+
+  repairElementAttributes(node);
+
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  let textNode = walker.nextNode();
+  while (textNode) {
+    const current = textNode.nodeValue || "";
+    const repaired = repairMojibakeText(current);
+    if (repaired !== current) {
+      textNode.nodeValue = repaired;
+    }
+    textNode = walker.nextNode();
+  }
+
+  node.querySelectorAll("*").forEach((child) => {
+    repairElementAttributes(child);
+  });
+}
+
+export function observeMojibakeRepair(root) {
+  if (typeof document === "undefined" || !root) return () => {};
+
+  repairNodeTree(root);
+
+  if (typeof MutationObserver === "undefined") {
+    return () => {};
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (mutation.type === "characterData") {
+        repairNodeTree(mutation.target);
+        return;
+      }
+
+      if (mutation.type === "attributes") {
+        repairNodeTree(mutation.target);
+        return;
+      }
+
+      mutation.addedNodes.forEach((node) => {
+        repairNodeTree(node);
+      });
+    });
+  });
+
+  observer.observe(root, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: REPAIRABLE_ATTRIBUTES,
+  });
+
+  return () => observer.disconnect();
+}

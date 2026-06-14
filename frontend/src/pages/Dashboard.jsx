@@ -2557,7 +2557,7 @@ export default function Dashboard({
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Radar de salud</h2>
-                <p className="home-panel-subtitle">Estado general registrado en Klinip</p>
+                <p className="home-panel-subtitle">Estado general de tu perfil</p>
               </div>
               <button type="button" className="home-panel-link" onClick={() => navigate("/stats")}>
                 Ver detalle
@@ -2628,7 +2628,7 @@ export default function Dashboard({
                               });
                             }}
                           >
-                            Consultar con Klinip IA
+                            Consultar con IA
                           </button>
                         </div>
                       ) : null}
@@ -2725,7 +2725,7 @@ export default function Dashboard({
               <div className="home-panel-head">
                 <div>
                   <h2 className="home-panel-title">{"Accesos r\u00E1pidos"}</h2>
-                  <p className="home-panel-subtitle">Acciones frecuentes de Klinip al alcance de tu mano.</p>
+                  <p className="home-panel-subtitle">Acciones frecuentes al alcance de tu mano.</p>
               </div>
             </div>
             <div className="home-actions-grid">

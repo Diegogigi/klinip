@@ -1663,11 +1663,12 @@ export default function AiKlinip() {
                   markClassName="ai-scene-brand-mark"
                   imgClassName="ai-scene-brand-img"
                   nameClassName="ai-scene-brand-name"
+                  showName={false}
                 />
                 <div className="ai-mobile-topbar-copy">
                   <span>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</span>
                   <strong>Asistente</strong>
-                  <small>Klinip IA</small>
+                  <small>Contexto activo</small>
                 </div>
               </div>
               <button
@@ -1690,11 +1691,12 @@ export default function AiKlinip() {
                       markClassName="ai-entry-brand-mark"
                       imgClassName="ai-entry-brand-img"
                       nameClassName="ai-entry-brand-name"
+                      showName={false}
                     />
                     <span className="ai-entry-brand-separator" aria-hidden="true" />
-                    <span className="ai-entry-brand-product">Asistente Klinip</span>
+                    <span className="ai-entry-brand-product">Asistente</span>
                   </div>
-                  <p className="ai-section-kicker ai-entry-kicker">Asistente Klinip</p>
+                  <p className="ai-section-kicker ai-entry-kicker">Respuestas simples para tu salud</p>
                   <h2 className="ai-landing-title">¿En qué te puedo ayudar hoy?</h2>
                   <p className="ai-landing-subtitle">
                     Resuelve dudas sobre tu salud en lenguaje simple y con el contexto activo de tu perfil.
@@ -1712,7 +1714,7 @@ export default function AiKlinip() {
                       className="ai-landing-input"
                       value={input}
                       onChange={(event) => setInput(event.target.value)}
-                      placeholder="Haz una pregunta a Klinip..."
+                      placeholder="Haz una pregunta sobre tu salud..."
                       rows={1}
                       onInput={(event) => {
                         const target = event.currentTarget;
@@ -1724,7 +1726,7 @@ export default function AiKlinip() {
                       type="submit"
                       className="ai-landing-send"
                       disabled={loading || historyLoading || !input.trim()}
-                      aria-label="Iniciar conversación con Klinip IA"
+                        aria-label="Iniciar conversación"
                     >
                       <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M12 19V5M6 11l6-6 6 6" strokeLinecap="round" strokeLinejoin="round" />

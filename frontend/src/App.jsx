@@ -26,6 +26,7 @@ import {
   parseScheduleTimeValue,
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
+import { observeMojibakeRepair } from "./utils/textEncoding";
 
 const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
 
@@ -410,11 +411,11 @@ function Sidebar({
                   to={link.to}
                   className={`sidebar-link ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
                     link.to === "/ai" ? "is-mobile-ai" : ""
-                  }`}
+                  } ${link.to === "/voice" ? "is-mobile-voice" : ""}`}
                   onClick={() => setShowMobileMenu(false)}
                 >
                 <span className="sidebar-icon">
-                  {link.to === "/ai" ? <span className="icon-k" aria-hidden="true">K</span> : link.icon}
+                  {link.icon}
                 </span>
                 {link.badge > 0 && (
                   <span className="sidebar-badge">{link.badge}</span>
@@ -542,7 +543,7 @@ function Topbar({
     "/settings": "Perfil",
     "/settings/familia": "Gestionar familia",
   };
-  const title = titles[location.pathname] || "Klinip";
+  const title = titles[location.pathname] || "Panel";
   const subtitle =
     location.pathname === "/"
       ? "Panel general"
@@ -1021,6 +1022,11 @@ export default function App() {
     document.body.classList.toggle("theme-dark", theme === "dark");
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    return observeMojibakeRepair(document.body);
+  }, []);
 
   useEffect(() => {
     const handleResize = () => setIsMobileShell(isHandheldViewport(768));

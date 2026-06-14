@@ -243,6 +243,7 @@ export default function MiSalud() {
             markClassName="clp-scene-brand-mark"
             imgClassName="clp-scene-brand-img"
             nameClassName="clp-scene-brand-name"
+            showName={false}
           />
           <Link to="/documents" className="clp-scene-action" aria-label="Abrir documentos">
             <IcoDoc />

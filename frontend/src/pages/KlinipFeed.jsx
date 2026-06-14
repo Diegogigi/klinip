@@ -821,7 +821,7 @@ function PostMediaCard({ post }) {
       <div className="kfeed-media-card-body" style={{ "--type-color": typeInfo.color }}>
         <div className="kfeed-media-card-tag">
           <span>{typeInfo.emoji}</span>
-          <span>{typeInfo.label} · Klinip</span>
+          <span>{typeInfo.label} · familia</span>
         </div>
         <p className="kfeed-media-card-title">
           {post.post_type === "exam_result"  ? "Resultados de examen compartidos" :
@@ -1855,6 +1855,7 @@ export default function KlinipFeed({ user }) {
               markClassName="kfeed-scene-brand-mark"
               imgClassName="kfeed-scene-brand-img"
               nameClassName="kfeed-scene-brand-name"
+              showName={false}
             />
             {profiles.length > 0 && (
               <button

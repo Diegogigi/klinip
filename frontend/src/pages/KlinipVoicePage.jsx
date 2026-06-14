@@ -785,6 +785,7 @@ export default function KlinipVoicePage() {
           markClassName="vp2-scene-brand-mark"
           imgClassName="vp2-scene-brand-img"
           nameClassName="vp2-scene-brand-name"
+          showName={false}
         />
         <button
           type="button"
