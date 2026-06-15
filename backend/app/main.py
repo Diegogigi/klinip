@@ -7236,10 +7236,15 @@ def _ai_document_metadata(doc: models.Document, entities: list) -> tuple[str, st
     return titulo, nota
 
 
-def _enrich_document_metadata(db: Session, doc: models.Document, original_user_note: str) -> None:
-    """Mejora nombre y notas tras la extracción: usa LLM si está disponible y cae
-    a una versión determinística desde las entidades. Nunca pisa una nota escrita
-    por el usuario ni rompe el pipeline."""
+def _enrich_document_metadata(
+    db: Session,
+    doc: models.Document,
+    original_user_note: str,
+    vision_meta: dict | None = None,
+) -> None:
+    """Mejora nombre y notas tras la extracción. Prioriza el título/nota que ya
+    entregó la IA de visión; si no, usa un LLM de texto; si no, una versión
+    determinística desde las entidades. Nunca pisa una nota escrita por el usuario."""
     entities = (
         db.query(models.DocumentClinicalEntity)
         .filter(models.DocumentClinicalEntity.document_id == doc.id)
@@ -7252,8 +7257,15 @@ def _enrich_document_metadata(db: Session, doc: models.Document, original_user_n
         .first()
     )
 
-    ai = _ai_document_metadata(doc, entities)
-    ai_title, ai_note = ai if ai else (None, None)
+    # 1) Lo que ya dio la visión (gratis, sin segunda llamada).
+    ai_title = _safe_text(str((vision_meta or {}).get("titulo") or "")) or None
+    ai_note = _safe_text(str((vision_meta or {}).get("nota") or "")) or None
+    # 2) Si falta alguno, pedir a un LLM de texto.
+    if not (ai_title and ai_note):
+        ai = _ai_document_metadata(doc, entities)
+        if ai:
+            ai_title = ai_title or ai[0]
+            ai_note = ai_note or ai[1]
 
     # Nombre de archivo: solo si el actual es genérico.
     if _filename_looks_generic(doc.filename or ""):
@@ -7606,6 +7618,159 @@ def _extract_ocr_text(data: bytes, filename: str) -> str:
     return _dedup_ocr_lines("\n".join(texts))
 
 
+def _vision_model_name() -> str:
+    return (os.getenv("OPENAI_VISION_MODEL") or "gpt-4o-mini").strip() or "gpt-4o-mini"
+
+
+def _image_to_data_uri(pil_img, max_side: int = 1536, quality: int = 85) -> str | None:
+    """Convierte una imagen PIL a data URI JPEG (redimensionada para acotar costo)."""
+    try:
+        img = pil_img
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        width, height = img.size
+        scale = min(1.0, float(max_side) / float(max(width, height) or 1))
+        if scale < 1.0:
+            img = img.resize((max(1, int(width * scale)), max(1, int(height * scale))), Image.LANCZOS)
+        buffer = io.BytesIO()
+        img.convert("RGB").save(buffer, format="JPEG", quality=quality)
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        return None
+
+
+def _document_images_for_vision(data: bytes, filename: str) -> list[str]:
+    """Hasta 2 imágenes (data URIs) del documento para enviar al modelo de visión."""
+    uris: list[str] = []
+    try:
+        if filename.lower().endswith(".pdf"):
+            if not convert_from_bytes:
+                return []
+            poppler_path = os.getenv("POPPLER_PATH") or None
+            pages = convert_from_bytes(data, first_page=1, last_page=2, poppler_path=poppler_path)
+            for page in pages[:2]:
+                uri = _image_to_data_uri(page)
+                if uri:
+                    uris.append(uri)
+        else:
+            if not Image:
+                return []
+            img = Image.open(io.BytesIO(data))
+            uri = _image_to_data_uri(img)
+            if uri:
+                uris.append(uri)
+    except Exception as exc:
+        print(f"WARNING _document_images_for_vision: {exc}")
+    return uris
+
+
+def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str]) -> str | None:
+    """Llama a un modelo de visión con una o más imágenes. Devuelve texto o None."""
+    api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
+    if not api_key or OpenAI is None or not image_uris:
+        return None
+    model = _vision_model_name()
+    client = OpenAI(api_key=api_key, timeout=_ai_openai_timeout_seconds())
+
+    user_content = [{"type": "input_text", "text": user_text}]
+    for uri in image_uris:
+        user_content.append({"type": "input_image", "image_url": uri})
+    responses_input = [
+        {"role": "system", "content": [{"type": "input_text", "text": system_prompt}]},
+        {"role": "user", "content": user_content},
+    ]
+    try:
+        response = client.responses.create(
+            model=model, input=responses_input, temperature=0.1, max_output_tokens=1300,
+        )
+        content = (getattr(response, "output_text", "") or "").strip()
+        if content:
+            return content
+    except Exception as exc:
+        print(f"WARNING vision responses provider failed: {exc}")
+
+    # Respaldo con chat.completions (formato de imagen distinto).
+    try:
+        cc_content = [{"type": "text", "text": user_text}]
+        for uri in image_uris:
+            cc_content.append({"type": "image_url", "image_url": {"url": uri}})
+        completion = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": cc_content},
+            ],
+            temperature=0.1, max_tokens=1300,
+        )
+        return (completion.choices[0].message.content or "").strip()
+    except Exception as exc:
+        print(f"WARNING vision chat-completions provider failed: {exc}")
+    return None
+
+
+_VISION_DOC_SYSTEM = (
+    "Eres un asistente clínico que lee documentos de salud chilenos (recetas, "
+    "órdenes médicas, resultados de laboratorio, informes), incluso fotos, "
+    "manuscritos, formularios y documentos con logos. Lee TODO el documento de "
+    "la(s) imagen(es) y responde EXCLUSIVAMENTE con un JSON válido con estos campos:\n"
+    '- "transcripcion": todo el texto legible del documento.\n'
+    '- "tipo": uno de "receta","orden","resultado","informe","otro".\n'
+    '- "centro": nombre del centro médico o laboratorio (incluye el de logos); "" si no aparece.\n'
+    '- "fecha": fecha del documento en formato AAAA-MM-DD; "" si no aparece. NUNCA la fecha de nacimiento.\n'
+    '- "titulo": nombre de archivo corto y claro (ej "Receta Celecoxib", "Hemograma").\n'
+    '- "nota": resumen muy breve de lo importante (1-2 frases). En receta, las indicaciones; '
+    "en resultado, los valores fuera de rango.\n"
+    '- "medicamentos": lista de {"nombre","dosis","frecuencia","duracion"} (vacía si no aplica).\n'
+    '- "examenes": lista de {"nombre","valor","unidad","rango","estado"} con estado '
+    '"normal"/"alto"/"bajo"/"critico" (vacía si no aplica).\n'
+    "No inventes datos: si algo no está, déjalo vacío. No diagnostiques ni recomiendes tratamientos."
+)
+
+
+def _vision_read_document(data: bytes, filename: str) -> dict | None:
+    """Lee el documento con IA de visión y devuelve datos estructurados, o None."""
+    if not (os.getenv("OPENAI_API_KEY") or "").strip() or OpenAI is None:
+        return None
+    uris = _document_images_for_vision(data, filename)
+    if not uris:
+        return None
+    raw = _call_openai_vision(
+        _VISION_DOC_SYSTEM,
+        "Lee este documento de salud y entrega el JSON solicitado.",
+        uris,
+    )
+    if not raw:
+        return None
+    return _parse_json_object(raw)
+
+
+def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
+    """Aplica tipo, centro y fecha detectados por visión (más confiables que regex)."""
+    type_map = {
+        "receta": models.DocumentType.receta,
+        "orden": models.DocumentType.orden,
+        "resultado": models.DocumentType.resultado,
+        "examen": models.DocumentType.resultado,
+        "informe": models.DocumentType.informe,
+    }
+    tipo = _normalize_text(str(meta.get("tipo") or ""))
+    if doc.doc_type == models.DocumentType.otro and tipo in type_map:
+        doc.doc_type = type_map[tipo]
+    centro = _safe_text(str(meta.get("centro") or ""))
+    if centro and not doc.center and _normalize_text(centro) not in _GENERIC_CENTER_WORDS:
+        doc.center = centro[:120]
+    fecha = str(meta.get("fecha") or "").strip()
+    if fecha and not doc.date:
+        parsed = None
+        try:
+            parsed = datetime.strptime(fecha[:10], "%Y-%m-%d")
+        except Exception:
+            parsed = _guess_date(fecha)
+        if parsed:
+            doc.date = parsed
+
+
 def _run_document_ocr(document_id: int):
     db = SessionLocal()
     try:
@@ -7628,14 +7793,42 @@ def _run_document_ocr(document_id: int):
             db.commit()
             return
         filename = doc.filename or "document"
-        try:
-            text = _extract_ocr_text(doc.file_data, filename)
-        except Exception as exc:
-            doc.ocr_status = f"error_{str(exc)[:50]}"
-            db.commit()
-            return
+        vision_meta = None
+        text = ""
+        # 1) PDF digital: texto embebido (perfecto y gratis, sin IA).
+        embedded = ""
+        if filename.lower().endswith(".pdf"):
+            embedded = _extract_pdf_embedded_text(doc.file_data)
+            if not _is_meaningful_text_layer(embedded):
+                embedded = ""
+        if embedded:
+            text = embedded
+        else:
+            # 2) Imágenes y escaneos: IA con visión primero (lee cualquier documento,
+            #    foto o manuscrito); si no hay API key o falla, cae a Tesseract.
+            try:
+                vision_meta = _vision_read_document(doc.file_data, filename)
+            except Exception as exc:
+                print(f"WARNING vision read: {exc}")
+                vision_meta = None
+            if vision_meta and (vision_meta.get("transcripcion") or "").strip():
+                text = vision_meta["transcripcion"].strip()
+            else:
+                vision_meta = None
+                try:
+                    text = _extract_ocr_text(doc.file_data, filename)
+                except Exception as exc:
+                    doc.ocr_status = f"error_{str(exc)[:50]}"
+                    db.commit()
+                    return
 
         doc.ocr_text = text
+        # Metadata de visión (tipo/centro/fecha) antes de las automatizaciones.
+        if vision_meta:
+            try:
+                _apply_vision_metadata(doc, vision_meta)
+            except Exception as exc:
+                print(f"WARNING apply vision metadata: {exc}")
         doc.ocr_status = "done"
         doc.ocr_lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
         db.commit()
@@ -7669,7 +7862,7 @@ def _run_document_ocr(document_id: int):
             profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
 
         try:
-            _enrich_document_metadata(db, doc, original_user_note)
+            _enrich_document_metadata(db, doc, original_user_note, vision_meta)
         except Exception as exc:
             print(f"WARNING _run_document_ocr enrich: {exc}")
 
