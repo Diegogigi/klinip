@@ -7815,8 +7815,12 @@ def _run_document_ocr(document_id: int):
             # 2) Imágenes y escaneos: IA con visión primero (lee cualquier documento,
             #    foto o manuscrito); si no hay API key o falla, cae a Tesseract.
             import traceback as _tb
+
+            def _dlog(msg):
+                print(msg, flush=True)
+
             _has_key = bool((os.getenv("OPENAI_API_KEY") or "").strip())
-            print(
+            _dlog(
                 f"KLINIP_DOCREAD: start file={filename!r} bytes={len(doc.file_data or b'')} "
                 f"has_key={_has_key} pytesseract={pytesseract is not None} "
                 f"PIL={Image is not None} cv2={cv2 is not None}"
@@ -7825,13 +7829,13 @@ def _run_document_ocr(document_id: int):
             try:
                 vision_meta = _vision_read_document(doc.file_data, filename)
                 vision_ok = bool(vision_meta and (vision_meta.get("transcripcion") or "").strip())
-                print(
+                _dlog(
                     f"KLINIP_DOCREAD: vision_ok={int(vision_ok)} "
                     f"keys={list(vision_meta.keys()) if isinstance(vision_meta, dict) else None}"
                 )
             except Exception as exc:
-                print(f"KLINIP_DOCREAD: vision_EXC={type(exc).__name__}: {exc}")
-                print(_tb.format_exc())
+                _dlog(f"KLINIP_DOCREAD: vision_EXC={type(exc).__name__}: {exc}")
+                _dlog(_tb.format_exc())
                 vision_meta = None
             if vision_ok:
                 text = vision_meta["transcripcion"].strip()
@@ -7839,10 +7843,10 @@ def _run_document_ocr(document_id: int):
                 vision_meta = None
                 try:
                     text = _extract_ocr_text(doc.file_data, filename)
-                    print(f"KLINIP_DOCREAD: tesseract_chars={len((text or '').strip())}")
+                    _dlog(f"KLINIP_DOCREAD: tesseract_chars={len((text or '').strip())}")
                 except Exception as exc:
-                    print(f"KLINIP_DOCREAD: tesseract_EXC={type(exc).__name__}: {exc}")
-                    print(_tb.format_exc())
+                    _dlog(f"KLINIP_DOCREAD: tesseract_EXC={type(exc).__name__}: {exc}")
+                    _dlog(_tb.format_exc())
                     doc.ocr_status = f"error_{type(exc).__name__}_{str(exc)[:40]}"
                     db.commit()
                     return
