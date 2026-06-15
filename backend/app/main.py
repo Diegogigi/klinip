@@ -149,6 +149,14 @@ except Exception:
     cv2 = None
     np = None
 
+# Soporte para fotos HEIC/HEIF de iPhone: registra el decodificador en PIL para
+# que Image.open() pueda abrirlas (sin esto, las fotos de iPhone fallan al leer).
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+except Exception:
+    pillow_heif = None
+
 RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
     (os.getenv("ENABLE_RUNTIME_SCHEMA_MUTATIONS") or "").strip() == "1"
     or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
@@ -7806,19 +7814,36 @@ def _run_document_ocr(document_id: int):
         else:
             # 2) Imágenes y escaneos: IA con visión primero (lee cualquier documento,
             #    foto o manuscrito); si no hay API key o falla, cae a Tesseract.
+            import traceback as _tb
+            _has_key = bool((os.getenv("OPENAI_API_KEY") or "").strip())
+            print(
+                f"KLINIP_DOCREAD: start file={filename!r} bytes={len(doc.file_data or b'')} "
+                f"has_key={_has_key} pytesseract={pytesseract is not None} "
+                f"PIL={Image is not None} cv2={cv2 is not None}"
+            )
+            vision_ok = False
             try:
                 vision_meta = _vision_read_document(doc.file_data, filename)
+                vision_ok = bool(vision_meta and (vision_meta.get("transcripcion") or "").strip())
+                print(
+                    f"KLINIP_DOCREAD: vision_ok={int(vision_ok)} "
+                    f"keys={list(vision_meta.keys()) if isinstance(vision_meta, dict) else None}"
+                )
             except Exception as exc:
-                print(f"WARNING vision read: {exc}")
+                print(f"KLINIP_DOCREAD: vision_EXC={type(exc).__name__}: {exc}")
+                print(_tb.format_exc())
                 vision_meta = None
-            if vision_meta and (vision_meta.get("transcripcion") or "").strip():
+            if vision_ok:
                 text = vision_meta["transcripcion"].strip()
             else:
                 vision_meta = None
                 try:
                     text = _extract_ocr_text(doc.file_data, filename)
+                    print(f"KLINIP_DOCREAD: tesseract_chars={len((text or '').strip())}")
                 except Exception as exc:
-                    doc.ocr_status = f"error_{str(exc)[:50]}"
+                    print(f"KLINIP_DOCREAD: tesseract_EXC={type(exc).__name__}: {exc}")
+                    print(_tb.format_exc())
+                    doc.ocr_status = f"error_{type(exc).__name__}_{str(exc)[:40]}"
                     db.commit()
                     return
 
