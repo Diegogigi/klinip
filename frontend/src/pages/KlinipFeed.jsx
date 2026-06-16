@@ -160,18 +160,18 @@ function openAuthFile(postId, attachmentId) {
 // ─── Constantes ──────────────────────────────────────────────────────────────
 
 const POST_TYPES = [
-  { value: "general",      label: "General",     emoji: "💬", color: "#2563eb" },
-  { value: "exam_result",  label: "Examen",      emoji: "🧪", color: "#7c3aed" },
-  { value: "doctor_visit", label: "Consulta",    emoji: "🩺", color: "#0891b2" },
-  { value: "medication",   label: "Medicamento", emoji: "💊", color: "#16a34a" },
+  { value: "general", label: "General", emoji: "💬", color: "#2563eb" },
+  { value: "exam_result", label: "Examen", emoji: "🧪", color: "#7c3aed" },
+  { value: "doctor_visit", label: "Consulta", emoji: "🩺", color: "#0891b2" },
+  { value: "medication", label: "Medicamento", emoji: "💊", color: "#16a34a" },
 ];
 
 const REACTIONS = [
-  { type: "apoyo",   emoji: "💙", label: "Apoyar"    },
-  { type: "animo",   emoji: "💪", label: "Ánimo"     },
-  { type: "amor",    emoji: "❤️", label: "Amor"      },
-  { type: "gracias", emoji: "🙏", label: "Gracias"   },
-  { type: "alegra",  emoji: "😊", label: "Me alegra" },
+  { type: "apoyo", emoji: "💙", label: "Apoyar" },
+  { type: "animo", emoji: "💪", label: "Ánimo" },
+  { type: "amor", emoji: "❤️", label: "Amor" },
+  { type: "gracias", emoji: "🙏", label: "Gracias" },
+  { type: "alegra", emoji: "😊", label: "Me alegra" },
 ];
 
 const PRIMARY_REACTION = REACTIONS[0];
@@ -742,35 +742,35 @@ function CommentsSection({
 
 // ─── Media card ───────────────────────────────────────────────────────────────
 
+function getAttachmentKind(attachment) {
+  const declaredType = String(attachment?.attachment_type || "").toLowerCase().trim();
+  const extension = getAttachmentExtension(attachment?.filename);
+
+  if ([".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp", ".svg"].includes(extension)) {
+    return "image";
+  }
+  if ([".mp4", ".mov", ".m4v", ".webm", ".ogg", ".ogv"].includes(extension)) {
+    return "video";
+  }
+  if (extension === ".pdf") {
+    return "pdf";
+  }
+  if (declaredType === "image" || declaredType === "video" || declaredType === "audio") {
+    return declaredType;
+  }
+  return "document";
+}
+
 function isPdf(attachment) {
-  return getAttachmentExtension(attachment?.filename) === ".pdf";
+  return getAttachmentKind(attachment) === "pdf";
 }
 
 function isImageAttachment(attachment) {
-  const extension = getAttachmentExtension(attachment?.filename);
-  return (
-    attachment?.attachment_type === "image" ||
-    extension === ".jpg" ||
-    extension === ".jpeg" ||
-    extension === ".png" ||
-    extension === ".gif" ||
-    extension === ".webp" ||
-    extension === ".heic" ||
-    extension === ".heif"
-  );
+  return getAttachmentKind(attachment) === "image";
 }
 
 function isVideo(attachment) {
-  const extension = getAttachmentExtension(attachment?.filename);
-  return (
-    attachment?.attachment_type === "video" ||
-    extension === ".mp4" ||
-    extension === ".mov" ||
-    extension === ".m4v" ||
-    extension === ".webm" ||
-    extension === ".ogg" ||
-    extension === ".ogv"
-  );
+  return getAttachmentKind(attachment) === "video";
 }
 
 function inferAttachmentType(file) {
@@ -778,7 +778,7 @@ function inferAttachmentType(file) {
   const extension = getAttachmentExtension(file?.name);
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
-  if ([".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"].includes(extension)) return "image";
+  if ([".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp", ".svg"].includes(extension)) return "image";
   if ([".mp4", ".mov", ".m4v", ".webm", ".ogg", ".ogv"].includes(extension)) return "video";
   return "document";
 }
@@ -837,10 +837,10 @@ function PostMediaCard({ post }) {
           <span>{typeInfo.label} · familia</span>
         </div>
         <p className="kfeed-media-card-title">
-          {post.post_type === "exam_result"  ? "Resultados de examen compartidos" :
-           post.post_type === "doctor_visit" ? "Nota de consulta médica"          :
-           post.post_type === "medication"   ? "Actualización de medicamento"      :
-                                              "Actualización de salud"}
+          {post.post_type === "exam_result" ? "Resultados de examen compartidos" :
+           post.post_type === "doctor_visit" ? "Nota de consulta médica" :
+           post.post_type === "medication" ? "Actualización de medicamento" :
+           "Actualización de salud"}
         </p>
         <p className="kfeed-media-card-sub">Compartido de forma privada con tu familia</p>
       </div>
