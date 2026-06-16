@@ -7822,6 +7822,87 @@ def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
             _klog(f"KLINIP_DOCREAD: vision date applied -> {parsed.date().isoformat()}")
 
 
+def _apply_core_document_metadata(doc, vision_meta, text, original_user_note):
+    """Fija los campos clave (tipo, centro, fecha, nombre, nota) de forma blindada
+    ANTES de las automatizaciones/inteligencia, para que persistan aunque esos
+    pasos posteriores fallen. Visión primero; respaldo determinístico desde el texto."""
+    from types import SimpleNamespace
+
+    meta = vision_meta or {}
+    if meta:
+        try:
+            _apply_vision_metadata(doc, meta)
+        except Exception as exc:
+            _klog(f"KLINIP_DOCREAD: apply_vision EXC: {type(exc).__name__}: {exc}")
+
+    # Respaldos desde el texto si la visión no los entregó.
+    try:
+        if doc.doc_type == models.DocumentType.otro:
+            guessed = _guess_doc_type(text) or _classify_document_type_from_ocr(text, doc.filename or "")
+            if guessed == "examen":
+                guessed = "resultado"
+            if guessed and guessed != "otro":
+                doc.doc_type = models.DocumentType(guessed)
+    except Exception:
+        pass
+    try:
+        if not doc.center:
+            guess_c = _guess_center(text)
+            if guess_c:
+                doc.center = guess_c
+    except Exception:
+        pass
+    try:
+        if not doc.date:
+            guess_d = _guess_date(text)
+            if guess_d:
+                doc.date = guess_d
+    except Exception:
+        pass
+    _klog(
+        f"KLINIP_DOCREAD: core type={doc.doc_type.value if doc.doc_type else None} "
+        f"center={(doc.center or '')[:30]!r} date={doc.date.date().isoformat() if doc.date else None}"
+    )
+
+    # Entidades rápidas (regex sobre el texto) para nombre/nota, sin depender
+    # de la inteligencia (que puede fallar/rollback).
+    doc_type = doc.doc_type.value if doc.doc_type else "otro"
+    quick: list = []
+    try:
+        if doc_type == "receta":
+            quick = [SimpleNamespace(**e) for e in _extract_prescription_entities(text)]
+        elif doc_type == "resultado":
+            quick = [SimpleNamespace(**e) for e in _extract_document_lab_entities(text)]
+    except Exception:
+        quick = []
+
+    # Nombre de archivo (si es genérico).
+    try:
+        if _filename_looks_generic(doc.filename or ""):
+            title = _safe_text(str(meta.get("titulo") or "")) or _document_display_title(doc, quick)
+            if title:
+                ext = ""
+                current = doc.filename or ""
+                if "." in current:
+                    cand = current.rsplit(".", 1)[1]
+                    if 1 <= len(cand) <= 5 and cand.isalnum():
+                        ext = "." + cand
+                doc.filename = _safe_text(title)[:80] + ext
+                _klog(f"KLINIP_DOCREAD: filename set -> {doc.filename!r}")
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: filename EXC: {type(exc).__name__}: {exc}")
+
+    # Nota (si el usuario no escribió una propia).
+    try:
+        if not (original_user_note or "").strip():
+            note = _safe_text(str(meta.get("nota") or "")) or _compose_document_notes_deterministic(doc, None, quick)
+            if note:
+                doc.notes = note[:600]
+                _klog(f"KLINIP_DOCREAD: notes set len={len(doc.notes)}")
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: notes EXC: {type(exc).__name__}: {exc}")
+
+
 def _run_document_ocr(document_id: int):
     db = SessionLocal()
     try:
@@ -7895,12 +7976,12 @@ def _run_document_ocr(document_id: int):
                     return
 
         doc.ocr_text = text
-        # Metadata de visión (tipo/centro/fecha) antes de las automatizaciones.
-        if vision_meta:
-            try:
-                _apply_vision_metadata(doc, vision_meta)
-            except Exception as exc:
-                print(f"WARNING apply vision metadata: {exc}")
+        # Campos clave (tipo/centro/fecha/nombre/nota) en el PRIMER commit, para que
+        # persistan aunque las automatizaciones o la inteligencia fallen después.
+        try:
+            _apply_core_document_metadata(doc, vision_meta, text, original_user_note)
+        except Exception as exc:
+            _klog(f"KLINIP_DOCREAD: core_metadata EXC: {type(exc).__name__}: {exc}")
         doc.ocr_status = "done"
         doc.ocr_lang = os.getenv("OCR_LANG", OCR_LANG_DEFAULT)
         db.commit()
