@@ -157,6 +157,14 @@ try:
 except Exception:
     pillow_heif = None
 
+
+def _klog(msg: str) -> None:
+    """Log de diagnóstico con flush inmediato (contenedores bufferizan stdout)."""
+    try:
+        print(msg, flush=True)
+    except Exception:
+        pass
+
 RUNTIME_SCHEMA_MUTATIONS_ENABLED = (
     (os.getenv("ENABLE_RUNTIME_SCHEMA_MUTATIONS") or "").strip() == "1"
     or not bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
@@ -7253,45 +7261,69 @@ def _enrich_document_metadata(
     """Mejora nombre y notas tras la extracción. Prioriza el título/nota que ya
     entregó la IA de visión; si no, usa un LLM de texto; si no, una versión
     determinística desde las entidades. Nunca pisa una nota escrita por el usuario."""
-    entities = (
-        db.query(models.DocumentClinicalEntity)
-        .filter(models.DocumentClinicalEntity.document_id == doc.id)
-        .order_by(models.DocumentClinicalEntity.id.asc())
-        .all()
-    )
-    summary = (
-        db.query(models.DocumentSummary)
-        .filter(models.DocumentSummary.document_id == doc.id)
-        .first()
-    )
+    try:
+        entities = (
+            db.query(models.DocumentClinicalEntity)
+            .filter(models.DocumentClinicalEntity.document_id == doc.id)
+            .order_by(models.DocumentClinicalEntity.id.asc())
+            .all()
+        )
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: enrich entities query EXC: {type(exc).__name__}: {exc}")
+        entities = []
+    try:
+        summary = (
+            db.query(models.DocumentSummary)
+            .filter(models.DocumentSummary.document_id == doc.id)
+            .first()
+        )
+    except Exception:
+        summary = None
 
     # 1) Lo que ya dio la visión (gratis, sin segunda llamada).
     ai_title = _safe_text(str((vision_meta or {}).get("titulo") or "")) or None
     ai_note = _safe_text(str((vision_meta or {}).get("nota") or "")) or None
     # 2) Si falta alguno, pedir a un LLM de texto.
     if not (ai_title and ai_note):
-        ai = _ai_document_metadata(doc, entities)
+        try:
+            ai = _ai_document_metadata(doc, entities)
+        except Exception as exc:
+            _klog(f"KLINIP_DOCREAD: enrich ai_meta EXC: {type(exc).__name__}: {exc}")
+            ai = None
         if ai:
             ai_title = ai_title or ai[0]
             ai_note = ai_note or ai[1]
 
-    # Nombre de archivo: solo si el actual es genérico.
-    if _filename_looks_generic(doc.filename or ""):
-        title = (ai_title or "").strip() or _document_display_title(doc, entities)
-        if title:
-            ext = ""
-            current = doc.filename or ""
-            if "." in current:
-                candidate = current.rsplit(".", 1)[1]
-                if 1 <= len(candidate) <= 5 and candidate.isalnum():
-                    ext = "." + candidate
-            doc.filename = _safe_text(title)[:80] + ext
+    _klog(
+        f"KLINIP_DOCREAD: enrich title={(ai_title or '')[:40]!r} note_len={len(ai_note or '')} "
+        f"generic_name={_filename_looks_generic(doc.filename or '')}"
+    )
 
-    # Notas: solo si el usuario no escribió una nota propia al subir.
-    if not (original_user_note or "").strip():
-        note = (ai_note or "").strip() or _compose_document_notes_deterministic(doc, summary, entities)
-        if note:
-            doc.notes = note[:600]
+    # Nombre de archivo: solo si el actual es genérico. (Paso aislado.)
+    try:
+        if _filename_looks_generic(doc.filename or ""):
+            title = (ai_title or "").strip() or _document_display_title(doc, entities)
+            if title:
+                ext = ""
+                current = doc.filename or ""
+                if "." in current:
+                    candidate = current.rsplit(".", 1)[1]
+                    if 1 <= len(candidate) <= 5 and candidate.isalnum():
+                        ext = "." + candidate
+                doc.filename = _safe_text(title)[:80] + ext
+                _klog(f"KLINIP_DOCREAD: filename set -> {doc.filename!r}")
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: enrich filename EXC: {type(exc).__name__}: {exc}")
+
+    # Notas: solo si el usuario no escribió una nota propia al subir. (Paso aislado.)
+    try:
+        if not (original_user_note or "").strip():
+            note = (ai_note or "").strip() or _compose_document_notes_deterministic(doc, summary, entities)
+            if note:
+                doc.notes = note[:600]
+                _klog(f"KLINIP_DOCREAD: notes set len={len(doc.notes)}")
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: enrich notes EXC: {type(exc).__name__}: {exc}")
 
 
 def _apply_document_ocr_automations(
@@ -7763,20 +7795,31 @@ def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
         "informe": models.DocumentType.informe,
     }
     tipo = _normalize_text(str(meta.get("tipo") or ""))
+    centro = _safe_text(str(meta.get("centro") or ""))
+    fecha = str(meta.get("fecha") or "").strip()
+    _klog(
+        f"KLINIP_DOCREAD: vision_fields tipo={tipo!r} centro={centro[:40]!r} "
+        f"fecha={fecha!r} titulo={str(meta.get('titulo') or '')[:40]!r} "
+        f"nota_len={len(str(meta.get('nota') or ''))}"
+    )
     if doc.doc_type == models.DocumentType.otro and tipo in type_map:
         doc.doc_type = type_map[tipo]
-    centro = _safe_text(str(meta.get("centro") or ""))
     if centro and not doc.center and _normalize_text(centro) not in _GENERIC_CENTER_WORDS:
         doc.center = centro[:120]
-    fecha = str(meta.get("fecha") or "").strip()
+    # La fecha del DOCUMENTO la lee mejor la visión; admite AAAA-MM-DD y DD/MM/AAAA.
     if fecha and not doc.date:
         parsed = None
-        try:
-            parsed = datetime.strptime(fecha[:10], "%Y-%m-%d")
-        except Exception:
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
+            try:
+                parsed = datetime.strptime(fecha[:10], fmt)
+                break
+            except Exception:
+                continue
+        if not parsed:
             parsed = _guess_date(fecha)
         if parsed:
             doc.date = parsed
+            _klog(f"KLINIP_DOCREAD: vision date applied -> {parsed.date().isoformat()}")
 
 
 def _run_document_ocr(document_id: int):
