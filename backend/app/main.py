@@ -7797,20 +7797,20 @@ def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
         doc.doc_type = type_map[tipo]
     if centro and not doc.center and _normalize_text(centro) not in _GENERIC_CENTER_WORDS:
         doc.center = centro[:120]
-    # La fecha del DOCUMENTO la lee mejor la visión; admite AAAA-MM-DD y DD/MM/AAAA.
-    if fecha and not doc.date:
-        parsed = None
-        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
-            try:
-                parsed = datetime.strptime(fecha[:10], fmt)
-                break
-            except Exception:
-                continue
-        if not parsed:
-            parsed = _guess_date(fecha)
-        if parsed:
-            doc.date = parsed
-            _klog(f"KLINIP_DOCREAD: vision date applied -> {parsed.date().isoformat()}")
+    # La fecha se fija en _apply_core_document_metadata (override del default de hoy).
+
+
+def _parse_vision_date(fecha) -> "datetime | None":
+    """Parsea la fecha que entrega la visión (AAAA-MM-DD o DD/MM/AAAA, etc.)."""
+    fecha = str(fecha or "").strip()
+    if not fecha:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(fecha[:10], fmt)
+        except Exception:
+            continue
+    return _guess_date(fecha)
 
 
 def _apply_core_document_metadata(doc, vision_meta, text, original_user_note):
@@ -7843,11 +7843,13 @@ def _apply_core_document_metadata(doc, vision_meta, text, original_user_note):
                 doc.center = guess_c
     except Exception:
         pass
+    # Fecha del documento: la columna trae HOY por defecto, así que se SOBRESCRIBE
+    # con la fecha real extraída. El texto (transcripción) es más exacto que el
+    # campo "fecha" de la visión (que a veces equivoca el año); por eso va primero.
     try:
-        if not doc.date:
-            guess_d = _guess_date(text)
-            if guess_d:
-                doc.date = guess_d
+        real_date = _guess_date(text) or _parse_vision_date(meta.get("fecha"))
+        if real_date:
+            doc.date = real_date
     except Exception:
         pass
     _klog(
@@ -7995,9 +7997,11 @@ def _run_document_ocr(document_id: int):
         try:
             _upsert_document_intelligence(db, doc)
             _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
+            db.commit()  # Persistir resumen/entidades y dejar la transacción limpia.
+            db.refresh(doc)
         except Exception as exc:
             db.rollback()
-            print(f"WARNING _run_document_ocr memory sync: {exc}")
+            _klog(f"KLINIP_DOCREAD: intelligence EXC: {type(exc).__name__}: {exc}")
             doc = (
                 db.query(models.Document).filter(models.Document.id == document_id).first()
             )
@@ -8007,10 +8011,16 @@ def _run_document_ocr(document_id: int):
 
         try:
             _enrich_document_metadata(db, doc, original_user_note, vision_meta)
+            db.commit()
         except Exception as exc:
-            print(f"WARNING _run_document_ocr enrich: {exc}")
+            db.rollback()
+            _klog(f"KLINIP_DOCREAD: enrich EXC: {type(exc).__name__}: {exc}")
 
-        user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+        try:
+            user = db.query(models.User).filter(models.User.id == doc.user_id).first()
+        except Exception:
+            db.rollback()
+            user = None
         try:
             _mark_profile_ai_dirty(db, profile, include_family=True)
             db.commit()
