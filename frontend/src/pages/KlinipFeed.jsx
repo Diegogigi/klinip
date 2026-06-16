@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import BrandLogo from "../components/BrandLogo";
 import {
   getFamilyFeed,
   createFeedPost,
@@ -747,6 +746,20 @@ function isPdf(attachment) {
   return getAttachmentExtension(attachment?.filename) === ".pdf";
 }
 
+function isImageAttachment(attachment) {
+  const extension = getAttachmentExtension(attachment?.filename);
+  return (
+    attachment?.attachment_type === "image" ||
+    extension === ".jpg" ||
+    extension === ".jpeg" ||
+    extension === ".png" ||
+    extension === ".gif" ||
+    extension === ".webp" ||
+    extension === ".heic" ||
+    extension === ".heif"
+  );
+}
+
 function isVideo(attachment) {
   const extension = getAttachmentExtension(attachment?.filename);
   return (
@@ -772,10 +785,10 @@ function inferAttachmentType(file) {
 
 function PostMediaCard({ post }) {
   const typeInfo = getPostTypeInfo(post.post_type);
-  const images = (post.attachments || []).filter((a) => a.attachment_type === "image");
+  const images = (post.attachments || []).filter((a) => isImageAttachment(a));
   const videos = (post.attachments || []).filter((a) => isVideo(a));
   const pdfs   = (post.attachments || []).filter((a) => !isVideo(a) && isPdf(a));
-  const otherDocs = (post.attachments || []).filter((a) => a.attachment_type !== "image" && !isVideo(a) && !isPdf(a));
+  const otherDocs = (post.attachments || []).filter((a) => !isImageAttachment(a) && !isVideo(a) && !isPdf(a));
   const hasAny = images.length > 0 || videos.length > 0 || pdfs.length > 0 || otherDocs.length > 0;
 
   if (!hasAny && post.post_type === "general") return null;
@@ -1850,13 +1863,6 @@ export default function KlinipFeed({ user }) {
       <div className="kfeed-page">
         <div className="kfeed-page-header">
           <div className="kfeed-scene-topbar">
-            <BrandLogo
-              className="kfeed-scene-brand"
-              markClassName="kfeed-scene-brand-mark"
-              imgClassName="kfeed-scene-brand-img"
-              nameClassName="kfeed-scene-brand-name"
-              showName={false}
-            />
             {profiles.length > 0 && (
               <button
                 type="button"

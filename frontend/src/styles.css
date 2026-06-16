@@ -4551,6 +4551,7 @@ body.theme-dark .primary-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   min-height: 36px;
   margin-top: 0;
   padding: 0.4rem 0.72rem;
@@ -57940,6 +57941,17 @@ body.theme-dark .bio-unified-chart-legend-item small {
     justify-content: space-between;
   }
 
+  .kfeed-scene-topbar {
+    justify-content: flex-end;
+    min-height: 2rem;
+  }
+
+  .kfeed-scene-profile-row {
+    align-items: flex-start;
+    gap: 0.85rem;
+    margin-top: 0.4rem;
+  }
+
   .mobile-hero-profile-row {
     margin-top: 0.8rem;
   }
@@ -58123,9 +58135,9 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .clp-scene-header {
     border-radius: 2rem;
     padding: 1rem;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(245, 248, 255, 0.86));
-    border: 1px solid rgba(213, 222, 241, 0.84);
-    box-shadow: 0 20px 44px rgba(37, 99, 235, 0.1);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.74));
+    border: 1px solid rgba(213, 222, 241, 0.76);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.07);
   }
 
   body.theme-dark .kfeed-page-header,
@@ -58139,7 +58151,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     display: inline-flex;
     align-items: center;
     gap: 0.75rem;
-    margin-top: 0.9rem;
+    margin-top: 0.65rem;
   }
 
   .kfeed-scene-profile-copy,
@@ -58171,6 +58183,25 @@ body.theme-dark .bio-unified-chart-legend-item small {
     font-size: 3.15rem;
     line-height: 0.96;
     letter-spacing: -0.05em;
+  }
+
+  .kfeed-brand-row {
+    margin-top: 0.55rem;
+  }
+
+  .kfeed-manage-link {
+    min-height: 2.7rem;
+    padding: 0.62rem 0.92rem;
+    border-radius: 0.95rem;
+    background: rgba(255, 255, 255, 0.78);
+    border-color: rgba(191, 219, 254, 0.9);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+  }
+
+  body.theme-dark .kfeed-manage-link {
+    background: rgba(15, 23, 42, 0.64);
+    border-color: rgba(96, 165, 250, 0.26);
+    box-shadow: 0 12px 22px rgba(2, 6, 23, 0.18);
   }
 
   .kfeed-page-caption {
@@ -58422,12 +58453,12 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .sidebar.sidebar-mobile-shell {
     height: auto !important;
     border-radius: 1.9rem !important;
-    border: 1px solid rgba(226, 232, 240, 0.76) !important;
+    border: 1px solid rgba(226, 232, 240, 0.62) !important;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.56)) !important;
+      linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.34)) !important;
     box-shadow:
-      0 14px 28px rgba(15, 23, 42, 0.08),
-      inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
+      0 14px 28px rgba(15, 23, 42, 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
     backdrop-filter: blur(22px) saturate(1.08) !important;
     -webkit-backdrop-filter: blur(22px) saturate(1.08) !important;
     overflow: hidden !important;
@@ -58439,7 +58470,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02));
     pointer-events: none;
     z-index: 0;
   }
@@ -58482,7 +58513,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     padding: 0.2rem 0.08rem !important;
     gap: 0 !important;
     border-radius: 1.05rem;
-    color: rgba(79, 97, 132, 0.86);
+    color: rgba(37, 52, 82, 0.94);
     background: transparent;
     box-shadow: none;
     transform: none !important;
@@ -58492,7 +58523,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
   body.theme-dark .sidebar-link.sidebar-link-mobile,
   body.theme-dark .sidebar-link.sidebar-link-mobile.is-mobile-ai {
-    color: rgba(210, 220, 238, 0.78);
+    color: rgba(226, 234, 247, 0.9);
   }
 
   .sidebar-icon.sidebar-icon-mobile,
@@ -58502,9 +58533,20 @@ body.theme-dark .bio-unified-chart-legend-item small {
     min-width: 2.52rem !important;
     min-height: 2.52rem !important;
     border-radius: 999px;
-    background: transparent;
+    background: rgba(255, 255, 255, 0.34);
     color: currentColor;
-    transition: background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+    box-shadow:
+      inset 0 0 0 1px rgba(148, 163, 184, 0.18),
+      0 6px 16px rgba(15, 23, 42, 0.05);
+    transition: background-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.18s ease;
+  }
+
+  body.theme-dark .sidebar-icon.sidebar-icon-mobile,
+  body.theme-dark .sidebar-link.sidebar-link-mobile.is-mobile-ai .sidebar-icon.sidebar-icon-mobile {
+    background: rgba(15, 23, 42, 0.24);
+    box-shadow:
+      inset 0 0 0 1px rgba(148, 163, 184, 0.16),
+      0 8px 18px rgba(2, 6, 23, 0.2);
   }
 
   .sidebar-icon.sidebar-icon-mobile svg {
@@ -58551,10 +58593,11 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .sidebar-link.sidebar-link-mobile[href="/"]:not(.sidebar-more).active .sidebar-icon.sidebar-icon-mobile,
   .sidebar-link.sidebar-link-mobile[to="/"]:not(.sidebar-more).active .sidebar-icon.sidebar-icon-mobile {
     color: #1f5cff;
-    background: radial-gradient(circle at center, rgba(77, 163, 255, 0.14), rgba(77, 163, 255, 0.04) 68%, transparent 100%);
+    background: radial-gradient(circle at center, rgba(77, 163, 255, 0.22), rgba(77, 163, 255, 0.08) 70%, transparent 100%);
     box-shadow:
-      0 0 0 1px rgba(120, 177, 255, 0.12),
-      0 0 14px rgba(77, 163, 255, 0.16);
+      0 0 0 1px rgba(120, 177, 255, 0.18),
+      0 10px 20px rgba(77, 163, 255, 0.16);
+    transform: translateY(-1px);
   }
 
   body.theme-dark .sidebar-link.sidebar-link-mobile.active .sidebar-icon.sidebar-icon-mobile,
@@ -58562,10 +58605,10 @@ body.theme-dark .bio-unified-chart-legend-item small {
   body.theme-dark .sidebar-link.sidebar-link-mobile[href="/"]:not(.sidebar-more).active .sidebar-icon.sidebar-icon-mobile,
   body.theme-dark .sidebar-link.sidebar-link-mobile[to="/"]:not(.sidebar-more).active .sidebar-icon.sidebar-icon-mobile {
     color: #eef5ff;
-    background: radial-gradient(circle at center, rgba(77, 163, 255, 0.32), rgba(77, 163, 255, 0.1) 66%, transparent 100%);
+    background: radial-gradient(circle at center, rgba(77, 163, 255, 0.42), rgba(77, 163, 255, 0.14) 68%, transparent 100%);
     box-shadow:
-      0 0 0 1px rgba(138, 190, 255, 0.14),
-      0 0 18px rgba(77, 163, 255, 0.18);
+      0 0 0 1px rgba(138, 190, 255, 0.18),
+      0 12px 24px rgba(77, 163, 255, 0.2);
   }
 
   .sidebar-link.sidebar-link-mobile.is-mobile-voice {
