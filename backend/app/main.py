@@ -7422,27 +7422,15 @@ def _apply_document_ocr_automations(
         schedule = _extract_order_schedule(text) or {}
         date_time = schedule.get("date_time")
         specialty = schedule.get("specialty") or doc.notes or "Examen"
-        appointment = _create_appointment_from_document_ocr(
+        _create_appointment_from_document_ocr(
             db,
             doc=doc,
             profile=profile,
             specialty=specialty,
             date_time=date_time,
         )
-        if appointment.date_time:
-            date_label = appointment.date_time.strftime("%d/%m/%Y %H:%M")
-            if doc.notes:
-                if date_label not in doc.notes:
-                    doc.notes = f"{doc.notes}\nFecha: {date_label}"
-            else:
-                doc.notes = f"Fecha: {date_label}"
-        else:
-            missing_msg = "Falta fecha u hora, agregar manualmente en Citas."
-            if doc.notes:
-                if missing_msg not in doc.notes:
-                    doc.notes = f"{doc.notes}\n{missing_msg}"
-            else:
-                doc.notes = missing_msg
+        # No ensuciamos doc.notes con mensajes de agenda: la nota la define la
+        # lectura (visión/enriquecimiento) y se mantiene clara para el usuario.
         return detected_meds_for_email
 
     if doc.doc_type == models.DocumentType.otro and not doc.appointment_id:
@@ -7722,7 +7710,7 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
     ]
     try:
         response = client.responses.create(
-            model=model, input=responses_input, temperature=0.1, max_output_tokens=1300,
+            model=model, input=responses_input, temperature=0.1, max_output_tokens=2000,
         )
         content = (getattr(response, "output_text", "") or "").strip()
         if content:
@@ -7741,7 +7729,7 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": cc_content},
             ],
-            temperature=0.1, max_tokens=1300,
+            temperature=0.1, max_tokens=2000,
         )
         return (completion.choices[0].message.content or "").strip()
     except Exception as exc:
@@ -7757,7 +7745,10 @@ _VISION_DOC_SYSTEM = (
     '- "transcripcion": todo el texto legible del documento.\n'
     '- "tipo": uno de "receta","orden","resultado","informe","otro".\n'
     '- "centro": nombre del centro médico o laboratorio (incluye el de logos); "" si no aparece.\n'
-    '- "fecha": fecha del documento en formato AAAA-MM-DD; "" si no aparece. NUNCA la fecha de nacimiento.\n'
+    '- "fecha": fecha de emisión del documento en formato AAAA-MM-DD. Búscala con cuidado: '
+    'suele estar junto a "Fecha:", "Santiago, <fecha>", o cerca de la firma del profesional. '
+    'Si aparece CUALQUIER fecha de emisión, devuélvela (convierte DD/MM/AAAA a AAAA-MM-DD). '
+    'Usa "" solo si de verdad no hay ninguna. NUNCA uses la fecha de nacimiento.\n'
     '- "titulo": nombre de archivo corto y claro (ej "Receta Celecoxib", "Hemograma").\n'
     '- "nota": resumen muy breve de lo importante (1-2 frases). En receta, las indicaciones; '
     "en resultado, los valores fuera de rango.\n"
