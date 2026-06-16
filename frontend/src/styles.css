@@ -289,9 +289,11 @@ body.theme-dark .sidebar-menu-link.active {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(250, 250, 248, 0.92);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid #e8e6df;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.72);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
 .lp-navbar-inner,
@@ -1377,7 +1379,9 @@ body.theme-dark .lp-hero-mockup {
 }
 
 body.theme-dark .lp-navbar {
-  background: rgba(11, 17, 32, 0.88);
+  background: rgba(11, 17, 32, 0.78);
+  border-color: rgba(51, 65, 85, 0.88);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.24);
 }
 
 body.theme-dark .lp-theme-toggle {
@@ -1692,9 +1696,11 @@ body.theme-dark .lp-footer {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(250, 250, 248, 0.92);
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid #e8e6df;
+  border-bottom: 1px solid rgba(203, 213, 225, 0.72);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
 .pp-navbar-inner,
@@ -2496,6 +2502,12 @@ body.theme-dark .pp-btn-secondary,
 body.theme-dark .pp-btn-ghost {
   background: #0f172a;
   border-color: #223046;
+}
+
+body.theme-dark .pp-navbar {
+  background: rgba(11, 17, 32, 0.78);
+  border-color: rgba(51, 65, 85, 0.88);
+  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.24);
 }
 
 body.theme-dark .pp-nav-logo-name,
