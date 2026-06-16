@@ -12561,11 +12561,10 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
     if doc.center:
         key_points.append(f"Centro: {doc.center}")
     if doc.date:
-        key_points.append(f"Fecha: {_safe_iso(doc.date)}")
-    if doc.filename:
-        key_points.append(f"Archivo: {doc.filename}")
-    if doc.notes:
-        key_points.append(_clip_text(doc.notes, 140))
+        try:
+            key_points.append(f"Fecha: {doc.date.strftime('%d/%m/%Y')}")
+        except Exception:
+            pass
     if abnormal_values:
         names = ", ".join(item.get("entity_name") or "valor" for item in abnormal_values[:4])
         key_points.append(f"Valores fuera de rango detectados: {names}")
@@ -12630,8 +12629,6 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
         summary_plain = f"Documento de salud en formato {file_format}. El tipo clínico no se pudo confirmar con total certeza."
         patient_friendly = "Este documento fue registrado, pero su tipo clínico no es completamente claro. Puedo intentar explicarlo con el texto OCR disponible."
 
-    if text:
-        key_points.append("OCR: " + _clip_text(text, 220))
     return entities, {
         "document_type_inferred": doc_type,
         "summary_plain": _clip_text(summary_plain, 500),
