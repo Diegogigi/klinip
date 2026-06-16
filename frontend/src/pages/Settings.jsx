@@ -79,6 +79,26 @@ const SECURITY_EVENT_LABELS = {
   document_downloaded: "Documento descargado",
 };
 
+const getNameInitials = (value, fallback = "PF") =>
+  String(value || fallback)
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("") || fallback;
+
+function FamilyAvatar({ name, avatarUrl, className, style, fallback = "PF" }) {
+  return (
+    <span className={className} style={style} aria-hidden="true">
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" className="family-avatar-img" />
+      ) : (
+        getNameInitials(name, fallback)
+      )}
+    </span>
+  );
+}
+
 const getSecurityEventLabel = (action) =>
   SECURITY_EVENT_LABELS[action] || String(action || "evento").replace(/_/g, " ");
 
@@ -339,12 +359,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     return {
       ...item,
       tone,
-      initials: (item.full_name || "PF")
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase() || "")
-        .join(""),
+      initials: getNameInitials(item.full_name, "PF"),
+      avatarUrl: item.avatar_url || "",
       relationshipLabel,
       badgeLabel,
       accessSummary,
@@ -364,12 +380,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       id: `collab-${row.id}`,
       relationshipId: row.id,
       tone,
-      initials: (row.user_name || row.user_email || "CO")
-        .split(" ")
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part[0]?.toUpperCase() || "")
-        .join(""),
+      initials: getNameInitials(row.user_name || row.user_email, "CO"),
+      avatarUrl: row.user_avatar_url || "",
       name: row.user_name || row.user_email || `Usuario #${row.user_id}`,
       email: row.user_email || "",
       relationshipLabel: row.relationship_type || "Colaborador",
@@ -1425,12 +1437,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
               style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
             />
             <div className="family-member-head">
-              <span
+              <FamilyAvatar
                 className="family-member-avatar"
+                name={item.full_name}
+                avatarUrl={item.avatarUrl}
                 style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
-              >
-                {item.initials}
-              </span>
+                fallback={item.initials}
+              />
               <div>
                 <p className="family-member-name">{item.full_name}</p>
                 <p className="family-member-meta">{item.relationshipLabel}</p>
@@ -1466,12 +1479,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
               style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
             />
             <div className="family-member-head">
-              <span
+              <FamilyAvatar
                 className="family-member-avatar"
+                name={item.name}
+                avatarUrl={item.avatarUrl}
                 style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
-              >
-                {item.initials}
-              </span>
+                fallback={item.initials}
+              />
               <div>
                 <p className="family-member-name">{item.name}</p>
                 <p className="family-member-meta">
@@ -1967,13 +1981,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
           <div className="family-klinip-banner-actions">
             <div className="family-klinip-avatar-cluster">
               {bannerParticipants.slice(0, Math.max(planMaxProfiles, 5)).map((item) => (
-                <span
+                <FamilyAvatar
                   key={item.id}
                   className="family-klinip-avatar"
+                  name={item.full_name || item.name}
+                  avatarUrl={item.avatarUrl}
                   style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
-                >
-                  {item.initials}
-                </span>
+                  fallback={item.initials}
+                />
               ))}
               {Array.from({ length: familySlotsRemaining }).map((_, index) => (
                 <button
@@ -2007,12 +2022,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                 style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
               />
               <div className="family-member-head">
-                <span
+                <FamilyAvatar
                   className="family-member-avatar"
+                  name={item.full_name}
+                  avatarUrl={item.avatarUrl}
                   style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
-                >
-                  {item.initials}
-                </span>
+                  fallback={item.initials}
+                />
                 <div>
                   <p className="family-member-name">{item.full_name}</p>
                   <p className="family-member-meta">{item.relationshipLabel}</p>
@@ -2062,12 +2078,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                 style={{ background: `linear-gradient(90deg, ${item.tone.start}, ${item.tone.end})` }}
               />
               <div className="family-member-head">
-                <span
+                <FamilyAvatar
                   className="family-member-avatar"
+                  name={item.name}
+                  avatarUrl={item.avatarUrl}
                   style={{ background: `linear-gradient(135deg, ${item.tone.start}, ${item.tone.end})` }}
-                >
-                  {item.initials}
-                </span>
+                  fallback={item.initials}
+                />
                 <div>
                   <p className="family-member-name">{item.name}</p>
                   <p className="family-member-meta">

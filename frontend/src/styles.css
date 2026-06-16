@@ -4173,7 +4173,7 @@ body.theme-dark .primary-btn {
 .sidebar-icon .icon-k {
   display: inline-block;
   font-size: 0.9rem;
-  font-family: inherit;
+  font-family: var(--font-brand);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
@@ -10631,6 +10631,7 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   font-size: 0.7rem;
   font-weight: 700;
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.16);
+  overflow: hidden;
 }
 
 .family-klinip-avatar:first-child {
@@ -10727,6 +10728,14 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   color: #ffffff;
   font-size: 0.86rem;
   font-weight: 700;
+  overflow: hidden;
+}
+
+.family-avatar-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
 }
 
 .family-member-name {
@@ -57791,9 +57800,9 @@ body.theme-dark .bio-unified-chart-legend-item small {
     height: auto;
     padding: 0.62rem 0.48rem calc(0.62rem + env(safe-area-inset-bottom));
     border-radius: 2rem;
-    background: rgba(26, 29, 39, 0.78);
-    border: 1px solid rgba(148, 163, 184, 0.16);
-    box-shadow: 0 20px 44px rgba(15, 23, 42, 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(226, 232, 240, 0.72);
+    box-shadow: 0 20px 44px rgba(15, 23, 42, 0.12);
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
     overflow: hidden;
@@ -58413,11 +58422,11 @@ body.theme-dark .bio-unified-chart-legend-item small {
   .sidebar.sidebar-mobile-shell {
     height: auto !important;
     border-radius: 1.9rem !important;
-    border: 1px solid rgba(184, 201, 237, 0.34) !important;
+    border: 1px solid rgba(226, 232, 240, 0.76) !important;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(241, 247, 255, 0.24)) !important;
+      linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.56)) !important;
     box-shadow:
-      0 14px 28px rgba(43, 72, 126, 0.08),
+      0 14px 28px rgba(15, 23, 42, 0.08),
       inset 0 1px 0 rgba(255, 255, 255, 0.42) !important;
     backdrop-filter: blur(22px) saturate(1.08) !important;
     -webkit-backdrop-filter: blur(22px) saturate(1.08) !important;
@@ -58430,7 +58439,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(135deg, rgba(77, 163, 255, 0.1), transparent 34%, rgba(13, 71, 247, 0.08));
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04));
     pointer-events: none;
     z-index: 0;
   }
@@ -58464,14 +58473,14 @@ body.theme-dark .bio-unified-chart-legend-item small {
     flex: 1 1 0 !important;
     flex-direction: column !important;
     align-items: center !important;
-    justify-content: flex-start !important;
+    justify-content: center !important;
     align-self: start !important;
     max-width: none !important;
     min-width: 0;
-    min-height: 3.16rem !important;
+    min-height: 3.3rem !important;
     height: auto !important;
-    padding: 0.22rem 0.08rem 0.1rem !important;
-    gap: 0.12rem !important;
+    padding: 0.2rem 0.08rem !important;
+    gap: 0 !important;
     border-radius: 1.05rem;
     color: rgba(79, 97, 132, 0.86);
     background: transparent;
@@ -58488,10 +58497,10 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
   .sidebar-icon.sidebar-icon-mobile,
   .sidebar-link.sidebar-link-mobile.is-mobile-ai .sidebar-icon.sidebar-icon-mobile {
-    width: 2.22rem !important;
-    height: 2.22rem !important;
-    min-width: 2.22rem !important;
-    min-height: 2.22rem !important;
+    width: 2.52rem !important;
+    height: 2.52rem !important;
+    min-width: 2.52rem !important;
+    min-height: 2.52rem !important;
     border-radius: 999px;
     background: transparent;
     color: currentColor;
@@ -58499,8 +58508,12 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar-icon.sidebar-icon-mobile svg {
-    width: 1.22rem !important;
-    height: 1.22rem !important;
+    width: 1.4rem !important;
+    height: 1.4rem !important;
+  }
+
+  .sidebar-icon.sidebar-icon-mobile .icon-k {
+    font-size: 1.24rem !important;
   }
 
   .brand-mark-nav,
@@ -58512,17 +58525,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
   .sidebar-label.sidebar-label-mobile,
   .sidebar-link.sidebar-link-mobile.is-mobile-ai .sidebar-label.sidebar-label-mobile {
-    width: auto !important;
-    font-size: 0.61rem !important;
-    line-height: 0.98 !important;
-    font-weight: 700;
-    white-space: nowrap !important;
-    overflow-wrap: normal !important;
-    text-align: center;
-    letter-spacing: 0.01em;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
+    display: none !important;
   }
 
   .sidebar-link.sidebar-link-mobile.active,
@@ -58572,8 +58575,8 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar-link.sidebar-link-mobile.is-mobile-voice .sidebar-icon.sidebar-icon-mobile {
-    width: 2.22rem !important;
-    height: 2.22rem !important;
+    width: 2.52rem !important;
+    height: 2.52rem !important;
     border-radius: 999px;
     color: currentColor;
     background: transparent;
@@ -58589,8 +58592,8 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar-badge.sidebar-badge-mobile {
-    top: 0.04rem !important;
-    right: 0.14rem !important;
+    top: -0.02rem !important;
+    right: 0.08rem !important;
     min-width: 1.02rem;
     height: 1.02rem;
     padding: 0 0.2rem;

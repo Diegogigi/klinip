@@ -175,7 +175,7 @@ const icons = {
       <path d="M12 3v2M4 12H2M22 12h-2M18.5 5.5 17 7M5.5 5.5 7 7" />
     </svg>
   ),
-  aiMobile: <BrandMark className="brand-mark-nav" imgClassName="brand-mark-nav-img" />,
+  aiMobile: <span className="icon-k" aria-hidden="true">K</span>,
   voice: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="2" width="6" height="11" rx="3" />
@@ -430,6 +430,7 @@ function Sidebar({
                   className={`sidebar-link sidebar-link-mobile ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
                     link.to === "/ai" ? "is-mobile-ai" : ""
                   } ${link.to === "/voice" ? "is-mobile-voice" : ""}`}
+                  aria-label={link.label}
                   onClick={() => setShowMobileMenu(false)}
                 >
                 <span className="sidebar-icon sidebar-icon-mobile">
@@ -446,6 +447,7 @@ function Sidebar({
                 <button
                   type="button"
                   className={`sidebar-link sidebar-more ${showMobileMenu ? "active" : ""}`}
+                  aria-label="Otros"
                   aria-expanded={showMobileMenu}
                   aria-controls="sidebar-more-menu"
                   onClick={() => setShowMobileMenu((prev) => !prev)}
