@@ -12629,6 +12629,13 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
         summary_plain = f"Documento de salud en formato {file_format}. El tipo clínico no se pudo confirmar con total certeza."
         patient_friendly = "Este documento fue registrado, pero su tipo clínico no es completamente claro. Puedo intentar explicarlo con el texto OCR disponible."
 
+    # Si la lectura (visión) dejó una nota específica del contenido, úsala como
+    # explicación principal: describe el documento real en vez de una plantilla.
+    doc_note = _safe_text(doc.notes or "")
+    if len(doc_note) > 15:
+        patient_friendly = doc_note
+        summary_plain = doc_note
+
     return entities, {
         "document_type_inferred": doc_type,
         "summary_plain": _clip_text(summary_plain, 500),
@@ -24358,7 +24365,7 @@ def _serialize_post(post: models.FeedPost, db: Session, current_user_id: int) ->
             {
                 "id": a.id,
                 "post_id": a.post_id,
-                "attachment_type": a.attachment_type,
+                "attachment_type": _normalize_feed_attachment_type(a.attachment_type, a.filename),
                 "filename": a.filename,
                 "created_at": a.created_at.strftime("%Y-%m-%dT%H:%M:%S") if a.created_at else None,
             }
@@ -24377,6 +24384,19 @@ def _build_feed_video_mp4_name(filename: str = "") -> str:
     original = Path(filename or "video").stem.strip() or "video"
     safe_name = re.sub(r"[^A-Za-z0-9._-]+", "-", original).strip("-") or "video"
     return f"{safe_name}.mp4"
+
+
+def _normalize_feed_attachment_type(attachment_type: str | None, filename: str | None) -> str:
+    declared_type = str(attachment_type or "").strip().lower()
+    extension = Path((filename or "").strip()).suffix.lower()
+
+    if extension in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp", ".svg"}:
+        return "image"
+    if extension in {".mp4", ".mov", ".m4v", ".webm", ".ogg", ".ogv"}:
+        return "video"
+    if declared_type in {"image", "video", "audio"}:
+        return declared_type
+    return "document"
 
 
 def _transcode_feed_video_to_mp4(file_data: bytes, filename: str = ""):
@@ -24731,13 +24751,15 @@ async def add_post_attachment(
 
     file_data = await file.read()
     normalized_filename = file.filename or ""
-    if attachment_type == "video":
+    normalized_attachment_type = _normalize_feed_attachment_type(attachment_type, normalized_filename)
+    if normalized_attachment_type == "video":
         transcoded = _transcode_feed_video_to_mp4(file_data, normalized_filename)
         if transcoded:
             file_data, normalized_filename = transcoded
+            normalized_attachment_type = "video"
     attachment = models.PostAttachment(
         post_id=post_id,
-        attachment_type=attachment_type,
+        attachment_type=normalized_attachment_type,
         filename=normalized_filename,
         file_data=file_data,
     )
@@ -24747,7 +24769,7 @@ async def add_post_attachment(
     return {
         "id": attachment.id,
         "post_id": attachment.post_id,
-        "attachment_type": attachment.attachment_type,
+        "attachment_type": _normalize_feed_attachment_type(attachment.attachment_type, attachment.filename),
         "filename": attachment.filename,
         "created_at": attachment.created_at.strftime("%Y-%m-%dT%H:%M:%S"),
     }
