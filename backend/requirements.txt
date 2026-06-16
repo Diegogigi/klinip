@@ -16,8 +16,6 @@ pytesseract
 Pillow
 pdf2image
 pdfplumber
-numpy
-opencv-python-headless
 jinja2
 openai>=1.40.0
 pyotp>=2.9.0
