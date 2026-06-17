@@ -1928,13 +1928,25 @@ export default function KlinipFeed({ user }) {
               <p className="kfeed-page-subtitle">Cuidado compartido, con privacidad y control.</p>
             </div>
           </div>
-        </div>
-
-        <div className="kfeed-composer-card">
-          <Avatar name={user?.name || ""} size={44} avatarUrl={userAvatarUrl} />
-          <button type="button" className="kfeed-composer-trigger" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-            Registrar actualización clínica para el equipo
-          </button>
+          <div className="kfeed-hero-bottom">
+            <button
+              type="button"
+              className="kfeed-hero-create-btn"
+              onClick={() => setShowCreate(true)}
+              disabled={profiles.length === 0}
+            >
+              Registrar actualización clínica para el equipo
+            </button>
+            <div className="kfeed-hero-activity">
+              <div>
+                <p className="kfeed-section-kicker">Bitácora compartida</p>
+                <h2 className="kfeed-section-title">Actividad reciente del cuidado</h2>
+              </div>
+              <p className="kfeed-hero-activity-note">
+                {formatUnitLabel(feedClinicalPosts.length, "evento clínico", "eventos clínicos")} registrados recientemente.
+              </p>
+            </div>
+          </div>
         </div>
 
       {loading && (
@@ -1964,18 +1976,6 @@ export default function KlinipFeed({ user }) {
           <button type="button" className="kfeed-publish-btn" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
             + Registrar actualización
           </button>
-        </div>
-      )}
-
-      {!loading && !error && posts.length > 0 && (
-        <div className="kfeed-feed-head">
-          <div>
-            <p className="kfeed-section-kicker">Bitácora compartida</p>
-            <h2 className="kfeed-section-title">Actividad reciente del cuidado</h2>
-          </div>
-          <p className="kfeed-feed-head-note">
-            {formatUnitLabel(feedClinicalPosts.length, "evento clínico", "eventos clínicos")} registrados recientemente.
-          </p>
         </div>
       )}
 
