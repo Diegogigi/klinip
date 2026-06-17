@@ -36,7 +36,25 @@ elif DATABASE_URL.startswith("postgresql"):
         ))
         print(f"DEBUG: DATABASE_URL configurada con SSL: {DATABASE_URL.split('@')[0]}@***")
 
-engine = create_engine(DATABASE_URL, connect_args=connect_args)
+engine_kwargs = {"connect_args": connect_args}
+if DATABASE_URL.startswith("postgresql"):
+    # Configuración de pool robusta para producción:
+    # - pool_pre_ping: valida cada conexión antes de usarla (evita usar conexiones
+    #   muertas tras reinicios o blips de red — causa típica de timeouts 524).
+    # - pool_recycle: recicla conexiones cada 30 min (evita que Postgres las cierre
+    #   por inactividad y queden inservibles).
+    # - pool_size/max_overflow: más holgura para llamadas lentas (visión/embeddings).
+    engine_kwargs.update(
+        {
+            "pool_pre_ping": True,
+            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            "pool_timeout": int(os.getenv("DB_POOL_TIMEOUT", "30")),
+        }
+    )
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
