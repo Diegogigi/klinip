@@ -30,12 +30,20 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
   const src = allowRemote && sessionId ? (remoteUrl || voiceAudioUrl(sessionId)) : null;
   const [localAudioSrc, setLocalAudioSrc] = useState(null);
 
-  function toggle() {
+  async function toggle() {
     const a = audioRef.current;
     if (!a) return;
-    if (playing) a.pause();
-    else a.play();
-    setPlaying(!playing);
+    if (!a.paused) {
+      a.pause();
+      setPlaying(false);
+      return;
+    }
+    try {
+      await a.play();
+      setPlaying(true);
+    } catch {
+      setPlaying(false);
+    }
   }
 
   function handleSeek(e) {
@@ -81,6 +89,8 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
         src={audioSrc}
         preload="metadata"
         playsInline
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
         onEnded={() => setPlaying(false)}

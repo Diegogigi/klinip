@@ -78,15 +78,20 @@ function AudioPlayer({ src }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  function toggle() {
+  async function toggle() {
     const a = audioRef.current;
     if (!a) return;
-    if (playing) {
+    if (!a.paused) {
       a.pause();
+      setPlaying(false);
     } else {
-      a.play();
+      try {
+        await a.play();
+        setPlaying(true);
+      } catch {
+        setPlaying(false);
+      }
     }
-    setPlaying(!playing);
   }
 
   function handleSeek(e) {
@@ -107,6 +112,9 @@ function AudioPlayer({ src }) {
         ref={audioRef}
         src={src}
         preload="metadata"
+        playsInline
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
         onEnded={() => setPlaying(false)}

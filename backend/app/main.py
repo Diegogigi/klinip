@@ -17,6 +17,7 @@ from sqlalchemy import text, inspect, func, or_, and_
 from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
 from typing import List
 import os
+import shutil
 import sys
 import mimetypes
 import base64
@@ -7381,9 +7382,22 @@ def _enrich_document_metadata(
         _klog(f"KLINIP_DOCREAD: enrich notes EXC: {type(exc).__name__}: {exc}")
 
 
+def _is_historical_document(doc) -> bool:
+    """True si el documento es de hace más de N días (histórico): el usuario lo
+    sube para guardar/contextualizar, no para generar recordatorios o citas activas."""
+    if not getattr(doc, "date", None):
+        return False
+    try:
+        threshold = int(os.getenv("HISTORICAL_DOC_DAYS", "60"))
+        return doc.date.date() < (datetime.now().date() - timedelta(days=threshold))
+    except Exception:
+        return False
+
+
 def _apply_document_ocr_automations(
     db: Session,
     doc: models.Document,
+    create_active_items: bool = True,
 ) -> list[dict]:
     text = (doc.ocr_text or "").strip()
     if not text:
@@ -7456,19 +7470,21 @@ def _apply_document_ocr_automations(
                     medications_to_add = [med]
 
             for med in medications_to_add:
-                _create_medication_from_document_ocr(
-                    db,
-                    doc=doc,
-                    profile=profile,
-                    med=med,
-                )
-                detected_meds_for_email.append(
-                    {
-                        "name": med.get("name") or "Medicamento",
-                        "dose": med.get("dose") or "",
-                        "frequency": med.get("frequency") or "",
-                    }
-                )
+                # Históricos: no se crean medicamentos activos con recordatorios.
+                if create_active_items:
+                    _create_medication_from_document_ocr(
+                        db,
+                        doc=doc,
+                        profile=profile,
+                        med=med,
+                    )
+                    detected_meds_for_email.append(
+                        {
+                            "name": med.get("name") or "Medicamento",
+                            "dose": med.get("dose") or "",
+                            "frequency": med.get("frequency") or "",
+                        }
+                    )
                 _append_document_medication_summary(doc, med, is_electronic=is_electronic)
 
         return detected_meds_for_email
@@ -7483,13 +7499,15 @@ def _apply_document_ocr_automations(
             or _derive_specialty(text, doc.center or "")
             or "Examen"
         )
-        _create_appointment_from_document_ocr(
-            db,
-            doc=doc,
-            profile=profile,
-            specialty=specialty,
-            date_time=date_time,
-        )
+        # Históricos: no se crea cita pendiente.
+        if create_active_items:
+            _create_appointment_from_document_ocr(
+                db,
+                doc=doc,
+                profile=profile,
+                specialty=specialty,
+                date_time=date_time,
+            )
         # No ensuciamos doc.notes con mensajes de agenda: la nota la define la
         # lectura (visión/enriquecimiento) y se mantiene clara para el usuario.
         return detected_meds_for_email
@@ -7498,19 +7516,20 @@ def _apply_document_ocr_automations(
         label_med = _extract_label_medication(text)
         if label_med:
             doc.doc_type = models.DocumentType.receta
-            medication = _create_medication_from_document_ocr(
-                db,
-                doc=doc,
-                profile=profile,
-                med=label_med,
-            )
-            detected_meds_for_email.append(
-                {
-                    "name": medication.name or "Medicamento",
-                    "dose": medication.dose or "",
-                    "frequency": medication.frequency or "",
-                }
-            )
+            if create_active_items:
+                medication = _create_medication_from_document_ocr(
+                    db,
+                    doc=doc,
+                    profile=profile,
+                    med=label_med,
+                )
+                detected_meds_for_email.append(
+                    {
+                        "name": medication.name or "Medicamento",
+                        "dose": medication.dose or "",
+                        "frequency": medication.frequency or "",
+                    }
+                )
             _append_document_medication_summary(doc, label_med, is_electronic=False)
             return detected_meds_for_email
 
@@ -7518,7 +7537,7 @@ def _apply_document_ocr_automations(
             doc.doc_type = models.DocumentType.orden
             schedule = _extract_order_schedule(text) or {}
             date_time = schedule.get("date_time")
-            specialty = schedule.get("specialty") or ""
+            specialty = schedule.get("specialty") or _derive_specialty(text, doc.center or "")
             if not specialty:
                 normalized = _normalize_text(text)
                 if "ecografia" in normalized:
@@ -7529,13 +7548,14 @@ def _apply_document_ocr_automations(
                     specialty = "Radiografia"
                 else:
                     specialty = "Examen"
-            _create_appointment_from_document_ocr(
-                db,
-                doc=doc,
-                profile=profile,
-                specialty=specialty,
-                date_time=date_time,
-            )
+            if create_active_items:
+                _create_appointment_from_document_ocr(
+                    db,
+                    doc=doc,
+                    profile=profile,
+                    specialty=specialty,
+                    date_time=date_time,
+                )
 
     return detected_meds_for_email
 
@@ -8045,7 +8065,11 @@ def _run_document_ocr(document_id: int):
         db.refresh(doc)
 
         try:
-            detected_meds_for_email = _apply_document_ocr_automations(db, doc)
+            historical = _is_historical_document(doc)
+            _klog(f"KLINIP_DOCREAD: historical={historical} date={doc.date.date().isoformat() if doc.date else None}")
+            detected_meds_for_email = _apply_document_ocr_automations(
+                db, doc, create_active_items=not historical
+            )
             db.commit()
             db.refresh(doc)
         except Exception as exc:
@@ -15729,12 +15753,18 @@ def _resolve_voice_audio_stream_path(file_path: str | None) -> str | None:
     except OSError:
         pass
 
+    ffmpeg_exe = ""
     try:
         from imageio_ffmpeg import get_ffmpeg_exe
-    except ImportError:
-        return source_path
 
-    ffmpeg_exe = get_ffmpeg_exe()
+        ffmpeg_exe = get_ffmpeg_exe() or ""
+    except Exception:
+        ffmpeg_exe = ""
+
+    if not ffmpeg_exe:
+        ffmpeg_exe = shutil.which("ffmpeg") or ""
+    if not ffmpeg_exe:
+        return source_path
     temp_output_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".m4a") as temp_output:
@@ -20735,6 +20765,7 @@ async def voice_shared_audio(token: str, db: Session = Depends(auth.get_db)):
         stream_path,
         media_type=media_type,
         filename=download_name,
+        content_disposition_type="inline",
     )
 
 
@@ -20761,6 +20792,7 @@ async def voice_shared_consent_audio(token: str, db: Session = Depends(auth.get_
         stream_path,
         media_type=media_type,
         filename=download_name,
+        content_disposition_type="inline",
     )
 
 
@@ -20799,6 +20831,7 @@ async def voice_session_audio(
         stream_path,
         media_type=media_type,
         filename=download_name,
+        content_disposition_type="inline",
     )
 
 
@@ -20836,6 +20869,7 @@ async def voice_session_consent_audio(
         stream_path,
         media_type=media_type,
         filename=download_name,
+        content_disposition_type="inline",
     )
 
 
@@ -23962,6 +23996,7 @@ async def get_document_analysis(
         document_id=doc.id,
         doc_type=doc.doc_type.value if doc.doc_type else "otro",
         ocr_status=doc.ocr_status,
+        is_historical=_is_historical_document(doc),
         summary=schemas.DocumentSummaryOut.model_validate(summary) if summary else None,
         entities=[schemas.DocumentClinicalEntityOut.model_validate(e) for e in entities],
     )
@@ -24127,6 +24162,39 @@ async def retry_document_ocr(
     db.refresh(doc)
 
     background_tasks.add_task(_run_document_ocr, doc.id)
+    return doc
+
+
+@app.post("/documents/{document_id}/activate", response_model=schemas.DocumentOut)
+async def activate_document_items(
+    document_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Crea los ítems activos (medicamentos/citas) de un documento que se detectó
+    como histórico, cuando el usuario confirma que es vigente."""
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            *_document_scope_filter(profile, target_user_id),
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+    try:
+        _apply_document_ocr_automations(db, doc, create_active_items=True)
+        _mark_profile_ai_dirty(
+            db, _resolve_document_profile_for_ocr(db, doc) or profile, include_family=True
+        )
+        db.commit()
+        db.refresh(doc)
+    except Exception as exc:
+        db.rollback()
+        print(f"WARNING activate_document_items: {exc}")
+        raise HTTPException(status_code=500, detail="No se pudieron activar los ítems del documento.")
     return doc
 
 
