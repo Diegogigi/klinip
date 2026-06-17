@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
 import {
   deleteVoiceSession,
   getActiveHealthProfile,
@@ -145,25 +144,6 @@ function MicIcon({ className }) {
   );
 }
 
-function ShareSmallIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
-      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-      <polyline points="16 6 12 2 8 6" />
-      <line x1="12" y1="2" x2="12" y2="15" />
-    </svg>
-  );
-}
-
-function EyeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
 function TrashIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14 }}>
@@ -249,8 +229,8 @@ function VoiceSessionCard({
           }}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          aria-label="Eliminar grabación"
-          title="Eliminar grabación"
+          aria-label="Abrir acciones de la grabación"
+          title="Abrir acciones"
         >
           <DotsIcon />
         </button>
@@ -779,60 +759,44 @@ export default function KlinipVoicePage() {
         />
       )}
 
-      <div className="vp2-scene-topbar">
-        <BrandLogo
-          className="vp2-scene-brand"
-          markClassName="vp2-scene-brand-mark"
-          imgClassName="vp2-scene-brand-img"
-          nameClassName="vp2-scene-brand-name"
-          showName={false}
-        />
-        <button
-          type="button"
-          className="vp2-scene-action"
-          onClick={() => setLibraryTab((current) => (current === "mine" ? "shared" : "mine"))}
-          aria-label={libraryTab === "mine" ? "Abrir sesiones compartidas" : "Abrir mis grabaciones"}
-        >
-          {libraryTab === "mine" ? <ShareSmallIcon /> : <EyeIcon />}
-        </button>
-      </div>
+      <div className="vp2-header">
+        <div className="vp2-header-copy vp2-section-intro">
+          <span className="vp2-eyebrow">
+            <span className="vp2-eyebrow-dot" />
+            Consulta por voz
+          </span>
+          <p className="vp2-section-sub">Consultas grabadas - {profileName}</p>
+          <h1 className="vp2-scene-title">Voz</h1>
+          <p className="vp2-scene-subtitle">Graba, entiende y guarda tu consulta.</p>
+        </div>
 
-      <div className="vp2-section-intro">
-        <span className="vp2-eyebrow">
-          <span className="vp2-eyebrow-dot" />
-          Consulta por voz
-        </span>
-        <p className="vp2-section-sub">Consultas grabadas - {profileName}</p>
-        <h1 className="vp2-scene-title">Voz</h1>
-        <p className="vp2-scene-subtitle">Graba, entiende y guarda tu consulta.</p>
-      </div>
+        <div className="vp2-header-actions">
+          <label className="vp2-profile-picker">
+            <span>Perfil activo</span>
+            <select
+              className="vp2-profile-select"
+              value={activeProfile?.id || ""}
+              onChange={handleProfileChange}
+              disabled={profileBusy}
+            >
+              {(profiles || []).map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profileLabel(profile)}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <div className="vp2-actions-row">
-        <label className="vp2-profile-picker">
-          <span>Perfil activo</span>
-          <select
-            className="vp2-profile-select"
-            value={activeProfile?.id || ""}
-            onChange={handleProfileChange}
-            disabled={profileBusy}
+          <button
+            type="button"
+            className="vp2-new-btn"
+            disabled={!canEdit || profileBusy}
+            onClick={() => setShowRecorder(true)}
           >
-            {(profiles || []).map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profileLabel(profile)}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          type="button"
-          className="vp2-new-btn"
-          disabled={!canEdit || profileBusy}
-          onClick={() => setShowRecorder(true)}
-        >
-          <MicIcon className="vp2-new-btn-icon" />
-          Nueva grabación
-        </button>
+            <MicIcon className="vp2-new-btn-icon" />
+            Nueva grabación
+          </button>
+        </div>
       </div>
 
       <div className="vp2-trust-row" aria-label="Seguridad de Klinip Voice">
