@@ -71,10 +71,33 @@ function useAuthFile(postId, attachmentId, previewUrl) {
 }
 
 function AuthImage({ postId, attachmentId, filename, previewUrl, className, onClick }) {
-  const { src, loading } = useAuthFile(postId, attachmentId, previewUrl);
+  const directSrc = previewUrl || getPostAttachmentUrl(postId, attachmentId);
+  const [useBlobFallback, setUseBlobFallback] = useState(false);
+  const { src: fallbackSrc, loading } = useAuthFile(
+    useBlobFallback ? postId : null,
+    useBlobFallback ? attachmentId : null,
+    useBlobFallback ? null : directSrc,
+  );
+
+  useEffect(() => {
+    setUseBlobFallback(false);
+  }, [postId, attachmentId, previewUrl]);
+
   if (loading) return <div className="kfeed-attachment-loading" />;
-  if (!src) return null;
-  return <img src={src} alt={filename} className={className} onClick={onClick} style={onClick ? { cursor: "pointer" } : {}} />;
+  if (!fallbackSrc) return null;
+  return (
+    <img
+      src={fallbackSrc}
+      alt={filename}
+      className={className}
+      loading="lazy"
+      onClick={onClick}
+      onError={() => {
+        if (!useBlobFallback) setUseBlobFallback(true);
+      }}
+      style={onClick ? { cursor: "pointer" } : {}}
+    />
+  );
 }
 
 function AuthPDF({ postId, attachmentId, filename, previewUrl }) {
@@ -420,6 +443,17 @@ function Avatar({ name, size = 44, avatarUrl = null }) {
         : getInitials(name)
       }
     </div>
+  );
+}
+
+function TeamPanelIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 21v-1.2a3.8 3.8 0 0 0-3.8-3.8H7.8A3.8 3.8 0 0 0 4 19.8V21" />
+      <circle cx="10" cy="8" r="3.2" />
+      <path d="M20 21v-1a3.2 3.2 0 0 0-2.4-3.1" />
+      <path d="M15.5 4.9a3.1 3.1 0 0 1 0 6.2" />
+    </svg>
   );
 }
 
@@ -1871,7 +1905,7 @@ export default function KlinipFeed({ user }) {
                 title="Ver equipo"
                 aria-label="Abrir panel del equipo de cuidado"
               >
-                <Avatar name={user?.name || ""} size={28} avatarUrl={userAvatarUrl} />
+                <TeamPanelIcon />
               </button>
             )}
           </div>

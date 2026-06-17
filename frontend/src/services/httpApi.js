@@ -1057,7 +1057,8 @@ export async function uploadHealthProfileAvatar(profileId, file) {
 export function getPostAttachmentUrl(postId, attachmentId) {
   const base = api.defaults.baseURL || "";
   const token = localStorage.getItem("token");
-  return `${base}/feed/posts/${postId}/attachments/${attachmentId}/file?token=${token}`;
+  const tokenQuery = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${base}/feed/posts/${postId}/attachments/${attachmentId}/file${tokenQuery}`;
 }
 
 // ── Klinip Voice ──────────────────────────────────────────────────────────
