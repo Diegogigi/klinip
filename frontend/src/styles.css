@@ -58238,6 +58238,27 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
   .mobile-hero-appointment-card {
     border-radius: 1.6rem;
+    color: var(--scene-text-strong);
+  }
+
+  .mobile-hero-appointment-day {
+    color: var(--scene-blue);
+  }
+
+  .mobile-hero-appointment-day.is-urgent {
+    color: #b45309;
+  }
+
+  .mobile-hero-appointment-card strong {
+    color: var(--scene-text-strong);
+  }
+
+  .mobile-hero-appointment-card span:last-child {
+    color: var(--scene-text-soft);
+  }
+
+  body.theme-dark .mobile-hero-appointment-day.is-urgent {
+    color: #fcd34d;
   }
 
   .mobile-sheet {

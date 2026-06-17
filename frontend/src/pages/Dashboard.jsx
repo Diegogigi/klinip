@@ -40,10 +40,66 @@ import DocumentUploadWizard from "../components/DocumentUploadWizard";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
+const DASHBOARD_TEXT_REPAIRS = [
+  ["Tr�mite", "Trámite"],
+  ["Ma�ana", "Mañana"],
+  ["Pr�xima", "Próxima"],
+  ["pr�xima", "próxima"],
+  ["Atenci�n", "Atención"],
+  ["acci�n", "acción"],
+  ["r�pidas", "rápidas"],
+  ["m�dica", "médica"],
+  ["m�dico", "médico"],
+  ["cl�nica", "clínica"],
+  ["cl�nico", "clínico"],
+  ["gr�fico", "gráfico"],
+  ["d�a", "día"],
+  ["d�as", "días"],
+  ["m�s", "más"],
+  ["ex�menes", "exámenes"],
+  ["presi�n", "presión"],
+  ["Biom�trico", "Biométrico"],
+  ["Biom�tricos", "Biométricos"],
+  ["evoluci�n", "evolución"],
+  ["qu�", "qué"],
+  ["est�", "está"],
+  ["pr�ximo", "próximo"],
+  ["pr�ximos", "próximos"],
+  ["revisi�n", "revisión"],
+  ["orientaci�n", "orientación"],
+  ["continuaci�n", "continuación"],
+  ["�Tu salud está al día!", "¡Tu salud está al día!"],
+  ["�No olvides tus dosis de hoy!", "¡No olvides tus dosis de hoy!"],
+  ["�Necesitas ajustar el recordatorio?", "¿Necesitas ajustar el recordatorio?"],
+  ["�Tomas a tiempo?", "¿Tomas a tiempo?"],
+  ["�Qué puedo hacer?", "¿Qué puedo hacer?"],
+  ["�Qué debo hacer", "¿Qué debo hacer"],
+  [" Â· ", " · "],
+  ["ï¿½", ""],
+];
+
+function repairUtf8Mojibake(value) {
+  if (typeof value !== "string" || !/[ÃÂï¿½]/.test(value)) return value;
+  try {
+    const bytes = Uint8Array.from(Array.from(value), (char) => char.charCodeAt(0) & 0xff);
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return value;
+  }
+}
+
+function cleanDashboardText(value, fallback = "") {
+  const cleaned = repairUtf8Mojibake(cleanUiText(value, fallback));
+  return DASHBOARD_TEXT_REPAIRS.reduce(
+    (result, [search, replacement]) => result.split(search).join(replacement),
+    cleaned
+  ).trim();
+}
+
 const typeLabels = {
   cita: "Cita",
   examen: "Examen",
-  tramite: "TrÃ¡mite",
+  tramite: "Trámite",
 };
 
 const kindToneMap = {
@@ -124,9 +180,9 @@ function getAlertTone(severity) {
 
 function getAdherenceFriendlyValue(adherence, hasMedications) {
   if (!hasMedications) return "sin datos";
-  if (adherence >= 80) return `Muy bien Â· ${adherence}%`;
-  if (adherence >= 45) return `Regular Â· ${adherence}%`;
-  return `Bajo Â· ${adherence}%`;
+  if (adherence >= 80) return `Muy bien · ${adherence}%`;
+  if (adherence >= 45) return `Regular · ${adherence}%`;
+  return `Bajo · ${adherence}%`;
 }
 
 function clampPercent(value) {
@@ -271,7 +327,7 @@ const friendlyAlertTitleMap = {
   medication_running_out: "Medicamento por terminarse",
   low_adherence: "Tienes dosis sin tomar",
   missed_appointment_followup: "Tienes una cita sin confirmar",
-  missing_lab_result: "Faltan resultados de exÃ¡menes",
+  missing_lab_result: "Faltan resultados de exámenes",
   incomplete_treatment: "Tratamiento sin cerrar",
 };
 
@@ -282,15 +338,15 @@ function getFriendlyAlertTitle(alert) {
 
 const alertDetailMap = {
   medication_running_out:
-    "Tu medicamento estÃ¡ prÃ³ximo a terminarse. Revisa si tienes stock suficiente para los prÃ³ximos dÃ­as. Si necesitas renovar la receta, agenda una consulta con tu mÃ©dico antes de que se acabe.",
+    "Tu medicamento está próximo a terminarse. Revisa si tienes stock suficiente para los próximos días. Si necesitas renovar la receta, agenda una consulta con tu médico antes de que se acabe.",
   low_adherence:
-    "EstÃ¡s tomando menos dosis de las que corresponden. Revisa tus recordatorios y asegÃºrate de que estÃ©n activos. Si tienes dificultades para seguir el tratamiento, comÃ©ntalo con tu mÃ©dico.",
+    "Estás tomando menos dosis de las que corresponden. Revisa tus recordatorios y asegúrate de que están activos. Si tienes dificultades para seguir el tratamiento, coméntalo con tu médico.",
   missed_appointment_followup:
-    "Tienes una cita registrada que no fue marcada como realizada. Si ya la realizaste, actualiza su estado en tu agenda. Si no fue asÃ­, considera reagendarla.",
+    "Tienes una cita registrada que no fue marcada como realizada. Si ya la realizaste, actualiza su estado en tu agenda. Si no fue así, considera reagendarla.",
   missing_lab_result:
-    "Hay Ã³rdenes mÃ©dicas sin resultados asociados. Sube los documentos de tus exÃ¡menes para que queden registrados en tu historial clÃ­nico.",
+    "Hay órdenes médicas sin resultados asociados. Sube los documentos de tus exámenes para que queden registrados en tu historial clínico.",
   incomplete_treatment:
-    "Un tratamiento pasÃ³ su fecha estimada de tÃ©rmino y sigue marcado como activo. Revisa si aÃºn lo estÃ¡s tomando o si ya finalizÃ³ para actualizar tu historial.",
+    "Un tratamiento pasó su fecha estimada de término y sigue marcado como activo. Revisa si aún lo estás tomando o si ya finalizó para actualizar tu historial.",
 };
 
 function getAlertDetail(alert) {
@@ -301,7 +357,7 @@ function getAlertDetail(alert) {
 const TYPE_LABELS_SAFE = {
   cita: "Cita",
   examen: "Examen",
-  tramite: "TrÃ¡mite",
+  tramite: "Trámite",
 };
 
 function toRelativeDayLabelSafe(date) {
@@ -311,8 +367,8 @@ function toRelativeDayLabelSafe(date) {
   const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const diffDays = Math.round((startDate - startNow) / 86400000);
   if (diffDays === 0) return "Hoy";
-  if (diffDays === 1) return "MaÃ±ana";
-  if (diffDays > 1) return `En ${diffDays} dÃ­as`;
+  if (diffDays === 1) return "Mañana";
+  if (diffDays > 1) return `En ${diffDays} días`;
   return "Reciente";
 }
 
@@ -321,15 +377,15 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
   if (highAlerts.length > 0 || (activeMedications.length > 0 && adherence < 45)) {
     return {
       level: "alert",
-      title: "Necesita tu atenciÃ³n hoy",
-      message: "Revisa las alertas a continuaciÃ³n y toca cualquiera para recibir orientaciÃ³n de Klinip IA.",
+      title: "Necesita tu atención hoy",
+      message: "Revisa las alertas a continuación y toca cualquiera para recibir orientación de Klinip IA.",
     };
   }
   if (activeHealthAlerts.length > 0 || (activeMedications.length > 0 && adherence < 80)) {
     return {
       level: "warn",
       title: "Hay cosas para revisar",
-      message: "Toca cualquier alerta para ver quÃ© hacer. Klinip IA puede ayudarte.",
+      message: "Toca cualquier alerta para ver qué hacer. Klinip IA puede ayudarte.",
     };
   }
   if (activeMedications.length === 0) {
@@ -341,8 +397,8 @@ function getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications
   }
   return {
     level: "ok",
-    title: "Â¡Tu salud estÃ¡ al dÃ­a!",
-    message: "No hay alertas activas y estÃ¡s tomando tus medicamentos correctamente.",
+    title: "¡Tu salud está al día!",
+    message: "No hay alertas activas y estás tomando tus medicamentos correctamente.",
   };
 }
 
@@ -484,11 +540,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (activeMedications.length > 0 && adherence > 0) {
     if (adherence >= 80) {
-      msgs.push(`Est?s tomando el ${adherence}% de tus medicamentos a tiempo - excelente seguimiento.`);
+      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos a tiempo. Excelente seguimiento.`);
     } else if (adherence >= 50) {
-      msgs.push(`EstÃ¡s tomando el ${adherence}% de tus medicamentos. Puedes mejorar un poco mÃ¡s.`);
+      msgs.push(`Estás tomando el ${adherence}% de tus medicamentos. Puedes mejorar un poco más.`);
     } else {
-      msgs.push(`Solo estÃ¡s tomando el ${adherence}% de tus medicamentos. Â¡No olvides tus dosis de hoy!`);
+      msgs.push(`Solo estás tomando el ${adherence}% de tus medicamentos. ¡No olvides tus dosis de hoy!`);
     }
   }
 
@@ -496,8 +552,8 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
     const apptDate = parseDate(nextAppointment.date_time);
     if (apptDate) {
       const rel = toRelativeDayLabel(apptDate);
-      const specialty = cleanUiText(nextAppointment.specialty || typeLabels[nextAppointment.type] || "Cita mÃ©dica");
-      msgs.push(`Tienes una cita pr?xima: ${specialty} - ${rel}.`);
+      const specialty = cleanUiText(nextAppointment.specialty || typeLabels[nextAppointment.type] || "Cita médica");
+      msgs.push(`Tienes una cita próxima: ${specialty} - ${rel}.`);
     }
   }
 
@@ -508,11 +564,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
 
   if (lowAdherenceItems.length > 0) {
     const med = cleanUiText(lowAdherenceItems[0]?.name || "");
-    if (med) msgs.push(`${med} tiene dosis sin tomar. Â¿Necesitas ajustar el recordatorio?`);
+    if (med) msgs.push(`${med} tiene dosis sin tomar. ¿Necesitas ajustar el recordatorio?`);
   }
 
   if (pendingDocuments > 0) {
-    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisiÃ³n.`);
+    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisión.`);
   }
 
   if (activeMedications.length === 0) {
@@ -520,8 +576,8 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
   }
 
   if (msgs.length === 0) {
-    const timeGreet = hour < 12 ? "Buenos dÃ­as" : hour < 19 ? "Buenas tardes" : "Buenas noches";
-    msgs.push(`${timeGreet}, ${firstName}. Tu historial de salud estÃ¡ al dÃ­a.`);
+    const timeGreet = hour < 12 ? "Buenos días" : hour < 19 ? "Buenas tardes" : "Buenas noches";
+    msgs.push(`${timeGreet}, ${firstName}. Tu historial de salud está al día.`);
   }
 
   return msgs;
@@ -860,11 +916,11 @@ export default function Dashboard({
   const nextAppointmentHero = nextAppointmentDate
     ? {
         label: toRelativeDayLabelSafe(nextAppointmentDate) || "En agenda",
-        title: cleanUiText(
+        title: cleanDashboardText(
           nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad de salud",
           "Actividad de salud"
         ),
-        detail: cleanUiText(
+        detail: cleanDashboardText(
           [
             nextAppointmentDate.toLocaleDateString("es-CL", {
               weekday: "short",
@@ -875,7 +931,7 @@ export default function Dashboard({
             nextAppointment.center || "",
           ]
             .filter(Boolean)
-            .join(" Â· "),
+            .join(" · "),
           "Revisa el detalle de tu agenda."
         ),
         urgent: nextAppointmentDate.toDateString() === new Date().toDateString(),
@@ -976,7 +1032,7 @@ export default function Dashboard({
                 type="button"
                 className="adherence-guide-close"
                 onClick={() => setAdherenceGuideOpen(false)}
-                aria-label="Cerrar explicaciÃ³n del grÃ¡fico"
+                aria-label="Cerrar explicación del gráfico"
               >
                 x
               </button>
@@ -991,7 +1047,7 @@ export default function Dashboard({
                   <span>{adherencePercentLabel}</span>
                 </div>
                 <div className="adherence-guide-copy">
-                  <h3 id="adherence-guide-title">QuÃ© significa este grÃ¡fico</h3>
+                  <h3 id="adherence-guide-title">Qué significa este gráfico</h3>
                   <p>{adherenceGuide.summary}</p>
                 </div>
               </div>
@@ -1065,7 +1121,7 @@ export default function Dashboard({
       label: "Citas",
       value: nextAppointment
         ? `${toRelativeDayLabel(parseDate(nextAppointment.date_time)).toLowerCase()}`
-        : "sin citas prÃ³ximas",
+        : "sin citas próximas",
       onClick: () => navigate("/appointments"),
     },
     {
@@ -1073,14 +1129,14 @@ export default function Dashboard({
       icon: "document",
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
-      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al dÃ­a",
+      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al día",
       onClick: () => navigate("/documents"),
     },
     {
       key: "adherence",
       icon: "adherence",
       tone: activeMedications.length > 0 ? getRadarToneFromAdherence(adherence) : "warn",
-      label: "Â¿Tomas a tiempo?",
+      label: "¿Tomas a tiempo?",
       value: getAdherenceFriendlyValue(adherence, activeMedications.length > 0),
       onClick: () => navigate("/medications"),
     },
@@ -1138,10 +1194,10 @@ export default function Dashboard({
       id: `biometric-${item.id}`,
       date: parseDate(item.measured_at || item.created_at),
       kind: "biometric",
-      title: "BiomÃ©trico registrado",
+      title: "Biométrico registrado",
       subtitle: cleanUiText(
-        `${getBiometricMetricConfig(item.metric_type).label} Â· ${formatBiometricValue(item)}`,
-        "Registro biomÃ©trico"
+        `${getBiometricMetricConfig(item.metric_type).label} · ${formatBiometricValue(item)}`,
+        "Registro biométrico"
       ),
       time: item.measured_at || item.created_at,
     })),
@@ -1212,7 +1268,7 @@ export default function Dashboard({
       if (!alert) {
         navigate("/ai", {
           state: {
-            autoPrompt: "AyÃºdame a revisar mis alertas y pendientes de salud de hoy.",
+            autoPrompt: "Ayúdame a revisar mis alertas y pendientes de salud de hoy.",
           },
         });
         return;
@@ -1221,7 +1277,7 @@ export default function Dashboard({
         state: {
           autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(
             getFriendlyAlertTitle(alert)
-          )}". ${cleanUiText(alert.description)} Â¿QuÃ© debo hacer hoy paso a paso?`,
+          )}". ${cleanDashboardText(alert.description)} ¿Qué debo hacer hoy paso a paso?`,
         },
       });
     },
@@ -1233,12 +1289,12 @@ export default function Dashboard({
   const topLowAdherenceItem = lowAdherenceItems[0] || null;
   const biometricsSummaryText = latestBiometricReading
     ? cleanUiText(
-        `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)} Â· ${formatBiometricMeasuredAt(
+        `${latestBiometricMetric.label}: ${formatBiometricValue(latestBiometricReading)} · ${formatBiometricMeasuredAt(
           latestBiometricReading.measured_at || latestBiometricReading.created_at
         )}`,
         "Revisa tu monitoreo reciente."
       )
-    : "Empieza a registrar glucosa, presiÃ³n, frecuencia cardiaca o temperatura.";
+    : "Empieza a registrar glucosa, presión, frecuencia cardiaca o temperatura.";
   const topHighAlertType = String(topHighAlert?.alert_type || "").toLowerCase();
   const highAlertHeroState =
     topHighAlertType === "low_adherence"
@@ -1269,7 +1325,7 @@ export default function Dashboard({
         title: cleanUiText(getFriendlyAlertTitle(topHighAlert)),
         message: cleanUiText(
           topHighAlert.description,
-          "Tienes una alerta clÃ­nica que conviene revisar hoy."
+          "Tienes una alerta clínica que conviene revisar hoy."
         ),
         actionLabel: "Revisar alerta",
         onAction: () => openAlertAssistant(topHighAlert),
@@ -1283,11 +1339,11 @@ export default function Dashboard({
           : "Conviene revisar tu adherencia",
         message: nextMedicationEvent?.urgent
           ? cleanUiText(
-              `${nextMedicationEvent.title}${nextMedicationEvent.meta ? ` Â· ${nextMedicationEvent.meta}` : ""}`,
+              `${nextMedicationEvent.title}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
               "Revisa tu dosis pendiente."
             )
           : cleanUiText(
-              `${topLowAdherenceItem?.name || "Un medicamento"} necesita mÃ¡s constancia esta semana.`,
+              `${topLowAdherenceItem?.name || "Un medicamento"} necesita más constancia esta semana.`,
               "Revisa tus recordatorios."
             ),
         actionLabel: "Tomar medicamento",
@@ -1296,15 +1352,15 @@ export default function Dashboard({
     : nextAppointment
     ? {
         tone: "warn",
-        badge: "PrÃ³xima cita",
-        title: "Tu siguiente cita ya estÃ¡ en agenda",
+        badge: "Próxima cita",
+        title: "Tu siguiente cita ya está en agenda",
         message: cleanUiText(
-          `${nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad"} Â· ${
-            toRelativeDayLabelSafe(parseDate(nextAppointment.date_time)) || "PrÃ³ximamente"
+          `${nextAppointment.specialty || TYPE_LABELS_SAFE[nextAppointment.type] || "Actividad"} · ${
+            toRelativeDayLabelSafe(parseDate(nextAppointment.date_time)) || "Próximamente"
           }`,
-          "Revisa el detalle de tu prÃ³xima cita."
+          "Revisa el detalle de tu próxima cita."
         ),
-        actionLabel: "Ver prÃ³xima cita",
+        actionLabel: "Ver próxima cita",
         onAction: openAppointmentFocus,
       }
     : pendingDocuments > 0
@@ -1314,17 +1370,17 @@ export default function Dashboard({
         title: "Tienes documentos por revisar",
         message: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} necesita${
           pendingDocuments > 1 ? "n" : ""
-        } tu atenciÃ³n.`,
+        } tu atención.`,
         actionLabel: "Subir documento",
         onAction: openDocumentsFocus,
       }
     : {
         tone: "ok",
         badge: "Todo en orden",
-        title: "Tu control diario estÃ¡ al dÃ­a",
+        title: "Tu control diario está al día",
         message: activeMedications.length
-          ? "No hay alertas crÃ­ticas. Klinip dejÃ³ listos tus prÃ³ximos pasos."
-          : "Activa tu seguimiento para empezar a ver recordatorios y prioridades clÃ­nicas.",
+          ? "No hay alertas críticas. Klinip dejó listos tus próximos pasos."
+          : "Activa tu seguimiento para empezar a ver recordatorios y prioridades clínicas.",
         actionLabel: activeMedications.length ? "Ver medicamentos" : "Agregar medicamento",
         onAction: openMedicationFocus,
       };
@@ -1359,7 +1415,7 @@ export default function Dashboard({
     },
     {
       id: "next",
-      label: nextAppointmentEvent ? "PrÃ³ximo paso" : "Documentos",
+      label: nextAppointmentEvent ? "Próximo paso" : "Documentos",
       value: nextAppointmentEvent
         ? toRelativeDayLabelSafe(nextAppointmentEvent.date) || "En agenda"
         : pendingDocuments > 0
@@ -1383,7 +1439,7 @@ export default function Dashboard({
           title: cleanUiText(getFriendlyAlertTitle(topAlert)),
           detail: cleanUiText(
             topAlert.description,
-            "Toca para ver quÃ© hacer con Klinip IA."
+            "Toca para ver qué hacer con Klinip IA."
           ),
           actionLabel: "Abrir IA",
           onClick: () => openAlertAssistant(topAlert),
@@ -1396,7 +1452,7 @@ export default function Dashboard({
           eyebrow: nextMedicationEvent.urgent ? "Dosis de hoy" : "Medicamento",
           title: cleanUiText(nextMedicationEvent.title),
           detail: cleanUiText(
-            `${toRelativeDayLabelSafe(nextMedicationEvent.date)}${nextMedicationEvent.meta ? ` Â· ${nextMedicationEvent.meta}` : ""}`,
+            `${toRelativeDayLabelSafe(nextMedicationEvent.date)}${nextMedicationEvent.meta ? ` · ${nextMedicationEvent.meta}` : ""}`,
             "Revisa tu recordatorio."
           ),
           actionLabel: "Tomar medicamento",
@@ -1410,7 +1466,7 @@ export default function Dashboard({
           eyebrow: "Agenda",
           title: cleanUiText(nextAppointmentEvent.title),
           detail: cleanUiText(
-            `${toRelativeDayLabelSafe(nextAppointmentEvent.date)}${nextAppointmentEvent.meta ? ` Â· ${nextAppointmentEvent.meta}` : ""}`,
+            `${toRelativeDayLabelSafe(nextAppointmentEvent.date)}${nextAppointmentEvent.meta ? ` · ${nextAppointmentEvent.meta}` : ""}`,
             "Revisa el detalle de tu agenda."
           ),
           actionLabel: "Ver cita",
@@ -1458,10 +1514,10 @@ export default function Dashboard({
     {
       id: "appointment",
       icon: "appointment",
-      label: "Ver prÃ³xima cita",
+      label: "Ver próxima cita",
       subtitle: nextAppointmentEvent
         ? cleanUiText(nextAppointmentEvent.title, "Revisa tu agenda")
-        : "Agenda tu prÃ³ximo control",
+        : "Agenda tu próximo control",
       hint: nextAppointmentEvent ? toRelativeDayLabelSafe(nextAppointmentEvent.date) : "Sin cita",
       tone: "blue",
       onClick: openAppointmentFocus,
@@ -1473,7 +1529,7 @@ export default function Dashboard({
       subtitle:
         pendingDocuments > 0
           ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""} por revisar`
-          : "Guarda exÃ¡menes e informes",
+          : "Guarda exámenes e informes",
       hint: pendingDocuments > 0 ? "Pendiente" : "Nuevo",
       tone: "teal",
       onClick: openDocumentsFocus,
@@ -1481,13 +1537,13 @@ export default function Dashboard({
     {
       id: "biometric",
       icon: "biometric",
-      label: "Ver biomÃ©tricos",
+      label: "Ver biométricos",
       subtitle: latestBiometricReading
         ? cleanUiText(
-            `${latestBiometricMetric.label} Â· ${formatBiometricValue(latestBiometricReading)}`,
+            `${latestBiometricMetric.label} · ${formatBiometricValue(latestBiometricReading)}`,
             "Monitoreo activo"
           )
-        : "Activa tu monitoreo clÃ­nico",
+        : "Activa tu monitoreo clínico",
       hint: latestBiometricReading
         ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
         : "Nuevo",
@@ -1502,7 +1558,7 @@ export default function Dashboard({
   if (!futureAppointments.length) {
     suggestionItems.push({
       id: "suggestion-appointment",
-      text: "No tienes citas prÃ³ximas registradas. Agenda tu prÃ³ximo control.",
+      text: "No tienes citas próximas registradas. Agenda tu próximo control.",
     });
   }
   if (pendingDocuments > 0) {
@@ -1520,14 +1576,14 @@ export default function Dashboard({
   if (activeHealthAlerts.length) {
     suggestionItems.unshift({
       id: "suggestion-radar",
-      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. RevÃ­salas con Klinip IA.`,
+      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
     });
   }
 
   if (!biometricsMonitoringActive) {
     suggestionItems.push({
       id: "suggestion-biometric",
-      text: "Si estÃ¡s controlando exÃ¡menes o signos frecuentes, activa el panel de biomÃ©tricos para seguirlos en un solo lugar.",
+      text: "Si estás controlando exámenes o signos frecuentes, activa el panel de biométricos para seguirlos en un solo lugar.",
     });
   }
 
@@ -1642,7 +1698,7 @@ export default function Dashboard({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan BÃ¡sico";
+      : "Plan Básico";
   const quickNotesActionLabel = canEditActiveProfile ? (composerOpen ? "Cerrar" : "Nueva nota") : "Solo lectura";
   const openQuickNotesPanel = () => {
     if (composerOpen) {
@@ -1868,7 +1924,7 @@ export default function Dashboard({
       ? "Plan Familiar"
       : normalizedPlan === "plus"
       ? "Plan Plus"
-      : "Plan BÃ¡sico";
+      : "Plan Básico";
 
   const renderAttentionContent = (itemClassName, tagClassName = "") =>
     attentionItems.length ? (
@@ -1881,21 +1937,21 @@ export default function Dashboard({
         >
           <span className={`home-attention-icon tone-${item.tone}`}>
             {renderIcon(
-              cleanUiText(item.eyebrow) === "Documentos"
+              cleanDashboardText(item.eyebrow) === "Documentos"
                 ? "document"
-                : cleanUiText(item.eyebrow) === "Agenda"
+                : cleanDashboardText(item.eyebrow) === "Agenda"
                 ? "appointment"
-                : cleanUiText(item.eyebrow) === "Medicamento" || cleanUiText(item.eyebrow) === "Dosis de hoy"
+                : cleanDashboardText(item.eyebrow) === "Medicamento" || cleanDashboardText(item.eyebrow) === "Dosis de hoy"
                 ? "medication"
                 : "ai"
             )}
           </span>
           <span className="home-attention-copy">
-            <small className="home-attention-eyebrow">{cleanUiText(item.eyebrow)}</small>
-            <strong>{cleanUiText(item.title)}</strong>
-            <span>{cleanUiText(item.detail)}</span>
+            <small className="home-attention-eyebrow">{cleanDashboardText(item.eyebrow)}</small>
+            <strong>{cleanDashboardText(item.title)}</strong>
+            <span>{cleanDashboardText(item.detail)}</span>
           </span>
-          <span className={`home-attention-action ${tagClassName}`.trim()}>{cleanUiText(item.actionLabel)}</span>
+          <span className={`home-attention-action ${tagClassName}`.trim()}>{cleanDashboardText(item.actionLabel)}</span>
         </button>
       ))
     ) : (
@@ -1914,10 +1970,10 @@ export default function Dashboard({
       >
         <span className="home-action-icon">{renderIcon(item.icon)}</span>
         <span className="home-action-copy">
-          <strong>{cleanUiText(item.label)}</strong>
-          <small>{cleanUiText(item.subtitle)}</small>
+          <strong>{cleanDashboardText(item.label)}</strong>
+          <small>{cleanDashboardText(item.subtitle)}</small>
         </span>
-        <span className={`home-action-hint ${hintClassName}`.trim()}>{cleanUiText(item.hint)}</span>
+        <span className={`home-action-hint ${hintClassName}`.trim()}>{cleanDashboardText(item.hint)}</span>
       </button>
     ));
 
@@ -2031,7 +2087,7 @@ export default function Dashboard({
                   <path d="M21 12H9" />
                 </svg>
               </span>
-              <span>Cerrar sesiÃ³n</span>
+              <span>Cerrar sesión</span>
             </button>
           </div>,
           document.getElementById("overlay-root") || document.body
@@ -2048,7 +2104,7 @@ export default function Dashboard({
                   <button
                     type="button"
                     className="mobile-hero-avatar"
-                    aria-label="Abrir menÃº de usuario"
+                    aria-label="Abrir menú de usuario"
                     aria-expanded={profileMenuOpen}
                     aria-haspopup="menu"
                     onClick={() => {
@@ -2149,15 +2205,15 @@ export default function Dashboard({
               <div className="mobile-hero-health-main">
                 <div>
                   <div className="mobile-hero-stat-row">
-                    <span className="mobile-hero-stat-value">{displayHeroState.badge}</span>
+                    <span className="mobile-hero-stat-value">{cleanDashboardText(displayHeroState.badge)}</span>
                     {mobileAdherenceWindowBadge ? (
                       <span className={`mobile-hero-stat-badge is-${displayHeroState.tone}`}>
                         {mobileAdherenceWindowBadge}
                       </span>
                     ) : null}
                   </div>
-                  <p className="home-mobile-clinical-title">{cleanUiText(displayHeroState.title)}</p>
-                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{cleanUiText(displayHeroState.message)}</p>
+                  <p className="home-mobile-clinical-title">{cleanDashboardText(displayHeroState.title)}</p>
+                  <p className="mobile-hero-health-copy home-mobile-clinical-copy">{cleanDashboardText(displayHeroState.message)}</p>
                   {nextAppointmentHero ? (
                     <button
                       type="button"
@@ -2165,10 +2221,10 @@ export default function Dashboard({
                       onClick={openAppointmentFocus}
                     >
                       <span className={`mobile-hero-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                        Próxima cita · {cleanUiText(nextAppointmentHero.label)}
+                        Próxima cita · {cleanDashboardText(nextAppointmentHero.label)}
                       </span>
-                      <strong>{cleanUiText(nextAppointmentHero.title)}</strong>
-                      <span>{cleanUiText(nextAppointmentHero.detail)}</span>
+                      <strong>{cleanDashboardText(nextAppointmentHero.title)}</strong>
+                      <span>{cleanDashboardText(nextAppointmentHero.detail)}</span>
                     </button>
                   ) : null}
                 </div>
@@ -2208,7 +2264,7 @@ export default function Dashboard({
               </div>
               <div className="home-mobile-hero-actions">
                 <button type="button" className="mobile-hero-recommendation-btn" onClick={displayHeroState.onAction}>
-                  {cleanUiText(displayHeroState.actionLabel)}
+                  {cleanDashboardText(displayHeroState.actionLabel)}
                 </button>
                 <button type="button" className="home-mobile-notes-btn" onClick={openNotesHub}>
                   Notas rápidas
@@ -2359,8 +2415,8 @@ export default function Dashboard({
                 <h1 className="home-greeting-title">
                   Hola, <em>{userName}</em>
                 </h1>
-                <p className="home-clinical-headline">{cleanUiText(displayHeroState.title)}</p>
-                <p className="home-greeting-subtitle home-clinical-summary">{cleanUiText(displayHeroState.message)}</p>
+                <p className="home-clinical-headline">{cleanDashboardText(displayHeroState.title)}</p>
+                <p className="home-greeting-subtitle home-clinical-summary">{cleanDashboardText(displayHeroState.message)}</p>
                 {nextAppointmentHero ? (
                   <button
                     type="button"
@@ -2368,15 +2424,15 @@ export default function Dashboard({
                     onClick={openAppointmentFocus}
                   >
                     <span className={`home-clinical-appointment-day${nextAppointmentHero.urgent ? " is-urgent" : ""}`}>
-                      Próxima cita · {cleanUiText(nextAppointmentHero.label)}
+                      Próxima cita · {cleanDashboardText(nextAppointmentHero.label)}
                     </span>
-                    <strong>{cleanUiText(nextAppointmentHero.title)}</strong>
-                    <span>{cleanUiText(nextAppointmentHero.detail)}</span>
+                    <strong>{cleanDashboardText(nextAppointmentHero.title)}</strong>
+                    <span>{cleanDashboardText(nextAppointmentHero.detail)}</span>
                   </button>
                 ) : null}
                 <div className="home-clinical-actions">
                   <button type="button" className="home-note-primary home-clinical-primary" onClick={displayHeroState.onAction}>
-                    {cleanUiText(displayHeroState.actionLabel)}
+                    {cleanDashboardText(displayHeroState.actionLabel)}
                   </button>
                   <button type="button" className="home-panel-link home-clinical-secondary" onClick={openNotesHub}>
                     Notas rápidas
@@ -2414,8 +2470,8 @@ export default function Dashboard({
                 <div className="home-clinical-meta">
                   {heroHighlights.map((item) => (
                     <div key={item.id} className={`home-clinical-metric tone-${item.tone}`}>
-                          <small>{cleanUiText(item.label)}</small>
-                          <strong>{cleanUiText(item.value)}</strong>
+                          <small>{cleanDashboardText(item.label)}</small>
+                          <strong>{cleanDashboardText(item.value)}</strong>
                         </div>
                       ))}
                 </div>
@@ -2551,7 +2607,7 @@ export default function Dashboard({
             <div className="home-panel-head">
               <div>
                 <h2 className="home-panel-title">Voz</h2>
-                <p className="home-panel-subtitle">Graba tu prÃ³xima consulta mÃ©dica.</p>
+                <p className="home-panel-subtitle">Graba tu próxima consulta médica.</p>
               </div>
             </div>
             <div className="voice-body">
@@ -2569,7 +2625,7 @@ export default function Dashboard({
                     <path d="M9.5 20.5h5" />
                   </svg>
                 </span>
-                <span className="home-voice-btn-label">Iniciar grabaciÃ³n</span>
+                <span className="home-voice-btn-label">Iniciar grabación</span>
               </button>
             </div>
           </article>
@@ -2613,8 +2669,8 @@ export default function Dashboard({
             </div>
             <div className="home-radar-insights">
               <div className={`home-radar-status home-radar-status-${overallStatus.level}`}>
-                <strong>{overallStatus.title}</strong>
-                <span>{overallStatus.message}</span>
+                <strong>{cleanDashboardText(overallStatus.title)}</strong>
+                <span>{cleanDashboardText(overallStatus.message)}</span>
               </div>
               <div className="home-radar-summary">
                 <div className={`home-radar-summary-chip tone-${activeMedications.length > 0 ? getRadarToneFromAdherence(adherence) : "teal"}`}>
@@ -2639,16 +2695,16 @@ export default function Dashboard({
                         className={`home-radar-alert tone-${getAlertTone(item.severity)}${expandedAlertId === item.id ? " is-expanded" : ""}`}
                         onClick={() => setExpandedAlertId(expandedAlertId === item.id ? null : item.id)}
                       >
-                        <strong>{cleanUiText(getFriendlyAlertTitle(item))}</strong>
-                        <span>{cleanUiText(item.description)}</span>
+                        <strong>{cleanDashboardText(getFriendlyAlertTitle(item))}</strong>
+                        <span>{cleanDashboardText(item.description)}</span>
                         <span className="home-radar-alert-nav">
-                          {expandedAlertId === item.id ? "Presiona para cerrar" : "Presiona aquÃ­ para ver quÃ© hacer"}
+                          {expandedAlertId === item.id ? "Presiona para cerrar" : "Presiona aquí para ver qué hacer"}
                         </span>
                       </button>
                       {expandedAlertId === item.id ? (
                         <div className="home-radar-alert-detail">
-                          <strong>Â¿QuÃ© puedo hacer?</strong>
-                          <p>{cleanUiText(getAlertDetail(item))}</p>
+                          <strong>¿Qué puedo hacer?</strong>
+                          <p>{cleanDashboardText(getAlertDetail(item))}</p>
                           <button
                             type="button"
                             className="home-radar-alert-ai-btn"
@@ -2656,7 +2712,7 @@ export default function Dashboard({
                               e.stopPropagation();
                               navigate("/ai", {
                                 state: {
-                                  autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanUiText(getFriendlyAlertTitle(item))}". ${cleanUiText(item.description)} Â¿QuÃ© debo hacer paso a paso?`,
+                                  autoPrompt: `Tengo una alerta en mi Radar de Salud: "${cleanDashboardText(getFriendlyAlertTitle(item))}". ${cleanDashboardText(item.description)} ¿Qué debo hacer paso a paso?`,
                                 },
                               });
                             }}
@@ -2668,12 +2724,12 @@ export default function Dashboard({
                     </React.Fragment>
                   ))
                 ) : (
-                  <div className="home-empty-state">No hay alertas activas. Â¡Tu salud estÃ¡ al dÃ­a!</div>
+                  <div className="home-empty-state">No hay alertas activas. ¡Tu salud está al día!</div>
                 )}
               </div>
               {lowAdherenceItems.length ? (
                 <div className="home-radar-pattern">
-                  <strong>Estos medicamentos necesitan atenciÃ³n</strong>
+                  <strong>Estos medicamentos necesitan atención</strong>
                   <span>
                     {cleanUiText(
                       lowAdherenceItems
@@ -2791,8 +2847,8 @@ export default function Dashboard({
             <article className="home-panel-card home-biometrics-card">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">BiomÃ©tricos</h2>
-                  <p className="home-panel-subtitle">Resumen permanente de tu monitoreo clÃ­nico.</p>
+                  <h2 className="home-panel-title">Biométricos</h2>
+                  <p className="home-panel-subtitle">Resumen permanente de tu monitoreo clínico.</p>
                 </div>
                 <button type="button" className="home-panel-link" onClick={openBiometricsFocus}>
                   Ver panel
@@ -2830,7 +2886,7 @@ export default function Dashboard({
                 })}
                 {!biometricMetrics.some((item) => item.readings_count > 0) ? (
                   <div className="home-empty-state">
-                    Registra glucosa, presiÃ³n, frecuencia cardiaca o temperatura para ver tu evoluciÃ³n aquÃ­.
+                    Registra glucosa, presión, frecuencia cardiaca o temperatura para ver tu evolución aquí.
                   </div>
                 ) : null}
               </div>
