@@ -6351,6 +6351,52 @@ def _extract_label_medication(text: str) -> dict | None:
     }
 
 
+# Mapa de palabras clave → especialidad médica (para citas/órdenes).
+_SPECIALTY_KEYWORDS = {
+    "ortodoncia": "Odontología",
+    "odontolog": "Odontología",
+    "dental": "Odontología",
+    "endodoncia": "Odontología",
+    "cardiolog": "Cardiología",
+    "dermatolog": "Dermatología",
+    "oftalmolog": "Oftalmología",
+    "oftalm": "Oftalmología",
+    "ginecolog": "Ginecología",
+    "obstetr": "Ginecología",
+    "traumatolog": "Traumatología",
+    "neurolog": "Neurología",
+    "urolog": "Urología",
+    "otorrino": "Otorrinolaringología",
+    "pediatr": "Pediatría",
+    "psiquiatr": "Psiquiatría",
+    "psicolog": "Psicología",
+    "nutricion": "Nutrición",
+    "kinesiolog": "Kinesiología",
+    "fonoaudiolog": "Fonoaudiología",
+    "gastroenterolog": "Gastroenterología",
+    "endocrinolog": "Endocrinología",
+    "oncolog": "Oncología",
+    "reumatolog": "Reumatología",
+    "nefrolog": "Nefrología",
+    "broncopulmonar": "Broncopulmonar",
+    "geriatr": "Geriatría",
+    "imagenolog": "Imagenología",
+    "radiolog": "Radiología",
+    "ecotomografia": "Ecografía",
+    "ecografia": "Ecografía",
+    "laboratorio": "Exámenes de laboratorio",
+}
+
+
+def _derive_specialty(text: str, center: str = "") -> str:
+    """Deriva la especialidad a partir del centro y el texto (ej. ortodoncia → Odontología)."""
+    combined = _normalize_text(f"{center} {text}")
+    for key, label in _SPECIALTY_KEYWORDS.items():
+        if key in combined:
+            return label
+    return ""
+
+
 def _extract_order_schedule(text: str) -> dict | None:
     if not text:
         return None
@@ -6415,17 +6461,26 @@ def _extract_order_schedule(text: str) -> dict | None:
                 break
     if not time_match:
         time_match = time_pattern.search(text)
-    if not date_match and not citacion_date:
+    # Fallback general: fecha numérica DD/MM/AAAA en cualquier parte del texto
+    # (ej. "Cita ... el 17/06/2026 a las 10:30").
+    numeric_match = date_numeric_pattern.search(text)
+    if not date_match and not citacion_date and not numeric_match:
         return None
     if citacion_date:
         year, month, day = citacion_date
-    else:
+    elif date_match:
         day = int(date_match.group(1))
         month_name = date_match.group(2)
         month = month_map.get(month_name)
         year = int(date_match.group(3))
         if not month:
             return None
+    else:
+        day = int(numeric_match.group(1))
+        month = int(numeric_match.group(2))
+        year = int(numeric_match.group(3))
+        if year < 100:
+            year += 2000
     hour = 0
     minute = 0
     if citacion_time:
@@ -7421,7 +7476,13 @@ def _apply_document_ocr_automations(
     if doc.doc_type == models.DocumentType.orden and not doc.appointment_id:
         schedule = _extract_order_schedule(text) or {}
         date_time = schedule.get("date_time")
-        specialty = schedule.get("specialty") or doc.notes or "Examen"
+        # Especialidad derivada del centro/texto (ortodoncia→Odontología, etc.),
+        # nunca la nota larga del documento.
+        specialty = (
+            schedule.get("specialty")
+            or _derive_specialty(text, doc.center or "")
+            or "Examen"
+        )
         _create_appointment_from_document_ocr(
             db,
             doc=doc,
@@ -7745,10 +7806,10 @@ _VISION_DOC_SYSTEM = (
     '- "transcripcion": todo el texto legible del documento.\n'
     '- "tipo": uno de "receta","orden","resultado","informe","otro".\n'
     '- "centro": nombre del centro médico o laboratorio (incluye el de logos); "" si no aparece.\n'
-    '- "fecha": fecha de emisión del documento en formato AAAA-MM-DD. Búscala con cuidado: '
-    'suele estar junto a "Fecha:", "Santiago, <fecha>", o cerca de la firma del profesional. '
-    'Si aparece CUALQUIER fecha de emisión, devuélvela (convierte DD/MM/AAAA a AAAA-MM-DD). '
-    'Usa "" solo si de verdad no hay ninguna. NUNCA uses la fecha de nacimiento.\n'
+    '- "fecha": fecha de EMISIÓN del documento (cuándo se creó/imprimió) en formato AAAA-MM-DD. '
+    'OJO: si es un recordatorio u orden de cita, NO uses la fecha futura de la atención; '
+    'esa es la fecha de la cita, no la de emisión. Si no hay fecha de emisión, usa "". '
+    'NUNCA uses la fecha de nacimiento.\n'
     '- "titulo": nombre de archivo corto y claro (ej "Receta Celecoxib", "Hemograma").\n'
     '- "nota": resumen muy breve de lo importante (1-2 frases). En receta, las indicaciones; '
     "en resultado, los valores fuera de rango.\n"
@@ -7848,8 +7909,11 @@ def _apply_core_document_metadata(doc, vision_meta, text, original_user_note):
     # campo "fecha" de la visión (que a veces equivoca el año); por eso va primero.
     try:
         real_date = _guess_date(text) or _parse_vision_date(meta.get("fecha"))
-        if real_date:
-            doc.date = real_date
+        # Una fecha FUTURA es la de la cita/atención, no la de emisión. La fecha
+        # del documento es cuándo se emitió: si la hallada es futura o no hay, hoy.
+        if real_date and real_date.date() > datetime.now().date():
+            real_date = None
+        doc.date = real_date or datetime.now()
     except Exception:
         pass
     _klog(
