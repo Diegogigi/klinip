@@ -106,12 +106,24 @@ function AudioPlayer({ src }) {
     return `${m}:${sec.toString().padStart(2, "0")}`;
   }
 
+  const audioSrc = src;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioSrc) return;
+    try {
+      audio.load();
+    } catch {
+      // ignore browsers that reject manual load()
+    }
+  }, [audioSrc]);
+
   return (
     <div className="sv-player">
       <audio
         ref={audioRef}
-        src={src}
-        preload="metadata"
+        src={audioSrc}
+        preload="auto"
         playsInline
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}

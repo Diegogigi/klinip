@@ -635,6 +635,7 @@ export default function Dashboard({
   const [greetStarted, setGreetStarted] = useState(false);
   const [greetPhase, setGreetPhase] = useState(0);
   const [aiMsgIndex, setAiMsgIndex] = useState(0);
+  const [aiQuery, setAiQuery] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileMenuStyle, setProfileMenuStyle] = useState({
@@ -2271,6 +2272,38 @@ export default function Dashboard({
                 </button>
               </div>
             </div>
+
+            <form
+              className="home-ai-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const prompt = aiQuery.trim();
+                navigate("/ai", prompt ? { state: { autoPrompt: prompt } } : undefined);
+                setAiQuery("");
+              }}
+            >
+              <span className="home-ai-search-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="5" y="6" width="14" height="12" rx="4" />
+                  <path d="M9 12h.01M12 12h.01M15 12h.01" />
+                  <path d="M12 3v2M4 12H2M22 12h-2" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                className="home-ai-search-input"
+                value={aiQuery}
+                onChange={(event) => setAiQuery(event.target.value)}
+                placeholder="Pregúntale a la IA de Klinip…"
+                aria-label="Escribe un mensaje para la IA de Klinip"
+                enterKeyHint="send"
+              />
+              <button type="submit" className="home-ai-search-send" aria-label="Enviar a la IA de Klinip">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
+            </form>
           </div>
 
           <div className="mobile-sheet">

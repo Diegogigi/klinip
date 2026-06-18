@@ -80,6 +80,16 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
 
   const audioSrc = src || localAudioSrc;
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !audioSrc) return;
+    try {
+      audio.load();
+    } catch {
+      // ignore browsers that reject manual load()
+    }
+  }, [audioSrc]);
+
   if (!audioSrc) return null;
 
   return (
@@ -87,7 +97,7 @@ function IvAudioPlayer({ sessionId, fallbackBlob, allowRemote = true, remoteUrl 
       <audio
         ref={audioRef}
         src={audioSrc}
-        preload="metadata"
+        preload="auto"
         playsInline
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}

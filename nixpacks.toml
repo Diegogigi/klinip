@@ -1,20 +1,19 @@
-# Configuración de Nixpacks para Railway
+# Configuracion de Nixpacks para Railway
 [phases.setup]
 nixPkgs = ["nodejs-18_x", "python311", "tesseract", "poppler_utils"]
 
 [phases.install]
 cmds = [
-  "cd frontend && npm ci --prefer-offline",
+  "cd frontend && npm ci --prefer-offline --no-audit --no-fund",
   "cd backend && python -m venv venv",
   "cd backend && venv/bin/pip install --upgrade pip setuptools wheel",
-  "cd backend && venv/bin/pip install -r requirements.txt"
+  "cd backend && PIP_DISABLE_PIP_VERSION_CHECK=1 venv/bin/pip install -r requirements.txt"
 ]
 
 [phases.build]
 cmds = [
-  "cd frontend && npm run build",
-  "mkdir -p backend/static",
-  "cp -r frontend/dist/* backend/static/"
+  "rm -rf backend/static",
+  "cd frontend && VITE_BUILD_OUT_DIR=../backend/static npm run build"
 ]
 
 [start]

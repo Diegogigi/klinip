@@ -18,7 +18,8 @@ import {
   scheduleReminderNotifications,
   scheduleMedicationNotifications,
 } from "./services/notificationManager";
-import { subscribeClinicalDataChanged } from "./utils/clinicalRefresh";
+import { subscribeClinicalDataChanged, notifyClinicalDataChanged } from "./utils/clinicalRefresh";
+import DocumentUploadWizard from "./components/DocumentUploadWizard";
 import { isHandheldViewport } from "./utils/mobileViewport";
 import {
   getMedicationScheduleTimes,
@@ -183,6 +184,13 @@ const icons = {
       <path d="M12 17v4M8 21h8" />
     </svg>
   ),
+  ocr: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5.5" width="18" height="14" rx="3" />
+      <circle cx="12" cy="12.5" r="3.4" />
+      <path d="M8.5 5.5 9.7 3.4h4.6l1.2 2.1" />
+    </svg>
+  ),
 };
 
 const ROUTE_TRANSITION_ORDER = [
@@ -250,6 +258,7 @@ function Sidebar({
   activeProfileId,
   onSwitchProfile,
   switchingProfile,
+  onOpenOcr,
 }) {
   const location = useLocation();
   const isPublicAuthRoute =
@@ -286,7 +295,7 @@ function Sidebar({
 
   const links = [
     { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/ai", label: "Asistente", icon: icons.aiMobile },
+    { to: "/ai", label: "Asistente", icon: icons.ai },
     { to: "/voice", label: "Voz", icon: icons.voice },
     { to: "/family", label: "Familia", icon: icons.family, activePaths: ["/family", "/feed"] },
     {
@@ -297,7 +306,7 @@ function Sidebar({
       activePaths: HEALTH_SECTION_PATHS,
     },
   ];
-  const mobilePrimaryLinks = ["/", "/ai", "/voice", "/family", "/mi-salud"]
+  const mobilePrimaryLinks = ["/", "/voice", "/family", "/mi-salud"]
     .map((path) => links.find((item) => item.to === path))
     .filter(Boolean);
   const mobileOverflowLinks = [];
@@ -340,6 +349,24 @@ function Sidebar({
   useEffect(() => {
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
+
+  const renderMobileLink = (link) => (
+    <Link
+      key={link.to}
+      to={link.to}
+      className={`sidebar-link sidebar-link-mobile ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
+        link.to === "/voice" ? "is-mobile-voice" : ""
+      }`}
+      aria-label={link.label}
+      onClick={() => setShowMobileMenu(false)}
+    >
+      <span className="sidebar-icon sidebar-icon-mobile">{link.icon}</span>
+      {link.badge > 0 && (
+        <span className="sidebar-badge sidebar-badge-mobile">{link.badge}</span>
+      )}
+      <span className="sidebar-label sidebar-label-mobile">{link.label}</span>
+    </Link>
+  );
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute) return null;
 
@@ -423,25 +450,22 @@ function Sidebar({
         )}
         {isMobile ? (
           <>
-            {mobilePrimaryLinks.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={`sidebar-link sidebar-link-mobile ${isSidebarLinkActive(location.pathname, link) ? "active" : ""} ${
-                    link.to === "/ai" ? "is-mobile-ai" : ""
-                  } ${link.to === "/voice" ? "is-mobile-voice" : ""}`}
-                  aria-label={link.label}
-                  onClick={() => setShowMobileMenu(false)}
-                >
-                <span className="sidebar-icon sidebar-icon-mobile">
-                  {link.icon}
-                </span>
-                {link.badge > 0 && (
-                  <span className="sidebar-badge sidebar-badge-mobile">{link.badge}</span>
-                )}
-                <span className="sidebar-label sidebar-label-mobile">{link.label}</span>
-              </Link>
-            ))}
+            {mobilePrimaryLinks.slice(0, 2).map((link) => renderMobileLink(link))}
+            <button
+              type="button"
+              className="sidebar-link sidebar-link-mobile is-mobile-ocr"
+              aria-label="Escanear documento o tomar foto"
+              onClick={() => {
+                setShowMobileMenu(false);
+                onOpenOcr?.();
+              }}
+            >
+              <span className="sidebar-icon sidebar-icon-mobile sidebar-icon-ocr">
+                {icons.ocr}
+              </span>
+              <span className="sidebar-label sidebar-label-mobile">Escanear</span>
+            </button>
+            {mobilePrimaryLinks.slice(2).map((link) => renderMobileLink(link))}
             {mobileOverflowLinks.length > 0 && (
               <>
                 <button
@@ -1017,6 +1041,7 @@ export default function App() {
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
   const [switchingProfile, setSwitchingProfile] = useState(false);
+  const [ocrWizardOpen, setOcrWizardOpen] = useState(false);
   const [isMobileShell, setIsMobileShell] = useState(() => isHandheldViewport(768));
   const [routeTransitionKey, setRouteTransitionKey] = useState(0);
   const [routeTransitionDirection, setRouteTransitionDirection] = useState("forward");
@@ -2440,6 +2465,7 @@ export default function App() {
             activeProfileId={activeHealthProfileId}
             onSwitchProfile={handleSwitchActiveProfile}
             switchingProfile={switchingProfile}
+            onOpenOcr={() => setOcrWizardOpen(true)}
           />
         ) : null}
         <div className={`main-area ${isPublicStandaloneRoute ? "main-area-public" : ""} ${
@@ -2723,6 +2749,19 @@ export default function App() {
             </div>
           </main>
         </div>
+        {!hideAppChrome && user ? (
+          <DocumentUploadWizard
+            open={ocrWizardOpen}
+            onClose={() => setOcrWizardOpen(false)}
+            profileId={activeHealthProfileId}
+            onUploaded={() => {
+              notifyClinicalDataChanged({
+                profileId: activeHealthProfileId,
+                sources: ["documents", "health-radar"],
+              });
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

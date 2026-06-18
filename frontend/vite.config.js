@@ -8,7 +8,7 @@ export default defineConfig({
   },
   base: '/', // Usar rutas relativas para producción
   build: {
-    outDir: 'dist',
+    outDir: process.env.VITE_BUILD_OUT_DIR || 'dist',
     assetsDir: 'assets'
   }
 })

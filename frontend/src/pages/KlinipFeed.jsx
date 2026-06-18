@@ -1896,7 +1896,14 @@ export default function KlinipFeed({ user }) {
     <div className="kfeed-layout-wrapper">
       <div className="kfeed-page">
         <div className="kfeed-page-header">
-          <div className="kfeed-scene-topbar">
+          <div className="kfeed-scene-topbar kfeed-scene-topbar-family">
+            <div className="kfeed-scene-profile kfeed-scene-profile-hero">
+              <Avatar name={headerProfileName} size={46} avatarUrl={primaryProfile?.avatar_url || userAvatarUrl} />
+              <div className="kfeed-scene-profile-copy">
+                <strong>{headerProfileName}</strong>
+                <span>{headerProfileMeta}</span>
+              </div>
+            </div>
             {profiles.length > 0 && (
               <button
                 type="button"
@@ -1909,34 +1916,24 @@ export default function KlinipFeed({ user }) {
               </button>
             )}
           </div>
-          <div className="kfeed-scene-profile-row">
-            <div className="kfeed-scene-profile">
-              <Avatar name={headerProfileName} size={40} avatarUrl={primaryProfile?.avatar_url || userAvatarUrl} />
-              <div className="kfeed-scene-profile-copy">
-                <strong>{headerProfileName}</strong>
-                <span>{headerProfileMeta}</span>
-              </div>
-            </div>
-            <Link className="kfeed-manage-link" to="/settings/familia">
-              Gestionar
-            </Link>
-          </div>
           <div className="kfeed-brand-row">
             <div className="kfeed-brand-copy">
               <p className="kfeed-section-kicker">Familia</p>
               <h1 className="kfeed-page-title">Familia</h1>
               <p className="kfeed-page-subtitle">Cuidado compartido, con privacidad y control.</p>
+              <p className="kfeed-hero-summary">{familySummary}</p>
+            </div>
+          </div>
+          <div className="kfeed-hero-meta-row">
+            <Link className="kfeed-manage-link" to="/settings/familia">
+              Gestionar grupo
+            </Link>
+            <div className="kfeed-hero-chip-row" aria-label="Resumen del círculo familiar">
+              <span className="kfeed-hero-chip">{formatUnitLabel(collaborativeProfiles, "perfil activo", "perfiles activos")}</span>
+              <span className="kfeed-hero-chip">{formatUnitLabel(careTeamTotal, "persona en el círculo", "personas en el círculo")}</span>
             </div>
           </div>
           <div className="kfeed-hero-bottom">
-            <button
-              type="button"
-              className="kfeed-hero-create-btn"
-              onClick={() => setShowCreate(true)}
-              disabled={profiles.length === 0}
-            >
-              Registrar actualización clínica para el equipo
-            </button>
             <div className="kfeed-hero-activity">
               <div>
                 <p className="kfeed-section-kicker">Bitácora compartida</p>
@@ -1948,6 +1945,15 @@ export default function KlinipFeed({ user }) {
             </div>
           </div>
         </div>
+
+        <button
+          type="button"
+          className="kfeed-hero-create-btn kfeed-hero-post-btn"
+          onClick={() => setShowCreate(true)}
+          disabled={profiles.length === 0}
+        >
+          Crear publicación para tu familia o círculo
+        </button>
 
       {loading && (
         <div className="kfeed-state-center">
@@ -1971,10 +1977,10 @@ export default function KlinipFeed({ user }) {
               <path d="M28 54a14 14 0 0 1 24 0" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round"/>
             </svg>
           </div>
-          <h3 className="kfeed-empty-title">Aún no hay bitácora de cuidado compartida</h3>
-          <p className="kfeed-empty-sub">Registra la primera actualización clínica para tu equipo familiar.</p>
+          <h3 className="kfeed-empty-title">Aún no hay publicaciones en la bitácora compartida</h3>
+          <p className="kfeed-empty-sub">Crea la primera publicación o actualización para tu círculo familiar.</p>
           <button type="button" className="kfeed-publish-btn" onClick={() => setShowCreate(true)} disabled={profiles.length === 0}>
-            + Registrar actualización
+            + Crear publicación
           </button>
         </div>
       )}

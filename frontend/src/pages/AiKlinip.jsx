@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import BrandLogo from "../components/BrandLogo";
 import {
   getActiveHealthProfile,
   generateAiClinicalReport,
@@ -39,24 +38,6 @@ const ENTRY_ACTIONS = [
   { id: "exam", label: "Entender examen", prompt: "Ayúdame a entender mi examen o resultado más reciente en palabras simples." },
   { id: "today-meds", label: "Medicamentos de hoy", prompt: "¿Qué medicamentos debo tomar hoy y qué debería revisar?" },
   { id: "symptom", label: "Consultar síntoma", prompt: "Quiero consultar un síntoma de forma segura. Guíame con preguntas claras." },
-];
-
-const ENTRY_SUGGESTIONS = [
-  {
-    id: "medications-plan",
-    title: "¿Qué debo hacer hoy con mis medicamentos?",
-    prompt: "¿Qué debo hacer hoy con mis medicamentos y cuáles son los puntos importantes a vigilar?",
-  },
-  {
-    id: "medical-instruction",
-    title: "Explícame esta indicación médica en simple",
-    prompt: "Explícame mi indicación médica más reciente en lenguaje simple y con pasos concretos.",
-  },
-  {
-    id: "control-questions",
-    title: "Ayúdame a preparar preguntas para mi control",
-    prompt: "Ayúdame a preparar preguntas útiles para mi próximo control médico.",
-  },
 ];
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
@@ -882,56 +863,6 @@ export default function AiKlinip() {
     };
   }, [activeMedications.length, resources.documents.length, nextAppointment, overallAdherenceRate]);
 
-  const assistantHomeStats = useMemo(() => {
-    const upcomingDays = nextAppointment ? Math.max(daysUntil(nextAppointment.date_time) || 0, 0) : null;
-    const nextDoseLabel = nextMedicationDoseItem
-      ? "1 pendiente"
-      : activeMedications.length
-      ? `${activeMedications.length} activo${activeMedications.length === 1 ? "" : "s"}`
-      : "Sin pendientes";
-    const documentsLabel = resources.documents.length
-      ? `${resources.documents.length} cargado${resources.documents.length === 1 ? "" : "s"}`
-      : "Sin documentos";
-
-    return [
-      {
-        key: "appointment",
-        tone: "blue",
-        label: "Próxima cita",
-        value: nextAppointment ? `En ${upcomingDays} día${upcomingDays === 1 ? "" : "s"}` : "Sin cita",
-        detail: nextAppointment
-          ? cleanUiText(nextAppointment.specialty, APPOINTMENT_TYPE_LABELS[nextAppointment.type] || "Atención")
-          : "Agenda disponible",
-      },
-      {
-        key: "medications",
-        tone: "amber",
-        label: "Medicamentos",
-        value: nextDoseLabel,
-        detail: nextMedicationDoseItem
-          ? cleanUiText(nextMedicationDoseItem.medication?.name, "Revisar toma de hoy")
-          : activeMedications.length
-          ? "Tratamientos activos"
-          : "Sin tratamiento activo",
-      },
-      {
-        key: "documents",
-        tone: "violet",
-        label: "Documentos",
-        value: documentsLabel,
-        detail: topDocumentInsights[0]
-          ? cleanUiText(DOC_LABELS[topDocumentInsights[0].document_type_inferred] || "Documento clínico")
-          : "Sin análisis reciente",
-      },
-    ];
-  }, [
-    activeMedications.length,
-    nextAppointment,
-    nextMedicationDoseItem,
-    resources.documents.length,
-    topDocumentInsights,
-  ]);
-
   const sortedConversations = useMemo(() => {
     const pinnedOrder = new Map(pinnedConversationIds.map((id, index) => [id, index]));
     return [...conversations].sort((left, right) => {
@@ -1658,17 +1589,9 @@ export default function AiKlinip() {
           <div className="ai-copilot-stage" ref={stageRef}>
             <div className="ai-mobile-topbar">
               <div className="ai-mobile-topbar-main">
-                <BrandLogo
-                  className="ai-scene-brand"
-                  markClassName="ai-scene-brand-mark"
-                  imgClassName="ai-scene-brand-img"
-                  nameClassName="ai-scene-brand-name"
-                  showName={false}
-                />
                 <div className="ai-mobile-topbar-copy">
                   <span>{meta.activeProfileName || resources.profile?.full_name || "Perfil activo"}</span>
                   <strong>Asistente</strong>
-                  <small>Contexto activo</small>
                 </div>
               </div>
               <button
@@ -1685,18 +1608,6 @@ export default function AiKlinip() {
             {isAssistantHome ? (
               <div className="ai-landing">
                 <div className="ai-landing-center is-entry">
-                  <div className="ai-entry-brandline">
-                    <BrandLogo
-                      className="ai-entry-brand"
-                      markClassName="ai-entry-brand-mark"
-                      imgClassName="ai-entry-brand-img"
-                      nameClassName="ai-entry-brand-name"
-                      showName={false}
-                    />
-                    <span className="ai-entry-brand-separator" aria-hidden="true" />
-                    <span className="ai-entry-brand-product">Asistente</span>
-                  </div>
-                  <p className="ai-section-kicker ai-entry-kicker">Respuestas simples para tu salud</p>
                   <h2 className="ai-landing-title">¿En qué te puedo ayudar hoy?</h2>
                   <p className="ai-landing-subtitle">
                     Resuelve dudas sobre tu salud en lenguaje simple y con el contexto activo de tu perfil.
@@ -1751,57 +1662,6 @@ export default function AiKlinip() {
                     </button>
                   ))}
                 </section>
-
-                <div className="ai-entry-stack">
-                  <section className="ai-entry-panel">
-                    <div className="ai-entry-panel-head">
-                      <div className="ai-entry-panel-icon tone-blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
-                          <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3Z" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <div>
-                        <strong>Sugerencias para comenzar</strong>
-                        <span>Abre el chat con una consulta frecuente y contextual.</span>
-                      </div>
-                    </div>
-                    <div className="ai-entry-suggestion-list">
-                      {ENTRY_SUGGESTIONS.map((item) => (
-                        <button key={item.id} type="button" className="ai-entry-suggestion" onClick={() => submitPrompt(item.prompt)}>
-                          <span>{item.title}</span>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                            <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section className="ai-entry-panel">
-                    <div className="ai-entry-panel-head">
-                      <div className="ai-entry-panel-icon tone-teal">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
-                          <path d="M12 21s-6.5-4.35-8.5-8.08C1.94 9.88 4.1 6 8.1 6c1.55 0 3.06.75 3.9 1.98A4.75 4.75 0 0 1 15.9 6c4 0 6.16 3.88 4.6 6.92C18.5 16.65 12 21 12 21Z" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <div>
-                        <strong>Contexto de tu salud</strong>
-                        <span>Klinip IA arranca con el resumen del perfil que tienes activo.</span>
-                      </div>
-                    </div>
-                    <div className="ai-entry-stats">
-                      {assistantHomeStats.map((item) => (
-                        <article key={item.key} className={`ai-entry-stat tone-${item.tone}`}>
-                          <span className="ai-entry-stat-label">{item.label}</span>
-                          <strong>{item.value}</strong>
-                          <small>{item.detail}</small>
-                        </article>
-                      ))}
-                    </div>
-                  </section>
-                </div>
-
-                {renderClinicalSnapshot()}
 
                 <div className="ai-landing-safe ai-entry-safe">
                   <span className="ai-safe-dot" />
