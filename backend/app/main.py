@@ -15807,6 +15807,14 @@ def _resolve_voice_audio_stream_path(file_path: str | None) -> str | None:
                 pass
 
 
+def _prime_voice_audio_stream_cache(*file_paths: str | None) -> None:
+    for file_path in file_paths:
+        try:
+            _resolve_voice_audio_stream_path(file_path)
+        except Exception as exc:
+            print(f"WARNING voice audio cache warmup failed: {exc}")
+
+
 def _ai_transcription_timeout_seconds() -> float:
     """Timeout for audio transcription — needs to be much higher than chat completions."""
     raw = (os.getenv("OPENAI_TRANSCRIPTION_TIMEOUT") or "180").strip()
@@ -20247,6 +20255,7 @@ async def voice_process(
             f.write(consent_bytes)
         with open(session_path, "wb") as f:
             f.write(session_bytes)
+        _prime_voice_audio_stream_cache(consent_path, session_path)
     except OSError as exc:
         print(f"WARNING voice file I/O failed: {exc}")
         raise HTTPException(status_code=500, detail="Error al guardar los archivos de audio.")

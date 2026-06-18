@@ -749,6 +749,11 @@ export async function getDocumentAnalysis(id, profileId) {
   return res.data;
 }
 
+export async function activateDocumentItems(id) {
+  const res = await api.post(`/documents/${id}/activate`);
+  return res.data;
+}
+
 export async function getDocumentFile(documentId) {
   const response = await api.get(`/documents/${documentId}/file`, {
     responseType: "blob",

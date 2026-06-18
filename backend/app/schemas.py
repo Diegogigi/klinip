@@ -944,6 +944,7 @@ class DocumentAnalysisOut(BaseModel):
     document_id: int
     doc_type: str = "otro"
     ocr_status: Optional[str] = None
+    is_historical: bool = False
     summary: Optional[DocumentSummaryOut] = None
     entities: list[DocumentClinicalEntityOut] = []
 

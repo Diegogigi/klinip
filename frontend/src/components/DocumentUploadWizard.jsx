@@ -4,6 +4,7 @@ import {
   uploadDocument,
   getDocumentAnalysis,
   updateDocument,
+  activateDocumentItems,
 } from "../services/httpApi";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
@@ -80,6 +81,8 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const [errorMsg, setErrorMsg] = useState("");
   const [editingType, setEditingType] = useState(false);
   const [savingType, setSavingType] = useState(false);
+  const [histChoice, setHistChoice] = useState(null); // null | "historical" | "activated"
+  const [activating, setActivating] = useState(false);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -95,6 +98,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setDocId(null);
       setErrorMsg("");
       setEditingType(false);
+      setHistChoice(null);
     }
     return () => {
       cancelledRef.current = true;
@@ -187,12 +191,28 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
     [docId, profileId, onUploaded],
   );
 
+  const handleActivate = useCallback(async () => {
+    if (!docId) return;
+    setActivating(true);
+    try {
+      await activateDocumentItems(docId);
+      if (typeof onUploaded === "function") onUploaded();
+      setHistChoice("activated");
+    } catch (err) {
+      setErrorMsg("No pudimos activar los recordatorios. Intenta de nuevo.");
+    } finally {
+      setActivating(false);
+    }
+  }, [docId, onUploaded]);
+
   if (!open) return null;
 
   const tipo = analysis?.doc_type || "otro";
   const tipoLabel = TYPE_LABELS[tipo] || TYPE_LABELS.otro;
   const entities = Array.isArray(analysis?.entities) ? analysis.entities : [];
   const friendly = analysis?.summary?.patient_friendly_explanation || "";
+  const isHistorical = Boolean(analysis?.is_historical);
+  const showHistoricalAsk = isHistorical && histChoice === null && ["receta", "orden"].includes(tipo);
 
   return createPortal(
     <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label="Asistente de documentos">
@@ -281,39 +301,80 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
 
             {friendly && <p style={styles.friendly}>{friendly}</p>}
 
-            {!editingType ? (
-              <>
-                <button type="button" style={styles.primaryBtn} onClick={onClose}>
-                  Sí, está bien
+            {showHistoricalAsk ? (
+              <div style={styles.card}>
+                <div style={styles.cardLabel}>📅 Parece de tu historial</div>
+                <p style={styles.friendly}>
+                  Este documento es de hace un tiempo. Lo guardé en tu historial y la IA lo
+                  usará como contexto. ¿Es un {tipo === "receta" ? "tratamiento" : "trámite"} vigente?
+                </p>
+                <button
+                  type="button"
+                  style={styles.primaryBtn}
+                  disabled={activating}
+                  onClick={handleActivate}
+                >
+                  {activating
+                    ? "Activando…"
+                    : tipo === "receta"
+                    ? "Sí, está vigente — activar recordatorios"
+                    : "Sí, está vigente — agendar la cita"}
                 </button>
                 <button
                   type="button"
-                  style={styles.linkBtn}
-                  onClick={() => setEditingType(true)}
+                  style={styles.secondaryBtn}
+                  onClick={() => setHistChoice("historical")}
                 >
-                  No es {tipoLabel} — cambiar tipo
+                  No, solo guardar en mi historial
                 </button>
-              </>
-            ) : (
-              <div style={styles.card}>
-                <div style={styles.cardLabel}>¿Qué tipo de documento es?</div>
-                <div style={styles.typeGrid}>
-                  {TYPE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      disabled={savingType}
-                      style={{
-                        ...styles.typeBtn,
-                        ...(opt.value === tipo ? styles.typeBtnActive : {}),
-                      }}
-                      onClick={() => handleChangeType(opt.value)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
               </div>
+            ) : (
+              <>
+                {histChoice === "activated" && (
+                  <p style={styles.friendly}>
+                    ✓ Listo. Activé los {tipo === "receta" ? "recordatorios" : "datos de la cita"} de este documento.
+                  </p>
+                )}
+                {histChoice === "historical" && (
+                  <p style={styles.friendly}>
+                    ✓ Guardado en tu historial. La IA lo usará como contexto, sin recordatorios.
+                  </p>
+                )}
+                {!editingType ? (
+                  <>
+                    <button type="button" style={styles.primaryBtn} onClick={onClose}>
+                      Sí, está bien
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.linkBtn}
+                      onClick={() => setEditingType(true)}
+                    >
+                      No es {tipoLabel} — cambiar tipo
+                    </button>
+                  </>
+                ) : (
+                  <div style={styles.card}>
+                    <div style={styles.cardLabel}>¿Qué tipo de documento es?</div>
+                    <div style={styles.typeGrid}>
+                      {TYPE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          disabled={savingType}
+                          style={{
+                            ...styles.typeBtn,
+                            ...(opt.value === tipo ? styles.typeBtnActive : {}),
+                          }}
+                          onClick={() => handleChangeType(opt.value)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
