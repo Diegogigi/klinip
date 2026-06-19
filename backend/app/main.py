@@ -5597,10 +5597,10 @@ app = FastAPI(title="MiRutaSalud API")
 def _startup_event():
     from app.jobs.registry import embedded_scheduler_enabled
 
-    # Auto-activar scheduler en Railway si no hay worker separado corriendo.
-    is_railway = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RAILWAY_PUBLIC_DOMAIN"))
-    explicitly_disabled = (os.getenv("ENABLE_EMBEDDED_SCHEDULER") or "").strip().lower() in {"0", "false", "no", "off"}
-    should_start = embedded_scheduler_enabled() or (is_railway and not explicitly_disabled)
+    # El scheduler embebido solo debe activarse de forma explicita.
+    # En produccion, Railway debe usar un worker separado para evitar que
+    # las tareas en segundo plano afecten la disponibilidad del proceso web.
+    should_start = embedded_scheduler_enabled()
 
     if should_start:
         print("INFO startup: embedded scheduler enabled")
