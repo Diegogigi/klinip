@@ -258,13 +258,15 @@ export default function MiSalud() {
       <section className="clp-card tone-blue" aria-labelledby="clp-appt-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-blue"><IcoCal /></span>
-          <div className="clp-card-titles">
-            <h2 className="clp-card-title" id="clp-appt-h">Tu próxima cita</h2>
-            <p className="clp-card-sub">Lo siguiente en tu agenda médica</p>
-          </div>
-          <div className="clp-card-head-meta">
-            <span className="clp-card-metric">{appointments.length} {appointments.length === 1 ? "cita" : "citas"}</span>
-            <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+          <div className="clp-card-head-main">
+            <div className="clp-card-titles">
+              <h2 className="clp-card-title" id="clp-appt-h">Tu próxima cita</h2>
+              <p className="clp-card-sub">Lo siguiente en tu agenda médica</p>
+            </div>
+            <div className="clp-card-head-meta">
+              <span className="clp-card-metric">{appointments.length} {appointments.length === 1 ? "cita" : "citas"}</span>
+              <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+            </div>
           </div>
         </div>
         {nextAppt ? (
@@ -299,13 +301,15 @@ export default function MiSalud() {
       <section className="clp-card tone-green" aria-labelledby="clp-med-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-green"><IcoPill /></span>
-          <div className="clp-card-titles">
-            <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
-            <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, dejala pendiente.</p>
-          </div>
-          <div className="clp-card-head-meta">
-            <span className="clp-card-metric">{activeMeds.length} {activeMeds.length === 1 ? "activo" : "activos"}</span>
-            <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          <div className="clp-card-head-main">
+            <div className="clp-card-titles">
+              <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
+              <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, dejala pendiente.</p>
+            </div>
+            <div className="clp-card-head-meta">
+              <span className="clp-card-metric">{activeMeds.length} {activeMeds.length === 1 ? "activo" : "activos"}</span>
+              <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+            </div>
           </div>
         </div>
         {activeMeds.length > 0 ? (
@@ -356,13 +360,15 @@ export default function MiSalud() {
       <section className="clp-card tone-slate" aria-labelledby="clp-doc-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-slate"><IcoDoc /></span>
-          <div className="clp-card-titles">
-            <h2 className="clp-card-title" id="clp-doc-h">Tus documentos</h2>
-            <p className="clp-card-sub">Recetas, exámenes y archivos médicos</p>
-          </div>
-          <div className="clp-card-head-meta">
-            <span className="clp-card-metric">{documents.length} {documents.length === 1 ? "archivo" : "archivos"}</span>
-            <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          <div className="clp-card-head-main">
+            <div className="clp-card-titles">
+              <h2 className="clp-card-title" id="clp-doc-h">Tus documentos</h2>
+              <p className="clp-card-sub">Recetas, exámenes y archivos médicos</p>
+            </div>
+            <div className="clp-card-head-meta">
+              <span className="clp-card-metric">{documents.length} {documents.length === 1 ? "archivo" : "archivos"}</span>
+              <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+            </div>
           </div>
         </div>
         {documents.length > 0 ? (

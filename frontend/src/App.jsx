@@ -186,9 +186,8 @@ const icons = {
   ),
   ocr: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5.5" width="18" height="14" rx="3" />
-      <circle cx="12" cy="12.5" r="3.4" />
-      <path d="M8.5 5.5 9.7 3.4h4.6l1.2 2.1" />
+      <path d="M4 9.2a2.4 2.4 0 0 1 2.4-2.4h1.1l.8-1.4a1.6 1.6 0 0 1 1.4-.8h4.6a1.6 1.6 0 0 1 1.4.8l.8 1.4h1.1A2.4 2.4 0 0 1 20 9.2v7.4a2.4 2.4 0 0 1-2.4 2.4H6.4A2.4 2.4 0 0 1 4 16.6z" />
+      <circle cx="12" cy="13" r="3.2" />
     </svg>
   ),
 };
