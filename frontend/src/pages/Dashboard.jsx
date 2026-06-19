@@ -568,7 +568,9 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
   }
 
   if (pendingDocuments > 0) {
-    msgs.push(`Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisión.`);
+    msgs.push(
+      `Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} por revisar en tu sección de documentos.`
+    );
   }
 
   if (activeMedications.length === 0) {
@@ -581,6 +583,11 @@ function buildContextualMessages({ firstName, activeMedications, adherence, next
   }
 
   return msgs;
+}
+
+function isDocumentReviewPending(item) {
+  const status = String(item?.ocr_status || "").trim().toLowerCase();
+  return !status || status === "pending" || status === "processing" || status === "skipped_size" || status.startsWith("error");
 }
 
 export default function Dashboard({
@@ -968,10 +975,7 @@ export default function Dashboard({
   const adherencePatternSummary = adherenceSummary?.pattern_summary || {};
   const activeHealthAlerts = healthRadarItems.filter((item) => item.status === "active");
   const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
-  const pendingDocuments = documentItems.filter((item) => {
-    const status = String(item.ocr_status || "").toLowerCase();
-    return !status || status === "pending" || status === "processing" || status === "error";
-  }).length;
+  const pendingDocuments = documentItems.filter(isDocumentReviewPending).length;
   const latestBiometricMetric = getBiometricLatestMetric(biometricMetrics);
   const latestBiometricReading = latestBiometricMetric?.latest_reading || null;
   const activeBiometricMetricsCount = Number(biometricDashboard?.active_metrics_count || 0);
@@ -1130,7 +1134,7 @@ export default function Dashboard({
       icon: "document",
       tone: pendingDocuments > 0 ? "alert" : "ok",
       label: "Documentos",
-      value: pendingDocuments > 0 ? `${pendingDocuments} por subir` : "al día",
+      value: pendingDocuments > 0 ? `${pendingDocuments} por revisar` : "al día",
       onClick: () => navigate("/documents"),
     },
     {
@@ -1368,11 +1372,11 @@ export default function Dashboard({
     ? {
         tone: "warn",
         badge: "Documentos",
-        title: "Tienes documentos por revisar",
-        message: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} necesita${
+        title: "Revisa tus documentos",
+        message: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} sigue${
           pendingDocuments > 1 ? "n" : ""
-        } tu atención.`,
-        actionLabel: "Subir documento",
+        } en análisis o requiere${pendingDocuments > 1 ? "n" : ""} una nueva revisión.`,
+        actionLabel: "Revisar documentos",
         onAction: openDocumentsFocus,
       }
     : {
@@ -1416,11 +1420,11 @@ export default function Dashboard({
     },
     {
       id: "next",
-      label: nextAppointmentEvent ? "Próximo paso" : "Documentos",
+        label: nextAppointmentEvent ? "Próximo paso" : "Documentos",
       value: nextAppointmentEvent
         ? toRelativeDayLabelSafe(nextAppointmentEvent.date) || "En agenda"
         : pendingDocuments > 0
-        ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""}`
+        ? `${pendingDocuments} por revisar`
         : "Sin pendientes",
       tone:
         nextAppointmentEvent?.urgent || pendingDocuments > 0
@@ -1479,11 +1483,9 @@ export default function Dashboard({
           id: "documents-pending",
           tone: pendingDocuments > 1 ? "warn" : "ok",
           eyebrow: "Documentos",
-          title: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${
-            pendingDocuments > 1 ? "s" : ""
-          }`,
-          detail: "Sube resultados, recetas o informes para mantener tu historial completo.",
-          actionLabel: "Subir ahora",
+          title: `${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} por revisar`,
+          detail: "Klinip está analizando o no pudo leer algunos archivos. Revísalos en Documentos.",
+          actionLabel: "Revisar",
           onClick: openDocumentsFocus,
         }
       : null,
@@ -1526,12 +1528,12 @@ export default function Dashboard({
     {
       id: "document",
       icon: "upload",
-      label: "Subir documento",
+      label: "Documentos",
       subtitle:
         pendingDocuments > 0
-          ? `${pendingDocuments} pendiente${pendingDocuments > 1 ? "s" : ""} por revisar`
-          : "Guarda exámenes e informes",
-      hint: pendingDocuments > 0 ? "Pendiente" : "Nuevo",
+          ? `${pendingDocuments} por revisar`
+          : "Guarda y revisa exámenes e informes",
+      hint: pendingDocuments > 0 ? "Revisar" : "Nuevo",
       tone: "teal",
       onClick: openDocumentsFocus,
     },
@@ -1565,7 +1567,7 @@ export default function Dashboard({
   if (pendingDocuments > 0) {
     suggestionItems.push({
       id: "suggestion-docs",
-      text: `Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} pendiente${pendingDocuments > 1 ? "s" : ""} de revisar.`,
+      text: `Tienes ${pendingDocuments} documento${pendingDocuments > 1 ? "s" : ""} en análisis o con revisión pendiente.`,
     });
   }
   if (activeMedications.some((item) => getMedicationScheduleTimes(item).length === 0)) {
