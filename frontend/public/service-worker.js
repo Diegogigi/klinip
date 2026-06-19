@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v27";
+const CACHE_NAME = "klinip-cache-v28";
 const BRAND_ASSET_VERSION = "20260523a";
 const ICON_192 = `/icons/android-chrome-192x192.png?v=${BRAND_ASSET_VERSION}`;
 const ICON_512 = `/icons/android-chrome-512x512.png?v=${BRAND_ASSET_VERSION}`;

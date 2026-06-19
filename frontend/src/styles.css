@@ -78,8 +78,9 @@ textarea,
 }
 
 :root {
-  --font-brand: "Nunito", "Avenir Next Rounded", "Segoe UI", system-ui, -apple-system,
-    BlinkMacSystemFont, sans-serif;
+  --font-brand: "Nunito", "Avenir Next Rounded", "SF Pro Rounded", "Segoe UI Rounded",
+    "Arial Rounded MT Bold", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont,
+    sans-serif;
   --blue: #0d47f7;
   --sky: #4da3ff;
   --brand-primary: #0d47f7;
@@ -38189,7 +38190,7 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
    ============================================================ */
 @media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   :root {
-    --mobile-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    --mobile-font: var(--font-brand);
     --mobile-bg: #ffffff;
     --mobile-surface: #ffffff;
     --mobile-surface-muted: #f8fbff;
@@ -38221,6 +38222,18 @@ body.theme-dark .topbar.topbar-mobile-compact .topbar-title {
   .modal-card,
   .mobile-sheet {
     font-family: var(--mobile-font);
+  }
+
+  .main-area,
+  .main-content,
+  .topbar-title,
+  .topbar-name,
+  .sidebar-label,
+  .mobile-hero,
+  .mobile-hero *,
+  .kl-page,
+  .kl-page * {
+    font-family: var(--font-brand);
   }
 
   .main-area {

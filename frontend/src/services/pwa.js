@@ -2,7 +2,7 @@ import { subscribePush, unsubscribePush } from "./httpApi";
 
 const PUBLIC_VAPID_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
 const SERVICE_WORKER_URL = "/service-worker.js";
-const APP_SHELL_VERSION = "20260614-mobile-nav-refresh-2";
+const APP_SHELL_VERSION = "20260618-font-fix-1";
 const APP_SHELL_VERSION_KEY = "klinip-app-shell-version";
 let pendingPushSubscriptionPromise = null;
 
