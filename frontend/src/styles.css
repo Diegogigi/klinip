@@ -59462,26 +59462,32 @@ body.theme-dark .bio-unified-chart-legend-item small {
    Definido a nivel base (sin media query) porque este botón solo se renderiza
    en la navbar móvil. Así el círculo azul Klinip se aplica en TODOS los
    breakpoints (incluido móvil en horizontal con pointer: coarse). */
+/* La barra debe permitir que el botón sobresalga por arriba (efecto levantado). */
+.sidebar.sidebar-mobile-shell {
+  overflow: visible !important;
+}
+
 .sidebar-link.sidebar-link-mobile.is-mobile-ocr {
   align-self: center !important;
   border: 0;
   background: transparent;
   cursor: pointer;
+  overflow: visible !important;
 }
 
 .sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.sidebar-icon-ocr {
-  width: 3.4rem !important;
-  height: 3.4rem !important;
-  min-width: 3.4rem !important;
-  min-height: 3.4rem !important;
-  margin-top: -1.05rem !important;
+  width: 3.5rem !important;
+  height: 3.5rem !important;
+  min-width: 3.5rem !important;
+  min-height: 3.5rem !important;
+  margin-top: -1.7rem !important;
   border-radius: 50% !important;
   aspect-ratio: 1 / 1 !important;
   color: #ffffff !important;
   background: linear-gradient(160deg, #1678f2 0%, #0d47f7 100%) !important;
   box-shadow:
-    0 0 0 4px rgba(255, 255, 255, 0.95),
-    0 8px 18px rgba(13, 71, 247, 0.42) !important;
+    0 0 0 5px var(--klinip-ocr-cradle, #ffffff),
+    0 10px 20px rgba(13, 71, 247, 0.45) !important;
   transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -59501,6 +59507,6 @@ body.theme-dark .bio-unified-chart-legend-item small {
 
 body.theme-dark .sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.sidebar-icon-ocr {
   box-shadow:
-    0 0 0 4px rgba(15, 23, 42, 0.92),
+    0 0 0 5px rgba(15, 23, 42, 0.95),
     0 10px 22px rgba(13, 71, 247, 0.5) !important;
 }

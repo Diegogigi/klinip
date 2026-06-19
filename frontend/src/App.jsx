@@ -340,7 +340,7 @@ function Sidebar({
         padding: "0.46rem 0.54rem 0.42rem",
         borderRadius: "1.9rem",
         transform: "translateX(-50%)",
-        overflow: "hidden",
+        overflow: "visible",
         isolation: "isolate",
       }
     : undefined;
