@@ -54348,7 +54348,7 @@ body.theme-dark .main-area {
   line-height: 1;
   color: inherit;
   font-family: var(--font-brand);
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: -0.055em;
 }
 
@@ -54368,7 +54368,7 @@ body.theme-dark .main-area {
 
 .brand-logo-sidebar-name {
   font-size: 1.18rem;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: -0.06em;
 }
 
@@ -54402,7 +54402,7 @@ body.theme-dark .main-area {
 
 .brand-logo-auth-name {
   font-size: inherit;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: -0.06em;
 }
 
@@ -59821,8 +59821,8 @@ body.theme-dark .kl-flower-mark { color: rgba(132, 163, 255, 0.07); }
   margin: 1.1rem 0 0;
   font-size: clamp(2.5rem, 5.4vw, 4.1rem);
   line-height: 1.04;
-  font-weight: 900;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.035em;
 }
 .kl-hero-title span {
   display: block;
@@ -60838,6 +60838,28 @@ body.theme-dark .kl-flower-mark { color: rgba(132, 163, 255, 0.07); }
   .kl-nav-links { display: none; }
 }
 @media (max-width: 560px) {
+  .kl-hero {
+    min-height: auto;
+    padding: 6rem 1.1rem 3rem;
+  }
+  .kl-hero-pill {
+    font-size: 0.76rem;
+    padding: 0.42rem 0.78rem;
+  }
+  .kl-hero-title {
+    font-size: clamp(2.25rem, 12vw, 3.35rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+  }
+  .kl-hero-desc {
+    font-size: 1rem;
+    line-height: 1.55;
+  }
+  .kl-btn-hero,
+  .kl-btn-secondary {
+    padding: 0.88rem 1.28rem;
+    font-size: 0.96rem;
+  }
   .kl-section { padding: 3.5rem 1.1rem; }
   .kl-hub-grid { grid-template-columns: 1fr; }
   .kl-hero-stats { gap: 1.2rem; }
