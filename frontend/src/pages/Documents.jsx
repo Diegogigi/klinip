@@ -40,10 +40,10 @@ function getNewestDocumentRank(item) {
 }
 
 const ocrLabels = {
-  pending: "OCR pendiente",
-  processing: "OCR en proceso",
-  done: "OCR listo",
-  skipped_size: "OCR omitido",
+  pending: "Por leer",
+  processing: "Leyendo",
+  done: "Leido por IA",
+  skipped_size: "No se pudo leer",
 };
 
 const ocrActiveStatuses = new Set(["pending", "processing"]);
@@ -64,11 +64,11 @@ function getDocumentFilename(doc) {
 
 function getOcrStatusLabel(status) {
   const key = String(status || "").trim().toLowerCase();
-  if (!key) return "Sin OCR";
+  if (!key) return "Sin lectura IA";
   if (ocrLabels[key]) return ocrLabels[key];
   if (key === "error_no_file") return "Archivo no disponible";
-  if (key.startsWith("error_")) return "OCR con error";
-  return "OCR con error";
+  if (key.startsWith("error_")) return "No se pudo leer";
+  return "No se pudo leer";
 }
 
 function isOcrActiveDocument(doc) {
@@ -375,17 +375,17 @@ export default function Documents() {
         tone: "stalled",
         title:
           stalledOcrDocs.length === 1
-            ? `El OCR de ${getDocumentFilename(leadDoc)} está tardando más de lo normal.`
-            : `El OCR está tardando más de lo normal en ${stalledOcrDocs.length} documentos.`,
-        body: `El archivo ya se guardó, pero la lectura automática sigue pendiente hace ${waitLabel}. Puedes actualizar el estado o reintentar el OCR.`,
+            ? `Klinip IA sigue leyendo ${getDocumentFilename(leadDoc)}.`
+            : `Klinip IA sigue leyendo ${stalledOcrDocs.length} documentos.`,
+        body: `El archivo ya se guardó, pero Klinip IA todavía está leyendo su contenido hace ${waitLabel}. Puedes actualizar el estado o volver a leer el documento.`,
         retryDoc: stalledOcrDocs.length === 1 ? leadDoc : null,
       };
     }
     return {
       tone: "active",
-      title: uploadNotice || "Klinip está procesando los documentos recientes.",
+      title: uploadNotice || "Klinip IA está leyendo tus documentos recientes.",
       body: ocrSyncing
-        ? "Actualizando estado del OCR..."
+        ? "Actualizando el estado de lectura..."
         : "El archivo ya quedó guardado. En unos segundos deberían aparecer el resumen y los datos detectados.",
       retryDoc: null,
     };
@@ -662,11 +662,11 @@ export default function Documents() {
       const retryStartedAt = Date.now();
       const updatedDoc = await retryDocumentOcr(doc.id);
       syncDocumentState({ ...updatedDoc, __ocrRetryStartedAtMs: retryStartedAt });
-      setUploadNotice("Reintento iniciado. Klinip volverá a leer el archivo.");
+      setUploadNotice("Klinip IA volverá a leer el documento.");
       await load();
     } catch (err) {
-      console.error("No se pudo reintentar el OCR:", err);
-      window.alert(getErrorDetail(err, "No se pudo reintentar el OCR."));
+      console.error("No se pudo volver a leer el documento:", err);
+      window.alert(getErrorDetail(err, "No se pudo volver a leer el documento."));
     } finally {
       setRetryingOcrIds((current) => current.filter((item) => item !== docId));
     }
@@ -800,7 +800,7 @@ export default function Documents() {
       <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip puede leerlos con OCR, completar datos y activar acciones clínicas vinculadas al perfil activo.
+          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip IA puede leerlos, completar datos y activar acciones clínicas vinculadas al perfil activo.
         </p>
       </div>
 
@@ -818,7 +818,7 @@ export default function Documents() {
         <div className="card documents-surface-free documents-ocr-assist">
           <div className="documents-ocr-assist-head">
             <div>
-              <span className="documents-ocr-kicker">OCR clínico</span>
+              <span className="documents-ocr-kicker">Klinip IA</span>
               <h3 className="card-title">Carga inteligente en {activeProfileLabel}</h3>
             </div>
             {hasPendingOcr ? (
@@ -849,7 +849,7 @@ export default function Documents() {
                     onClick={() => void handleRefreshOcrState()}
                     disabled={ocrSyncing}
                   >
-                    {ocrSyncing ? "Actualizando..." : "Actualizar estado"}
+                    {ocrSyncing ? "Actualizando..." : "Ver si ya está listo"}
                   </button>
                   {ocrBannerModel.retryDoc ? (
                     <button
@@ -860,7 +860,7 @@ export default function Documents() {
                     >
                       {retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))
                         ? "Reintentando..."
-                        : "Reintentar OCR"}
+                        : "Volver a leer"}
                     </button>
                   ) : null}
                 </div>
@@ -938,7 +938,7 @@ export default function Documents() {
                     ))}
                   </select>
                   <span className="tiny-note">
-                    Usa autodetección cuando no quieras clasificarlo manualmente. Klinip puede corregir el tipo después del OCR.
+                    Usa autodetección cuando no quieras clasificarlo manualmente. Klinip puede corregir el tipo después de leer el documento.
                   </span>
                 </div>
                 <div className="input-group">
@@ -984,7 +984,7 @@ export default function Documents() {
                 />
                 <span className="tiny-note">Puedes cargar imágenes o PDF de hasta 10 MB.</span>
                 <span className="tiny-note">
-                  El archivo se guardará en el perfil activo y el OCR intentará completar centro, fecha y acciones clínicas relacionadas.
+                  El archivo se guardará en el perfil activo y Klinip IA intentará completar centro, fecha y acciones clínicas relacionadas.
                 </span>
               </div>
 
@@ -1119,7 +1119,7 @@ export default function Documents() {
                 <div className="documents-ai-panel-head">
                   <div>
                     <span className="documents-ocr-kicker">Klinip IA</span>
-                    <h4>Lectura estructurada del documento</h4>
+                    <h4>Lo que Klinip IA leyó en tu documento</h4>
                   </div>
                   {detailIntelligence?.requires_review ? (
                     <span className="detail-chip detail-chip-status pendiente">Revisar</span>
@@ -1134,8 +1134,8 @@ export default function Documents() {
                   <div className={`documents-ai-empty-block${detailOcrIsStalled ? " is-stalled" : ""}`}>
                     <p className="documents-ai-empty">
                       {detailOcrIsStalled
-                        ? `La lectura automática sigue pendiente hace ${formatOcrPendingTime(getOcrPendingAgeMs(detailTarget))}. El archivo ya quedó guardado, pero Klinip todavía no termina de interpretarlo.`
-                        : "El OCR sigue en proceso. Cuando termine, aquí aparecerán el resumen clínico y los datos detectados."}
+                        ? `Klinip IA sigue leyendo este documento hace ${formatOcrPendingTime(getOcrPendingAgeMs(detailTarget))}. El archivo ya quedó guardado, pero todavía no termina de interpretarlo.`
+                        : "Klinip IA está leyendo este documento. Cuando termine, aquí aparecerán el resumen clínico y los datos detectados."}
                     </p>
                     <div className="documents-ocr-banner-actions">
                       <button
@@ -1144,7 +1144,7 @@ export default function Documents() {
                         onClick={() => void handleRefreshOcrState()}
                         disabled={ocrSyncing}
                       >
-                        {ocrSyncing ? "Actualizando..." : "Actualizar estado"}
+                        {ocrSyncing ? "Actualizando..." : "Ver si ya está listo"}
                       </button>
                       {canEditActiveProfile && detailOcrIsStalled ? (
                         <button
@@ -1155,7 +1155,7 @@ export default function Documents() {
                         >
                           {retryingOcrIds.includes(String(detailTarget.id))
                             ? "Reintentando..."
-                            : "Reintentar OCR"}
+                            : "Volver a leer"}
                         </button>
                       ) : null}
                     </div>
@@ -1193,7 +1193,7 @@ export default function Documents() {
                   </>
                 ) : (
                   <p className="documents-ai-empty">
-                    El OCR quedó listo, pero este archivo todavía no tiene un resumen estructurado disponible.
+                    Klinip IA ya leyó este documento, pero todavía no tiene un resumen estructurado disponible.
                   </p>
                 )}
               </div>
@@ -1372,7 +1372,7 @@ export default function Documents() {
               <thead>
                 <tr>
                   <th>Tipo</th>
-                  <th>OCR</th>
+                  <th>Lectura IA</th>
                   <th>Fecha</th>
                   <th>Centro</th>
                   <th>Notas</th>
