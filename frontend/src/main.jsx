@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { HashRouter } from "react-router-dom";
 import App from "./App";
 
+import "./fonts/nunito.css";
 import "./styles.css";
 
 function normalizeLegacySpaUrl() {

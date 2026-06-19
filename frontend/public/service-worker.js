@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v28";
+const CACHE_NAME = "klinip-cache-v29";
 const BRAND_ASSET_VERSION = "20260523a";
 const ICON_192 = `/icons/android-chrome-192x192.png?v=${BRAND_ASSET_VERSION}`;
 const ICON_512 = `/icons/android-chrome-512x512.png?v=${BRAND_ASSET_VERSION}`;
@@ -128,6 +128,13 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const requestUrl = new URL(event.request.url);
   if (!["http:", "https:"].includes(requestUrl.protocol)) return;
+
+  if (
+    requestUrl.hostname === "fonts.googleapis.com" ||
+    requestUrl.hostname === "fonts.gstatic.com"
+  ) {
+    return;
+  }
 
   if (event.request.headers.get("authorization")) {
     respondSafely(event, fetchWithNetworkFallback(event.request));
