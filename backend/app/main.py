@@ -3509,6 +3509,107 @@ def _calculate_expected_doses_until(med: models.Medication, now: datetime) -> in
     return _calculate_expected_doses_between(med, _medication_start_at(med, now), now)
 
 
+def _medication_tracking_start(
+    db: Session,
+    med: models.Medication,
+    user_id: int | None = None,
+) -> datetime | None:
+    """Momento del primer registro de tomas para este medicamento.
+
+    Sirve para no penalizar dosis programadas ANTES de que la persona empezara
+    a registrar en la app (que de otro modo hunden la adherencia y la dejan
+    "pegada" en un porcentaje bajo). Si no hay registros aún, devuelve None.
+    """
+    med_id = getattr(med, "id", None)
+    if not med_id:
+        return None
+    query = db.query(
+        func.min(
+            func.coalesce(
+                models.MedicationIntake.scheduled_at,
+                models.MedicationIntake.taken_at,
+            )
+        )
+    ).filter(models.MedicationIntake.medication_id == med_id)
+    if user_id is not None:
+        query = query.filter(models.MedicationIntake.user_id == user_id)
+    earliest = query.scalar()
+    if earliest is None:
+        return None
+    return earliest.replace(tzinfo=None) if getattr(earliest, "tzinfo", None) else earliest
+
+
+def _adherence_window_start(
+    db: Session,
+    med: models.Medication,
+    window_start: datetime,
+    user_id: int | None = None,
+) -> datetime:
+    """Inicio efectivo de la ventana de adherencia: el más reciente entre el
+    inicio de la ventana solicitada y el inicio real del seguimiento."""
+    tracking_start = _medication_tracking_start(db, med, user_id)
+    if tracking_start and tracking_start > window_start:
+        return tracking_start
+    return window_start
+
+
+def _compute_daily_adherence(
+    db: Session,
+    medications: list[models.Medication],
+) -> dict:
+    """Adherencia de HOY (en vivo): dosis tomadas vs. esperadas desde el inicio
+    del día hasta ahora. Se calcula al vuelo porque debe reflejar de inmediato
+    la dosis recién registrada."""
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    med_ids = [int(m.id) for m in medications if getattr(m, "id", None)]
+    rows_by_med: dict[int, list] = {mid: [] for mid in med_ids}
+    if med_ids:
+        intake_rows = (
+            db.query(
+                models.MedicationIntake.medication_id,
+                models.MedicationIntake.status,
+            )
+            .filter(
+                models.MedicationIntake.medication_id.in_(med_ids),
+                or_(
+                    models.MedicationIntake.taken_at >= today_start,
+                    models.MedicationIntake.scheduled_at >= today_start,
+                ),
+            )
+            .all()
+        )
+        for mid, status in intake_rows:
+            rows_by_med.setdefault(int(mid), []).append(status)
+
+    expected_total = 0
+    taken_total = 0
+    for med in medications:
+        if _is_medication_finished(med, now):
+            continue
+        med_expected = _calculate_expected_doses_between(med, today_start, now)
+        if med_expected <= 0:
+            continue
+        med_taken = sum(
+            1
+            for status in rows_by_med.get(int(med.id), [])
+            if _normalize_adherence_status(status) in {"taken", "late"}
+        )
+        expected_total += med_expected
+        taken_total += min(med_taken, med_expected)
+
+    rate = (
+        int(round(min((taken_total / expected_total) * 100, 100)))
+        if expected_total
+        else None
+    )
+    return {
+        "today_adherence_rate": rate,
+        "today_taken": taken_total,
+        "today_expected": expected_total,
+    }
+
+
 def _normalize_adherence_status(value: str | None) -> str:
     normalized = _normalize_text(value or "").lower()
     if normalized in {"late", "atrasada", "tarde"}:
@@ -4472,7 +4573,12 @@ def _attach_medication_adherence(
                 addressed_schedule_slots[int(medication_id)].add(normalized_scheduled_at)
 
     for med in medications:
-        expected = _calculate_expected_doses_until(med, now)
+        # Ancla al inicio real del seguimiento: no penaliza dosis previas al
+        # primer registro (evita que la adherencia quede "pegada" en bajo).
+        window_start = _adherence_window_start(
+            db, med, _medication_start_at(med, now), target_user_id
+        )
+        expected = _calculate_expected_doses_between(med, window_start, now)
         med_counts = status_counts.get(int(med.id), {})
         resolved_slots = addressed_schedule_slots.get(int(med.id), set())
         next_dose = next(
@@ -12024,14 +12130,17 @@ def _upsert_adherence_summaries(
 
     for med in medications:
         daily_freq = _estimate_daily_frequency(med)
-        expected = _calculate_expected_doses_between(med, since, now)
+        # Ancla la ventana al inicio real del seguimiento para no penalizar dosis
+        # programadas antes de que la persona empezara a registrar en la app.
+        window_start = _adherence_window_start(db, med, since)
+        expected = _calculate_expected_doses_between(med, window_start, now)
         intake_rows = (
             db.query(models.MedicationIntake)
             .filter(
                 models.MedicationIntake.medication_id == med.id,
                 or_(
-                    models.MedicationIntake.taken_at >= since,
-                    models.MedicationIntake.scheduled_at >= since,
+                    models.MedicationIntake.taken_at >= window_start,
+                    models.MedicationIntake.scheduled_at >= window_start,
                 ),
             )
             .all()
@@ -12121,6 +12230,7 @@ def _upsert_adherence_summaries(
             "most_consistent_day": best_day,
             "lowest_recorded_time_slot": risk_slot,
         },
+        **_compute_daily_adherence(db, medications),
     }
 
 
@@ -12142,6 +12252,9 @@ def _load_adherence_summary_cached(
                 "most_consistent_day": "",
                 "lowest_recorded_time_slot": "",
             },
+            "today_adherence_rate": None,
+            "today_taken": 0,
+            "today_expected": 0,
         }
 
     rows = (
@@ -12204,6 +12317,7 @@ def _load_adherence_summary_cached(
             "most_consistent_day": max(day_counts, key=day_counts.get) if day_counts else "",
             "lowest_recorded_time_slot": min(time_counts, key=time_counts.get) if time_counts else "",
         },
+        **_compute_daily_adherence(db, medications),
     }
 
 
@@ -21797,6 +21911,9 @@ def _empty_adherence_summary(window_days: int = 30) -> dict:
             "most_consistent_day": "",
             "lowest_recorded_time_slot": "",
         },
+        "today_adherence_rate": None,
+        "today_taken": 0,
+        "today_expected": 0,
     }
 
 

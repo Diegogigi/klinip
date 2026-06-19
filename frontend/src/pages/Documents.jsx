@@ -76,20 +76,24 @@ function isOcrActiveDocument(doc) {
 }
 
 function getDocumentCreatedAtMs(doc) {
+  const retryStartedAtMs = Number(doc?.__ocrRetryStartedAtMs || 0);
+  if (Number.isFinite(retryStartedAtMs) && retryStartedAtMs > 0) {
+    return retryStartedAtMs;
+  }
   const createdAt = new Date(doc?.created_at || "");
   const timestamp = createdAt.getTime();
   return Number.isNaN(timestamp) ? null : timestamp;
 }
 
-function getOcrPendingAgeMs(doc, nowTs = Date.now()) {
-  const createdAtMs = getDocumentCreatedAtMs(doc);
-  if (createdAtMs === null) return null;
-  return Math.max(0, nowTs - createdAtMs);
+function getOcrPendingAgeMs(doc, nowTs = Date.now(), startedAtMs = null) {
+  const referenceTs = Number.isFinite(startedAtMs) ? startedAtMs : getDocumentCreatedAtMs(doc);
+  if (referenceTs === null) return null;
+  return Math.max(0, nowTs - referenceTs);
 }
 
-function isOcrStalled(doc, nowTs = Date.now()) {
+function isOcrStalled(doc, nowTs = Date.now(), startedAtMs = null) {
   if (!isOcrActiveDocument(doc)) return false;
-  const ageMs = getOcrPendingAgeMs(doc, nowTs);
+  const ageMs = getOcrPendingAgeMs(doc, nowTs, startedAtMs);
   return ageMs !== null && ageMs >= OCR_STALLED_MS;
 }
 
@@ -290,11 +294,20 @@ export default function Documents() {
       ]);
       setActiveProfile(profile || null);
       setDocumentIntelligence(Array.isArray(intelligence) ? intelligence : []);
-      setDocs(
-        Array.isArray(data)
-          ? [...data].sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a))
-          : []
-      );
+      setDocs((current) => {
+        const previousById = new Map(current.map((item) => [String(item.id), item]));
+        if (!Array.isArray(data)) return [];
+        return data
+          .map((item) => {
+            const previous = previousById.get(String(item.id));
+            const retryStartedAtMs = previous?.__ocrRetryStartedAtMs;
+            if (Number.isFinite(retryStartedAtMs) && isOcrActiveDocument(item)) {
+              return { ...item, __ocrRetryStartedAtMs: retryStartedAtMs };
+            }
+            return item;
+          })
+          .sort((a, b) => getNewestDocumentRank(b) - getNewestDocumentRank(a));
+      });
     } catch (error) {
       if (!isAuthSessionError(error)) {
         console.error("No se pudieron cargar los documentos", error);
@@ -316,6 +329,22 @@ export default function Documents() {
 
   useEffect(() => () => releaseViewerUrl(), [viewerUrl]);
 
+  useEffect(() => {
+    if (!detailOpen || !detailTarget?.id) return;
+    const refreshedTarget = docs.find((item) => String(item.id) === String(detailTarget.id));
+    if (refreshedTarget && refreshedTarget !== detailTarget) {
+      setDetailTarget(refreshedTarget);
+    }
+  }, [detailOpen, detailTarget, docs]);
+
+  useEffect(() => {
+    if (!viewerOpen || !viewerTarget?.id) return;
+    const refreshedTarget = docs.find((item) => String(item.id) === String(viewerTarget.id));
+    if (refreshedTarget && refreshedTarget !== viewerTarget) {
+      setViewerTarget(refreshedTarget);
+    }
+  }, [viewerOpen, viewerTarget, docs]);
+
   const pendingOcrDocs = useMemo(() => docs.filter((item) => isOcrActiveDocument(item)), [docs]);
 
   const hasPendingOcr = pendingOcrDocs.length > 0;
@@ -329,9 +358,10 @@ export default function Documents() {
 
   const oldestPendingOcrDoc = useMemo(() => {
     if (!pendingOcrDocs.length) return null;
+    const nowTs = Date.now();
     return [...pendingOcrDocs].sort((left, right) => {
-      const leftAge = getOcrPendingAgeMs(left) || 0;
-      const rightAge = getOcrPendingAgeMs(right) || 0;
+      const leftAge = getOcrPendingAgeMs(left, nowTs) || 0;
+      const rightAge = getOcrPendingAgeMs(right, nowTs) || 0;
       return rightAge - leftAge;
     })[0] || null;
   }, [pendingOcrDocs]);
@@ -397,6 +427,8 @@ export default function Documents() {
     () => normalizeAbnormalValues(detailIntelligence?.abnormal_values_json).slice(0, 4),
     [detailIntelligence],
   );
+
+  const detailOcrIsStalled = detailTarget ? isOcrStalled(detailTarget, Date.now()) : false;
 
   const filteredDocs = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -592,20 +624,33 @@ export default function Documents() {
   const syncDocumentState = (updatedDoc) => {
     if (!updatedDoc?.id) return;
     setDocs((current) =>
-      current.map((item) => (String(item.id) === String(updatedDoc.id) ? updatedDoc : item))
+      current.map((item) => {
+        if (String(item.id) !== String(updatedDoc.id)) return item;
+        const retryStartedAtMs = updatedDoc.__ocrRetryStartedAtMs ?? item.__ocrRetryStartedAtMs;
+        return Number.isFinite(retryStartedAtMs) && isOcrActiveDocument(updatedDoc)
+          ? { ...updatedDoc, __ocrRetryStartedAtMs: retryStartedAtMs }
+          : updatedDoc;
+      })
     );
-    setDetailTarget((current) =>
-      current && String(current.id) === String(updatedDoc.id) ? updatedDoc : current
-    );
-    setViewerTarget((current) =>
-      current && String(current.id) === String(updatedDoc.id) ? updatedDoc : current
-    );
+    setDetailTarget((current) => {
+      if (!current || String(current.id) !== String(updatedDoc.id)) return current;
+      const retryStartedAtMs = updatedDoc.__ocrRetryStartedAtMs ?? current.__ocrRetryStartedAtMs;
+      return Number.isFinite(retryStartedAtMs) && isOcrActiveDocument(updatedDoc)
+        ? { ...updatedDoc, __ocrRetryStartedAtMs: retryStartedAtMs }
+        : updatedDoc;
+    });
+    setViewerTarget((current) => {
+      if (!current || String(current.id) !== String(updatedDoc.id)) return current;
+      const retryStartedAtMs = updatedDoc.__ocrRetryStartedAtMs ?? current.__ocrRetryStartedAtMs;
+      return Number.isFinite(retryStartedAtMs) && isOcrActiveDocument(updatedDoc)
+        ? { ...updatedDoc, __ocrRetryStartedAtMs: retryStartedAtMs }
+        : updatedDoc;
+    });
   };
 
   const handleRefreshOcrState = async () => {
-    if (loadRef.current) {
-      await loadRef.current({ silent: true });
-    }
+    if (ocrSyncing || !loadRef.current) return;
+    await loadRef.current({ silent: true });
   };
 
   const handleRetryDocumentOcr = async (doc) => {
@@ -614,8 +659,9 @@ export default function Documents() {
     if (retryingOcrIds.includes(docId)) return;
     setRetryingOcrIds((current) => [...current, docId]);
     try {
+      const retryStartedAt = Date.now();
       const updatedDoc = await retryDocumentOcr(doc.id);
-      syncDocumentState(updatedDoc);
+      syncDocumentState({ ...updatedDoc, __ocrRetryStartedAtMs: retryStartedAt });
       setUploadNotice("Reintento iniciado. Klinip volverá a leer el archivo.");
       await load();
     } catch (err) {
@@ -801,15 +847,16 @@ export default function Documents() {
                     className="secondary-btn documents-ocr-banner-btn"
                     type="button"
                     onClick={() => void handleRefreshOcrState()}
+                    disabled={ocrSyncing}
                   >
-                    Actualizar estado
+                    {ocrSyncing ? "Actualizando..." : "Actualizar estado"}
                   </button>
                   {ocrBannerModel.retryDoc ? (
                     <button
                       className="secondary-btn documents-ocr-banner-btn"
                       type="button"
                       onClick={() => void handleRetryDocumentOcr(ocrBannerModel.retryDoc)}
-                      disabled={retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))}
+                      disabled={ocrSyncing || retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))}
                     >
                       {retryingOcrIds.includes(String(ocrBannerModel.retryDoc.id))
                         ? "Reintentando..."
@@ -1084,9 +1131,9 @@ export default function Documents() {
                 </div>
 
                 {isOcrActiveDocument(detailTarget) ? (
-                  <div className={`documents-ai-empty-block${isOcrStalled(detailTarget) ? " is-stalled" : ""}`}>
+                  <div className={`documents-ai-empty-block${detailOcrIsStalled ? " is-stalled" : ""}`}>
                     <p className="documents-ai-empty">
-                      {isOcrStalled(detailTarget)
+                      {detailOcrIsStalled
                         ? `La lectura automática sigue pendiente hace ${formatOcrPendingTime(getOcrPendingAgeMs(detailTarget))}. El archivo ya quedó guardado, pero Klinip todavía no termina de interpretarlo.`
                         : "El OCR sigue en proceso. Cuando termine, aquí aparecerán el resumen clínico y los datos detectados."}
                     </p>
@@ -1095,15 +1142,16 @@ export default function Documents() {
                         className="secondary-btn documents-ocr-banner-btn"
                         type="button"
                         onClick={() => void handleRefreshOcrState()}
+                        disabled={ocrSyncing}
                       >
-                        Actualizar estado
+                        {ocrSyncing ? "Actualizando..." : "Actualizar estado"}
                       </button>
-                      {canEditActiveProfile && isOcrStalled(detailTarget) ? (
+                      {canEditActiveProfile && detailOcrIsStalled ? (
                         <button
                           className="secondary-btn documents-ocr-banner-btn"
                           type="button"
                           onClick={() => void handleRetryDocumentOcr(detailTarget)}
-                          disabled={retryingOcrIds.includes(String(detailTarget.id))}
+                          disabled={ocrSyncing || retryingOcrIds.includes(String(detailTarget.id))}
                         >
                           {retryingOcrIds.includes(String(detailTarget.id))
                             ? "Reintentando..."

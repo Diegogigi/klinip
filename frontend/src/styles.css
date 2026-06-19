@@ -59510,3 +59510,27 @@ body.theme-dark .sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.si
     0 0 0 5px rgba(15, 23, 42, 0.95),
     0 10px 22px rgba(13, 71, 247, 0.5) !important;
 }
+
+/* Adherencia: valor diario junto al aro (30 días) */
+.mobile-hero-progress-today {
+  margin-top: 0.12rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.home-clinical-ring-today {
+  margin-top: 0.1rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0d47f7;
+  text-align: center;
+  white-space: nowrap;
+}
+
+body.theme-dark .home-clinical-ring-today {
+  color: #6ea2ff;
+}

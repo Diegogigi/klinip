@@ -214,6 +214,13 @@ function humanizeTimeSlot(slot) {
   return "Sin patron claro";
 }
 
+function formatTodayAdherenceValue(todayRate, todayTaken, todayExpected) {
+  if (!todayExpected || todayExpected <= 0) return "Sin dosis para hoy";
+  const rate = todayRate === null || todayRate === undefined ? null : Math.round(Number(todayRate));
+  const ratePart = rate === null || Number.isNaN(rate) ? "" : `${rate}% · `;
+  return `${ratePart}${todayTaken}/${todayExpected} dosis`;
+}
+
 function buildAdherenceGuideData({
   adherence,
   expected,
@@ -223,6 +230,9 @@ function buildAdherenceGuideData({
   weakestMedication,
   patternSummary,
   pendingRefresh,
+  todayRate,
+  todayTaken,
+  todayExpected,
 }) {
   if (!activeCount) {
     return {
@@ -315,7 +325,13 @@ function buildAdherenceGuideData({
       },
     ],
     insights: [
-      { key: "doses", label: "Dosis tomadas", value: `${taken} de ${expected}` },
+      {
+        key: "today",
+        label: "Adherencia de hoy",
+        value: formatTodayAdherenceValue(todayRate, todayTaken, todayExpected),
+        description: "Refleja al instante las dosis de hoy. La de abajo resume los últimos días.",
+      },
+      { key: "doses", label: `Dosis tomadas (${windowDays} días)`, value: `${taken} de ${expected}` },
       { key: "plan", label: "Medicamentos en seguimiento", value: `${activeCount}` },
       { key: "weakest", label: "Medicamento que mas afecto tu promedio", value: weakestValue, description: weakestDescription },
       { key: "slot", label: "Momento del dia donde mas cuesta recordar", value: weakestSlot },
@@ -995,6 +1011,20 @@ export default function Dashboard({
       (left, right) => Number(left?.adherence_rate || 0) - Number(right?.adherence_rate || 0)
     )[0] ||
     null;
+  const todayExpectedDoses = Number(adherenceSummary?.today_expected || 0);
+  const todayTakenDoses = Number(adherenceSummary?.today_taken || 0);
+  const numericTodayRate = Number(adherenceSummary?.today_adherence_rate);
+  const hasTodayRate =
+    adherenceSummary?.today_adherence_rate !== null &&
+    adherenceSummary?.today_adherence_rate !== undefined &&
+    Number.isFinite(numericTodayRate);
+  const todayAdherenceValue = hasTodayRate ? clampPercent(Math.round(numericTodayRate)) : null;
+  const todayAdherenceHint =
+    activeMedications.length && todayExpectedDoses > 0
+      ? `Hoy ${todayAdherenceValue ?? 0}% · ${todayTakenDoses}/${todayExpectedDoses}`
+      : activeMedications.length
+      ? "Hoy sin dosis"
+      : "";
   const adherenceGuide = buildAdherenceGuideData({
     adherence: adherencePercentValue,
     expected: adherenceTotals.expected,
@@ -1004,6 +1034,9 @@ export default function Dashboard({
     weakestMedication,
     patternSummary: adherencePatternSummary,
     pendingRefresh: Boolean(adherenceSummary?.pending_refresh),
+    todayRate: todayAdherenceValue,
+    todayTaken: todayTakenDoses,
+    todayExpected: todayExpectedDoses,
   });
   const adherenceLeadMedicationName = cleanUiText(weakestMedication?.name || "");
   const lowAdherenceHeroMessage = activeMedications.length
@@ -2244,6 +2277,9 @@ export default function Dashboard({
                     <span>{adherencePercentLabel}</span>
                   </button>
                   <span className="mobile-hero-progress-title">{adherenceRingTitle}</span>
+                  {todayAdherenceHint ? (
+                    <span className="mobile-hero-progress-today">{todayAdherenceHint}</span>
+                  ) : null}
                   <span className="mobile-hero-progress-hint">Ver detalle</span>
                 </div>
               </div>
@@ -2490,6 +2526,9 @@ export default function Dashboard({
                     <strong>{adherencePercentLabel}</strong>
                   </span>
                   <small>{adherenceRingTitle}</small>
+                  {todayAdherenceHint ? (
+                    <span className="home-clinical-ring-today">{todayAdherenceHint}</span>
+                  ) : null}
                   <span className="home-clinical-ring-link">Ver detalle</span>
                 </button>
                 <div className="home-greeting-date">
