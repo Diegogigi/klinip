@@ -22,12 +22,28 @@ const fallbackStats = {
 const formatCount = (value) => `${new Intl.NumberFormat("es-CL").format(value)}+`;
 const formatPercent = (value) => `${value}%`;
 
+// Filigrana: pétalo/flor del logo de Klinip (mismo trazo que la marca)
+const BRAND_FLOWER_PATH =
+  "M50 17.5c7.18 0 13 5.82 13 13v8.41l7.28-4.2c6.21-3.59 14.15-1.46 17.74 4.75 3.59 6.21 1.46 14.15-4.75 17.74L76 61.4l7.27 4.2c6.21 3.59 8.34 11.53 4.75 17.74-3.59 6.21-11.53 8.34-17.74 4.75L63 83.9v8.4c0 7.19-5.82 13-13 13s-13-5.81-13-13v-8.4l-7.28 4.2c-6.21 3.59-14.15 1.46-17.74-4.75-3.59-6.21-1.46-14.15 4.75-17.74l7.27-4.2-7.27-4.2c-6.21-3.59-8.34-11.53-4.75-17.74 3.59-6.21 11.53-8.34 17.74-4.75l7.28 4.2V30.5c0-7.18 5.82-13 13-13Z";
+
+// Personalidad de marca (banda tipo "chips")
+const brandPersonality = [
+  "Cercana",
+  "Confiable",
+  "Inteligente",
+  "Empática",
+  "Moderna",
+  "Humana",
+];
+
 // ── Hub: "Reúne toda tu salud en un solo lugar" (4 columnas) ───────────────
 const dataHub = [
   {
     key: "citas",
     title: "Citas y agenda",
     desc: "Tus controles, exámenes y consultas en una sola línea de tiempo.",
+    accent: "#0d47f7",
+    accentSoft: "#eaf2ff",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
         <rect x="3" y="4" width="18" height="18" rx="3" />
@@ -39,6 +55,8 @@ const dataHub = [
     key: "medicamentos",
     title: "Medicamentos",
     desc: "Registra tomas y mira tu adherencia diaria y de los últimos 30 días.",
+    accent: "#22c55e",
+    accentSoft: "#e7faef",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
         <rect x="3" y="8" width="13" height="8" rx="4" transform="rotate(-35 9.5 12)" />
@@ -50,6 +68,8 @@ const dataHub = [
     key: "documentos",
     title: "Documentos con OCR",
     desc: "Una foto y Klinip lee fecha, centro y datos clave de recetas y exámenes.",
+    accent: "#06b6d4",
+    accentSoft: "#e0f7fb",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -62,6 +82,8 @@ const dataHub = [
     key: "familia",
     title: "Familia",
     desc: "Comparte avances y contexto de salud del hogar en un espacio privado.",
+    accent: "#8b5cf6",
+    accentSoft: "#f1ecff",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
         <circle cx="8" cy="9" r="2.5" />
@@ -85,6 +107,8 @@ const featureStories = [
       "Alertas cuando un medicamento está por terminarse",
     ],
     mockup: "adherence",
+    accent: "#22c55e",
+    accentSoft: "#e7faef",
   },
   {
     key: "ocr",
@@ -98,6 +122,8 @@ const featureStories = [
     ],
     mockup: "ocr",
     reverse: true,
+    accent: "#06b6d4",
+    accentSoft: "#e0f7fb",
   },
   {
     key: "familia",
@@ -110,6 +136,8 @@ const featureStories = [
       "Contexto reciente del hogar en un vistazo",
     ],
     mockup: "family",
+    accent: "#8b5cf6",
+    accentSoft: "#f1ecff",
   },
 ];
 
@@ -162,24 +190,88 @@ const faqItems = [
 ];
 
 // ── Mockups del producto (imágenes hechas con la propia UI) ──────────────────
-function PhoneFrame({ children, tag }) {
+function PhoneNav({ active = "home" }) {
+  return (
+    <div className="kl-mk-nav">
+      <span className={`kl-mk-nav-i ${active === "home" ? "is-active" : ""}`} aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M4 10.5 12 4l8 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z" /></svg>
+      </span>
+      <span className="kl-mk-nav-i" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v4" /></svg>
+      </span>
+      <span className="kl-mk-nav-cta" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.2a2.4 2.4 0 0 1 2.4-2.4h1.1l.8-1.4a1.6 1.6 0 0 1 1.4-.8h4.6a1.6 1.6 0 0 1 1.4.8l.8 1.4h1.1A2.4 2.4 0 0 1 20 9.2v7.4a2.4 2.4 0 0 1-2.4 2.4H6.4A2.4 2.4 0 0 1 4 16.6z" /><circle cx="12" cy="13" r="3.2" /></svg>
+      </span>
+      <span className="kl-mk-nav-i" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="8" cy="9" r="2.5" /><circle cx="16" cy="9" r="2.5" /><path d="M3.5 19a4.5 4.5 0 0 1 9 0M11.5 19a4.5 4.5 0 0 1 9 0" /></svg>
+      </span>
+      <span className="kl-mk-nav-i" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="8" width="13" height="8" rx="4" transform="rotate(-35 9.5 12)" /></svg>
+      </span>
+    </div>
+  );
+}
+
+function PhoneFrame({ children, tag, nav = "home" }) {
   return (
     <div className="kl-phone">
       <div className="kl-phone-notch" />
       <div className="kl-phone-screen">
-        {tag ? <div className="kl-phone-tag">{tag}</div> : null}
-        {children}
+        <span className="kl-phone-blob kl-phone-blob-1" aria-hidden="true" />
+        <span className="kl-phone-blob kl-phone-blob-2" aria-hidden="true" />
+        <div className="kl-phone-content">
+          {tag ? <div className="kl-phone-tag">{tag}</div> : null}
+          {children}
+        </div>
+        <PhoneNav active={nav} />
       </div>
     </div>
   );
 }
 
+function HomeMockup() {
+  return (
+    <PhoneFrame>
+      <div className="kl-mk-home">
+        <div className="kl-mk-home-top">
+          <span className="kl-mk-avatar tone-blue">A</span>
+          <div className="kl-mk-greet-block">
+            <span className="kl-mk-greet">Hola, Ana</span>
+            <small>&iquest;C&oacute;mo te sientes hoy?</small>
+          </div>
+          <span className="kl-mk-bell" />
+        </div>
+
+        <div className="kl-mk-summary">
+          <span className="kl-mk-summary-kicker">Resumen de salud</span>
+          <div className="kl-mk-summary-row">
+            <span className="kl-mk-dot is-green" />
+            <strong>Todo en orden</strong>
+          </div>
+          <p>Tus &uacute;ltimos registros est&aacute;n en buen estado.</p>
+        </div>
+
+        <div className="kl-mk-section-label">Pr&oacute;ximas citas</div>
+        <div className="kl-mk-appt">
+          <span className="kl-mk-appt-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5.5 19a6.5 6.5 0 0 1 13 0" /></svg>
+          </span>
+          <div>
+            <strong>Cardiolog&iacute;a</strong>
+            <small>Dr. Juan P&eacute;rez &middot; 12 Jun &middot; 10:00 AM</small>
+          </div>
+        </div>
+      </div>
+    </PhoneFrame>
+  );
+}
+
 function AdherenceMockup() {
   return (
-    <PhoneFrame tag="Inicio">
+    <PhoneFrame>
       <div className="kl-mk-hero">
         <div className="kl-mk-hero-top">
-          <span className="kl-mk-greet">Hola, Diego</span>
+          <span className="kl-mk-greet">Adherencia</span>
           <span className="kl-mk-bell" />
         </div>
         <div className="kl-mk-ring-card">
@@ -187,7 +279,7 @@ function AdherenceMockup() {
             <span>92%</span>
           </div>
           <div className="kl-mk-ring-meta">
-            <strong>Adherencia 30 d&iacute;as</strong>
+            <strong>30 d&iacute;as</strong>
             <span className="kl-mk-today">Hoy 100% &middot; 2/2</span>
           </div>
         </div>
@@ -202,7 +294,7 @@ function AdherenceMockup() {
 
 function OcrMockup() {
   return (
-    <PhoneFrame tag="Documento">
+    <PhoneFrame nav="ocr">
       <div className="kl-mk-scan">
         <div className="kl-mk-scan-doc">
           <div className="kl-mk-scan-line" />
@@ -224,7 +316,7 @@ function OcrMockup() {
 
 function FamilyMockup() {
   return (
-    <PhoneFrame tag="Familia">
+    <PhoneFrame nav="family">
       <div className="kl-mk-feed">
         {[
           { who: "Mamá", txt: "Control de presión al día ✅", tone: "green" },
@@ -392,9 +484,12 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       {/* ── HERO full-bleed ─────────────────────────────────────────────── */}
       <section className="kl-hero">
         <div className="kl-hero-bg" aria-hidden="true">
-          <span className="kl-hero-orb kl-hero-orb-1" />
-          <span className="kl-hero-orb kl-hero-orb-2" />
-          <span className="kl-hero-grid" />
+          <span className="kl-dots kl-dots-hero" />
+          <span className="kl-blob kl-blob-a" />
+          <span className="kl-blob kl-blob-b" />
+          <svg className="kl-flower-mark" viewBox="0 0 100 100" aria-hidden="true">
+            <path d={BRAND_FLOWER_PATH} fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinejoin="round" />
+          </svg>
         </div>
         <div className="kl-hero-inner">
           <div className="kl-hero-copy">
@@ -403,12 +498,12 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               Asistente cl&iacute;nico con IA
             </div>
             <h1 className="kl-hero-title kl-reveal">
-              Una nueva relaci&oacute;n
-              <span> con tu salud</span>
+              Tu salud, organizada.
+              <span>Tu vida, m&aacute;s tranquila.</span>
             </h1>
             <p className="kl-hero-desc kl-reveal">
-              Klinip re&uacute;ne tus citas, medicamentos, documentos e historial en un solo lugar,
-              con una IA que te ayuda a no olvidar nada y a entender tu salud d&iacute;a a d&iacute;a.
+              Klinip centraliza tu informaci&oacute;n cl&iacute;nica en un solo lugar para que entiendas,
+              gestiones y compartas tu salud de forma simple, segura y humana.
             </p>
             <div className="kl-hero-actions kl-reveal">
               <Link className="kl-btn-hero" to="/register">
@@ -428,7 +523,8 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           </div>
 
           <div className="kl-hero-visual kl-reveal">
-            <AdherenceMockup />
+            <span className="kl-blob kl-blob-visual" aria-hidden="true" />
+            <HomeMockup />
             <div className="kl-hero-float kl-hero-float-1">
               <span className="kl-hero-float-dot is-green" />
               Dosis registrada
@@ -451,6 +547,18 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         </button>
       </section>
 
+      {/* ── Banda de personalidad de marca ──────────────────────────────── */}
+      <div className="kl-personality" aria-hidden="true">
+        <div className="kl-personality-track">
+          {[...brandPersonality, ...brandPersonality, ...brandPersonality].map((word, i) => (
+            <span className="kl-personality-chip" key={`${word}-${i}`}>
+              <svg viewBox="0 0 100 100"><path d={BRAND_FLOWER_PATH} fill="currentColor" /></svg>
+              {word}
+            </span>
+          ))}
+        </div>
+      </div>
+
       {/* ── HUB: toda tu salud en un lugar ──────────────────────────────── */}
       <section id="todo" className="kl-section kl-hub">
         <div className="kl-section-inner">
@@ -464,11 +572,16 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               <article
                 key={item.key}
                 className="kl-hub-card kl-reveal"
-                style={{ "--kl-delay": `${i * 90}ms` }}
+                style={{
+                  "--kl-delay": `${i * 90}ms`,
+                  "--kl-accent": item.accent,
+                  "--kl-accent-soft": item.accentSoft,
+                }}
               >
                 <div className="kl-hub-icon">{item.icon}</div>
                 <h3>{cleanUiText(item.title)}</h3>
                 <p>{cleanUiText(item.desc)}</p>
+                <span className="kl-hub-corner" aria-hidden="true" />
               </article>
             ))}
           </div>
@@ -523,10 +636,14 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       {featureStories.map((story) => {
         const Mockup = MOCKUPS[story.mockup];
         return (
-          <section key={story.key} className={`kl-section kl-story ${story.reverse ? "is-reverse" : ""}`}>
+          <section
+            key={story.key}
+            className={`kl-section kl-story ${story.reverse ? "is-reverse" : ""}`}
+            style={{ "--kl-accent": story.accent, "--kl-accent-soft": story.accentSoft }}
+          >
             <div className="kl-section-inner kl-story-inner">
               <div className="kl-story-copy kl-reveal">
-                <div className="kl-eyebrow">{cleanUiText(story.eyebrow)}</div>
+                <div className="kl-eyebrow is-accent">{cleanUiText(story.eyebrow)}</div>
                 <h2 className="kl-section-title">{cleanUiText(story.title)}</h2>
                 <p className="kl-section-sub">{cleanUiText(story.desc)}</p>
                 <ul className="kl-story-bullets">
@@ -541,7 +658,8 @@ export default function Landing({ theme = "light", onToggleTheme }) {
                 </ul>
               </div>
               <div className="kl-story-visual kl-reveal">
-                <div className="kl-story-glow" aria-hidden="true" />
+                <span className="kl-blob kl-blob-story" aria-hidden="true" />
+                <span className="kl-dots kl-dots-story" aria-hidden="true" />
                 {Mockup ? <Mockup /> : null}
               </div>
             </div>

@@ -1205,32 +1205,6 @@ export default function Medications() {
     }
   };
 
-  const handleArchiveFinished = async (med) => {
-    if (!canEditActiveProfile) {
-      alert("Este perfil está en modo solo lectura. No puedes modificar medicamentos.");
-      return;
-    }
-    if (!med?.id) return;
-    if (med.completed) return;
-    const confirmMsg =
-      "¿Marcar este tratamiento como finalizado? Quedará archivado en 'Finalizados'.";
-    if (!window.confirm(confirmMsg)) return;
-    try {
-      await saveMedication({ id: med.id, completed: true });
-      await load();
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
-    } catch (err) {
-      console.error(err);
-      alert(
-        "No se pudo archivar el medicamento: " +
-          (err?.response?.data?.detail || err?.message || "Error desconocido")
-      );
-    }
-  };
-
   const handleRenewMedication = async (med) => {
     if (!canEditActiveProfile) {
       alert("Este perfil está en modo solo lectura. No puedes crear medicamentos.");
@@ -2600,11 +2574,7 @@ export default function Medications() {
                 {(() => {
                   const finishReason = getMedicationFinishReason(detailTarget);
                   const finished = Boolean(finishReason);
-                  const label = finishReason === "manual"
-                    ? "Realizado"
-                    : finishReason === "expired"
-                    ? "Finalizado"
-                    : "Activo";
+                  const label = finished ? "Finalizado" : "Activo";
                   return (
                     <span className={`detail-chip detail-chip-status ${finished ? "realizada" : "pendiente"}`}>
                       {label}
@@ -2900,17 +2870,6 @@ export default function Medications() {
                   Editar
                 </button>
               ) : null}
-              {canEditActiveProfile && isMedicationFinished(detailTarget) && !detailTarget.completed ? (
-                <button
-                  className="secondary-btn"
-                  type="button"
-                  onClick={() => {
-                    handleArchiveFinished(detailTarget).finally(handleCloseDetail);
-                  }}
-                >
-                  Marcar como finalizado
-                </button>
-              ) : null}
               {canEditActiveProfile && isMedicationFinished(detailTarget) ? (
                 <button
                   className="primary-btn"
@@ -2966,13 +2925,6 @@ export default function Medications() {
                   </div>
                   {canEditActiveProfile ? (
                     <div className="med-finished-banner-actions">
-                      <button
-                        type="button"
-                        className="secondary-btn"
-                        onClick={() => handleArchiveFinished(med)}
-                      >
-                        Archivar
-                      </button>
                       <button
                         type="button"
                         className="primary-btn"
@@ -3133,11 +3085,7 @@ export default function Medications() {
                       : "0%";
                     const finishReason = getMedicationFinishReason(m);
                     const finished = Boolean(finishReason);
-                    const statusLabel = finishReason === "manual"
-                      ? "Realizado"
-                      : finishReason === "expired"
-                      ? "Finalizado"
-                      : "Activo";
+                    const statusLabel = finished ? "Finalizado" : "Activo";
                     return (
                       <tr
                         key={m.id}
@@ -3213,13 +3161,6 @@ export default function Medications() {
                                   label: "Editar",
                                   onClick: () => handleEdit(m),
                                 },
-                                finished && !m.completed
-                                  ? {
-                                      key: "archive",
-                                      label: "Marcar como finalizado",
-                                      onClick: () => handleArchiveFinished(m),
-                                    }
-                                  : null,
                                 finished
                                   ? {
                                       key: "renew",
@@ -3265,11 +3206,7 @@ export default function Medications() {
                   : "0%";
                 const finishReason = getMedicationFinishReason(m);
                 const finished = Boolean(finishReason);
-                const statusLabel = finishReason === "manual"
-                  ? "Realizado"
-                  : finishReason === "expired"
-                  ? "Finalizado"
-                  : "Activo";
+                const statusLabel = finished ? "Finalizado" : "Activo";
                 return (
                   <article
                     key={`mobile-${m.id}`}
@@ -3310,13 +3247,6 @@ export default function Medications() {
                                   label: "Editar",
                                   onClick: () => handleEdit(m),
                                 },
-                                finished && !m.completed
-                                  ? {
-                                      key: "archive",
-                                      label: "Marcar como finalizado",
-                                      onClick: () => handleArchiveFinished(m),
-                                    }
-                                  : null,
                                 finished
                                   ? {
                                       key: "renew",
