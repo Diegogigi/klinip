@@ -240,65 +240,10 @@ export default function MiSalud() {
           <h1 className="clp-page-intro-title">Mi Salud</h1>
           <p className="clp-page-intro-subtitle">
             {hasData
-              ? `${appointments.length} citas · ${activeMeds.length} medicamentos · ${documents.length} documentos`
+              ? "Tu agenda, tratamientos y documentos en un solo lugar"
               : "Todavía no tienes información guardada"}
           </p>
         </div>
-      </section>
-      <section className="clp-stat-grid" aria-label="Resumen rápido">
-        <article className="clp-stat-card tone-blue">
-          <span className="clp-stat-icon"><IcoCal /></span>
-          <div className="clp-stat-copy">
-            <span className="clp-stat-label">Agenda</span>
-            <strong>{appointments.length}</strong>
-            <span className="clp-stat-meta">
-              {nextAppt ? `Próxima ${relativeDay(parseDate(nextAppt.date_time)).toLowerCase()}` : "Sin cita agendada"}
-            </span>
-          </div>
-        </article>
-        <article className="clp-stat-card tone-amber">
-          <span className="clp-stat-icon"><IcoPill /></span>
-          <div className="clp-stat-copy">
-            <span className="clp-stat-label">Tratamientos</span>
-            <strong>{activeMeds.length}</strong>
-            <span className="clp-stat-meta">
-              {activeMeds.length === 1 ? "medicamento activo" : "medicamentos activos"}
-            </span>
-          </div>
-        </article>
-        <article className="clp-stat-card tone-violet">
-          <span className="clp-stat-icon"><IcoDoc /></span>
-          <div className="clp-stat-copy">
-            <span className="clp-stat-label">Documentos</span>
-            <strong>{documents.length}</strong>
-            <span className="clp-stat-meta">
-              {documents.length === 1 ? "documento por revisar" : "documentos por revisar"}
-            </span>
-          </div>
-        </article>
-      </section>
-      <section className="clp-summary-strip" aria-label="Resumen rápido">
-        <article className="clp-summary-item">
-          <span className="clp-summary-icon"><IcoCal /></span>
-          <div>
-            <strong>{nextAppt ? 1 : 0}</strong>
-            <span>{nextAppt ? relativeDay(parseDate(nextAppt.date_time)) : "Sin cita"}</span>
-          </div>
-        </article>
-        <article className="clp-summary-item">
-          <span className="clp-summary-icon"><IcoPill /></span>
-          <div>
-            <strong>{activeMeds.length}</strong>
-            <span>medicamentos activos</span>
-          </div>
-        </article>
-        <article className="clp-summary-item">
-          <span className="clp-summary-icon"><IcoDoc /></span>
-          <div>
-            <strong>{documents.length}</strong>
-            <span>{documents.length === 1 ? "documento pendiente" : "documentos pendientes"}</span>
-          </div>
-        </article>
       </section>
 
       {/* ═══ STATUS STRIP ═══ */}
@@ -317,7 +262,10 @@ export default function MiSalud() {
             <h2 className="clp-card-title" id="clp-appt-h">Tu próxima cita</h2>
             <p className="clp-card-sub">Lo siguiente en tu agenda médica</p>
           </div>
-          <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+          <div className="clp-card-head-meta">
+            <span className="clp-card-metric">{appointments.length} {appointments.length === 1 ? "cita" : "citas"}</span>
+            <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+          </div>
         </div>
         {nextAppt ? (
           <div className="clp-appt-body">
@@ -355,7 +303,10 @@ export default function MiSalud() {
             <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
             <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, dejala pendiente.</p>
           </div>
-          <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          <div className="clp-card-head-meta">
+            <span className="clp-card-metric">{activeMeds.length} {activeMeds.length === 1 ? "activo" : "activos"}</span>
+            <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          </div>
         </div>
         {activeMeds.length > 0 ? (
           <div className="clp-med-list" role="list">
@@ -409,7 +360,10 @@ export default function MiSalud() {
             <h2 className="clp-card-title" id="clp-doc-h">Tus documentos</h2>
             <p className="clp-card-sub">Recetas, exámenes y archivos médicos</p>
           </div>
-          <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          <div className="clp-card-head-meta">
+            <span className="clp-card-metric">{documents.length} {documents.length === 1 ? "archivo" : "archivos"}</span>
+            <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+          </div>
         </div>
         {documents.length > 0 ? (
           <div className="clp-doc-list" role="list">

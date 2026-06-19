@@ -49668,6 +49668,14 @@ body.theme-dark .health-hub-quick-card.tone-green {
   gap: 0.7rem;
 }
 
+.clp-card-head-meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
 .clp-card-icon {
   flex-shrink: 0;
   width: 36px;
@@ -49727,6 +49735,22 @@ body.theme-dark .health-hub-quick-card.tone-green {
 }
 
 .clp-card-link:hover { text-decoration: underline; }
+
+.clp-card-metric {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.7rem;
+  padding: 0.22rem 0.58rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: rgba(248, 250, 252, 0.84);
+  color: #64748b;
+  font-size: 0.69rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
 
 /* ── Appointment body ── */
 .clp-appt-body {
@@ -50243,6 +50267,12 @@ body.theme-dark .clp-more-link {
   color: #60a5fa;
 }
 
+body.theme-dark .clp-card-metric {
+  border-color: rgba(71, 85, 105, 0.6);
+  background: rgba(15, 23, 42, 0.8);
+  color: #94a3b8;
+}
+
 body.theme-dark .clp-appt-tag {
   background: rgba(37, 99, 235, 0.15);
   color: #60a5fa;
@@ -50395,6 +50425,13 @@ body.theme-dark .clp-loading-pulse {
     font-size: 0.88rem;
   }
 
+  .clp-card-head-meta {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+    padding-left: 2.95rem;
+  }
+
   .clp-appt-title {
     font-size: 1rem;
   }
@@ -50447,6 +50484,12 @@ body.theme-dark .clp-loading-pulse {
 
   .clp-card-sub {
     font-size: 0.7rem;
+  }
+
+  .clp-card-metric {
+    min-height: 1.55rem;
+    padding: 0.18rem 0.48rem;
+    font-size: 0.65rem;
   }
 }
 /* Historial por episodios clínicos */
