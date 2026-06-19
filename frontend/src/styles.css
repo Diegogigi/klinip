@@ -59457,3 +59457,50 @@ body.theme-dark .bio-unified-chart-legend-item small {
     display: none;
   }
 }
+
+/* ── Botón central OCR de la navbar móvil ──────────────────────────────────
+   Definido a nivel base (sin media query) porque este botón solo se renderiza
+   en la navbar móvil. Así el círculo azul Klinip se aplica en TODOS los
+   breakpoints (incluido móvil en horizontal con pointer: coarse). */
+.sidebar-link.sidebar-link-mobile.is-mobile-ocr {
+  align-self: center !important;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.sidebar-icon-ocr {
+  width: 3.4rem !important;
+  height: 3.4rem !important;
+  min-width: 3.4rem !important;
+  min-height: 3.4rem !important;
+  margin-top: -1.05rem !important;
+  border-radius: 50% !important;
+  aspect-ratio: 1 / 1 !important;
+  color: #ffffff !important;
+  background: linear-gradient(160deg, #1678f2 0%, #0d47f7 100%) !important;
+  box-shadow:
+    0 0 0 4px rgba(255, 255, 255, 0.95),
+    0 8px 18px rgba(13, 71, 247, 0.42) !important;
+  transition: transform 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.sidebar-icon-ocr svg {
+  width: 1.72rem !important;
+  height: 1.72rem !important;
+}
+
+.sidebar-link.sidebar-link-mobile.is-mobile-ocr:active .sidebar-icon.sidebar-icon-ocr {
+  transform: scale(0.93);
+  background: linear-gradient(160deg, #0d47f7 0%, #0a37c4 100%) !important;
+}
+
+.sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-label.sidebar-label-mobile {
+  display: none !important;
+}
+
+body.theme-dark .sidebar-link.sidebar-link-mobile.is-mobile-ocr .sidebar-icon.sidebar-icon-ocr {
+  box-shadow:
+    0 0 0 4px rgba(15, 23, 42, 0.92),
+    0 10px 22px rgba(13, 71, 247, 0.5) !important;
+}
