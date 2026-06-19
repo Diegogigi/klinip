@@ -990,7 +990,6 @@ export default function Dashboard({
   const adherenceMedicationItems = ensureArray(adherenceSummary?.medication_items);
   const adherencePatternSummary = adherenceSummary?.pattern_summary || {};
   const activeHealthAlerts = healthRadarItems.filter((item) => item.status === "active");
-  const overallStatus = getOverallHealthStatus(activeHealthAlerts, adherence, activeMedications);
   const pendingDocuments = documentItems.filter(isDocumentReviewPending).length;
   const latestBiometricMetric = getBiometricLatestMetric(biometricMetrics);
   const latestBiometricReading = latestBiometricMetric?.latest_reading || null;
@@ -1005,6 +1004,18 @@ export default function Dashboard({
   const adherencePercentValue = activeMedications.length ? clampPercent(adherence) : 0;
   const adherencePercentLabel = activeMedications.length ? `${adherencePercentValue}%` : "--";
   const adherenceRingProgress = activeMedications.length ? adherencePercentValue : 0;
+  const hasPendingAdherenceRefresh = Boolean(adherenceSummary?.pending_refresh);
+  const hasReliableCurrentAdherence =
+    (hasSummaryAdherence && !hasPendingAdherenceRefresh) || adherenceTotals.expected > 0;
+  const hasCurrentLowAdherence =
+    activeMedications.length > 0 && (lowAdherenceItems.length > 0 || adherencePercentValue < 80);
+  const shouldHideStaleLowAdherenceAlert =
+    activeMedications.length === 0 || (hasReliableCurrentAdherence && !hasCurrentLowAdherence);
+  const visibleHealthAlerts = activeHealthAlerts.filter((item) => {
+    const alertType = String(item?.alert_type || "").toLowerCase();
+    return !(alertType === "low_adherence" && shouldHideStaleLowAdherenceAlert);
+  });
+  const overallStatus = getOverallHealthStatus(visibleHealthAlerts, adherence, activeMedications);
   const weakestMedication =
     lowAdherenceItems[0] ||
     [...adherenceMedicationItems].sort(
@@ -1181,10 +1192,10 @@ export default function Dashboard({
     {
       key: "family",
       icon: "family",
-      tone: activeHealthAlerts.length ? "warn" : linkedProfiles > 0 ? "warn" : "ok",
+      tone: visibleHealthAlerts.length ? "warn" : linkedProfiles > 0 ? "warn" : "ok",
       label: "Familia",
-      value: activeHealthAlerts.length
-        ? `${activeHealthAlerts.length} por atender`
+      value: visibleHealthAlerts.length
+        ? `${visibleHealthAlerts.length} por atender`
         : linkedProfiles > 0
         ? `${linkedProfiles} familiar${linkedProfiles > 1 ? "es" : ""}`
         : "sin alertas",
@@ -1322,8 +1333,8 @@ export default function Dashboard({
     [navigate]
   );
 
-  const topHighAlert = activeHealthAlerts.find((item) => item.severity === "high") || null;
-  const topAlert = topHighAlert || activeHealthAlerts[0] || null;
+  const topHighAlert = visibleHealthAlerts.find((item) => item.severity === "high") || null;
+  const topAlert = topHighAlert || visibleHealthAlerts[0] || null;
   const topLowAdherenceItem = lowAdherenceItems[0] || null;
   const biometricsSummaryText = latestBiometricReading
     ? cleanUiText(
@@ -1609,10 +1620,10 @@ export default function Dashboard({
       text: "Hay medicamentos sin horario definido. Completa su recordatorio para no olvidarlos.",
     });
   }
-  if (activeHealthAlerts.length) {
+  if (visibleHealthAlerts.length) {
     suggestionItems.unshift({
       id: "suggestion-radar",
-      text: `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""} detectada${activeHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
+      text: `${visibleHealthAlerts.length} alerta${visibleHealthAlerts.length > 1 ? "s" : ""} detectada${visibleHealthAlerts.length > 1 ? "s" : ""} por el radar de salud. Revísalas con Klinip IA.`,
     });
   }
 
@@ -2399,13 +2410,13 @@ export default function Dashboard({
             activeMedications,
             adherence,
             nextAppointment,
-            activeHealthAlerts,
+            activeHealthAlerts: visibleHealthAlerts,
             lowAdherenceItems,
             pendingDocuments,
           })
         : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [greetStarted, activeMedications.length, adherence, nextAppointment?.id, activeHealthAlerts.length, lowAdherenceItems.length, pendingDocuments]
+    [greetStarted, activeMedications.length, adherence, nextAppointment?.id, visibleHealthAlerts.length, lowAdherenceItems.length, pendingDocuments]
   );
   const titleTyper = useTypewriter(greetText, { speed: 55, startDelay: 300 });
   const subtitleTyper = useTypewriter(greetPhase >= 1 ? "Este es tu resumen de salud para hoy." : "", { speed: 32 });
@@ -2751,18 +2762,18 @@ export default function Dashboard({
                   <span>Cumplimiento general</span>
                   <strong>{activeMedications.length ? `${adherence}%` : "Sin datos"}</strong>
                 </div>
-                <div className={`home-radar-summary-chip tone-${activeHealthAlerts.length ? "alert" : "ok"}`}>
+                <div className={`home-radar-summary-chip tone-${visibleHealthAlerts.length ? "alert" : "ok"}`}>
                   <span>Por atender</span>
                   <strong>
-                    {activeHealthAlerts.length
-                      ? `${activeHealthAlerts.length} alerta${activeHealthAlerts.length > 1 ? "s" : ""}`
+                    {visibleHealthAlerts.length
+                      ? `${visibleHealthAlerts.length} alerta${visibleHealthAlerts.length > 1 ? "s" : ""}`
                       : "Todo bien"}
                   </strong>
                 </div>
               </div>
               <div className="home-radar-alert-list">
-                {activeHealthAlerts.length ? (
-                  activeHealthAlerts.map((item) => (
+                {visibleHealthAlerts.length ? (
+                  visibleHealthAlerts.map((item) => (
                     <React.Fragment key={item.id}>
                       <button
                         type="button"
