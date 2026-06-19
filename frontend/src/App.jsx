@@ -2073,6 +2073,8 @@ export default function App() {
     isPublicMarketingRoute || isLegalRoute || isSharedVoiceRoute || isPublicAuthRoute;
   const isAiRoute = location.pathname === "/ai";
   const hideAppChrome = isAiRoute;
+  // En la IA mantenemos la experiencia inmersiva, pero en móvil mostramos la navbar.
+  const showAiNavbar = isAiRoute && isMobileShell;
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;
@@ -2456,7 +2458,7 @@ export default function App() {
         </div>
       )}
       <div className="layout">
-        {!hideAppChrome ? (
+        {!hideAppChrome || showAiNavbar ? (
           <Sidebar
             user={user}
             notifications={notifications}
@@ -2470,7 +2472,7 @@ export default function App() {
         ) : null}
         <div className={`main-area ${isPublicStandaloneRoute ? "main-area-public" : ""} ${
           hideAppChrome ? "main-area-ai-immersive" : ""
-        }`}>
+        } ${showAiNavbar ? "main-area-ai-immersive-nav" : ""}`}>
           {!hideAppChrome ? (
             <Topbar
               user={user}
