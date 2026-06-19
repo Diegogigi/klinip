@@ -1,0 +1,1082 @@
+.landing-modern {
+  --lm-bg: linear-gradient(180deg, #f4f0e8 0%, #fbfaf7 16%, #ffffff 40%, #f8f5ef 100%);
+  --lm-surface: rgba(255, 255, 255, 0.88);
+  --lm-surface-strong: #ffffff;
+  --lm-surface-soft: #f5efe5;
+  --lm-border: rgba(27, 39, 59, 0.1);
+  --lm-border-strong: rgba(27, 39, 59, 0.16);
+  --lm-text: #162033;
+  --lm-text-soft: #556074;
+  --lm-text-muted: #6f7787;
+  --lm-primary: #1858f2;
+  --lm-primary-deep: #0e3fb8;
+  --lm-accent: #b78d52;
+  --lm-green: #2e8b57;
+  --lm-shadow: 0 24px 70px rgba(19, 31, 53, 0.08);
+  --lm-shadow-soft: 0 18px 40px rgba(19, 31, 53, 0.06);
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font-family: var(--font-brand), "Nunito", system-ui, sans-serif;
+}
+
+body.theme-dark .landing-modern {
+  --lm-bg: linear-gradient(180deg, #0f1522 0%, #11192b 18%, #151e31 45%, #101621 100%);
+  --lm-surface: rgba(21, 31, 49, 0.82);
+  --lm-surface-strong: rgba(19, 28, 44, 0.96);
+  --lm-surface-soft: rgba(27, 39, 59, 0.92);
+  --lm-border: rgba(143, 169, 214, 0.18);
+  --lm-border-strong: rgba(143, 169, 214, 0.28);
+  --lm-text: #eef4ff;
+  --lm-text-soft: #c6d0e5;
+  --lm-text-muted: #98a7c4;
+  --lm-primary: #74a2ff;
+  --lm-primary-deep: #9bbcff;
+  --lm-accent: #f1c588;
+  --lm-green: #67cc98;
+  --lm-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+  --lm-shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
+}
+
+.landing-modern-shell {
+  width: min(1180px, calc(100% - 2.4rem));
+  margin: 0 auto;
+}
+
+.landing-modern-shell-narrow {
+  width: min(860px, calc(100% - 2.4rem));
+}
+
+.landing-modern-nav {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--lm-bg) 50%, transparent);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.landing-modern-nav-inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.4rem;
+  min-height: 5rem;
+}
+
+.landing-modern-logo,
+.landing-modern-logo:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
+.landing-modern-logo-name {
+  color: var(--lm-text);
+}
+
+.landing-modern-links {
+  display: flex;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.landing-modern-link {
+  border: 0;
+  background: transparent;
+  color: var(--lm-text-soft);
+  font: inherit;
+  font-weight: 700;
+  padding: 0.7rem 0.95rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.landing-modern-link:hover,
+.landing-modern-link.is-active {
+  color: var(--lm-text);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+body.theme-dark .landing-modern-link:hover,
+body.theme-dark .landing-modern-link.is-active {
+  background: rgba(116, 162, 255, 0.14);
+}
+
+.landing-modern-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.7rem;
+}
+
+.landing-modern-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-modern-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.9rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  font-weight: 800;
+  font-size: 0.95rem;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.landing-modern-btn:hover {
+  transform: translateY(-1px);
+}
+
+.landing-modern-btn.is-large {
+  min-height: 3.2rem;
+  padding-inline: 1.45rem;
+}
+
+.landing-modern-btn.is-primary {
+  background: linear-gradient(135deg, var(--lm-primary) 0%, var(--lm-primary-deep) 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 28px rgba(24, 88, 242, 0.22);
+}
+
+.landing-modern-btn.is-ghost {
+  color: var(--lm-text);
+  background: rgba(255, 255, 255, 0.5);
+  border-color: var(--lm-border);
+}
+
+.landing-modern-btn.is-secondary {
+  color: var(--lm-text);
+  background: var(--lm-surface);
+  border-color: var(--lm-border-strong);
+}
+
+.landing-modern-btn.is-dark-ghost {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+body.theme-dark .landing-modern-btn.is-ghost,
+body.theme-dark .landing-modern-btn.is-secondary {
+  background: rgba(21, 31, 49, 0.88);
+  color: var(--lm-text);
+}
+
+.landing-modern-hero {
+  position: relative;
+  padding: 4.2rem 0 3rem;
+}
+
+.landing-modern-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.02fr) minmax(420px, 0.98fr);
+  gap: 2.4rem;
+  align-items: center;
+}
+
+.landing-modern-copy {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.landing-modern-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.42rem 0.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  color: var(--lm-primary-deep);
+  font-size: 0.8rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+body.theme-dark .landing-modern-kicker {
+  background: rgba(116, 162, 255, 0.14);
+  border-color: rgba(116, 162, 255, 0.2);
+  color: #cfe0ff;
+}
+
+.landing-modern-kicker.is-on-dark {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #d8e4ff;
+}
+
+.landing-modern-copy h1 {
+  margin: 0;
+  font-size: clamp(2.6rem, 5vw, 4.9rem);
+  line-height: 0.96;
+  letter-spacing: -0.04em;
+  color: var(--lm-text);
+  max-width: 11ch;
+}
+
+.landing-modern-copy h1 span {
+  display: block;
+  color: color-mix(in srgb, var(--lm-text) 72%, var(--lm-primary) 28%);
+}
+
+.landing-modern-lead {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 1.07rem;
+  line-height: 1.72;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding-top: 0.2rem;
+}
+
+.landing-modern-highlights {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.35rem;
+}
+
+.landing-modern-highlight {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-highlight-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--lm-accent) 0%, #e9c188 100%);
+  box-shadow: 0 0 0 5px rgba(183, 141, 82, 0.14);
+  flex: 0 0 auto;
+}
+
+.landing-modern-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  padding-top: 0.7rem;
+}
+
+.landing-modern-stat {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
+  border-radius: 1.2rem;
+  background: var(--lm-surface);
+  border: 1px solid var(--lm-border);
+  box-shadow: var(--lm-shadow-soft);
+}
+
+.landing-modern-stat strong {
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--lm-text);
+}
+
+.landing-modern-stat span {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--lm-text-muted);
+}
+
+.landing-modern-hero-media {
+  position: relative;
+  min-height: 680px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-modern-photo-frame {
+  position: relative;
+  width: min(100%, 560px);
+  border-radius: 2rem;
+  overflow: hidden;
+  background: var(--lm-surface-soft);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--lm-shadow);
+}
+
+.landing-modern-photo-frame::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 38%;
+  background: linear-gradient(180deg, rgba(14, 22, 36, 0) 0%, rgba(14, 22, 36, 0.28) 100%);
+  pointer-events: none;
+}
+
+.landing-modern-photo {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  object-position: center;
+}
+
+.landing-modern-floating-card {
+  position: absolute;
+  display: grid;
+  gap: 0.35rem;
+  max-width: 250px;
+  padding: 1rem 1.05rem;
+  border-radius: 1.15rem;
+  background: color-mix(in srgb, var(--lm-surface-strong) 86%, transparent);
+  border: 1px solid var(--lm-border);
+  box-shadow: var(--lm-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.landing-modern-floating-card.is-top {
+  top: 8%;
+  right: -2%;
+}
+
+.landing-modern-floating-card.is-bottom {
+  bottom: 8%;
+  left: -3%;
+}
+
+.landing-modern-floating-label {
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--lm-primary);
+}
+
+.landing-modern-floating-card strong {
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.landing-modern-floating-card p {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-section {
+  padding: 2.8rem 0;
+}
+
+.landing-modern-section-muted {
+  background: linear-gradient(180deg, rgba(245, 239, 229, 0.5) 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+body.theme-dark .landing-modern-section-muted {
+  background: linear-gradient(180deg, rgba(31, 44, 69, 0.32) 0%, rgba(16, 22, 33, 0) 100%);
+}
+
+.landing-modern-section-pricing,
+.landing-modern-section-faq {
+  padding-top: 3rem;
+}
+
+.landing-modern-section-head {
+  display: grid;
+  gap: 0.9rem;
+  max-width: 760px;
+  margin-bottom: 1.8rem;
+}
+
+.landing-modern-section-head h2 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 3.2rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.landing-modern-section-head p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.72;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-pillars,
+.landing-modern-operations,
+.landing-modern-privacy-grid,
+.landing-modern-pricing-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.landing-modern-pillars {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-modern-pillar,
+.landing-modern-operation-card,
+.landing-modern-privacy-card,
+.landing-modern-price-card,
+.landing-modern-faq-item {
+  border-radius: 1.6rem;
+  background: var(--lm-surface);
+  border: 1px solid var(--lm-border);
+  box-shadow: var(--lm-shadow-soft);
+}
+
+.landing-modern-pillar {
+  padding: 1.4rem;
+}
+
+.landing-modern-pillar.is-blue {
+  background: linear-gradient(180deg, rgba(233, 242, 255, 0.92) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.landing-modern-pillar.is-sand {
+  background: linear-gradient(180deg, rgba(249, 241, 229, 0.92) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.landing-modern-pillar.is-green {
+  background: linear-gradient(180deg, rgba(235, 248, 240, 0.92) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+body.theme-dark .landing-modern-pillar.is-blue,
+body.theme-dark .landing-modern-pillar.is-sand,
+body.theme-dark .landing-modern-pillar.is-green {
+  background: rgba(21, 31, 49, 0.88);
+}
+
+.landing-modern-pillar h3,
+.landing-modern-operation-card h3,
+.landing-modern-privacy-card h3,
+.landing-modern-story-copy h3,
+.landing-modern-price-plan {
+  margin: 0;
+  color: var(--lm-text);
+}
+
+.landing-modern-pillar h3,
+.landing-modern-operation-card h3,
+.landing-modern-privacy-card h3 {
+  font-size: 1.2rem;
+  margin-bottom: 0.55rem;
+}
+
+.landing-modern-pillar p,
+.landing-modern-operation-card p,
+.landing-modern-privacy-card p {
+  margin: 0;
+  color: var(--lm-text-soft);
+  line-height: 1.68;
+}
+
+.landing-modern-operations {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.landing-modern-operation-card {
+  padding: 1.35rem;
+}
+
+.landing-modern-operation-eyebrow {
+  display: inline-block;
+  margin-bottom: 0.7rem;
+  color: var(--lm-accent);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.landing-modern-story-list {
+  display: grid;
+  gap: 1.2rem;
+}
+
+.landing-modern-story {
+  display: grid;
+  grid-template-columns: minmax(0, 0.96fr) minmax(0, 1.04fr);
+  gap: 1.2rem;
+  align-items: stretch;
+}
+
+.landing-modern-story.is-reverse {
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+}
+
+.landing-modern-story.is-reverse .landing-modern-story-image-wrap {
+  order: 2;
+}
+
+.landing-modern-story.is-reverse .landing-modern-story-copy {
+  order: 1;
+}
+
+.landing-modern-story-image-wrap,
+.landing-modern-story-copy {
+  min-width: 0;
+}
+
+.landing-modern-story-image-wrap {
+  border-radius: 1.8rem;
+  overflow: hidden;
+  background: var(--lm-surface-soft);
+  border: 1px solid var(--lm-border);
+  box-shadow: var(--lm-shadow-soft);
+}
+
+.landing-modern-story-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  object-fit: cover;
+}
+
+.landing-modern-story-copy {
+  display: grid;
+  gap: 0.95rem;
+  align-content: center;
+  padding: 1.4rem 1.55rem;
+  border-radius: 1.8rem;
+  background: var(--lm-surface);
+  border: 1px solid var(--lm-border);
+  box-shadow: var(--lm-shadow-soft);
+}
+
+.landing-modern-story-copy p {
+  margin: 0;
+  line-height: 1.72;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-story-copy ul,
+.landing-modern-price-features {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landing-modern-story-copy ul {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.landing-modern-story-copy li,
+.landing-modern-price-features li {
+  position: relative;
+  padding-left: 1.15rem;
+  line-height: 1.55;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-story-copy li::before,
+.landing-modern-price-features li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.62rem;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--lm-primary);
+}
+
+.landing-modern-privacy-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-modern-privacy-card {
+  padding: 1.4rem;
+}
+
+.landing-modern-billing-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+  color: var(--lm-text-muted);
+  font-weight: 800;
+}
+
+.landing-modern-billing-toggle .is-active {
+  color: var(--lm-text);
+}
+
+.landing-modern-billing-switch {
+  width: 3.45rem;
+  height: 2rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(24, 88, 242, 0.2);
+  cursor: pointer;
+  position: relative;
+}
+
+.landing-modern-billing-switch.is-yearly {
+  background: rgba(24, 88, 242, 0.38);
+}
+
+.landing-modern-billing-thumb {
+  display: block;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(16, 22, 33, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.landing-modern-billing-switch.is-yearly .landing-modern-billing-thumb {
+  transform: translateX(1.42rem);
+}
+
+.landing-modern-billing-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(46, 139, 87, 0.12);
+  color: var(--lm-green);
+  font-size: 0.82rem;
+}
+
+.landing-modern-pricing-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-modern-price-card {
+  position: relative;
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+  padding: 1.45rem;
+}
+
+.landing-modern-price-card.is-featured {
+  border-color: rgba(24, 88, 242, 0.28);
+  box-shadow: 0 20px 46px rgba(24, 88, 242, 0.12);
+}
+
+body.theme-dark .landing-modern-price-card.is-featured {
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.26);
+}
+
+.landing-modern-price-rec {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(24, 88, 242, 0.12);
+  color: var(--lm-primary);
+  font-size: 0.74rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.landing-modern-price-amount {
+  font-size: 2.55rem;
+  line-height: 1;
+  font-weight: 900;
+  color: var(--lm-text);
+}
+
+.landing-modern-price-amount.is-free {
+  color: var(--lm-green);
+}
+
+.landing-modern-price-period,
+.landing-modern-price-note {
+  margin: 0;
+  color: var(--lm-text-muted);
+  line-height: 1.6;
+}
+
+.landing-modern-price-features {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.25rem 0 0.35rem;
+}
+
+.landing-modern-faq {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.landing-modern-faq-item {
+  overflow: hidden;
+}
+
+.landing-modern-faq-question {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 0;
+  background: transparent;
+  padding: 1.2rem 1.25rem;
+  font: inherit;
+  font-weight: 800;
+  color: var(--lm-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.landing-modern-faq-icon {
+  position: relative;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+.landing-modern-faq-icon::before,
+.landing-modern-faq-icon::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1rem;
+  height: 2px;
+  background: currentColor;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.landing-modern-faq-icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.landing-modern-faq-item.is-open .landing-modern-faq-icon::after {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+
+.landing-modern-faq-answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.22s ease;
+}
+
+.landing-modern-faq-item.is-open .landing-modern-faq-answer {
+  grid-template-rows: 1fr;
+}
+
+.landing-modern-faq-answer p {
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0 1.25rem 1.2rem;
+  color: var(--lm-text-soft);
+  line-height: 1.7;
+}
+
+.landing-modern-cta {
+  padding: 3rem 0 2rem;
+}
+
+.landing-modern-cta-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1.4rem;
+  align-items: center;
+  padding: 1.8rem;
+  border-radius: 2rem;
+  background: linear-gradient(135deg, #102349 0%, #1858f2 50%, #0f57c4 100%);
+  color: #ffffff;
+  box-shadow: 0 24px 60px rgba(16, 35, 73, 0.26);
+}
+
+.landing-modern-cta-inner h2 {
+  margin: 0 0 0.8rem;
+  font-size: clamp(2rem, 3vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+}
+
+.landing-modern-cta-inner p {
+  margin: 0;
+  max-width: 58ch;
+  color: rgba(255, 255, 255, 0.84);
+  line-height: 1.72;
+}
+
+.landing-modern-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.8rem;
+}
+
+.landing-modern-footer {
+  padding: 1.4rem 0 3rem;
+}
+
+.landing-modern-footer-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--lm-border);
+  padding-top: 1.2rem;
+}
+
+.landing-modern-footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  color: var(--lm-text-soft);
+}
+
+.landing-modern-footer-copy {
+  color: var(--lm-text-muted);
+  font-size: 0.88rem;
+}
+
+@media (max-width: 1180px) {
+  .landing-modern-hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-modern-hero-media {
+    min-height: 0;
+    padding-top: 0.6rem;
+  }
+
+  .landing-modern-floating-card.is-top {
+    right: 2%;
+  }
+
+  .landing-modern-floating-card.is-bottom {
+    left: 2%;
+  }
+
+  .landing-modern-pillars,
+  .landing-modern-operations,
+  .landing-modern-privacy-grid,
+  .landing-modern-pricing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .landing-modern-nav-inner {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+    gap: 0.9rem;
+    padding: 0.8rem 0;
+  }
+
+  .landing-modern-links {
+    justify-content: flex-start;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 0.15rem;
+  }
+
+  .landing-modern-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .landing-modern-stats,
+  .landing-modern-pillars,
+  .landing-modern-operations,
+  .landing-modern-privacy-grid,
+  .landing-modern-pricing-grid,
+  .landing-modern-story,
+  .landing-modern-story.is-reverse,
+  .landing-modern-cta-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-modern-story.is-reverse .landing-modern-story-image-wrap,
+  .landing-modern-story.is-reverse .landing-modern-story-copy {
+    order: initial;
+  }
+
+  .landing-modern-cta-actions {
+    justify-content: flex-start;
+  }
+
+  .landing-modern-footer-inner,
+  .landing-modern-footer-brand {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-modern-shell,
+  .landing-modern-shell-narrow {
+    width: min(100% - 1.25rem, 100%);
+  }
+
+  .landing-modern-hero {
+    padding: 2rem 0 1.4rem;
+  }
+
+  .landing-modern-copy {
+    gap: 1rem;
+  }
+
+  .landing-modern-copy h1 {
+    max-width: none;
+    font-size: clamp(2.15rem, 10vw, 3rem);
+    line-height: 0.98;
+  }
+
+  .landing-modern-lead,
+  .landing-modern-section-head p,
+  .landing-modern-story-copy p,
+  .landing-modern-faq-answer p,
+  .landing-modern-cta-inner p {
+    font-size: 0.95rem;
+    line-height: 1.62;
+  }
+
+  .landing-modern-cta-row,
+  .landing-modern-actions,
+  .landing-modern-cta-actions {
+    gap: 0.65rem;
+  }
+
+  .landing-modern-btn,
+  .landing-modern-btn.is-large {
+    width: 100%;
+    min-height: 2.9rem;
+    padding: 0.8rem 1rem;
+  }
+
+  .landing-modern-highlights {
+    gap: 0.6rem;
+  }
+
+  .landing-modern-highlight {
+    gap: 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  .landing-modern-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.7rem;
+    padding-top: 0.3rem;
+  }
+
+  .landing-modern-stat {
+    padding: 0.9rem;
+    border-radius: 1rem;
+  }
+
+  .landing-modern-stat strong {
+    font-size: 1.1rem;
+  }
+
+  .landing-modern-hero-media {
+    padding-top: 0.2rem;
+  }
+
+  .landing-modern-photo-frame {
+    border-radius: 1.35rem;
+  }
+
+  .landing-modern-photo {
+    aspect-ratio: 4 / 4.6;
+  }
+
+  .landing-modern-floating-card {
+    position: static;
+    max-width: none;
+    margin-top: 0.7rem;
+    padding: 0.85rem 0.9rem;
+    border-radius: 1rem;
+  }
+
+  .landing-modern-section,
+  .landing-modern-section-pricing,
+  .landing-modern-section-faq,
+  .landing-modern-cta {
+    padding: 2rem 0 1.35rem;
+  }
+
+  .landing-modern-section-head {
+    gap: 0.75rem;
+    margin-bottom: 1.1rem;
+  }
+
+  .landing-modern-section-head h2,
+  .landing-modern-cta-inner h2 {
+    font-size: clamp(1.75rem, 8vw, 2.35rem);
+    line-height: 1.05;
+  }
+
+  .landing-modern-pillar,
+  .landing-modern-operation-card,
+  .landing-modern-privacy-card,
+  .landing-modern-price-card,
+  .landing-modern-story-copy {
+    padding: 1rem;
+    border-radius: 1.15rem;
+  }
+
+  .landing-modern-story-list {
+    gap: 0.9rem;
+  }
+
+  .landing-modern-story {
+    gap: 0.8rem;
+  }
+
+  .landing-modern-story-image-wrap {
+    border-radius: 1.15rem;
+  }
+
+  .landing-modern-story-image {
+    min-height: 280px;
+  }
+
+  .landing-modern-billing-toggle {
+    gap: 0.65rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .landing-modern-faq-question {
+    padding: 1rem;
+    align-items: flex-start;
+  }
+
+  .landing-modern-faq-answer p {
+    padding: 0 1rem 1rem;
+  }
+
+  .landing-modern-cta-inner {
+    padding: 1.2rem;
+    border-radius: 1.3rem;
+  }
+
+  .landing-modern-footer {
+    padding-bottom: 2rem;
+  }
+}

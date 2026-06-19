@@ -4,10 +4,11 @@ import { getLandingStats, getPublicPlans } from "../api";
 import BrandLogo from "../components/BrandLogo";
 import { PLAN_CATALOG } from "../data/plans";
 import { cleanUiText } from "../utils/textEncoding";
+import "./Landing.css";
 
 const LANDING_NAV_ITEMS = [
-  { id: "todo", label: "Todo tu salud" },
-  { id: "ia", label: "Copiloto IA" },
+  { id: "valor", label: "Valor" },
+  { id: "acompanamiento", label: "Acompañamiento" },
   { id: "privacidad", label: "Privacidad" },
   { id: "planes", label: "Planes" },
 ];
@@ -19,334 +20,202 @@ const fallbackStats = {
   satisfaction: 98,
 };
 
-const formatCount = (value) => `${new Intl.NumberFormat("es-CL").format(value)}+`;
-const formatPercent = (value) => `${value}%`;
-
-// Filigrana: pétalo/flor del logo de Klinip (mismo trazo que la marca)
-const BRAND_FLOWER_PATH =
-  "M50 17.5c7.18 0 13 5.82 13 13v8.41l7.28-4.2c6.21-3.59 14.15-1.46 17.74 4.75 3.59 6.21 1.46 14.15-4.75 17.74L76 61.4l7.27 4.2c6.21 3.59 8.34 11.53 4.75 17.74-3.59 6.21-11.53 8.34-17.74 4.75L63 83.9v8.4c0 7.19-5.82 13-13 13s-13-5.81-13-13v-8.4l-7.28 4.2c-6.21 3.59-14.15 1.46-17.74-4.75-3.59-6.21-1.46-14.15 4.75-17.74l7.27-4.2-7.27-4.2c-6.21-3.59-8.34-11.53-4.75-17.74 3.59-6.21 11.53-8.34 17.74-4.75l7.28 4.2V30.5c0-7.18 5.82-13 13-13Z";
-
-// Personalidad de marca (banda tipo "chips")
-const brandPersonality = [
-  "Cercana",
-  "Confiable",
-  "Inteligente",
-  "Empática",
-  "Moderna",
-  "Humana",
+const heroHighlights = [
+  "Agenda, medicamentos y documentos en un mismo lugar",
+  "Apoyo claro para pacientes, familias y cuidadores",
+  "Diseño pensado para personas reales, no para dashboards fríos",
 ];
 
-// ── Hub: "Reúne toda tu salud en un solo lugar" (4 columnas) ───────────────
-const dataHub = [
+const carePillars = [
   {
-    key: "citas",
-    title: "Citas y agenda",
-    desc: "Tus controles, exámenes y consultas en una sola línea de tiempo.",
-    accent: "#0d47f7",
-    accentSoft: "#eaf2ff",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-        <rect x="3" y="4" width="18" height="18" rx="3" />
-        <path d="M16 2v4M8 2v4M3 10h18" />
-      </svg>
-    ),
+    title: "Todo ordenado",
+    description:
+      "Tus citas, resultados, indicaciones y recordatorios se entienden rápido, sin tener que abrir diez pantallas.",
+    tone: "blue",
   },
   {
-    key: "medicamentos",
-    title: "Medicamentos",
-    desc: "Registra tomas y mira tu adherencia diaria y de los últimos 30 días.",
-    accent: "#22c55e",
-    accentSoft: "#e7faef",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-        <rect x="3" y="8" width="13" height="8" rx="4" transform="rotate(-35 9.5 12)" />
-        <path d="M9 9.5 14.5 15" />
-      </svg>
-    ),
+    title: "Mejor acompañado",
+    description:
+      "Klinip ayuda a que la familia y el equipo tratante compartan contexto sin perder privacidad ni control.",
+    tone: "sand",
   },
   {
-    key: "documentos",
-    title: "Documentos con OCR",
-    desc: "Una foto y Klinip lee fecha, centro y datos clave de recetas y exámenes.",
-    accent: "#06b6d4",
-    accentSoft: "#e0f7fb",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-        <polyline points="14 2 14 8 20 8" />
-        <path d="M8 13h8M8 17h5" />
-      </svg>
-    ),
-  },
-  {
-    key: "familia",
-    title: "Familia",
-    desc: "Comparte avances y contexto de salud del hogar en un espacio privado.",
-    accent: "#8b5cf6",
-    accentSoft: "#f1ecff",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-        <circle cx="8" cy="9" r="2.5" />
-        <circle cx="16" cy="9" r="2.5" />
-        <path d="M3.5 19a4.5 4.5 0 0 1 9 0M11.5 19a4.5 4.5 0 0 1 9 0" />
-      </svg>
-    ),
+    title: "Menos carga mental",
+    description:
+      "La app te recuerda lo importante, resume lo urgente y baja la fricción diaria del cuidado de salud.",
+    tone: "green",
   },
 ];
 
-// ── Secciones alternadas (imagen-texto) con mockups del producto ─────────────
-const featureStories = [
+const operationalCards = [
   {
-    key: "adherencia",
-    eyebrow: "Adherencia inteligente",
-    title: "Tu tratamiento, al día y a 30 días",
-    desc: "Klinip calcula tu adherencia de forma justa: cuenta desde que empiezas a registrar, con una vista de hoy en vivo y otra de tendencia mensual.",
-    bullets: [
-      "Anillo de adherencia que se mueve al registrar cada dosis",
-      "Vista diaria y de 30 días, sin penalizar el historial previo",
-      "Alertas cuando un medicamento está por terminarse",
-    ],
-    mockup: "adherence",
-    accent: "#22c55e",
-    accentSoft: "#e7faef",
+    eyebrow: "Seguimiento diario",
+    title: "Tu rutina de salud se vuelve visible",
+    description:
+      "Ve pendientes, próximas citas y recordatorios sin rebuscar entre mensajes, papeles o aplicaciones separadas.",
   },
   {
-    key: "ocr",
-    eyebrow: "Documentos sin esfuerzo",
-    title: "Una foto y Klinip entiende tu documento",
-    desc: "Toma una foto de una receta, orden o resultado y el motor OCR extrae lo importante: tipo, fecha, centro y valores clave, listos para tu historial.",
+    eyebrow: "Contexto compartido",
+    title: "La familia entiende qué está pasando",
+    description:
+      "Comparte avances y tareas con las personas correctas para que el cuidado no dependa de una sola persona.",
+  },
+  {
+    eyebrow: "Lectura útil",
+    title: "Los documentos dejan de ser una carga",
+    description:
+      "Recetas, órdenes y resultados se transforman en información legible y ordenada para usarla cuando la necesitas.",
+  },
+];
+
+const storySections = [
+  {
+    id: "story-paciente",
+    eyebrow: "Para pacientes",
+    title: "Una vista clara para seguir tu día sin enredarte",
+    description:
+      "La información importante aparece de frente: qué toca hoy, qué viene después y qué necesita atención.",
     bullets: [
-      "Captura desde el botón central de la app",
-      "Lectura automática de fecha, centro y datos clínicos",
-      "Resumen amigable y búsqueda rápida",
+      "Recordatorios visibles y simples",
+      "Resumen comprensible del estado del día",
+      "Acceso rápido a lo más importante",
     ],
-    mockup: "ocr",
+    image: {
+      src: "/landing/hero-giselle.jpg",
+      fallback: "/landing/fallback-home-hero.png",
+      alt: "Paciente mostrando la app Klinip en su teléfono desde su casa.",
+    },
+  },
+  {
+    id: "story-familia",
+    eyebrow: "Para familias",
+    title: "Acompañar a alguien se vuelve más fácil y más humano",
+    description:
+      "Cuando varias personas están pendientes del mismo proceso de salud, Klinip ayuda a compartir contexto sin confusión.",
+    bullets: [
+      "Seguimiento compartido con criterio",
+      "Visión más clara para cuidadores y cercanos",
+      "Menos llamadas y menos pérdida de información",
+    ],
     reverse: true,
-    accent: "#06b6d4",
-    accentSoft: "#e0f7fb",
+    image: {
+      src: "/landing/familia-cuidando.jpg",
+      fallback: "/landing/fallback-familia-home.png",
+      alt: "Dos familiares revisando el estado de salud desde la aplicación.",
+    },
   },
   {
-    key: "familia",
-    eyebrow: "En sintonía con tu hogar",
-    title: "Mantén a tu familia al tanto",
-    desc: "Un espacio privado donde compartir avances, recordatorios y novedades de salud con quienes te importan, con el alcance que define tu plan.",
+    id: "story-consulta",
+    eyebrow: "Para consultas y controles",
+    title: "Llegar mejor preparado cambia la conversación clínica",
+    description:
+      "Con tus antecedentes ordenados, la consulta se enfoca en decidir mejor y no en reconstruir el historial desde cero.",
     bullets: [
-      "Feed familiar privado y seguro",
-      "Perfiles de salud para cada integrante",
-      "Contexto reciente del hogar en un vistazo",
+      "Más contexto antes de cada cita",
+      "Información lista para conversar con el profesional",
+      "Menos tiempo perdido explicando lo mismo",
     ],
-    mockup: "family",
-    accent: "#8b5cf6",
-    accentSoft: "#f1ecff",
+    image: {
+      src: "/landing/consulta-acompanada.jpg",
+      fallback: "/landing/fallback-radar-salud.png",
+      alt: "Paciente, familiar y médico revisando información de salud en un teléfono.",
+    },
   },
-];
-
-const aiBullets = [
-  "Detecta cuando una cita o un medicamento está por vencer",
-  "Explica tu adherencia y tu historial en lenguaje cotidiano",
-  "Prepara resúmenes y recordatorios por ti",
+  {
+    id: "story-documentos",
+    eyebrow: "Para documentos",
+    title: "Tus exámenes y recetas quedan guardados con sentido",
+    description:
+      "La app toma lo que normalmente vive en papel o en fotos sueltas y lo convierte en una referencia fácil de usar.",
+    bullets: [
+      "Subida rápida desde el teléfono",
+      "Lectura útil para el seguimiento diario",
+      "Mejor orden para consultas futuras",
+    ],
+    reverse: true,
+    image: {
+      src: "/landing/documentos-en-casa.jpg",
+      fallback: "/landing/fallback-mi-salud.png",
+      alt: "Persona revisando un documento clínico mientras usa Klinip en su teléfono.",
+    },
+  },
 ];
 
 const privacyPoints = [
   {
-    title: "Tú decides qué se comparte",
-    desc: "Consentimiento explícito y control total sobre cada perfil y cada dato.",
+    title: "Control por perfil",
+    description:
+      "Cada persona decide qué comparte y con quién, especialmente cuando hay familia o cuidadores involucrados.",
   },
   {
-    title: "Tus datos no entrenan modelos externos",
-    desc: "Tu información clínica nunca se usa para entrenar modelos de terceros.",
+    title: "Privacidad desde el diseño",
+    description:
+      "La información clínica se trata como información sensible: con contexto, permisos y claridad de uso.",
   },
   {
-    title: "Exportación y borrado a tu ritmo",
-    desc: "Descarga o elimina tu información cuando quieras, sin fricciones.",
+    title: "Datos útiles, no expuestos",
+    description:
+      "Klinip busca hacer más simple la gestión diaria sin convertir tu historial en ruido ni en un activo ajeno.",
   },
 ];
 
 const faqItems = [
   {
-    q: "¿Klinip es gratis?",
-    a: "Sí. Puedes empezar con el plan básico sin costo y subir de plan cuando necesites más perfiles, colaboración o red familiar.",
+    q: "¿Klinip está pensado solo para pacientes mayores?",
+    a: "No. Está pensado para cualquier persona que necesite ordenar su salud, pero con especial foco en procesos donde también participan familias o cuidadores.",
   },
   {
-    q: "¿Qué hace el asistente de IA?",
-    a: "Organiza tu agenda, te avisa de citas y medicamentos, explica tu adherencia e historial y prepara resúmenes, todo en lenguaje natural.",
+    q: "¿Puedo usarlo con mi familia?",
+    a: "Sí. La experiencia considera acompañamiento y seguimiento compartido, siempre respetando qué perfiles y datos se comparten.",
   },
   {
-    q: "¿Cómo funciona la lectura de documentos?",
-    a: "Tomas una foto de una receta, orden o resultado y el OCR de Klinip extrae fecha, centro y datos clave para guardarlos en tu historial.",
+    q: "¿Sirve para llevar documentos y resultados?",
+    a: "Sí. La landing ya comunica esa capacidad porque Klinip permite centralizar recetas, órdenes y resultados en un mismo flujo.",
   },
   {
-    q: "¿Puedo gestionar la salud de mi familia?",
-    a: "Sí. Creas perfiles de salud para tu hogar y compartes avances en un espacio privado, según el alcance de tu plan.",
-  },
-  {
-    q: "¿Mis datos están seguros?",
-    a: "Tu información es privada y bajo tu control. No se comparte sin tu consentimiento ni se usa para entrenar modelos externos.",
-  },
-  {
-    q: "¿En qué dispositivos funciona?",
-    a: "Klinip funciona en el navegador y como app instalable (PWA) en móvil y escritorio, con notificaciones incluso con la app cerrada.",
+    q: "¿Necesito instalar una app?",
+    a: "Puedes entrar desde el navegador y también usar la experiencia instalable en celular o escritorio cuando corresponda.",
   },
 ];
 
-// ── Mockups del producto (imágenes hechas con la propia UI) ──────────────────
-function PhoneNav({ active = "home" }) {
+const formatCount = (value) => `${new Intl.NumberFormat("es-CL").format(value)}+`;
+const formatPercent = (value) => `${value}%`;
+
+const StatCard = ({ value, label }) => (
+  <div className="landing-modern-stat">
+    <strong>{value}</strong>
+    <span>{label}</span>
+  </div>
+);
+
+function LandingImage({ src, fallback, alt, className }) {
+  const [currentSrc, setCurrentSrc] = useState(src);
+
+  useEffect(() => {
+    setCurrentSrc(src);
+  }, [src]);
+
   return (
-    <div className="kl-mk-nav">
-      <span className={`kl-mk-nav-i ${active === "home" ? "is-active" : ""}`} aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><path d="M4 10.5 12 4l8 6.5v8a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5z" /></svg>
-      </span>
-      <span className="kl-mk-nav-i" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="9" y="2" width="6" height="11" rx="3" /><path d="M5 10a7 7 0 0 0 14 0M12 17v4" /></svg>
-      </span>
-      <span className="kl-mk-nav-cta" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9.2a2.4 2.4 0 0 1 2.4-2.4h1.1l.8-1.4a1.6 1.6 0 0 1 1.4-.8h4.6a1.6 1.6 0 0 1 1.4.8l.8 1.4h1.1A2.4 2.4 0 0 1 20 9.2v7.4a2.4 2.4 0 0 1-2.4 2.4H6.4A2.4 2.4 0 0 1 4 16.6z" /><circle cx="12" cy="13" r="3.2" /></svg>
-      </span>
-      <span className="kl-mk-nav-i" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><circle cx="8" cy="9" r="2.5" /><circle cx="16" cy="9" r="2.5" /><path d="M3.5 19a4.5 4.5 0 0 1 9 0M11.5 19a4.5 4.5 0 0 1 9 0" /></svg>
-      </span>
-      <span className="kl-mk-nav-i" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9"><rect x="3" y="8" width="13" height="8" rx="4" transform="rotate(-35 9.5 12)" /></svg>
-      </span>
-    </div>
+    <img
+      className={className}
+      src={currentSrc}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        if (fallback && currentSrc !== fallback) {
+          setCurrentSrc(fallback);
+        }
+      }}
+    />
   );
 }
-
-function PhoneFrame({ children, tag, nav = "home" }) {
-  return (
-    <div className="kl-phone">
-      <div className="kl-phone-notch" />
-      <div className="kl-phone-screen">
-        <span className="kl-phone-blob kl-phone-blob-1" aria-hidden="true" />
-        <span className="kl-phone-blob kl-phone-blob-2" aria-hidden="true" />
-        <div className="kl-phone-content">
-          {tag ? <div className="kl-phone-tag">{tag}</div> : null}
-          {children}
-        </div>
-        <PhoneNav active={nav} />
-      </div>
-    </div>
-  );
-}
-
-function HomeMockup() {
-  return (
-    <PhoneFrame>
-      <div className="kl-mk-home">
-        <div className="kl-mk-home-top">
-          <span className="kl-mk-avatar tone-blue">A</span>
-          <div className="kl-mk-greet-block">
-            <span className="kl-mk-greet">Hola, Ana</span>
-            <small>&iquest;C&oacute;mo te sientes hoy?</small>
-          </div>
-          <span className="kl-mk-bell" />
-        </div>
-
-        <div className="kl-mk-summary">
-          <span className="kl-mk-summary-kicker">Resumen de salud</span>
-          <div className="kl-mk-summary-row">
-            <span className="kl-mk-dot is-green" />
-            <strong>Todo en orden</strong>
-          </div>
-          <p>Tus &uacute;ltimos registros est&aacute;n en buen estado.</p>
-        </div>
-
-        <div className="kl-mk-section-label">Pr&oacute;ximas citas</div>
-        <div className="kl-mk-appt">
-          <span className="kl-mk-appt-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="8" r="3.2" /><path d="M5.5 19a6.5 6.5 0 0 1 13 0" /></svg>
-          </span>
-          <div>
-            <strong>Cardiolog&iacute;a</strong>
-            <small>Dr. Juan P&eacute;rez &middot; 12 Jun &middot; 10:00 AM</small>
-          </div>
-        </div>
-      </div>
-    </PhoneFrame>
-  );
-}
-
-function AdherenceMockup() {
-  return (
-    <PhoneFrame>
-      <div className="kl-mk-hero">
-        <div className="kl-mk-hero-top">
-          <span className="kl-mk-greet">Adherencia</span>
-          <span className="kl-mk-bell" />
-        </div>
-        <div className="kl-mk-ring-card">
-          <div className="kl-mk-ring">
-            <span>92%</span>
-          </div>
-          <div className="kl-mk-ring-meta">
-            <strong>30 d&iacute;as</strong>
-            <span className="kl-mk-today">Hoy 100% &middot; 2/2</span>
-          </div>
-        </div>
-        <div className="kl-mk-pill-row">
-          <span className="kl-mk-pill is-blue">Amlodipino 5 mg</span>
-          <span className="kl-mk-pill is-green">Al d&iacute;a</span>
-        </div>
-      </div>
-    </PhoneFrame>
-  );
-}
-
-function OcrMockup() {
-  return (
-    <PhoneFrame nav="ocr">
-      <div className="kl-mk-scan">
-        <div className="kl-mk-scan-doc">
-          <div className="kl-mk-scan-line" />
-          <span className="kl-mk-scan-h" />
-          <span className="kl-mk-scan-h is-short" />
-          <span className="kl-mk-scan-h" />
-          <span className="kl-mk-scan-h is-short" />
-        </div>
-        <div className="kl-mk-extract">
-          <div className="kl-mk-extract-row"><span>Tipo</span><strong>Receta</strong></div>
-          <div className="kl-mk-extract-row"><span>Fecha</span><strong>12 jun 2026</strong></div>
-          <div className="kl-mk-extract-row"><span>Centro</span><strong>Cl&iacute;nica Norte</strong></div>
-          <div className="kl-mk-extract-row"><span>Detectado</span><strong className="is-ok">2 medicamentos</strong></div>
-        </div>
-      </div>
-    </PhoneFrame>
-  );
-}
-
-function FamilyMockup() {
-  return (
-    <PhoneFrame nav="family">
-      <div className="kl-mk-feed">
-        {[
-          { who: "Mamá", txt: "Control de presión al día ✅", tone: "green" },
-          { who: "Papá", txt: "Subió resultados de laboratorio", tone: "blue" },
-          { who: "Tú", txt: "Recordatorio de medicación activado", tone: "violet" },
-        ].map((item) => (
-          <div key={item.who} className="kl-mk-feed-card">
-            <span className={`kl-mk-avatar tone-${item.tone}`}>{item.who.slice(0, 1)}</span>
-            <div>
-              <strong>{cleanUiText(item.who)}</strong>
-              <span>{cleanUiText(item.txt)}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </PhoneFrame>
-  );
-}
-
-const MOCKUPS = {
-  adherence: AdherenceMockup,
-  ocr: OcrMockup,
-  family: FamilyMockup,
-};
 
 export default function Landing({ theme = "light", onToggleTheme }) {
   const [stats, setStats] = useState(fallbackStats);
   const [billing, setBilling] = useState("monthly");
   const [plans, setPlans] = useState(PLAN_CATALOG);
-  const [activeNavSection, setActiveNavSection] = useState("todo");
+  const [activeNavSection, setActiveNavSection] = useState("valor");
   const [openFaq, setOpenFaq] = useState(0);
   const pageRef = useRef(null);
 
@@ -381,43 +250,22 @@ export default function Landing({ theme = "light", onToggleTheme }) {
     };
   }, []);
 
-  // Scroll-reveal: aparición suave al entrar en viewport (efecto healthapp.google)
-  useEffect(() => {
-    const root = pageRef.current;
-    if (!root) return undefined;
-    const els = Array.from(root.querySelectorAll(".kl-reveal"));
-    if (typeof IntersectionObserver === "undefined") {
-      els.forEach((el) => el.classList.add("is-in"));
-      return undefined;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-in");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.14, rootMargin: "0px 0px -10% 0px" }
-    );
-    els.forEach((el) => observer.observe(el));
-    return () => observer.disconnect();
-  }, [plans.length]);
-
-  // Nav activo según sección visible
   useEffect(() => {
     const sections = LANDING_NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(Boolean);
     if (!sections.length || typeof IntersectionObserver === "undefined") return undefined;
+
     const observer = new IntersectionObserver(
       (entries) => {
         const visibleEntry = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (visibleEntry?.target?.id) setActiveNavSection(visibleEntry.target.id);
+        if (visibleEntry?.target?.id) {
+          setActiveNavSection(visibleEntry.target.id);
+        }
       },
       { rootMargin: "-30% 0px -55% 0px", threshold: [0.15, 0.35, 0.55] }
     );
+
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
   }, []);
@@ -430,31 +278,31 @@ export default function Landing({ theme = "light", onToggleTheme }) {
   };
 
   const statItems = [
-    { value: formatCount(stats.users), label: "Usuarios" },
-    { value: formatCount(stats.appointments), label: "Citas gestionadas" },
-    { value: formatCount(stats.reminders), label: "Recordatorios" },
-    { value: formatPercent(stats.satisfaction), label: "Satisfacción" },
+    { value: formatCount(stats.users), label: "usuarios" },
+    { value: formatCount(stats.appointments), label: "citas gestionadas" },
+    { value: formatCount(stats.reminders), label: "recordatorios enviados" },
+    { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
   ];
 
   return (
-    <div className="kl-page" ref={pageRef}>
-      <header className="kl-navbar">
-        <div className="kl-navbar-inner">
-          <Link className="kl-nav-logo" to="/">
+    <div className="landing-modern" ref={pageRef}>
+      <header className="landing-modern-nav">
+        <div className="landing-modern-shell landing-modern-nav-inner">
+          <Link className="landing-modern-logo" to="/">
             <BrandLogo
               className="brand-logo-landing brand-logo-keep-name-mobile"
-              nameClassName="kl-nav-logo-name"
+              nameClassName="landing-modern-logo-name"
               showMark={false}
               responsive
             />
           </Link>
 
-          <nav className="kl-nav-links">
+          <nav className="landing-modern-links" aria-label="Navegación de la landing">
             {LANDING_NAV_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className={`kl-nav-link ${activeNavSection === item.id ? "active" : ""}`}
+                className={`landing-modern-link ${activeNavSection === item.id ? "is-active" : ""}`}
                 onClick={() => handleLandingNav(item.id)}
                 aria-current={activeNavSection === item.id ? "page" : undefined}
               >
@@ -463,10 +311,10 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             ))}
           </nav>
 
-          <div className="kl-nav-right">
+          <div className="landing-modern-actions">
             <button
               type="button"
-              className="theme-toggle kl-theme-toggle"
+              className="theme-toggle landing-modern-theme-toggle"
               onClick={() => onToggleTheme?.()}
               aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
               aria-pressed={theme === "dark"}
@@ -475,301 +323,256 @@ export default function Landing({ theme = "light", onToggleTheme }) {
                 <span className="theme-switch-thumb" />
               </span>
             </button>
-            <Link className="kl-btn-ghost" to="/login">Iniciar sesi&oacute;n</Link>
-            <Link className="kl-btn-primary" to="/register">Crear cuenta</Link>
+            <Link className="landing-modern-btn is-ghost" to="/login">
+              Iniciar sesión
+            </Link>
+            <Link className="landing-modern-btn is-primary" to="/register">
+              Crear cuenta
+            </Link>
           </div>
         </div>
       </header>
 
-      {/* ── HERO full-bleed ─────────────────────────────────────────────── */}
-      <section className="kl-hero">
-        <div className="kl-hero-bg" aria-hidden="true">
-          <span className="kl-dots kl-dots-hero" />
-          <span className="kl-blob kl-blob-a" />
-          <span className="kl-blob kl-blob-b" />
-          <svg className="kl-flower-mark" viewBox="0 0 100 100" aria-hidden="true">
-            <path d={BRAND_FLOWER_PATH} fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <div className="kl-hero-inner">
-          <div className="kl-hero-copy">
-            <div className="kl-hero-pill kl-reveal">
-              <span className="kl-hero-pill-dot" />
-              Asistente cl&iacute;nico con IA
-            </div>
-            <h1 className="kl-hero-title kl-reveal">
-              Tu salud, organizada.
-              <span>Tu vida, m&aacute;s tranquila.</span>
+      <section className="landing-modern-hero">
+        <div className="landing-modern-shell landing-modern-hero-grid">
+          <div className="landing-modern-copy">
+            <span className="landing-modern-kicker">Cuidado de salud más claro y más humano</span>
+            <h1>
+              Una app para ordenar la salud,
+              <span> acompañar mejor y decidir con más contexto.</span>
             </h1>
-            <p className="kl-hero-desc kl-reveal">
-              Klinip centraliza tu informaci&oacute;n cl&iacute;nica en un solo lugar para que entiendas,
-              gestiones y compartas tu salud de forma simple, segura y humana.
+            <p className="landing-modern-lead">
+              Klinip reúne agenda, medicamentos, documentos y acompañamiento familiar en una experiencia
+              moderna, sobria y fácil de entender tanto en escritorio como en celular.
             </p>
-            <div className="kl-hero-actions kl-reveal">
-              <Link className="kl-btn-hero" to="/register">
-                <span>Comenzar gratis</span>
-                <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+
+            <div className="landing-modern-cta-row">
+              <Link className="landing-modern-btn is-primary is-large" to="/register">
+                Comenzar gratis
               </Link>
-              <Link className="kl-btn-secondary" to="/login">Ya tengo cuenta</Link>
+              <button
+                type="button"
+                className="landing-modern-btn is-secondary is-large"
+                onClick={() => handleLandingNav("valor")}
+              >
+                Ver cómo funciona
+              </button>
             </div>
-            <div className="kl-hero-stats kl-reveal">
-              {statItems.map((item) => (
-                <div key={item.label} className="kl-hero-stat">
-                  <strong>{item.value}</strong>
-                  <span>{item.label}</span>
+
+            <div className="landing-modern-highlights">
+              {heroHighlights.map((item) => (
+                <div key={item} className="landing-modern-highlight">
+                  <span className="landing-modern-highlight-dot" aria-hidden="true" />
+                  <span>{item}</span>
                 </div>
               ))}
             </div>
-          </div>
 
-          <div className="kl-hero-visual kl-reveal">
-            <span className="kl-blob kl-blob-visual" aria-hidden="true" />
-            <HomeMockup />
-            <div className="kl-hero-float kl-hero-float-1">
-              <span className="kl-hero-float-dot is-green" />
-              Dosis registrada
-            </div>
-            <div className="kl-hero-float kl-hero-float-2">
-              <span className="kl-hero-float-dot is-blue" />
-              Cita en 1 h
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="kl-scroll-cue"
-          onClick={() => handleLandingNav("todo")}
-          aria-label="Desplazarse hacia abajo"
-        >
-          <span className="kl-scroll-mouse"><span className="kl-scroll-wheel" /></span>
-          <span className="kl-scroll-text">Descubre m&aacute;s</span>
-        </button>
-      </section>
-
-      {/* ── Banda de personalidad de marca ──────────────────────────────── */}
-      <div className="kl-personality" aria-hidden="true">
-        <div className="kl-personality-track">
-          {[...brandPersonality, ...brandPersonality, ...brandPersonality].map((word, i) => (
-            <span className="kl-personality-chip" key={`${word}-${i}`}>
-              <svg viewBox="0 0 100 100"><path d={BRAND_FLOWER_PATH} fill="currentColor" /></svg>
-              {word}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── HUB: toda tu salud en un lugar ──────────────────────────────── */}
-      <section id="todo" className="kl-section kl-hub">
-        <div className="kl-section-inner">
-          <div className="kl-section-head kl-reveal">
-            <div className="kl-eyebrow">Todo en un lugar</div>
-            <h2 className="kl-section-title">Re&uacute;ne toda tu salud <em>en un solo lugar</em></h2>
-            <p className="kl-section-sub">Citas, medicamentos, documentos y tu familia, conectados y siempre a mano.</p>
-          </div>
-          <div className="kl-hub-grid">
-            {dataHub.map((item, i) => (
-              <article
-                key={item.key}
-                className="kl-hub-card kl-reveal"
-                style={{
-                  "--kl-delay": `${i * 90}ms`,
-                  "--kl-accent": item.accent,
-                  "--kl-accent-soft": item.accentSoft,
-                }}
-              >
-                <div className="kl-hub-icon">{item.icon}</div>
-                <h3>{cleanUiText(item.title)}</h3>
-                <p>{cleanUiText(item.desc)}</p>
-                <span className="kl-hub-corner" aria-hidden="true" />
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Copiloto IA ─────────────────────────────────────────────────── */}
-      <section id="ia" className="kl-section kl-ai">
-        <div className="kl-section-inner kl-ai-inner">
-          <div className="kl-ai-copy kl-reveal">
-            <div className="kl-eyebrow is-light">Klinip IA</div>
-            <h2 className="kl-section-title is-light">Tu copiloto de <em>salud personal</em></h2>
-            <p className="kl-section-sub is-light">
-              Pregunta en lenguaje natural sobre tus medicamentos, tus citas o tu historial.
-              Klinip aprende tu rutina, detecta patrones y act&uacute;a antes de que algo se escape.
-            </p>
-            <ul className="kl-ai-list">
-              {aiBullets.map((b) => (
-                <li key={b}>
-                  <span className="kl-ai-check">
-                    <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
-                  </span>
-                  {cleanUiText(b)}
-                </li>
+            <div className="landing-modern-stats" aria-label="Indicadores principales">
+              {statItems.map((item) => (
+                <StatCard key={item.label} value={item.value} label={item.label} />
               ))}
-            </ul>
+            </div>
           </div>
 
-          <div className="kl-ai-visual kl-reveal">
-            <div className="kl-ai-chat">
-              <div className="kl-ai-chat-bar">
-                <div className="kl-ai-chat-dots"><span /><span /><span /></div>
-                <span className="kl-ai-chat-title">Klinip IA</span>
-                <span className="kl-ai-chat-tag">En l&iacute;nea</span>
-              </div>
-              <div className="kl-ai-messages">
-                <div className="kl-ai-msg is-ai">Hola. Tienes cardiolog&iacute;a hoy a las 12:00. &iquest;Preparo un resumen con tus documentos relevantes?</div>
-                <div className="kl-ai-msg is-user">S&iacute;, por favor</div>
-                <div className="kl-ai-msg is-ai">Listo. Adjunt&eacute; tu &uacute;ltimo ECG y la lista de medicamentos, y activ&eacute; un recordatorio 1 hora antes.</div>
-              </div>
-              <div className="kl-ai-chips">
-                <span className="kl-ai-chip">&iquest;Mi &uacute;ltima dosis?</span>
-                <span className="kl-ai-chip">Citas de marzo</span>
-                <span className="kl-ai-chip">Adherencia</span>
-              </div>
+          <div className="landing-modern-hero-media">
+            <div className="landing-modern-photo-frame">
+              <LandingImage
+                className="landing-modern-photo"
+                src="/landing/hero-giselle.jpg"
+                fallback="/landing/fallback-home-hero.png"
+                alt="Paciente usando Klinip en su teléfono desde casa."
+              />
+            </div>
+            <div className="landing-modern-floating-card is-top">
+              <span className="landing-modern-floating-label">Seguimiento diario</span>
+              <strong>Prioridades visibles</strong>
+              <p>Lo urgente, lo pendiente y lo próximo aparecen en una sola mirada.</p>
+            </div>
+            <div className="landing-modern-floating-card is-bottom">
+              <span className="landing-modern-floating-label">Experiencia multiplataforma</span>
+              <strong>Escritorio y celular</strong>
+              <p>Diseñada para usarla con calma en casa o rápido antes de una consulta.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Secciones alternadas con scroll-reveal ──────────────────────── */}
-      {featureStories.map((story) => {
-        const Mockup = MOCKUPS[story.mockup];
-        return (
-          <section
-            key={story.key}
-            className={`kl-section kl-story ${story.reverse ? "is-reverse" : ""}`}
-            style={{ "--kl-accent": story.accent, "--kl-accent-soft": story.accentSoft }}
-          >
-            <div className="kl-section-inner kl-story-inner">
-              <div className="kl-story-copy kl-reveal">
-                <div className="kl-eyebrow is-accent">{cleanUiText(story.eyebrow)}</div>
-                <h2 className="kl-section-title">{cleanUiText(story.title)}</h2>
-                <p className="kl-section-sub">{cleanUiText(story.desc)}</p>
-                <ul className="kl-story-bullets">
-                  {story.bullets.map((b) => (
-                    <li key={b}>
-                      <span className="kl-story-check">
-                        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
-                      </span>
-                      {cleanUiText(b)}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="kl-story-visual kl-reveal">
-                <span className="kl-blob kl-blob-story" aria-hidden="true" />
-                <span className="kl-dots kl-dots-story" aria-hidden="true" />
-                {Mockup ? <Mockup /> : null}
-              </div>
-            </div>
-          </section>
-        );
-      })}
-
-      {/* ── Privacidad y seguridad ──────────────────────────────────────── */}
-      <section id="privacidad" className="kl-section kl-privacy">
-        <div className="kl-section-inner">
-          <div className="kl-section-head kl-reveal">
-            <div className="kl-privacy-shield" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></svg>
-            </div>
-            <div className="kl-eyebrow">Personal, proactivo y seguro</div>
-            <h2 className="kl-section-title">Tu salud es tuya, <em>siempre</em></h2>
-            <p className="kl-section-sub">Dise&ntilde;ado con privacidad desde el primer d&iacute;a. T&uacute; tienes el control.</p>
+      <section id="valor" className="landing-modern-section">
+        <div className="landing-modern-shell">
+          <div className="landing-modern-section-head">
+            <span className="landing-modern-kicker">Valor clínico y cotidiano</span>
+            <h2>Menos aspecto de maqueta. Más utilidad real para el día a día.</h2>
+            <p>
+              La nueva landing prioriza contexto, confianza y personas reales. La app se presenta como una
+              herramienta concreta para ordenar el cuidado de salud, no como una demo genérica de IA.
+            </p>
           </div>
-          <div className="kl-privacy-grid">
-            {privacyPoints.map((item, i) => (
-              <article key={item.title} className="kl-privacy-card kl-reveal" style={{ "--kl-delay": `${i * 90}ms` }}>
-                <h3>{cleanUiText(item.title)}</h3>
-                <p>{cleanUiText(item.desc)}</p>
+
+          <div className="landing-modern-pillars">
+            {carePillars.map((item) => (
+              <article key={item.title} className={`landing-modern-pillar is-${item.tone}`}>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="landing-modern-operations">
+            {operationalCards.map((item) => (
+              <article key={item.title} className="landing-modern-operation-card">
+                <span className="landing-modern-operation-eyebrow">{item.eyebrow}</span>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── Planes ──────────────────────────────────────────────────────── */}
-      <section id="planes" className="kl-section kl-pricing">
-        <div className="kl-section-inner">
-          <div className="kl-section-head kl-reveal">
-            <div className="kl-eyebrow">Planes</div>
-            <h2 className="kl-section-title">Pensados para <em>cada necesidad</em></h2>
-            <p className="kl-section-sub">Empieza gratis y escala cuando necesites m&aacute;s perfiles o m&aacute;s colaboraci&oacute;n.</p>
+      <section id="acompanamiento" className="landing-modern-section landing-modern-section-muted">
+        <div className="landing-modern-shell">
+          <div className="landing-modern-section-head">
+            <span className="landing-modern-kicker">Acompañamiento real</span>
+            <h2>La experiencia gira en torno a personas, no a widgets.</h2>
+            <p>
+              Cada bloque usa fotografía real y copy más directo para transmitir cercanía, seguimiento y
+              utilidad clínica sin exagerar promesas tecnológicas.
+            </p>
           </div>
 
-          <div className="kl-billing-toggle kl-reveal">
+          <div className="landing-modern-story-list">
+            {storySections.map((story) => (
+              <article
+                key={story.id}
+                className={`landing-modern-story ${story.reverse ? "is-reverse" : ""}`}
+              >
+                <div className="landing-modern-story-image-wrap">
+                  <LandingImage
+                    className="landing-modern-story-image"
+                    src={story.image.src}
+                    fallback={story.image.fallback}
+                    alt={story.image.alt}
+                  />
+                </div>
+                <div className="landing-modern-story-copy">
+                  <span className="landing-modern-kicker">{story.eyebrow}</span>
+                  <h3>{story.title}</h3>
+                  <p>{story.description}</p>
+                  <ul>
+                    {story.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="privacidad" className="landing-modern-section">
+        <div className="landing-modern-shell">
+          <div className="landing-modern-section-head">
+            <span className="landing-modern-kicker">Privacidad y criterio</span>
+            <h2>La información sensible se trata con el tono y el cuidado correctos.</h2>
+            <p>
+              El mensaje visual y textual de esta landing evita el tono de "todo lo sabe la IA" y vuelve a
+              poner el foco en control, acompañamiento y confianza.
+            </p>
+          </div>
+
+          <div className="landing-modern-privacy-grid">
+            {privacyPoints.map((item) => (
+              <article key={item.title} className="landing-modern-privacy-card">
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="planes" className="landing-modern-section landing-modern-section-pricing">
+        <div className="landing-modern-shell">
+          <div className="landing-modern-section-head">
+            <span className="landing-modern-kicker">Planes</span>
+            <h2>Empieza simple y escala cuando tu contexto lo necesite.</h2>
+            <p>
+              La estructura de planes se mantiene, pero ahora vive dentro de una landing más limpia y con
+              mejor lectura en móvil.
+            </p>
+          </div>
+
+          <div className="landing-modern-billing-toggle">
             <span className={billing === "monthly" ? "is-active" : ""}>Mensual</span>
             <button
               type="button"
-              className={`kl-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
+              className={`landing-modern-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
               onClick={() => setBilling((prev) => (prev === "monthly" ? "yearly" : "monthly"))}
               aria-label="Cambiar facturación"
             >
-              <span className="kl-billing-thumb" />
+              <span className="landing-modern-billing-thumb" />
             </button>
             <span className={billing === "yearly" ? "is-active" : ""}>Anual</span>
-            <span className="kl-billing-badge">Ahorra 2 meses</span>
+            <span className="landing-modern-billing-badge">Ahorra 2 meses</span>
           </div>
 
-          <div className="kl-pricing-grid">
-            {plans.map((plan, i) => (
+          <div className="landing-modern-pricing-grid">
+            {plans.map((plan) => (
               <article
                 key={plan.slug}
-                className={`kl-price-card kl-reveal ${plan.recommended ? "is-featured" : ""}`}
-                style={{ "--kl-delay": `${i * 90}ms` }}
+                className={`landing-modern-price-card ${plan.recommended ? "is-featured" : ""}`}
               >
-                {plan.recommended ? <span className="kl-price-rec">Recomendado</span> : null}
-                <div className="kl-price-plan">{cleanUiText(plan.name)}</div>
-                <div className={`kl-price-amount ${plan.slug === "basico" ? "is-free" : ""}`}>
+                {plan.recommended ? <span className="landing-modern-price-rec">Recomendado</span> : null}
+                <div className="landing-modern-price-plan">{cleanUiText(plan.name)}</div>
+                <div className={`landing-modern-price-amount ${plan.slug === "basico" ? "is-free" : ""}`}>
                   {billing === "monthly" ? plan.priceMonthly : plan.priceYearly}
                 </div>
-                <div className="kl-price-period">
+                <div className="landing-modern-price-period">
                   {billing === "monthly" ? "Facturación mensual" : "Facturación anual"}
                 </div>
-                <div className="kl-price-subtitle">{cleanUiText(plan.note)}</div>
-                <div className="kl-price-divider" />
-                <ul className="kl-price-features">
+                <p className="landing-modern-price-note">{cleanUiText(plan.note)}</p>
+                <ul className="landing-modern-price-features">
                   {plan.features.map((feature) => (
-                    <li key={feature}>
-                      <span className="kl-price-check">
-                        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>
-                      </span>
-                      {cleanUiText(feature)}
-                    </li>
+                    <li key={feature}>{cleanUiText(feature)}</li>
                   ))}
                 </ul>
-                <Link className="kl-price-btn-primary" to={`/planes/${plan.slug}`}>Ver detalle</Link>
-                <Link className="kl-price-btn-ghost" to="/register">{cleanUiText(plan.cta)}</Link>
+                <Link className="landing-modern-btn is-primary" to={`/planes/${plan.slug}`}>
+                  Ver detalle
+                </Link>
+                <Link className="landing-modern-btn is-ghost" to="/register">
+                  {cleanUiText(plan.cta)}
+                </Link>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ── FAQ acordeón ───────────────────────────────────────────────── */}
-      <section className="kl-section kl-faq">
-        <div className="kl-section-inner kl-faq-inner">
-          <div className="kl-section-head kl-reveal">
-            <div className="kl-eyebrow">Preguntas frecuentes</div>
-            <h2 className="kl-section-title">Resolvemos tus <em>dudas</em></h2>
+      <section className="landing-modern-section landing-modern-section-faq">
+        <div className="landing-modern-shell landing-modern-shell-narrow">
+          <div className="landing-modern-section-head">
+            <span className="landing-modern-kicker">Preguntas frecuentes</span>
+            <h2>Una landing más limpia también explica mejor.</h2>
           </div>
-          <div className="kl-faq-list kl-reveal">
-            {faqItems.map((item, i) => {
-              const open = openFaq === i;
+
+          <div className="landing-modern-faq">
+            {faqItems.map((item, index) => {
+              const open = openFaq === index;
               return (
-                <div key={item.q} className={`kl-faq-item ${open ? "is-open" : ""}`}>
+                <div key={item.q} className={`landing-modern-faq-item ${open ? "is-open" : ""}`}>
                   <button
                     type="button"
-                    className="kl-faq-q"
+                    className="landing-modern-faq-question"
                     aria-expanded={open}
-                    onClick={() => setOpenFaq(open ? null : i)}
+                    onClick={() => setOpenFaq(open ? null : index)}
                   >
-                    <span>{cleanUiText(item.q)}</span>
-                    <span className="kl-faq-icon" aria-hidden="true" />
+                    <span>{item.q}</span>
+                    <span className="landing-modern-faq-icon" aria-hidden="true" />
                   </button>
-                  <div className="kl-faq-a" style={{ maxHeight: open ? "400px" : "0px" }}>
-                    <p>{cleanUiText(item.a)}</p>
+                  <div className="landing-modern-faq-answer">
+                    <p>{item.a}</p>
                   </div>
                 </div>
               );
@@ -778,26 +581,34 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         </div>
       </section>
 
-      {/* ── CTA final ───────────────────────────────────────────────────── */}
-      <section className="kl-cta">
-        <div className="kl-cta-inner kl-reveal">
-          <div className="kl-eyebrow is-light">Empieza hoy</div>
-          <h2>Comienza tu camino de <em>salud personalizada</em></h2>
-          <p>&Uacute;nete a miles de personas que ya confían en Klinip para cuidar su salud y la de su familia.</p>
-          <Link className="kl-cta-btn" to="/register">
-            <span>Crear cuenta gratis</span>
-            <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-          </Link>
+      <section className="landing-modern-cta">
+        <div className="landing-modern-shell landing-modern-cta-inner">
+          <div>
+            <span className="landing-modern-kicker is-on-dark">Listo para empezar</span>
+            <h2>Klinip se ve más confiable cuando se parece a un servicio real.</h2>
+            <p>
+              La base ya quedó preparada para reemplazar los fallbacks por tus fotos definitivas y seguir
+              afinando la narrativa comercial.
+            </p>
+          </div>
+          <div className="landing-modern-cta-actions">
+            <Link className="landing-modern-btn is-primary is-large" to="/register">
+              Crear cuenta gratis
+            </Link>
+            <Link className="landing-modern-btn is-dark-ghost is-large" to="/login">
+              Ya tengo cuenta
+            </Link>
+          </div>
         </div>
       </section>
 
-      <footer className="kl-footer">
-        <div className="kl-footer-inner">
-          <div className="kl-footer-brand">
+      <footer className="landing-modern-footer">
+        <div className="landing-modern-shell landing-modern-footer-inner">
+          <div className="landing-modern-footer-brand">
             <BrandLogo className="brand-logo-landing brand-logo-keep-name-mobile" showMark={false} responsive />
-            <span>Tu ruta de salud, simplificada</span>
+            <span>Tu salud más ordenada, tu cuidado más acompañado.</span>
           </div>
-          <div className="kl-footer-copy">&copy; 2026 Klinip. Todos los derechos reservados.</div>
+          <div className="landing-modern-footer-copy">&copy; 2026 Klinip. Todos los derechos reservados.</div>
         </div>
       </footer>
     </div>
