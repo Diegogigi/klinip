@@ -66,11 +66,6 @@ const journeySteps = [
       "Contexto listo para futuras consultas y controles",
     ],
     chips: ["Documentos activos", "Agenda clínica", "Perfil ordenado"],
-    image: {
-      src: "/landing/documentos-en-casa.jpg",
-      fallback: "/landing/fallback-mi-salud.png",
-      alt: "Persona revisando documentos clínicos con Klinip a mano.",
-    },
   },
   {
     eyebrow: "Durante el seguimiento",
@@ -83,12 +78,6 @@ const journeySteps = [
       "Klinip Voice para transformar consultas en continuidad útil",
     ],
     chips: ["Radar", "Klinip IA", "Klinip Voice"],
-    reverse: true,
-    image: {
-      src: "/landing/consulta-acompanada.jpg",
-      fallback: "/landing/fallback-radar-salud.png",
-      alt: "Paciente, familiar y profesional revisando información de salud en conjunto.",
-    },
   },
   {
     eyebrow: "Cuando hay familia o cuidadores",
@@ -101,11 +90,6 @@ const journeySteps = [
       "Más continuidad entre quien consulta y quien acompaña",
     ],
     chips: ["Permisos por perfil", "Red familiar privada", "Seguimiento compartido"],
-    image: {
-      src: "/landing/familia-cuidando.jpg",
-      fallback: "/landing/fallback-familia-home.png",
-      alt: "Familia revisando juntos el seguimiento de salud desde Klinip.",
-    },
   },
 ];
 
@@ -137,7 +121,7 @@ const moduleCards = [
     tone: "green",
     icon: "pill",
     image: {
-      src: "/landing/hero-giselle.jpg",
+      src: "/landing/fallback-home-hero.png",
       fallback: "/landing/fallback-home-hero.png",
       alt: "Recordatorios de salud y seguimiento diario en Klinip.",
     },
@@ -156,7 +140,7 @@ const moduleCards = [
     tone: "blue",
     icon: "radar",
     image: {
-      src: "/landing/consulta-acompanada.jpg",
+      src: "/landing/fallback-radar-salud.png",
       fallback: "/landing/fallback-radar-salud.png",
       alt: "Radar de salud y prioridades clínicas visibles en Klinip.",
     },
@@ -176,7 +160,7 @@ const moduleCards = [
     icon: "voice",
     image: {
       src: "/landing/consulta-acompanada.jpg",
-      fallback: "/landing/fallback-home-hero.png",
+      fallback: "/landing/fallback-mi-salud.png",
       alt: "Consulta acompañada con continuidad a través de Klinip Voice.",
     },
     bullets: [
@@ -194,7 +178,7 @@ const moduleCards = [
     tone: "coral",
     icon: "family",
     image: {
-      src: "/landing/familia-cuidando.jpg",
+      src: "/landing/fallback-familia-home.png",
       fallback: "/landing/fallback-familia-home.png",
       alt: "Familia revisando el seguimiento de salud desde Klinip.",
     },
@@ -544,80 +528,25 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           </div>
 
           <div className="landing-brand-stage landing-reveal">
-            <div className="landing-brand-stage-panel">
-              <div className="landing-brand-stage-head">
-                <BrandLogo
-                  className="landing-brand-stage-logo"
-                  markClassName="landing-brand-stage-logo-mark"
-                  nameClassName="landing-brand-stage-logo-name"
-                  variant="transparent"
-                  responsive
-                />
-                <span>Continuidad activa</span>
-              </div>
-
-              <div className="landing-brand-stage-priority">
-                <div>
-                  <small>Prioridad de hoy</small>
-                  <strong>Consulta mañana 09:30</strong>
-                </div>
-                <span className="landing-brand-stage-badge">Radar activo</span>
-              </div>
-
-              <div className="landing-brand-stage-list">
-                <div className="landing-brand-stage-item">
-                  <span className="landing-brand-stage-item-dot is-blue" aria-hidden="true" />
-                  <div>
-                    <strong>Documento leído</strong>
-                    <p>Receta vinculada a tratamiento y próxima reposición.</p>
-                  </div>
-                </div>
-                <div className="landing-brand-stage-item">
-                  <span className="landing-brand-stage-item-dot is-green" aria-hidden="true" />
-                  <div>
-                    <strong>Red familiar coordinada</strong>
-                    <p>Dos personas autorizadas siguiendo el mismo proceso.</p>
-                  </div>
-                </div>
-                <div className="landing-brand-stage-item">
-                  <span className="landing-brand-stage-item-dot is-gold" aria-hidden="true" />
-                  <div>
-                    <strong>Consulta con contexto</strong>
-                    <p>Antecedentes, recordatorios y voz clínica en el mismo flujo.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="landing-brand-stage-footer">
-                <div className="landing-brand-mini-card">
-                  <small>Klinip Voice</small>
-                  <strong>Resumen claro</strong>
-                </div>
-                <div className="landing-brand-mini-card">
-                  <small>Familia</small>
-                  <strong>Permisos activos</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="landing-brand-stage-photo">
+            <div className="landing-brand-stage-photo is-hero">
               <LandingImage
                 className="landing-brand-stage-image"
                 src="/landing/hero-giselle.jpg"
                 fallback="/landing/fallback-home-hero.png"
                 alt="Paciente usando Klinip desde su hogar."
               />
-              <div className="landing-brand-stage-photo-note">
-                <small>Diseñado para el día a día</small>
-                <strong>Menos fricción, más claridad</strong>
+              <div className="landing-brand-stage-chip is-top">
+                <span className="landing-brand-stage-chip-dot" aria-hidden="true" />
+                <span>Tu información de salud sigue siendo tuya</span>
               </div>
-            </div>
-
-            <div className="landing-brand-floating-card is-left">
-              <span>Perfil personal y familiar</span>
-            </div>
-            <div className="landing-brand-floating-card is-right">
-              <span>IA orientativa con contexto real</span>
+              <div className="landing-brand-stage-photo-note is-hero-box">
+                <small>Klinip en una sola vista</small>
+                <strong>Documentos, recordatorios, Radar, voz clínica y red familiar en un mismo lugar.</strong>
+                <p>
+                  Klinip ordena tu contexto de salud para que entiendas qué sigue, qué compartir y qué cuidar
+                  primero.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -669,16 +598,8 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             {journeySteps.map((step, index) => (
               <article
                 key={step.title}
-                className={`landing-brand-journey-card landing-reveal ${step.reverse ? "is-reverse" : ""}`}
+                className="landing-brand-journey-card landing-reveal"
               >
-                <div className="landing-brand-journey-media">
-                  <LandingImage
-                    className="landing-brand-journey-image"
-                    src={step.image.src}
-                    fallback={step.image.fallback}
-                    alt={step.image.alt}
-                  />
-                </div>
                 <div className="landing-brand-journey-content">
                   <span className="landing-brand-journey-step">0{index + 1}</span>
                   <span className="landing-brand-eyebrow">{step.eyebrow}</span>
