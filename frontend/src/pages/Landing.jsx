@@ -111,72 +111,122 @@ const journeySteps = [
 
 const moduleCards = [
   {
+    title: "Documentos vivos",
+    description:
+      "Tomas una foto, Klinip ordena el documento, lo vincula al perfil correcto y lo convierte en seguimiento útil.",
+    eyebrow: "Captura y activa",
+    tone: "sand",
+    icon: "document",
+    image: {
+      src: "/landing/documentos-en-casa.jpg",
+      fallback: "/landing/fallback-mi-salud.png",
+      alt: "Documentos clínicos guardados y organizados con Klinip.",
+    },
+    bullets: [
+      "Recetas, órdenes y resultados guardados en el historial",
+      "Lectura clínica que ayuda a detectar próximos pasos",
+      "Base para recordatorios y seguimiento posterior",
+    ],
+    spotlight: "De una foto a un dato ordenado y accionable",
+  },
+  {
+    title: "Recordatorios automáticos para tratamientos y citas",
+    description:
+      "Cuando el contexto del documento o la agenda lo permite, Klinip ayuda a transformar indicaciones en recordatorios visibles.",
+    eyebrow: "Sostiene la adherencia",
+    tone: "green",
+    icon: "pill",
+    image: {
+      src: "/landing/hero-giselle.jpg",
+      fallback: "/landing/fallback-home-hero.png",
+      alt: "Recordatorios de salud y seguimiento diario en Klinip.",
+    },
+    bullets: [
+      "Recordatorios de medicamentos dentro de la rutina diaria",
+      "Alertas de citas y controles relevantes",
+      "Menos carga mental para sostener tratamientos",
+    ],
+    spotlight: "La salud no depende solo de recordar de memoria",
+  },
+  {
     title: "Radar de salud",
     description:
-      "La capa que detecta prioridades, citas cercanas, adherencia y señales que no conviene dejar pasar.",
+      "Una capa que prioriza señales, pendientes y citas próximas para que el usuario vea primero lo que realmente importa.",
     eyebrow: "Prioriza",
     tone: "blue",
     icon: "radar",
-    featured: true,
-    bullets: ["Señales visibles", "Pendientes del día", "Seguimiento continuo"],
-  },
-  {
-    title: "Documentos que activan acciones",
-    description:
-      "OCR clínico y lectura contextual para pasar de guardar archivos a entender qué hacer con ellos.",
-    eyebrow: "Interpreta",
-    tone: "sand",
-    icon: "document",
-  },
-  {
-    title: "Medicamentos y adherencia",
-    description:
-      "Tratamientos, horarios y reposiciones en una vista que ayuda a sostener el cuidado diario.",
-    eyebrow: "Sostiene",
-    tone: "green",
-    icon: "pill",
+    image: {
+      src: "/landing/consulta-acompanada.jpg",
+      fallback: "/landing/fallback-radar-salud.png",
+      alt: "Radar de salud y prioridades clínicas visibles en Klinip.",
+    },
+    bullets: [
+      "Señales y alertas visibles en un mismo lugar",
+      "Prioridades del día sin perder contexto",
+      "Continuidad entre consulta, hogar y seguimiento",
+    ],
+    spotlight: "Ver primero lo urgente cambia cómo se cuida la salud",
   },
   {
     title: "Klinip Voice",
     description:
-      "Convierte una consulta en un registro útil, entendible y compartible cuando el usuario lo autoriza.",
-    eyebrow: "Escucha",
+      "Permite grabar una consulta y generar una versión clara para el usuario y otra versión útil para compartir con el profesional cuando hay autorización.",
+    eyebrow: "Escucha y traduce",
     tone: "indigo",
     icon: "voice",
+    image: {
+      src: "/landing/consulta-acompanada.jpg",
+      fallback: "/landing/fallback-home-hero.png",
+      alt: "Consulta acompañada con continuidad a través de Klinip Voice.",
+    },
+    bullets: [
+      "Versión simple para entender la consulta en casa",
+      "Versión técnica o compartible para el profesional",
+      "Más continuidad sin perder la fuente original",
+    ],
+    spotlight: "La consulta no termina cuando se cierra la puerta",
   },
   {
     title: "Red familiar privada",
     description:
-      "Un espacio cerrado para actualizaciones relevantes entre familia y cuidadores, no una red social abierta.",
-    eyebrow: "Conecta",
+      "La red familiar importa porque el cuidado real rara vez lo sostiene una sola persona, pero debe compartirse con criterio.",
+    eyebrow: "Coordina con permisos",
     tone: "coral",
     icon: "family",
-  },
-  {
-    title: "Asistente Klinip IA",
-    description:
-      "Explica, resume y orienta con contexto real del perfil activo sin prometer decisiones automáticas.",
-    eyebrow: "Orienta",
-    tone: "violet",
-    icon: "spark",
+    image: {
+      src: "/landing/familia-cuidando.jpg",
+      fallback: "/landing/fallback-familia-home.png",
+      alt: "Familia revisando el seguimiento de salud desde Klinip.",
+    },
+    bullets: [
+      "Permisos explícitos para ver o acompañar información",
+      "Actualizaciones privadas entre cuidadores y familia",
+      "Menos improvisación y más continuidad compartida",
+    ],
+    spotlight: "Acompañar mejor también requiere contexto compartido",
   },
 ];
 
 const trustCards = [
   {
-    title: "Fuente original primero",
+    title: "Tu salud, tu información",
     description:
-      "Documentos, agenda, registros y audio clínico siguen siendo la base. La IA interpreta encima de esa fuente, no la reemplaza.",
+      "Klinip está pensado para que la información de salud siga siendo tuya: ordenada en tu perfil, visible para ti y compartida solo cuando corresponde.",
   },
   {
-    title: "IA orientativa, no diagnóstica",
+    title: "Permisos antes que exposición",
     description:
-      "Klinip ayuda a entender y priorizar. Las decisiones clínicas siguen siendo del usuario y del profesional tratante.",
+      "La red familiar y el trabajo con cuidadores existen para ayudarte, no para quitarte control sobre tus documentos, citas o registros sensibles.",
   },
   {
-    title: "Privacidad por diseño",
+    title: "Radar con criterio",
     description:
-      "Perfiles, permisos y contexto compartido existen para acompañar mejor, no para exponer información sensible.",
+      "Radar no busca alarmar. Busca mostrar señales importantes para que puedas actuar antes, con más claridad y menos fricción.",
+  },
+  {
+    title: "Voice con doble lectura útil",
+    description:
+      "La versión para el usuario ayuda a entender; la versión para compartir con el profesional ayuda a mantener continuidad sin perder rigurosidad.",
   },
 ];
 
@@ -364,6 +414,27 @@ export default function Landing({ theme = "light", onToggleTheme }) {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return undefined;
+    const nodes = Array.from(document.querySelectorAll(".landing-reveal"));
+    if (!nodes.length) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { rootMargin: "0px 0px -12% 0px", threshold: 0.18 }
+    );
+
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, []);
+
   const handleLandingNav = (sectionId) => {
     const target = document.getElementById(sectionId);
     if (!target) return;
@@ -431,7 +502,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
 
       <section className="landing-brand-hero">
         <div className="landing-brand-shell landing-brand-hero-grid">
-          <div className="landing-brand-hero-copy">
+          <div className="landing-brand-hero-copy landing-reveal">
             <span className="landing-brand-eyebrow">Continuidad de cuidados</span>
             <h1>
               Klinip ordena lo que pasa
@@ -472,7 +543,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             </div>
           </div>
 
-          <div className="landing-brand-stage">
+          <div className="landing-brand-stage landing-reveal">
             <div className="landing-brand-stage-panel">
               <div className="landing-brand-stage-head">
                 <BrandLogo
@@ -555,7 +626,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       <section id="principios" className="landing-brand-section">
         <div className="landing-brand-shell">
           <div className="landing-brand-principles-layout">
-            <div className="landing-brand-quote-card">
+            <div className="landing-brand-quote-card landing-reveal">
               <span className="landing-brand-eyebrow">Principios de marca</span>
               <h2>Klinip no es solo una agenda ni solo un chatbot.</h2>
               <p>
@@ -572,7 +643,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               {brandPrinciples.map((item) => (
                 <article
                   key={item.title}
-                  className={`landing-brand-principle-card tone-${item.tone}`}
+                  className={`landing-brand-principle-card tone-${item.tone} landing-reveal`}
                 >
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
@@ -598,7 +669,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             {journeySteps.map((step, index) => (
               <article
                 key={step.title}
-                className={`landing-brand-journey-card ${step.reverse ? "is-reverse" : ""}`}
+                className={`landing-brand-journey-card landing-reveal ${step.reverse ? "is-reverse" : ""}`}
               >
                 <div className="landing-brand-journey-media">
                   <LandingImage
@@ -635,40 +706,45 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       <section id="modulos" className="landing-brand-section">
         <div className="landing-brand-shell">
           <div className="landing-brand-section-head">
-            <span className="landing-brand-eyebrow">Módulos reales</span>
-            <h2>El producto ya tiene piezas concretas para convertir información clínica en acción útil.</h2>
+            <span className="landing-brand-eyebrow">Pilares activos</span>
+            <h2>Klinip hace visibles sus pilares con acciones concretas, no solo con promesas.</h2>
             <p>
-              Klinip integra módulos que se potencian entre sí: agenda, adherencia, documentos, IA, voz
-              clínica y colaboración familiar dentro de un mismo lenguaje visual y funcional.
+              Desde una foto de un documento hasta un recordatorio útil, desde Radar hasta Klinip Voice y la
+              red familiar, cada pilar existe para convertir información dispersa en continuidad de cuidado.
             </p>
           </div>
 
           <div className="landing-brand-module-grid">
-            {moduleCards.map((item) => (
+            {moduleCards.map((item, index) => (
               <article
                 key={item.title}
-                className={`landing-brand-module-card tone-${item.tone} ${item.featured ? "is-featured" : ""}`}
+                className={`landing-brand-module-card tone-${item.tone} landing-reveal`}
+                style={{ "--reveal-delay": `${index * 90}ms` }}
               >
-                <div className="landing-brand-module-icon" aria-hidden="true">
-                  <ModuleIcon icon={item.icon} />
-                </div>
-                <span className="landing-brand-module-eyebrow">{item.eyebrow}</span>
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
-                {item.featured ? (
-                  <div className="landing-brand-module-feature">
-                    <div className="landing-brand-module-meter">
-                      <span className="is-strong" />
-                      <span className="is-medium" />
-                      <span className="is-soft" />
+                <div className="landing-brand-module-media">
+                  <LandingImage
+                    className="landing-brand-module-image"
+                    src={item.image.src}
+                    fallback={item.image.fallback}
+                    alt={item.image.alt}
+                  />
+                  <div className="landing-brand-module-media-overlay">
+                    <div className="landing-brand-module-icon" aria-hidden="true">
+                      <ModuleIcon icon={item.icon} />
                     </div>
-                    <ul className="landing-brand-module-feature-list">
-                      {item.bullets.map((bullet) => (
-                        <li key={bullet}>{bullet}</li>
-                      ))}
-                    </ul>
+                    <span className="landing-brand-module-eyebrow">{item.eyebrow}</span>
                   </div>
-                ) : null}
+                </div>
+                <div className="landing-brand-module-body">
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                  <div className="landing-brand-module-spotlight">{item.spotlight}</div>
+                  <ul className="landing-brand-module-feature-list">
+                    {item.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                </div>
               </article>
             ))}
           </div>
@@ -677,14 +753,22 @@ export default function Landing({ theme = "light", onToggleTheme }) {
 
       <section id="confianza" className="landing-brand-section">
         <div className="landing-brand-shell">
-          <div className="landing-brand-trust-panel">
+          <div className="landing-brand-trust-panel landing-reveal">
             <div className="landing-brand-section-head is-on-dark">
               <span className="landing-brand-eyebrow is-on-dark">Confianza y criterio</span>
-              <h2>Tecnología con criterio clínico, no con promesas vacías.</h2>
+              <h2>Tecnología con criterio clínico, propiedad de datos y continuidad compartida.</h2>
               <p>
                 Klinip se presenta como un sistema de apoyo que interpreta señales, organiza contexto y
                 acompaña procesos sensibles con reglas claras de privacidad y responsabilidad.
               </p>
+            </div>
+
+            <div className="landing-brand-ownership-banner">
+              <strong>Eres dueño de tu información de salud.</strong>
+              <span>
+                Klinip te ayuda a ordenarla, entenderla y compartirla con criterio, pero no te la quita ni
+                la convierte en una caja negra.
+              </span>
             </div>
 
             <div className="landing-brand-trust-flow" aria-label="Flujo de confianza de Klinip">
