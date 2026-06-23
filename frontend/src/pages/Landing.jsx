@@ -420,7 +420,17 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
   }, [landingNavItems]);
 
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return undefined;
+    const revealAll = () =>
+      document
+        .querySelectorAll(".landing-reveal:not(.is-visible)")
+        .forEach((node) => node.classList.add("is-visible"));
+
+    // Sin IntersectionObserver: mostrar todo de inmediato.
+    if (typeof IntersectionObserver === "undefined") {
+      revealAll();
+      return undefined;
+    }
+
     const nodes = Array.from(document.querySelectorAll(".landing-reveal"));
     if (!nodes.length) return undefined;
 
@@ -433,12 +443,21 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
           }
         });
       },
-      { rootMargin: "0px 0px -12% 0px", threshold: 0.18 }
+      // Umbral 0 + margen amplio: dispara fácil al acercarse (clave en móvil).
+      { rootMargin: "0px 0px 12% 0px", threshold: 0 }
     );
 
     nodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
+
+    // Red de seguridad: si el observer no revela algo (móvil, contenido que
+    // aparece después), igual se muestra para que NINGUNA imagen quede invisible.
+    const safety = window.setTimeout(revealAll, 2500);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(safety);
+    };
+  }, [audience]);
 
   const handleLandingNav = (sectionId) => {
     const target = document.getElementById(sectionId);
@@ -574,7 +593,7 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
             </div>
           </div>
         ) : (
-          <div className="landing-brand-shell">
+          <div className="landing-brand-shell landing-brand-shell-hero-bleed">
             <div className="landing-brand-hero-immersive landing-reveal">
               <LandingImage
                 className="landing-brand-hero-immersive-image"
