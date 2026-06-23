@@ -19,6 +19,7 @@ import RowActionsMenu from "../components/RowActionsMenu";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import StepUpModal from "../components/StepUpModal";
 import DocumentUploadWizard from "../components/DocumentUploadWizard";
+import SuccessSheet from "../components/SuccessSheet";
 import { cleanUiText } from "../utils/textEncoding";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 
@@ -206,6 +207,7 @@ export default function Documents() {
   const [activeProfile, setActiveProfile] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [docSuccess, setDocSuccess] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -471,7 +473,7 @@ export default function Documents() {
       timeoutId = window.setTimeout(() => {
         window.alert("La subida está tardando más de lo esperado. Mantente en esta pantalla.");
       }, 8000);
-      await uploadDocument({
+      const created = await uploadDocument({
         doc_type: form.doc_type,
         date: toIsoOrNull(form.date),
         center: form.center,
@@ -481,15 +483,19 @@ export default function Documents() {
       });
       window.clearTimeout(timeoutId);
       await load();
-      setUploadNotice(
-        "Documento cargado. Klinip está analizando el archivo y puede crear medicamentos, citas o resúmenes estructurados según lo que detecte.",
-      );
+      const successDoc = {
+        id: created?.id,
+        typeLabel: docLabels[form.doc_type] || "Documento",
+        center: form.center,
+        dateLabel: form.date ? toLocaleDateOrEmpty(form.date) : "",
+      };
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["documents", "health-radar"],
       });
       resetForm();
       setShowForm(false);
+      setDocSuccess(successDoc);
     } catch (err) {
       console.error(err);
       window.clearTimeout(timeoutId);
@@ -907,6 +913,22 @@ export default function Documents() {
             sources: ["documents", "health-radar"],
           });
         }}
+      />
+
+      <SuccessSheet
+        open={!!docSuccess}
+        onClose={() => setDocSuccess(null)}
+        kicker="Documento guardado"
+        title="Todo listo"
+        copy="El documento quedó guardado. Klinip lo está analizando y puede crear medicamentos, citas o resúmenes según lo que detecte."
+        referenceId={docSuccess?.id}
+        rows={[
+          { icon: "profile", label: "Perfil activo", value: activeProfileLabel },
+          { icon: "doc", label: "Tipo de documento", value: cleanUiText(docSuccess?.typeLabel || "Documento") },
+          { icon: "building", label: "Centro", value: cleanUiText(docSuccess?.center, "Sin centro registrado") },
+          { icon: "clock", label: "Fecha", value: docSuccess?.dateLabel || "Sin fecha" },
+        ]}
+        secondaryLabel="Volver a documentos"
       />
 
       {showForm && canEditActiveProfile && createPortal(

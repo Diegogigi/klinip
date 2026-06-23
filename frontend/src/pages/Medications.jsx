@@ -36,6 +36,8 @@ import {
   parseDurationDays,
 } from "../utils/medicationSchedule";
 import RowActionsMenu from "../components/RowActionsMenu";
+import SuccessSheet from "../components/SuccessSheet";
+import { cleanUiText } from "../utils/textEncoding";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
@@ -304,6 +306,7 @@ export default function Medications() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [medSuccess, setMedSuccess] = useState(null);
   const [detailIntakes, setDetailIntakes] = useState([]);
   const [detailIntakesLoading, setDetailIntakesLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -762,6 +765,10 @@ export default function Medications() {
       }
       resetForm();
       setShowForm(false);
+      // Confirmación visual solo al CREAR un medicamento nuevo (no al editar).
+      if (!payload.id && savedMedication) {
+        setMedSuccess(savedMedication);
+      }
     } catch (err) {
       console.error("Error al guardar medicamento:", err);
       console.error("Detalles del error:", err.response?.data);
@@ -2556,6 +2563,41 @@ export default function Medications() {
           </div>
         </div>
       , document.getElementById("overlay-root") || document.body)}
+
+      <SuccessSheet
+        open={!!medSuccess}
+        onClose={() => setMedSuccess(null)}
+        kicker="Medicamento agregado"
+        title="Todo listo"
+        copy="El medicamento quedó registrado y ya forma parte de tu seguimiento clínico."
+        referenceId={medSuccess?.id}
+        rows={[
+          {
+            icon: "profile",
+            label: "Perfil activo",
+            value: cleanUiText(activeProfile?.display_name || activeProfile?.full_name || "Mi perfil"),
+          },
+          {
+            icon: "pill",
+            label: "Medicamento",
+            value: cleanUiText(medSuccess?.name || "Medicamento"),
+          },
+          {
+            icon: "clock",
+            label: "Dosis y frecuencia",
+            value: cleanUiText(
+              [medSuccess?.dose, medSuccess?.frequency].filter(Boolean).join(" · ") || "Por confirmar",
+            ),
+          },
+        ]}
+        primaryLabel="Ver detalle"
+        onPrimary={() => {
+          const target = medSuccess;
+          setMedSuccess(null);
+          if (target) handleOpenDetail(target);
+        }}
+        secondaryLabel="Volver a medicamentos"
+      />
 
       {detailOpen && detailTarget && createPortal(
         <div className="modal-backdrop" onClick={handleCloseDetail}>
