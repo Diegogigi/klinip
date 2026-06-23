@@ -632,18 +632,18 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                   <div className="landing-brand-phone-notch" aria-hidden="true" />
                   <LandingImage
                     className="landing-brand-phone-screen"
-                    src="/landing/fallback-home-hero.png"
-                    fallback="/landing/fallback-home-hero.png"
-                    alt="Pantalla principal de Klinip en celular."
+                    src="/landing/fallback-home-hero.jpeg"
+                    fallback="/landing/fallback-home-hero.jpeg"
+                    alt="Pantalla principal de Klinip con centro de control diario y seguimiento."
                   />
                 </div>
                 <div className="landing-brand-phone landing-brand-phone-front">
                   <div className="landing-brand-phone-notch" aria-hidden="true" />
                   <LandingImage
                     className="landing-brand-phone-screen"
-                    src="/landing/fallback-radar-salud.png"
-                    fallback="/landing/fallback-radar-salud.png"
-                    alt="Pantalla de indicadores y resultados de Klinip en celular."
+                    src="/landing/fallback-radar-salud.jpeg"
+                    fallback="/landing/fallback-radar-salud.jpeg"
+                    alt="Pantalla de Atención de hoy con radar de salud, medicamentos y documentos."
                   />
                 </div>
               </div>
