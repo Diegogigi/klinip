@@ -667,6 +667,136 @@ body.theme-dark .landing-brand-section-soft {
   line-height: 1.55;
 }
 
+.landing-brand-business-panel,
+.landing-brand-simple-card {
+  border-radius: 1.7rem;
+  background: var(--lb-surface);
+  border: 1px solid var(--lb-border);
+  box-shadow: var(--lb-shadow-soft);
+}
+
+.landing-brand-business-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top right, rgba(77, 163, 255, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(241, 246, 255, 0.92));
+}
+
+body.theme-dark .landing-brand-business-panel {
+  background:
+    radial-gradient(circle at top right, rgba(139, 176, 255, 0.16), transparent 34%),
+    linear-gradient(180deg, rgba(15, 24, 40, 0.92), rgba(19, 31, 52, 0.92));
+}
+
+.landing-brand-business-panel-kicker,
+.landing-brand-simple-card-kicker {
+  color: var(--lb-primary);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.landing-brand-business-panel h2,
+.landing-brand-simple-card h3 {
+  margin: 0;
+  color: var(--lb-text);
+}
+
+.landing-brand-business-panel h2 {
+  font-size: clamp(1.8rem, 3vw, 2.7rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.landing-brand-business-panel p,
+.landing-brand-simple-card p {
+  margin: 0;
+  color: var(--lb-text-soft);
+  line-height: 1.65;
+}
+
+.landing-brand-business-steps,
+.landing-brand-simple-grid {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.landing-brand-business-step,
+.landing-brand-simple-card {
+  padding: 1rem 1.05rem;
+  border-radius: 1.25rem;
+}
+
+.landing-brand-business-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid var(--lb-border);
+}
+
+body.theme-dark .landing-brand-business-step {
+  background: rgba(9, 15, 27, 0.7);
+}
+
+.landing-brand-business-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: rgba(13, 71, 247, 0.1);
+  color: var(--lb-primary);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.landing-brand-business-step strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--lb-text);
+}
+
+.landing-brand-business-note,
+.landing-brand-ownership-banner-business {
+  display: grid;
+  gap: 0.38rem;
+  padding: 1rem 1.05rem;
+  border-radius: 1.25rem;
+  background: var(--lb-surface-soft);
+  border: 1px solid var(--lb-border);
+}
+
+.landing-brand-business-note strong,
+.landing-brand-ownership-banner-business strong {
+  color: var(--lb-text);
+}
+
+.landing-brand-business-note span,
+.landing-brand-ownership-banner-business span {
+  color: var(--lb-text-soft);
+  line-height: 1.6;
+}
+
+.landing-brand-simple-grid-enterprise {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-brand-simple-grid-capabilities,
+.landing-brand-simple-grid-trust {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-brand-simple-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
 .landing-brand-enterprise {
   display: grid;
   gap: 1.2rem;
@@ -1419,7 +1549,8 @@ body.theme-dark .landing-brand-cta-card {
   .landing-brand-module-image,
   .landing-brand-enterprise-card,
   .landing-brand-enterprise-core,
-  .landing-brand-enterprise-node {
+  .landing-brand-enterprise-node,
+  .landing-brand-simple-card {
     transition: none;
   }
 }
@@ -1428,11 +1559,13 @@ body.theme-dark .landing-brand-cta-card {
   .landing-brand-hero-grid,
   .landing-brand-showcase-grid,
   .landing-brand-split-card,
-  .landing-brand-enterprise-layout,
   .landing-brand-cta-card {
     grid-template-columns: 1fr;
   }
 
+  .landing-brand-simple-grid-enterprise,
+  .landing-brand-simple-grid-capabilities,
+  .landing-brand-simple-grid-trust,
   .landing-brand-enterprise-grid,
   .landing-brand-module-grid,
   .landing-brand-trust-grid,
@@ -1468,6 +1601,9 @@ body.theme-dark .landing-brand-cta-card {
     flex-wrap: wrap;
   }
 
+  .landing-brand-simple-grid-enterprise,
+  .landing-brand-simple-grid-capabilities,
+  .landing-brand-simple-grid-trust,
   .landing-brand-enterprise-grid,
   .landing-brand-module-grid,
   .landing-brand-trust-grid,
@@ -1535,9 +1671,11 @@ body.theme-dark .landing-brand-cta-card {
   .landing-brand-lead,
   .landing-brand-section-head p,
   .landing-brand-split-copy p,
+  .landing-brand-business-panel p,
   .landing-brand-enterprise-head p,
   .landing-brand-module-body p,
   .landing-brand-trust-card p,
+  .landing-brand-simple-card p,
   .landing-brand-faq-answer p,
   .landing-brand-cta-card p {
     font-size: 0.95rem;
@@ -1667,6 +1805,7 @@ body.theme-dark .landing-brand-cta-card {
   }
 
   .landing-brand-section-head h2,
+  .landing-brand-business-panel h2,
   .landing-brand-split-copy h2,
   .landing-brand-enterprise-head h2,
   .landing-brand-cta-card h2 {
@@ -1674,14 +1813,28 @@ body.theme-dark .landing-brand-cta-card {
     line-height: 1.05;
   }
 
+  .landing-brand-business-panel,
   .landing-brand-split-card,
   .landing-brand-enterprise,
   .landing-brand-module-card,
   .landing-brand-trust-panel,
+  .landing-brand-simple-card,
   .landing-brand-price-card,
   .landing-brand-cta-card {
     padding: 1rem;
     border-radius: 1.2rem;
+  }
+
+  .landing-brand-business-step,
+  .landing-brand-business-note,
+  .landing-brand-ownership-banner-business {
+    padding: 0.9rem;
+    border-radius: 1rem;
+  }
+
+  .landing-brand-business-step {
+    grid-template-columns: 1fr;
+    gap: 0.55rem;
   }
 
   .landing-brand-enterprise-layout,

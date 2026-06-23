@@ -44,6 +44,21 @@ const businessHeroHighlights = [
   "Permisos claros y propiedad de datos respetada en todo el flujo",
 ];
 
+const businessHeroSteps = [
+  {
+    title: "La atención ocurre",
+    description: "Recetas, resultados e indicaciones se generan en el momento clínico o del beneficio.",
+  },
+  {
+    title: "Klinip ordena",
+    description: "La información se convierte en seguimiento claro, recordatorios y próximos pasos.",
+  },
+  {
+    title: "La persona continúa",
+    description: "Todo llega a su teléfono sin mezclar la operación interna con la experiencia personal.",
+  },
+];
+
 const peopleBenefits = [
   "Organiza tu salud sin depender de papeles, chats o memoria.",
   "Activa recordatorios útiles para tratamientos, controles y próximos pasos.",
@@ -68,13 +83,37 @@ const companyBenefits = [
   },
 ];
 
-const companyFlowItems = [
-  "Resultados y exámenes",
-  "Recetas e indicaciones",
-  "Documentos con OCR",
-  "Klinip Voice",
-  "Recordatorios automáticos",
-  "Permisos familiares",
+const businessCapabilityCards = [
+  {
+    eyebrow: "Documentos",
+    title: "Resultados, recetas y órdenes con continuidad",
+    description: "Klinip transforma archivos clínicos en información visible, organizada y lista para seguimiento.",
+  },
+  {
+    eyebrow: "Seguimiento",
+    title: "Recordatorios y próximos pasos activados",
+    description: "La persona usuaria recibe una experiencia clara para sostener tratamientos, controles y acciones pendientes.",
+  },
+  {
+    eyebrow: "Acompañamiento",
+    title: "Contexto compartible sin perder control",
+    description: "Permisos, historial y apoyo familiar siguen reglas claras para no romper la privacidad.",
+  },
+];
+
+const businessTrustCards = [
+  {
+    title: "La organización no se adueña del dato",
+    description: "Klinip extiende la continuidad sin transferir la propiedad de la información personal de salud.",
+  },
+  {
+    title: "Permisos claros para cada flujo",
+    description: "La experiencia define qué se comparte, con quién y para qué, evitando accesos ambiguos.",
+  },
+  {
+    title: "Más claridad para la persona usuaria",
+    description: "La continuidad funciona mejor cuando las indicaciones, documentos y recordatorios se entienden de inmediato.",
+  },
 ];
 
 const companyOutcomeItems = [
@@ -297,19 +336,12 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
 
   const heroHighlights = isBusinessAudience ? businessHeroHighlights : peopleHeroHighlights;
   const faqEntries = isBusinessAudience ? businessFaqItems : faqItems;
-  const statItems = isBusinessAudience
-    ? [
-        { value: formatCount(stats.users), label: "usuarios con continuidad digital" },
-        { value: formatCount(stats.appointments), label: "citas coordinadas" },
-        { value: formatCount(stats.reminders), label: "recordatorios activados" },
-        { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
-      ]
-    : [
-        { value: formatCount(stats.users), label: "personas usando Klinip" },
-        { value: formatCount(stats.appointments), label: "citas coordinadas" },
-        { value: formatCount(stats.reminders), label: "recordatorios enviados" },
-        { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
-      ];
+  const statItems = [
+    { value: formatCount(stats.users), label: "personas usando Klinip" },
+    { value: formatCount(stats.appointments), label: "citas coordinadas" },
+    { value: formatCount(stats.reminders), label: "recordatorios enviados" },
+    { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
+  ];
 
   useEffect(() => {
     let mounted = true;
@@ -508,50 +540,65 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
             </div>
           </div>
 
-          <div className="landing-brand-stage landing-reveal">
-            <div className="landing-brand-stage-photo">
-              <LandingImage
-                className="landing-brand-stage-image"
-                src={isBusinessAudience ? "/landing/consulta-acompanada.jpg" : "/landing/hero-giselle.jpg"}
-                fallback="/landing/fallback-home-hero.png"
-                alt={
-                  isBusinessAudience
-                    ? "Profesional de salud y persona usuaria conectados por una experiencia de continuidad."
-                    : "Paciente usando Klinip desde su hogar."
-                }
-              />
-              <div className="landing-brand-stage-chip">
-                <span className="landing-brand-stage-chip-dot" aria-hidden="true" />
-                <span>
-                  {isBusinessAudience
-                    ? "La persona usuaria sigue controlando su información"
-                    : "Tu información de salud sigue siendo tuya"}
-                </span>
+          {isBusinessAudience ? (
+            <div className="landing-brand-business-panel landing-reveal">
+              <span className="landing-brand-business-panel-kicker">Cómo funciona Klinip Empresas</span>
+              <h2>Una propuesta más simple para continuidad, seguimiento y claridad.</h2>
+              <p>
+                La organización entrega contexto. Klinip lo convierte en una experiencia entendible para la
+                persona usuaria sin mostrar la interfaz interna de la empresa.
+              </p>
+              <div className="landing-brand-business-steps" aria-label="Proceso de Klinip Empresas">
+                {businessHeroSteps.map((item, index) => (
+                  <article key={item.title} className="landing-brand-business-step">
+                    <span className="landing-brand-business-step-index">0{index + 1}</span>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.description}</p>
+                    </div>
+                  </article>
+                ))}
               </div>
-              <div className="landing-brand-stage-photo-note">
-                <small>{isBusinessAudience ? "Continuidad visible" : "Klinip en una sola vista"}</small>
-                <strong>
-                  {isBusinessAudience
-                    ? "Documentos, indicaciones, recordatorios y contexto llegan al seguimiento sin perderse."
-                    : "Documentos, recordatorios, Radar, voz clínica y red familiar conectados."}
-                </strong>
-                <p>
-                  {isBusinessAudience
-                    ? "Una superficie pensada para que la organización acompañe mejor sin invadir la experiencia personal."
-                    : "Una experiencia diseñada para entender qué sigue, qué compartir y qué necesita atención antes de que se pierda."}
-                </p>
+              <div className="landing-brand-business-note">
+                <strong>La persona usuaria sigue controlando su información.</strong>
+                <span>Klinip mejora la continuidad, no cambia la propiedad del dato.</span>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="landing-brand-stage landing-reveal">
+              <div className="landing-brand-stage-photo">
+                <LandingImage
+                  className="landing-brand-stage-image"
+                  src="/landing/hero-giselle.jpg"
+                  fallback="/landing/fallback-home-hero.png"
+                  alt="Paciente usando Klinip desde su hogar."
+                />
+                <div className="landing-brand-stage-chip">
+                  <span className="landing-brand-stage-chip-dot" aria-hidden="true" />
+                  <span>Tu información de salud sigue siendo tuya</span>
+                </div>
+                <div className="landing-brand-stage-photo-note">
+                  <small>Klinip en una sola vista</small>
+                  <strong>Documentos, recordatorios, Radar, voz clínica y red familiar conectados.</strong>
+                  <p>
+                    Una experiencia diseñada para entender qué sigue, qué compartir y qué necesita atención
+                    antes de que se pierda.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="landing-brand-shell landing-brand-proof landing-reveal">
-          <div className="landing-brand-stats" aria-label="Indicadores principales">
-            {statItems.map((item) => (
-              <StatCard key={item.label} value={item.value} label={item.label} />
-            ))}
+        {!isBusinessAudience ? (
+          <div className="landing-brand-shell landing-brand-proof landing-reveal">
+            <div className="landing-brand-stats" aria-label="Indicadores principales">
+              {statItems.map((item) => (
+                <StatCard key={item.label} value={item.value} label={item.label} />
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </section>
 
       {!isBusinessAudience ? (
@@ -628,84 +675,29 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
       ) : (
         <section id="empresas" className="landing-brand-section landing-brand-section-soft">
           <div className="landing-brand-shell">
-            <div className="landing-brand-enterprise landing-reveal">
-              <div className="landing-brand-enterprise-layout">
-                <div className="landing-brand-enterprise-head">
-                  <span className="landing-brand-eyebrow">Empresas</span>
-                  <h2>Una experiencia exclusiva para organizaciones que quieren dar continuidad real.</h2>
-                  <p>
-                    Klinip Empresas separa la experiencia personal de la operación institucional para que cada
-                    atención, beneficio o programa siga viva en el teléfono de la persona usuaria.
-                  </p>
-                  <p>
-                    En vez de dejar la experiencia cortada en documentos sueltos o instrucciones que se pierden,
-                    Klinip convierte cada atención en una capa digital más clara para la persona y más valiosa
-                    para la organización.
-                  </p>
-                  <div className="landing-brand-enterprise-actions">
-                    <button
-                      type="button"
-                      className="landing-brand-btn is-secondary"
-                      onClick={() => handleLandingNav("modulos")}
-                    >
-                      Ver capacidades
-                    </button>
-                    <Link className="landing-brand-btn is-primary" to="/register">
-                      Explorar Klinip Empresas
-                      <ArrowIcon />
-                    </Link>
-                  </div>
-                  <div className="landing-brand-enterprise-outcomes" aria-label="Beneficios para la empresa">
-                    {companyOutcomeItems.map((item) => (
-                      <div key={item} className="landing-brand-enterprise-outcome">
-                        {item}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="landing-brand-enterprise-visual" aria-label="Flujo de información para empresas">
-                  <div className="landing-brand-enterprise-flow">
-                    <div className="landing-brand-enterprise-node is-source">
-                      <small>Centro, empresa o programa</small>
-                      <strong>La información clínica se origina donde ocurre la atención.</strong>
-                      <span>Resultados, recetas, órdenes, indicaciones y contexto clínico.</span>
-                    </div>
-
-                    <div className="landing-brand-enterprise-core">
-                      <span className="landing-brand-enterprise-core-label">Klinip</span>
-                      <strong>Ordena, activa y contextualiza</strong>
-                      <div className="landing-brand-enterprise-chip-list">
-                        {companyFlowItems.map((item) => (
-                          <span key={item} className="landing-brand-enterprise-chip">
-                            {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="landing-brand-enterprise-node is-user">
-                      <small>En el teléfono de la persona usuaria</small>
-                      <strong>Todo aparece en una experiencia más comprensible y accionable.</strong>
-                      <span>Recordatorios, historial, Voice, permisos y siguientes pasos en un mismo lugar.</span>
-                    </div>
-                  </div>
-
-                  <div className="landing-brand-enterprise-ownership">
-                    <strong>La organización mejora la continuidad.</strong>
-                    <span>La persona usuaria sigue siendo dueña de su información de salud y decide cómo compartirla.</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="landing-brand-enterprise-grid">
-                {companyBenefits.map((item) => (
-                  <article key={item.title} className="landing-brand-enterprise-card">
-                    <h3>{item.title}</h3>
-                    <p>{item.description}</p>
-                  </article>
-                ))}
-              </div>
+            <div className="landing-brand-section-head landing-reveal">
+              <span className="landing-brand-eyebrow">Empresas</span>
+              <h2>Una landing empresarial más directa, separada de la experiencia de personas.</h2>
+              <p>
+                Klinip Empresas está pensada para organizaciones que necesitan continuidad visible sin mezclar
+                su operación con la interfaz personal del usuario final.
+              </p>
+            </div>
+            <div className="landing-brand-simple-grid landing-brand-simple-grid-enterprise">
+              {companyBenefits.map((item) => (
+                <article key={item.title} className="landing-brand-simple-card landing-reveal">
+                  <span className="landing-brand-simple-card-kicker">Valor</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
+                </article>
+              ))}
+              {companyOutcomeItems.map((item) => (
+                <article key={item} className="landing-brand-simple-card landing-reveal">
+                  <span className="landing-brand-simple-card-kicker">Resultado</span>
+                  <h3>{item}</h3>
+                  <p>La continuidad se vuelve más clara para la organización y más útil para la persona usuaria.</p>
+                </article>
+              ))}
             </div>
           </div>
         </section>
@@ -714,13 +706,15 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
       <section id="modulos" className="landing-brand-section">
         <div className="landing-brand-shell">
           <div className="landing-brand-section-head">
-            <span className="landing-brand-eyebrow">Módulos Klinip</span>
+            <span className="landing-brand-eyebrow">
+              {isBusinessAudience ? "Capacidades clave" : "Módulos Klinip"}
+            </span>
             {isBusinessAudience ? (
               <>
-                <h2>Capacidades visibles para una propuesta empresarial clara.</h2>
+                <h2>Solo lo esencial para una propuesta empresarial clara.</h2>
                 <p>
-                  Estos módulos permiten transformar documentos, indicaciones y seguimiento en una experiencia
-                  útil para la persona usuaria y trazable para la organización.
+                  La versión de empresas resume las capacidades principales sin repetir toda la narrativa de la
+                  landing de personas.
                 </p>
               </>
             ) : (
@@ -734,79 +728,110 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
             )}
           </div>
 
-          <div className="landing-brand-module-grid">
-            {moduleCards.map((item, index) => (
-              <article
-                key={item.title}
-                className="landing-brand-module-card landing-reveal"
-                style={{ "--reveal-delay": `${index * 80}ms` }}
-              >
-                <div className="landing-brand-module-media">
-                  <LandingImage
-                    className="landing-brand-module-image"
-                    src={item.image.src}
-                    fallback={item.image.fallback}
-                    alt={item.image.alt}
-                  />
-                  <div className="landing-brand-module-media-overlay">
-                    <span className="landing-brand-module-eyebrow">{item.eyebrow}</span>
-                  </div>
-                </div>
-                <div className="landing-brand-module-body">
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                  <div className="landing-brand-module-spotlight">{item.spotlight}</div>
-                  <ul className="landing-brand-module-feature-list">
-                    {item.bullets.map((bullet) => (
-                      <li key={bullet}>{bullet}</li>
-                    ))}
-                  </ul>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="confianza" className="landing-brand-section">
-        <div className="landing-brand-shell">
-          <div className="landing-brand-trust-panel landing-reveal">
-            <div className="landing-brand-section-head is-on-dark">
-              <span className="landing-brand-eyebrow is-on-dark">Confianza</span>
-              <h2>
-                {isBusinessAudience
-                  ? "Privacidad, propiedad de datos y continuidad con reglas claras."
-                  : "Propiedad de datos, privacidad y continuidad antes que ruido visual."}
-              </h2>
-              <p>
-                {isBusinessAudience
-                  ? "Klinip ayuda a extender la experiencia de salud sin romper el control de la persona usuaria sobre su información."
-                  : "Klinip usa tecnología para hacer más útil la información clínica, pero con foco en control, claridad y responsabilidad."}
-              </p>
-            </div>
-
-            <div className="landing-brand-ownership-banner">
-              <strong>
-                {isBusinessAudience
-                  ? "La persona usuaria sigue siendo dueña de su información de salud."
-                  : "Eres dueño de tu información de salud."}
-              </strong>
-              <span>
-                {isBusinessAudience
-                  ? "Klinip organiza la información, la vuelve más entendible y permite compartirla con criterio, sin transferir su control a la organización."
-                  : "Klinip la organiza, la vuelve más entendible y te ayuda a compartirla con criterio, pero no la transforma en algo ajeno a ti."}
-              </span>
-            </div>
-
-            <div className="landing-brand-trust-grid">
-              {trustCards.map((item) => (
-                <article key={item.title} className="landing-brand-trust-card">
+          {isBusinessAudience ? (
+            <div className="landing-brand-simple-grid landing-brand-simple-grid-capabilities">
+              {businessCapabilityCards.map((item) => (
+                <article key={item.title} className="landing-brand-simple-card landing-reveal">
+                  <span className="landing-brand-simple-card-kicker">{item.eyebrow}</span>
                   <h3>{item.title}</h3>
                   <p>{item.description}</p>
                 </article>
               ))}
             </div>
-          </div>
+          ) : (
+            <div className="landing-brand-module-grid">
+              {moduleCards.map((item, index) => (
+                <article
+                  key={item.title}
+                  className="landing-brand-module-card landing-reveal"
+                  style={{ "--reveal-delay": `${index * 80}ms` }}
+                >
+                  <div className="landing-brand-module-media">
+                    <LandingImage
+                      className="landing-brand-module-image"
+                      src={item.image.src}
+                      fallback={item.image.fallback}
+                      alt={item.image.alt}
+                    />
+                    <div className="landing-brand-module-media-overlay">
+                      <span className="landing-brand-module-eyebrow">{item.eyebrow}</span>
+                    </div>
+                  </div>
+                  <div className="landing-brand-module-body">
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                    <div className="landing-brand-module-spotlight">{item.spotlight}</div>
+                    <ul className="landing-brand-module-feature-list">
+                      {item.bullets.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section id="confianza" className="landing-brand-section">
+        <div className="landing-brand-shell">
+          {isBusinessAudience ? (
+            <>
+              <div className="landing-brand-section-head landing-reveal">
+                <span className="landing-brand-eyebrow">Confianza</span>
+                <h2>Privacidad y propiedad de datos con una explicación simple.</h2>
+                <p>
+                  La propuesta empresarial debe dejar claro desde el inicio que la continuidad no elimina el
+                  control de la persona usuaria sobre su información.
+                </p>
+              </div>
+              <div className="landing-brand-ownership-banner landing-brand-ownership-banner-business landing-reveal">
+                <strong>La persona usuaria sigue siendo dueña de su información de salud.</strong>
+                <span>
+                  Klinip organiza la información, la vuelve más entendible y permite compartirla con criterio,
+                  sin transferir su control a la organización.
+                </span>
+              </div>
+              <div className="landing-brand-simple-grid landing-brand-simple-grid-trust">
+                {businessTrustCards.map((item) => (
+                  <article key={item.title} className="landing-brand-simple-card landing-reveal">
+                    <span className="landing-brand-simple-card-kicker">Confianza</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </article>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="landing-brand-trust-panel landing-reveal">
+              <div className="landing-brand-section-head is-on-dark">
+                <span className="landing-brand-eyebrow is-on-dark">Confianza</span>
+                <h2>Propiedad de datos, privacidad y continuidad antes que ruido visual.</h2>
+                <p>
+                  Klinip usa tecnología para hacer más útil la información clínica, pero con foco en control,
+                  claridad y responsabilidad.
+                </p>
+              </div>
+
+              <div className="landing-brand-ownership-banner">
+                <strong>Eres dueño de tu información de salud.</strong>
+                <span>
+                  Klinip la organiza, la vuelve más entendible y te ayuda a compartirla con criterio, pero no
+                  la transforma en algo ajeno a ti.
+                </span>
+              </div>
+
+              <div className="landing-brand-trust-grid">
+                {trustCards.map((item) => (
+                  <article key={item.title} className="landing-brand-trust-card">
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
