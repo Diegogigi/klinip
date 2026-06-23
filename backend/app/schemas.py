@@ -557,6 +557,7 @@ class MedicationOut(MedicationBase):
     id: int
     user_id: int
     created_at: datetime
+    schedule_anchor_at: Optional[datetime] = None
     expected_doses: int = 0
     taken_doses: int = 0
     missed_doses: int = 0
@@ -576,7 +577,7 @@ class MedicationOut(MedicationBase):
     refill_contacts_count: int = 0
     refill_alert_active: bool = False
 
-    @field_serializer('start_at', 'end_date', 'created_at', 'effective_end_date', 'next_dose_at')
+    @field_serializer('start_at', 'end_date', 'created_at', 'schedule_anchor_at', 'effective_end_date', 'next_dose_at')
     def serialize_datetime(self, dt: Optional[datetime], _info):
         return _serialize_datetime_preserving_offset(dt)
 

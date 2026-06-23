@@ -2601,7 +2601,7 @@ export default function Medications() {
                   <span className="detail-item-icon" aria-hidden>🗓️</span>
                   <div>
                     <span className="detail-label">Primera dosis</span>
-                    <p>{toLocaleDateTimeOrEmpty(detailTarget.start_at || detailTarget.created_at) || "Sin inicio definido"}</p>
+                    <p>{toLocaleDateTimeOrEmpty(detailTarget.schedule_anchor_at || detailTarget.start_at || detailTarget.created_at) || "Sin inicio definido"}</p>
                   </div>
                 </div>
                 <div className="detail-field">
@@ -3292,14 +3292,14 @@ export default function Medications() {
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Inicio</span>
-                        <span>{formatMedicationDateTime(m.start_at || m.created_at)}</span>
+                        <span>{formatMedicationDateTime(m.schedule_anchor_at || m.start_at || m.created_at)}</span>
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Horario habitual</span>
                         <span>
                           {nextDose
                             ? formatMedicationTime(nextDose)
-                            : formatMedicationTime(m.start_at || m.schedule_time)}
+                            : formatMedicationTime(m.schedule_anchor_at || m.start_at || m.schedule_time)}
                         </span>
                       </div>
                     </div>

@@ -3244,6 +3244,8 @@ def _effective_frequency_per_day_from_values(
 
 
 def _medication_start_at(med: models.Medication, fallback: datetime | None = None) -> datetime:
+    if getattr(med, "schedule_anchor_at", None):
+        return med.schedule_anchor_at
     if getattr(med, "start_at", None):
         return med.start_at
     if getattr(med, "created_at", None):
@@ -3335,6 +3337,66 @@ def _coerce_dt_aware(dt: datetime, reference: datetime) -> datetime:
     return dt
 
 
+def _normalize_medication_dt(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=None) if getattr(dt, "tzinfo", None) is not None else dt
+
+
+def _interval_alignment_distance_minutes(
+    base_dt: datetime,
+    candidate_dt: datetime,
+    interval_hours: int,
+) -> float:
+    interval_minutes = max(int(interval_hours or 0) * 60, 1)
+    delta_minutes = abs((candidate_dt - base_dt).total_seconds()) / 60
+    remainder = delta_minutes % interval_minutes
+    return min(remainder, interval_minutes - remainder)
+
+
+def _medication_schedule_anchor_at(
+    db: Session,
+    med: models.Medication,
+    user_id: int | None = None,
+    fallback: datetime | None = None,
+) -> datetime:
+    configured_start = _normalize_medication_dt(
+        getattr(med, "start_at", None)
+        or getattr(med, "created_at", None)
+        or fallback
+        or datetime.now()
+    ) or datetime.now()
+    tracking_start = _normalize_medication_dt(_medication_tracking_start(db, med, user_id))
+    if tracking_start is None:
+        return configured_start
+
+    tolerance_minutes = 15
+    tolerance = timedelta(minutes=tolerance_minutes)
+    if tracking_start <= configured_start - tolerance:
+        return tracking_start
+
+    interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
+    if interval_hours:
+        if _interval_alignment_distance_minutes(configured_start, tracking_start, interval_hours) <= tolerance_minutes:
+            return configured_start
+        return tracking_start
+
+    schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    if schedule_slot:
+        configured_slot_dt = configured_start.replace(
+            hour=schedule_slot[0],
+            minute=schedule_slot[1],
+            second=0,
+            microsecond=0,
+        )
+        if abs((tracking_start - configured_slot_dt).total_seconds()) <= tolerance.total_seconds():
+            return configured_start
+
+    if abs((tracking_start - configured_start).total_seconds()) <= tolerance.total_seconds():
+        return configured_start
+    return tracking_start
+
+
 def _medication_schedule_events_between(
     med: models.Medication,
     window_start: datetime,
@@ -3395,7 +3457,12 @@ def _medication_schedule_events_between(
 
 def _medication_time_slots(med: models.Medication):
     anchor = _medication_start_at(med, datetime.now())
-    schedule_slot = _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    derived_anchor = _normalize_medication_dt(getattr(med, "schedule_anchor_at", None))
+    schedule_slot = (
+        (derived_anchor.hour, derived_anchor.minute)
+        if derived_anchor
+        else _parse_schedule_time(getattr(med, "schedule_time", "") or "")
+    )
     if not schedule_slot:
         schedule_slot = (anchor.hour, anchor.minute)
     interval_hours = _frequency_interval_hours(getattr(med, "frequency", "") or "")
@@ -3621,6 +3688,26 @@ def _normalize_adherence_status(value: str | None) -> str:
     return "taken"
 
 
+def _nearest_medication_due_slot(
+    med: models.Medication,
+    reference_dt: datetime,
+) -> datetime | None:
+    candidate_slots = _medication_schedule_events_between(
+        med,
+        reference_dt - timedelta(days=2),
+        reference_dt + timedelta(days=2),
+    )
+    if not candidate_slots:
+        return None
+    due_candidates = [
+        item for item in candidate_slots
+        if item <= reference_dt + timedelta(minutes=15)
+    ]
+    if due_candidates:
+        return max(due_candidates)
+    return min(candidate_slots, key=lambda item: abs(item - reference_dt))
+
+
 def _build_medication_event_defaults(
     med: models.Medication,
     status: str,
@@ -3638,38 +3725,18 @@ def _build_medication_event_defaults(
     normalized_status = _normalize_adherence_status(status)
     if not schedule_dt:
         reference_dt = actual_taken_at or now
-        candidate_slots = _medication_schedule_events_between(
-            med,
-            reference_dt - timedelta(days=2),
-            reference_dt + timedelta(days=2),
-        )
-        if candidate_slots:
-            due_candidates = [
-                item for item in candidate_slots
-                if item <= reference_dt + timedelta(minutes=90)
-            ]
-            if due_candidates:
-                schedule_dt = max(due_candidates)
-            else:
-                schedule_dt = min(candidate_slots, key=lambda item: abs(item - reference_dt))
+        schedule_dt = _nearest_medication_due_slot(med, reference_dt)
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
     if normalized_status in {"taken", "late"} and schedule_dt and actual_taken_at:
         future_margin = timedelta(minutes=15)
-        if schedule_dt > actual_taken_at + future_margin:
-            candidate_slots = _medication_schedule_events_between(
-                med,
-                actual_taken_at - timedelta(days=2),
-                actual_taken_at + timedelta(minutes=90),
-            )
-            due_candidates = [
-                item for item in candidate_slots
-                if item <= actual_taken_at + future_margin
-            ]
-            if due_candidates:
-                schedule_dt = max(due_candidates)
-            else:
-                schedule_dt = actual_taken_at
+        nearest_due_slot = _nearest_medication_due_slot(med, actual_taken_at)
+        if nearest_due_slot is not None:
+            distance_minutes = abs((schedule_dt - nearest_due_slot).total_seconds()) / 60
+            if schedule_dt > actual_taken_at + future_margin or distance_minutes > 15:
+                schedule_dt = nearest_due_slot
+        elif schedule_dt > actual_taken_at + future_margin:
+            schedule_dt = actual_taken_at
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
             normalized_status = "late"
@@ -3690,6 +3757,97 @@ def _medication_intake_to_response_payload(item) -> dict:
         "notes": getattr(item, "notes", "") or "",
         "created_at": getattr(item, "created_at", None),
     }
+
+
+def _medication_intake_status_rank(status: str) -> int:
+    normalized = _normalize_adherence_status(status)
+    return {
+        "taken": 4,
+        "late": 3,
+        "skipped": 2,
+        "missed": 1,
+    }.get(normalized, 0)
+
+
+def _medication_intake_sort_stamp(payload: dict) -> datetime:
+    return (
+        _normalize_medication_dt(payload.get("scheduled_at"))
+        or _normalize_medication_dt(payload.get("taken_at"))
+        or _normalize_medication_dt(payload.get("created_at"))
+        or datetime.min
+    )
+
+
+def _medication_intake_payload_from_item(
+    med: models.Medication,
+    item,
+) -> tuple[datetime, dict]:
+    normalized_status = _normalize_adherence_status(getattr(item, "status", "taken"))
+    raw_scheduled_at = _normalize_medication_dt(getattr(item, "scheduled_at", None))
+    raw_taken_at = _normalize_medication_dt(getattr(item, "taken_at", None))
+    raw_created_at = _normalize_medication_dt(getattr(item, "created_at", None))
+
+    reference_scheduled_at = raw_scheduled_at or raw_taken_at or raw_created_at
+    if normalized_status in {"taken", "late"}:
+        normalized_scheduled_at, normalized_taken_at, normalized_status = _build_medication_event_defaults(
+            med,
+            normalized_status,
+            reference_scheduled_at,
+            raw_taken_at or raw_created_at,
+        )
+    else:
+        normalized_scheduled_at, _, normalized_status = _build_medication_event_defaults(
+            med,
+            normalized_status,
+            reference_scheduled_at,
+            None,
+        )
+        normalized_taken_at = None
+
+    payload = {
+        "id": int(getattr(item, "id", 0) or 0),
+        "medication_id": int(getattr(item, "medication_id", 0) or 0),
+        "user_id": int(getattr(item, "user_id", 0) or 0),
+        "scheduled_at": normalized_scheduled_at,
+        "taken_at": normalized_taken_at if normalized_status in {"taken", "late"} else None,
+        "status": normalized_status,
+        "source": getattr(item, "source", "") or "manual",
+        "notes": getattr(item, "notes", "") or "",
+        "created_at": getattr(item, "created_at", None),
+    }
+    slot_key = (
+        _normalize_medication_dt(normalized_scheduled_at)
+        or _normalize_medication_dt(normalized_taken_at)
+        or raw_created_at
+        or datetime.min
+    )
+    return slot_key, payload
+
+
+def _normalize_medication_intake_payloads(
+    med: models.Medication,
+    items: list,
+) -> list[dict]:
+    resolved_by_slot: dict[datetime, dict] = {}
+    for item in items:
+        slot_key, payload = _medication_intake_payload_from_item(med, item)
+        existing = resolved_by_slot.get(slot_key)
+        if existing is None:
+            resolved_by_slot[slot_key] = payload
+            continue
+        if _medication_intake_status_rank(payload.get("status")) > _medication_intake_status_rank(existing.get("status")):
+            resolved_by_slot[slot_key] = payload
+            continue
+        if (
+            _medication_intake_status_rank(payload.get("status")) == _medication_intake_status_rank(existing.get("status"))
+            and _medication_intake_sort_stamp(payload) >= _medication_intake_sort_stamp(existing)
+        ):
+            resolved_by_slot[slot_key] = payload
+    return sorted(
+        resolved_by_slot.values(),
+        key=_medication_intake_sort_stamp,
+        reverse=True,
+    )
 
 
 def _materialize_medication_adherence_events(db: Session, user: models.User, horizon_days: int = 2):
@@ -4536,20 +4694,14 @@ def _attach_medication_adherence(
     horizon_end = now + timedelta(days=45)
     target_user_id = owner_user_id or current_user.id
     medication_ids = [m.id for m in medications if getattr(m, "id", None)]
-    status_counts = {
-        int(mid): {"taken": 0, "late": 0, "missed": 0, "skipped": 0}
-        for mid in medication_ids
-    }
-    addressed_schedule_slots: dict[int, set[datetime]] = {
-        int(mid): set()
+    intake_rows_by_medication: dict[int, list] = {
+        int(mid): []
         for mid in medication_ids
     }
     if medication_ids:
         intake_rows = (
             db.query(
-                models.MedicationIntake.medication_id,
-                models.MedicationIntake.status,
-                models.MedicationIntake.scheduled_at,
+                models.MedicationIntake,
             )
             .filter(
                 models.MedicationIntake.user_id == target_user_id,
@@ -4557,30 +4709,37 @@ def _attach_medication_adherence(
             )
             .all()
         )
-        for medication_id, status, scheduled_at in intake_rows:
-            key = _normalize_adherence_status(status)
-            if int(medication_id) not in status_counts:
-                continue
-            if key not in status_counts[int(medication_id)]:
-                key = "taken"
-            status_counts[int(medication_id)][key] += 1
-            if scheduled_at:
-                normalized_scheduled_at = (
-                    scheduled_at.replace(tzinfo=None)
-                    if getattr(scheduled_at, "tzinfo", None) is not None
-                    else scheduled_at
-                )
-                addressed_schedule_slots[int(medication_id)].add(normalized_scheduled_at)
+        for intake in intake_rows:
+            medication_id = int(getattr(intake, "medication_id", 0) or 0)
+            if medication_id in intake_rows_by_medication:
+                intake_rows_by_medication[medication_id].append(intake)
 
     for med in medications:
+        setattr(
+            med,
+            "schedule_anchor_at",
+            _medication_schedule_anchor_at(db, med, target_user_id, fallback=now),
+        )
         # Ancla al inicio real del seguimiento: no penaliza dosis previas al
         # primer registro (evita que la adherencia quede "pegada" en bajo).
         window_start = _adherence_window_start(
             db, med, _medication_start_at(med, now), target_user_id
         )
         expected = _calculate_expected_doses_between(med, window_start, now)
-        med_counts = status_counts.get(int(med.id), {})
-        resolved_slots = addressed_schedule_slots.get(int(med.id), set())
+        normalized_payloads = _normalize_medication_intake_payloads(
+            med,
+            intake_rows_by_medication.get(int(med.id), []),
+        )
+        med_counts = {"taken": 0, "late": 0, "missed": 0, "skipped": 0}
+        resolved_slots: set[datetime] = set()
+        for payload in normalized_payloads:
+            key = _normalize_adherence_status(payload.get("status"))
+            if key not in med_counts:
+                key = "taken"
+            med_counts[key] += 1
+            normalized_scheduled_at = _normalize_medication_dt(payload.get("scheduled_at"))
+            if normalized_scheduled_at:
+                resolved_slots.add(normalized_scheduled_at)
         next_dose = next(
             (
                 scheduled_at
@@ -23076,9 +23235,14 @@ async def list_medication_intakes(
         .limit(max(1, min(int(limit or 40), 120)))
         .all()
     )
+    setattr(
+        med,
+        "schedule_anchor_at",
+        _medication_schedule_anchor_at(db, med, target_user_id),
+    )
     return {
         "medication_id": medication_id,
-        "items": [_medication_intake_to_response_payload(item) for item in items],
+        "items": _normalize_medication_intake_payloads(med, items),
     }
 
 

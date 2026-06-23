@@ -51,7 +51,7 @@ export function deriveFrequencyPerDay(frequencyText = "", fallbackValue = null) 
 }
 
 export function getMedicationStartAt(med) {
-  return parseDate(med?.start_at || med?.created_at || null);
+  return parseDate(med?.schedule_anchor_at || med?.start_at || med?.created_at || null);
 }
 
 export function getMedicationEffectiveEndAt(med) {
