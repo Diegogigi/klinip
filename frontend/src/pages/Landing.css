@@ -113,26 +113,36 @@ body.theme-dark .landing-brand {
 }
 
 .landing-brand-nav-link {
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--lb-text-soft);
   font: inherit;
   font-weight: 800;
-  padding: 0.7rem 0.95rem;
-  border-radius: 999px;
+  padding: 0.62rem 1.05rem;
+  border-radius: 12px;
   cursor: pointer;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
 }
 
-.landing-brand-nav-link:hover,
-.landing-brand-nav-link.is-active {
+.landing-brand-nav-link:hover {
   color: var(--lb-text);
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(13, 71, 247, 0.06);
 }
 
-body.theme-dark .landing-brand-nav-link:hover,
+.landing-brand-nav-link.is-active {
+  color: #0d47f7;
+  background: rgba(13, 71, 247, 0.1);
+  border-color: rgba(13, 71, 247, 0.22);
+}
+
+body.theme-dark .landing-brand-nav-link:hover {
+  background: rgba(139, 176, 255, 0.12);
+}
+
 body.theme-dark .landing-brand-nav-link.is-active {
-  background: rgba(139, 176, 255, 0.14);
+  color: #8fc5ff;
+  background: rgba(139, 176, 255, 0.16);
+  border-color: rgba(139, 176, 255, 0.32);
 }
 
 .landing-brand-nav-actions {
@@ -146,6 +156,18 @@ body.theme-dark .landing-brand-nav-link.is-active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Sin el recuadro que envuelve el switch: solo el interruptor. */
+  width: auto;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.landing-brand-theme-toggle:hover {
+  background: transparent;
+  border: 0;
 }
 
 .landing-brand-btn {
@@ -154,8 +176,8 @@ body.theme-dark .landing-brand-nav-link.is-active {
   justify-content: center;
   gap: 0.55rem;
   min-height: 2.95rem;
-  padding: 0.82rem 1.28rem;
-  border-radius: 999px;
+  padding: 0.82rem 1.35rem;
+  border-radius: 14px;
   border: 1px solid transparent;
   text-decoration: none;
   font-weight: 800;
