@@ -34,9 +34,46 @@ const peopleBenefits = [
 ];
 
 const companyBenefits = [
-  "Entrega una experiencia de salud más clara para colaboradores y sus familias.",
-  "Centraliza continuidad, seguimiento y trazabilidad en programas de acompañamiento.",
-  "Convierte documentos, voz clínica y recordatorios en una capa de servicio más útil.",
+  {
+    title: "Carga clínica automática",
+    description:
+      "Resultados, recetas, órdenes e indicaciones pueden llegar al teléfono del usuario en una experiencia más clara y lista para activar seguimiento.",
+  },
+  {
+    title: "Menos fricción operativa",
+    description:
+      "Klinip transforma documentos, citas, recordatorios y Voice en continuidad real sin depender de PDFs sueltos, llamados o reenvíos manuales.",
+  },
+  {
+    title: "Más valor para la empresa",
+    description:
+      "Tu centro o programa ofrece una experiencia digital más moderna, trazable y útil para pacientes, colaboradores o beneficiarios.",
+  },
+];
+
+const companyFlowItems = [
+  "Resultados y exámenes",
+  "Recetas e indicaciones",
+  "Documentos con OCR",
+  "Klinip Voice",
+  "Recordatorios automáticos",
+  "Permisos familiares",
+];
+
+const companyOutcomeItems = [
+  "Más continuidad entre atención, hogar y seguimiento",
+  "Mayor percepción de orden y servicio para el usuario",
+  "Implementación compatible con programas, centros y beneficios de salud",
+];
+
+const showcaseIndicators = [
+  "Salud del corazón",
+  "Cognición",
+  "Metabolismo",
+  "Inflamación",
+  "Equilibrio hormonal",
+  "Aptitud física",
+  "Más de 100 otros indicadores",
 ];
 
 const moduleCards = [
@@ -433,6 +470,53 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         </div>
       </section>
 
+      <section className="landing-brand-section landing-brand-showcase">
+        <div className="landing-brand-shell landing-brand-showcase-grid">
+          <div className="landing-brand-showcase-copy landing-reveal">
+            <span className="landing-brand-eyebrow">Lectura clara</span>
+            <h2>
+              Entiende tu salud <span>sin ser médico</span>
+            </h2>
+            <p>
+              Klinip presenta resultados, contexto y progreso en una vista más clara para que la información
+              clínica no se sienta lejana ni difícil de interpretar.
+            </p>
+            <p>
+              Con una interfaz más simple, puedes ver señales importantes, revisar tu avance y entender mejor
+              qué está pasando en tu salud y en cada función clave.
+            </p>
+            <div className="landing-brand-showcase-tags" aria-label="Áreas de salud">
+              {showcaseIndicators.map((item) => (
+                <span key={item} className="landing-brand-showcase-tag">
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="landing-brand-showcase-phones landing-reveal">
+            <div className="landing-brand-phone landing-brand-phone-back">
+              <div className="landing-brand-phone-notch" aria-hidden="true" />
+              <LandingImage
+                className="landing-brand-phone-screen"
+                src="/landing/fallback-home-hero.png"
+                fallback="/landing/fallback-home-hero.png"
+                alt="Pantalla principal de Klinip en celular."
+              />
+            </div>
+            <div className="landing-brand-phone landing-brand-phone-front">
+              <div className="landing-brand-phone-notch" aria-hidden="true" />
+              <LandingImage
+                className="landing-brand-phone-screen"
+                src="/landing/fallback-radar-salud.png"
+                fallback="/landing/fallback-radar-salud.png"
+                alt="Pantalla de indicadores y resultados de Klinip en celular."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="personas" className="landing-brand-section">
         <div className="landing-brand-shell">
           <div className="landing-brand-split-card landing-reveal">
@@ -458,18 +542,81 @@ export default function Landing({ theme = "light", onToggleTheme }) {
       <section id="empresas" className="landing-brand-section landing-brand-section-soft">
         <div className="landing-brand-shell">
           <div className="landing-brand-enterprise landing-reveal">
-            <div className="landing-brand-enterprise-head">
-              <span className="landing-brand-eyebrow">Empresas</span>
-              <h2>Una capa de salud más clara para experiencias corporativas, programas y acompañamiento.</h2>
-              <p>
-                Klinip también puede presentarse para empresas que necesitan una experiencia de salud más
-                ordenada para colaboradores, beneficiarios o comunidades de cuidado.
-              </p>
+            <div className="landing-brand-enterprise-layout">
+              <div className="landing-brand-enterprise-head">
+                <span className="landing-brand-eyebrow">Empresas</span>
+                <h2>Presenta Klinip a la empresa como una experiencia de salud que sigue viva.</h2>
+                <p>
+                  Imagina poder conectar Klinip con tu centro, beneficio o programa para que la información
+                  se cargue en el teléfono del usuario de forma automática, ordenada y lista para activar
+                  seguimiento.
+                </p>
+                <p>
+                  En vez de dejar la experiencia cortada en documentos sueltos o instrucciones que se pierden,
+                  Klinip convierte cada atención en una capa digital más clara para la persona y más valiosa
+                  para la empresa.
+                </p>
+                <div className="landing-brand-enterprise-actions">
+                  <button
+                    type="button"
+                    className="landing-brand-btn is-secondary"
+                    onClick={() => handleLandingNav("planes")}
+                  >
+                    Ver estructura comercial
+                  </button>
+                  <Link className="landing-brand-btn is-primary" to="/register">
+                    Explorar Klinip
+                    <ArrowIcon />
+                  </Link>
+                </div>
+                <div className="landing-brand-enterprise-outcomes" aria-label="Beneficios para la empresa">
+                  {companyOutcomeItems.map((item) => (
+                    <div key={item} className="landing-brand-enterprise-outcome">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="landing-brand-enterprise-visual" aria-label="Flujo de información para empresas">
+                <div className="landing-brand-enterprise-flow">
+                  <div className="landing-brand-enterprise-node is-source">
+                    <small>Centro, empresa o programa</small>
+                    <strong>La información clínica se origina donde ocurre la atención.</strong>
+                    <span>Resultados, recetas, órdenes, indicaciones y contexto clínico.</span>
+                  </div>
+
+                  <div className="landing-brand-enterprise-core">
+                    <span className="landing-brand-enterprise-core-label">Klinip</span>
+                    <strong>Ordena, activa y contextualiza</strong>
+                    <div className="landing-brand-enterprise-chip-list">
+                      {companyFlowItems.map((item) => (
+                        <span key={item} className="landing-brand-enterprise-chip">
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="landing-brand-enterprise-node is-user">
+                    <small>En el teléfono del usuario</small>
+                    <strong>Todo aparece en una experiencia más comprensible y accionable.</strong>
+                    <span>Recordatorios, historial, Voice, permisos y siguientes pasos en un mismo lugar.</span>
+                  </div>
+                </div>
+
+                <div className="landing-brand-enterprise-ownership">
+                  <strong>La empresa mejora la continuidad.</strong>
+                  <span>El usuario sigue siendo dueño de su información de salud y decide cómo compartirla.</span>
+                </div>
+              </div>
             </div>
+
             <div className="landing-brand-enterprise-grid">
               {companyBenefits.map((item) => (
-                <article key={item} className="landing-brand-enterprise-card">
-                  <p>{item}</p>
+                <article key={item.title} className="landing-brand-enterprise-card">
+                  <h3>{item.title}</h3>
+                  <p>{item.description}</p>
                 </article>
               ))}
             </div>
