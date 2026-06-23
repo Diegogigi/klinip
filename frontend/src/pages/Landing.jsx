@@ -116,6 +116,27 @@ const businessTrustCards = [
   },
 ];
 
+const businessImageCards = [
+  {
+    title: "Implementación en terreno",
+    description: "Klinip puede vivir dentro de campañas, programas y puntos de atención donde la continuidad necesita verse.",
+    image: {
+      src: "/landing/empresa-uno.jpeg",
+      fallback: "/landing/empresa-uno.jpeg",
+      alt: "Equipo de salud mostrando Klinip durante una jornada de vacunación y acompañamiento en terreno.",
+    },
+  },
+  {
+    title: "Acompañamiento en puntos de atención",
+    description: "La experiencia también sirve para orientar personas usuarias y activar seguimiento desde espacios presenciales.",
+    image: {
+      src: "/landing/empresa-dos.jpeg",
+      fallback: "/landing/empresa-dos.jpeg",
+      alt: "Equipo de salud presentando Klinip a personas usuarias en un punto de atención presencial.",
+    },
+  },
+];
+
 const companyOutcomeItems = [
   "Más continuidad entre atención, hogar y seguimiento",
   "Mayor percepción de orden y servicio para el usuario",
@@ -682,6 +703,23 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                 Klinip Empresas está pensada para organizaciones que necesitan continuidad visible sin mezclar
                 su operación con la interfaz personal del usuario final.
               </p>
+            </div>
+            <div className="landing-brand-enterprise-gallery">
+              {businessImageCards.map((item) => (
+                <article key={item.title} className="landing-brand-enterprise-media-card landing-reveal">
+                  <LandingImage
+                    className="landing-brand-enterprise-media-image"
+                    src={item.image.src}
+                    fallback={item.image.fallback}
+                    alt={item.image.alt}
+                  />
+                  <div className="landing-brand-enterprise-media-body">
+                    <span className="landing-brand-simple-card-kicker">Terreno</span>
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </div>
+                </article>
+              ))}
             </div>
             <div className="landing-brand-simple-grid landing-brand-simple-grid-enterprise">
               {companyBenefits.map((item) => (
