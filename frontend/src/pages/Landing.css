@@ -363,25 +363,39 @@ body.theme-dark .landing-brand-eyebrow {
   overflow: hidden;
   min-height: 39rem;
   border-radius: 2rem;
-  background:
-    radial-gradient(circle at top right, rgba(77, 163, 255, 0.18), transparent 34%),
-    linear-gradient(180deg, #dfeaf8 0%, #edf3fb 100%);
+  isolation: isolate;
+  background: linear-gradient(180deg, #dfeaf8 0%, #edf3fb 100%);
   border: 1px solid rgba(255, 255, 255, 0.42);
   box-shadow: var(--lb-shadow);
 }
 
+.landing-brand-stage-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgba(8, 18, 34, 0.16) 0%, rgba(8, 18, 34, 0.04) 24%, rgba(8, 18, 34, 0) 48%),
+    linear-gradient(0deg, rgba(8, 18, 34, 0.58) 0%, rgba(8, 18, 34, 0.16) 28%, rgba(8, 18, 34, 0) 52%);
+  pointer-events: none;
+}
+
 .landing-brand-stage-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   display: block;
   width: 100%;
-  height: 39rem;
-  object-fit: contain;
-  object-position: center;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .landing-brand-stage-chip {
   position: absolute;
   top: 1.2rem;
   left: 1.2rem;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -410,9 +424,10 @@ body.theme-dark .landing-brand-eyebrow {
   left: 1.2rem;
   right: 1.2rem;
   bottom: 1.2rem;
+  z-index: 2;
   padding: 1rem 1.05rem;
   border-radius: 1.25rem;
-  background: rgba(10, 18, 29, 0.58);
+  background: rgba(10, 18, 29, 0.72);
   color: #ffffff;
   backdrop-filter: blur(10px);
 }
@@ -1701,7 +1716,8 @@ body.theme-dark .landing-brand-cta-card {
   }
 
   .landing-brand-stage-image {
-    height: 26rem;
+    height: 100%;
+    object-position: center;
   }
 
   .landing-brand-stage-chip,
