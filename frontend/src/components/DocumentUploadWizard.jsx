@@ -7,6 +7,7 @@ import {
   activateDocumentItems,
 } from "../services/httpApi";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import SuccessSheet from "./SuccessSheet";
 
 /**
  * Asistente de subida de documentos (wizard) — pensado para que cualquier
@@ -83,6 +84,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const [savingType, setSavingType] = useState(false);
   const [histChoice, setHistChoice] = useState(null); // null | "historical" | "activated"
   const [activating, setActivating] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -99,6 +101,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setErrorMsg("");
       setEditingType(false);
       setHistChoice(null);
+      setDoneOpen(false);
     }
     return () => {
       cancelledRef.current = true;
@@ -214,7 +217,20 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const isHistorical = Boolean(analysis?.is_historical);
   const showHistoricalAsk = isHistorical && histChoice === null && ["receta", "orden"].includes(tipo);
 
-  return createPortal(
+  // Centro y fecha desde los puntos clave del resumen (para la tarjeta final).
+  const keyPoints = Array.isArray(analysis?.summary?.key_points_json)
+    ? analysis.summary.key_points_json.map((k) => String(k))
+    : [];
+  const pickKp = (prefix) => {
+    const hit = keyPoints.find((k) => k.toLowerCase().startsWith(prefix));
+    return hit ? hit.slice(hit.indexOf(":") + 1).trim() : "";
+  };
+  const centerVal = pickKp("centro");
+  const dateVal = pickKp("fecha");
+
+  return (
+    <>
+    {createPortal(
     <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label="Asistente de documentos">
       <div style={styles.sheet}>
         <button type="button" onClick={onClose} style={styles.closeBtn} aria-label="Cerrar">
@@ -267,10 +283,10 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
 
         {step === "result" && (
           <div style={styles.body}>
-            <div style={styles.bigIcon}>✅</div>
-            <h2 style={styles.title}>Guardado</h2>
+            <div style={styles.bigIcon}>📄</div>
+            <h2 style={styles.title}>Esto fue lo que leí</h2>
             <p style={styles.subtitle}>
-              Esto parece <strong>{tipoLabel}</strong>.
+              Parece <strong>{tipoLabel}</strong>. Revisa y confirma.
             </p>
 
             {entities.length > 0 && (
@@ -342,7 +358,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                 )}
                 {!editingType ? (
                   <>
-                    <button type="button" style={styles.primaryBtn} onClick={onClose}>
+                    <button type="button" style={styles.primaryBtn} onClick={() => setDoneOpen(true)}>
                       Sí, está bien
                     </button>
                     <button
@@ -395,6 +411,26 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       </div>
     </div>,
     document.body,
+    )}
+
+    <SuccessSheet
+      open={doneOpen}
+      onClose={() => {
+        setDoneOpen(false);
+        onClose();
+      }}
+      kicker="Documento guardado"
+      title="Todo listo"
+      copy="El documento quedó guardado y ya forma parte de tu seguimiento clínico."
+      referenceId={docId}
+      rows={[
+        { icon: "doc", label: "Tipo de documento", value: TYPE_LABELS[tipo]?.replace(/^un[a]? /, "") || "Documento" },
+        { icon: "building", label: "Centro", value: centerVal || "Sin centro registrado" },
+        { icon: "clock", label: "Fecha", value: dateVal || "Sin fecha" },
+      ]}
+      secondaryLabel="Volver a documentos"
+    />
+    </>
   );
 }
 
