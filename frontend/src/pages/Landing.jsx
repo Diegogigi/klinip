@@ -167,7 +167,7 @@ const moduleCards = [
     ],
     image: {
       src: "/landing/documentos-en-casa.jpg",
-      fallback: "/landing/fallback-mi-salud.png",
+      fallback: "/landing/fallback-mi-salud.jpeg",
       alt: "Documentos clínicos organizados dentro de Klinip.",
     },
   },
@@ -183,8 +183,8 @@ const moduleCards = [
       "Alertas más claras para el día a día",
     ],
     image: {
-      src: "/landing/fallback-home-hero.png",
-      fallback: "/landing/fallback-home-hero.png",
+      src: "/landing/fallback-home-hero.jpeg",
+      fallback: "/landing/fallback-home-hero.jpeg",
       alt: "Recordatorios y seguimiento diario en Klinip.",
     },
   },
@@ -200,8 +200,8 @@ const moduleCards = [
       "Mejor continuidad entre consulta y hogar",
     ],
     image: {
-      src: "/landing/fallback-radar-salud.png",
-      fallback: "/landing/fallback-radar-salud.png",
+      src: "/landing/fallback-radar-salud.jpeg",
+      fallback: "/landing/fallback-radar-salud.jpeg",
       alt: "Radar de salud con prioridades visibles en Klinip.",
     },
   },
@@ -218,7 +218,7 @@ const moduleCards = [
     ],
     image: {
       src: "/landing/consulta-acompanada.jpg",
-      fallback: "/landing/fallback-mi-salud.png",
+      fallback: "/landing/fallback-mi-salud.jpeg",
       alt: "Consulta clínica acompañada con continuidad a través de Klinip Voice.",
     },
   },
@@ -235,7 +235,7 @@ const moduleCards = [
     ],
     image: {
       src: "/landing/familia-cuidando.jpg",
-      fallback: "/landing/fallback-familia-home.png",
+      fallback: "/landing/familia-cuidando.jpg",
       alt: "Familia y cuidadores siguiendo el proceso de salud desde Klinip.",
     },
   },
