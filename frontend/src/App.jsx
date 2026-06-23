@@ -2062,7 +2062,11 @@ export default function App() {
     location.pathname === "/planes" || location.pathname.startsWith("/planes/");
   const isLegalRoute = location.pathname.startsWith("/legal/");
   const isSharedVoiceRoute = location.pathname.startsWith("/voice/shared/");
-  const isPublicMarketingRoute = (!user && location.pathname === "/") || isPlansRoute;
+  const isPublicMarketingRoute =
+    (!user && location.pathname === "/") ||
+    location.pathname === "/personas" ||
+    location.pathname === "/empresas" ||
+    isPlansRoute;
   const isPublicAuthRoute =
     location.pathname === "/login" ||
     location.pathname === "/register" ||
@@ -2595,9 +2599,17 @@ export default function App() {
                       />
                     </ProtectedRoute>
                   ) : (
-                    <Landing theme={theme} onToggleTheme={handleToggleTheme} />
+                    <Landing theme={theme} onToggleTheme={handleToggleTheme} audience="people" />
                   )
                 }
+              />
+              <Route
+                path="/personas"
+                element={<Landing theme={theme} onToggleTheme={handleToggleTheme} audience="people" />}
+              />
+              <Route
+                path="/empresas"
+                element={<Landing theme={theme} onToggleTheme={handleToggleTheme} audience="business" />}
               />
               <Route
                 path="/appointments"

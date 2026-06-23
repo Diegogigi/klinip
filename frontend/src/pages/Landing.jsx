@@ -6,12 +6,23 @@ import { PLAN_CATALOG } from "../data/plans";
 import { cleanUiText } from "../utils/textEncoding";
 import "./Landing.css";
 
-const LANDING_NAV_ITEMS = [
+const AUDIENCE_SWITCH_ITEMS = [
+  { id: "people", label: "Personas", to: "/personas" },
+  { id: "business", label: "Empresas", to: "/empresas" },
+];
+
+const PEOPLE_LANDING_NAV_ITEMS = [
   { id: "personas", label: "Personas" },
-  { id: "empresas", label: "Empresas" },
   { id: "modulos", label: "Módulos" },
   { id: "confianza", label: "Confianza" },
   { id: "planes", label: "Planes" },
+];
+
+const BUSINESS_LANDING_NAV_ITEMS = [
+  { id: "empresas", label: "Empresas" },
+  { id: "modulos", label: "Capacidades" },
+  { id: "confianza", label: "Confianza" },
+  { id: "faq", label: "Preguntas" },
 ];
 
 const fallbackStats = {
@@ -21,10 +32,16 @@ const fallbackStats = {
   satisfaction: 98,
 };
 
-const heroHighlights = [
+const peopleHeroHighlights = [
   "Documentos, citas, medicamentos y contexto en un mismo lugar",
   "Klinip Voice con versión clara para el usuario y versión compartible para el profesional",
-  "Propiedad de datos y permisos explícitos para familia, cuidadores y equipos",
+  "Propiedad de datos y permisos explícitos para familia y cuidadores",
+];
+
+const businessHeroHighlights = [
+  "Resultados, recetas y seguimiento en una sola experiencia para la persona usuaria",
+  "Continuidad visible después de cada atención, beneficio o programa",
+  "Permisos claros y propiedad de datos respetada en todo el flujo",
 ];
 
 const peopleBenefits = [
@@ -189,8 +206,8 @@ const trustCards = [
 
 const faqItems = [
   {
-    q: "¿Klinip es para personas o también para empresas?",
-    a: "Para ambos. Puede usarse como plataforma personal y familiar, y también como base para experiencias de salud, seguimiento o acompañamiento en organizaciones.",
+    q: "¿Klinip sirve si cuido mi salud y también acompaño a otra persona?",
+    a: "Sí. Klinip está pensado para personas, familias y cuidadores que necesitan ordenar documentos, tratamientos, citas y contexto compartido.",
   },
   {
     q: "¿Klinip reemplaza al profesional de salud?",
@@ -203,6 +220,25 @@ const faqItems = [
   {
     q: "¿Quién controla la información compartida?",
     a: "El usuario. Klinip trabaja con perfiles y permisos explícitos para que la información de salud se comparta solo con quienes corresponde.",
+  },
+];
+
+const businessFaqItems = [
+  {
+    q: "¿Qué tipo de organización puede usar Klinip Empresas?",
+    a: "Centros, programas, beneficios corporativos y equipos que quieren extender la continuidad del cuidado más allá del momento de atención.",
+  },
+  {
+    q: "¿La empresa pasa a ser dueña de los datos personales de salud?",
+    a: "No. Klinip mantiene la propiedad de datos en la persona usuaria y trabaja con permisos claros para cada flujo de información.",
+  },
+  {
+    q: "¿Klinip reemplaza los sistemas clínicos existentes?",
+    a: "No necesariamente. Puede complementar la operación existente y convertir documentos, indicaciones y recordatorios en una experiencia más clara para seguimiento.",
+  },
+  {
+    q: "¿Qué recibe la persona usuaria al final del flujo?",
+    a: "Una experiencia única para revisar documentos, tratamientos, recordatorios, contexto y siguientes pasos desde su teléfono.",
   },
 ];
 
@@ -248,12 +284,32 @@ function LandingImage({ src, fallback, alt, className }) {
   );
 }
 
-export default function Landing({ theme = "light", onToggleTheme }) {
+export default function Landing({ theme = "light", onToggleTheme, audience = "people" }) {
+  const isBusinessAudience = audience === "business";
+  const landingNavItems = isBusinessAudience
+    ? BUSINESS_LANDING_NAV_ITEMS
+    : PEOPLE_LANDING_NAV_ITEMS;
   const [stats, setStats] = useState(fallbackStats);
   const [billing, setBilling] = useState("monthly");
   const [plans, setPlans] = useState(PLAN_CATALOG);
-  const [activeNavSection, setActiveNavSection] = useState("personas");
+  const [activeNavSection, setActiveNavSection] = useState(landingNavItems[0].id);
   const [openFaq, setOpenFaq] = useState(0);
+
+  const heroHighlights = isBusinessAudience ? businessHeroHighlights : peopleHeroHighlights;
+  const faqEntries = isBusinessAudience ? businessFaqItems : faqItems;
+  const statItems = isBusinessAudience
+    ? [
+        { value: formatCount(stats.users), label: "usuarios con continuidad digital" },
+        { value: formatCount(stats.appointments), label: "citas coordinadas" },
+        { value: formatCount(stats.reminders), label: "recordatorios activados" },
+        { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
+      ]
+    : [
+        { value: formatCount(stats.users), label: "personas usando Klinip" },
+        { value: formatCount(stats.appointments), label: "citas coordinadas" },
+        { value: formatCount(stats.reminders), label: "recordatorios enviados" },
+        { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
+      ];
 
   useEffect(() => {
     let mounted = true;
@@ -287,7 +343,11 @@ export default function Landing({ theme = "light", onToggleTheme }) {
   }, []);
 
   useEffect(() => {
-    const sections = LANDING_NAV_ITEMS.map((item) => document.getElementById(item.id)).filter(Boolean);
+    setActiveNavSection(landingNavItems[0].id);
+  }, [landingNavItems]);
+
+  useEffect(() => {
+    const sections = landingNavItems.map((item) => document.getElementById(item.id)).filter(Boolean);
     if (!sections.length || typeof IntersectionObserver === "undefined") return undefined;
 
     const observer = new IntersectionObserver(
@@ -304,7 +364,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
 
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, []);
+  }, [landingNavItems]);
 
   useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return undefined;
@@ -334,18 +394,11 @@ export default function Landing({ theme = "light", onToggleTheme }) {
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  const statItems = [
-    { value: formatCount(stats.users), label: "personas usando Klinip" },
-    { value: formatCount(stats.appointments), label: "citas coordinadas" },
-    { value: formatCount(stats.reminders), label: "recordatorios enviados" },
-    { value: formatPercent(stats.satisfaction), label: "satisfacción reportada" },
-  ];
-
   return (
     <div className="landing-brand">
       <header className="landing-brand-nav">
         <div className="landing-brand-shell landing-brand-nav-inner">
-          <Link className="landing-brand-logo-link" to="/">
+          <Link className="landing-brand-logo-link" to="/personas">
             <BrandLogo
               className="brand-logo-landing brand-logo-keep-name-mobile landing-brand-logo"
               markClassName="landing-brand-logo-mark"
@@ -355,7 +408,7 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           </Link>
 
           <nav className="landing-brand-nav-links" aria-label="Navegación de la landing">
-            {LANDING_NAV_ITEMS.map((item) => (
+            {landingNavItems.map((item) => (
               <button
                 key={item.id}
                 type="button"
@@ -394,36 +447,54 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         <div className="landing-brand-shell landing-brand-hero-grid">
           <div className="landing-brand-hero-copy landing-reveal">
             <div className="landing-brand-segmented" role="tablist" aria-label="Audiencias principales">
-              <button type="button" className="landing-brand-segment is-active" onClick={() => handleLandingNav("personas")}>
-                Personas
-              </button>
-              <button type="button" className="landing-brand-segment" onClick={() => handleLandingNav("empresas")}>
-                Empresas
-              </button>
+              {AUDIENCE_SWITCH_ITEMS.map((item) => (
+                <Link
+                  key={item.id}
+                  className={`landing-brand-segment ${
+                    (item.id === "business") === isBusinessAudience ? "is-active" : ""
+                  }`}
+                  to={item.to}
+                  aria-current={(item.id === "business") === isBusinessAudience ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
 
-            <span className="landing-brand-eyebrow">Plataforma clínica personal y familiar</span>
+            <span className="landing-brand-eyebrow">
+              {isBusinessAudience
+                ? "Continuidad clínica para organizaciones"
+                : "Plataforma clínica personal y familiar"}
+            </span>
             <h1>
-              Klinip organiza la salud
-              <span> con continuidad real.</span>
+              {isBusinessAudience ? "Klinip conecta la atención" : "Klinip organiza la salud"}
+              <span>{isBusinessAudience ? " con seguimiento real." : " con continuidad real."}</span>
             </h1>
             <p className="landing-brand-lead">
-              Centraliza documentos, medicamentos, citas, recordatorios, Klinip Voice y red familiar en una
-              experiencia clara para personas y adaptable a empresas que necesitan acompañar mejor procesos de
-              salud.
+              {isBusinessAudience ? (
+                <>
+                  Lleva resultados, recetas, indicaciones y recordatorios a una experiencia clara para la
+                  persona usuaria, sin mezclar la operación de tu organización con la experiencia personal.
+                </>
+              ) : (
+                <>
+                  Centraliza documentos, medicamentos, citas, recordatorios, Klinip Voice y red familiar en
+                  una experiencia clara para personas, familias y cuidadores.
+                </>
+              )}
             </p>
 
             <div className="landing-brand-cta-row">
               <Link className="landing-brand-btn is-primary is-large" to="/register">
-                Crear cuenta gratis
+                {isBusinessAudience ? "Explorar solución" : "Crear cuenta gratis"}
                 <ArrowIcon />
               </Link>
               <button
                 type="button"
                 className="landing-brand-btn is-secondary is-large"
-                onClick={() => handleLandingNav("planes")}
+                onClick={() => handleLandingNav(isBusinessAudience ? "modulos" : "planes")}
               >
-                Ver planes
+                {isBusinessAudience ? "Ver capacidades" : "Ver planes"}
               </button>
             </div>
 
@@ -441,20 +512,33 @@ export default function Landing({ theme = "light", onToggleTheme }) {
             <div className="landing-brand-stage-photo">
               <LandingImage
                 className="landing-brand-stage-image"
-                src="/landing/hero-giselle.jpg"
+                src={isBusinessAudience ? "/landing/consulta-acompanada.jpg" : "/landing/hero-giselle.jpg"}
                 fallback="/landing/fallback-home-hero.png"
-                alt="Paciente usando Klinip desde su hogar."
+                alt={
+                  isBusinessAudience
+                    ? "Profesional de salud y persona usuaria conectados por una experiencia de continuidad."
+                    : "Paciente usando Klinip desde su hogar."
+                }
               />
               <div className="landing-brand-stage-chip">
                 <span className="landing-brand-stage-chip-dot" aria-hidden="true" />
-                <span>Tu información de salud sigue siendo tuya</span>
+                <span>
+                  {isBusinessAudience
+                    ? "La persona usuaria sigue controlando su información"
+                    : "Tu información de salud sigue siendo tuya"}
+                </span>
               </div>
               <div className="landing-brand-stage-photo-note">
-                <small>Klinip en una sola vista</small>
-                <strong>Documentos, recordatorios, Radar, voz clínica y red familiar conectados.</strong>
+                <small>{isBusinessAudience ? "Continuidad visible" : "Klinip en una sola vista"}</small>
+                <strong>
+                  {isBusinessAudience
+                    ? "Documentos, indicaciones, recordatorios y contexto llegan al seguimiento sin perderse."
+                    : "Documentos, recordatorios, Radar, voz clínica y red familiar conectados."}
+                </strong>
                 <p>
-                  Una experiencia diseñada para entender qué sigue, qué compartir y qué necesita atención
-                  antes de que se pierda.
+                  {isBusinessAudience
+                    ? "Una superficie pensada para que la organización acompañe mejor sin invadir la experiencia personal."
+                    : "Una experiencia diseñada para entender qué sigue, qué compartir y qué necesita atención antes de que se pierda."}
                 </p>
               </div>
             </div>
@@ -470,169 +554,184 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         </div>
       </section>
 
-      <section className="landing-brand-section landing-brand-showcase">
-        <div className="landing-brand-shell landing-brand-showcase-grid">
-          <div className="landing-brand-showcase-copy landing-reveal">
-            <span className="landing-brand-eyebrow">Lectura clara</span>
-            <h2>
-              Entiende tu salud <span>sin ser médico</span>
-            </h2>
-            <p>
-              Klinip presenta resultados, contexto y progreso en una vista más clara para que la información
-              clínica no se sienta lejana ni difícil de interpretar.
-            </p>
-            <p>
-              Con una interfaz más simple, puedes ver señales importantes, revisar tu avance y entender mejor
-              qué está pasando en tu salud y en cada función clave.
-            </p>
-            <div className="landing-brand-showcase-tags" aria-label="Áreas de salud">
-              {showcaseIndicators.map((item) => (
-                <span key={item} className="landing-brand-showcase-tag">
-                  {item}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="landing-brand-showcase-phones landing-reveal">
-            <div className="landing-brand-phone landing-brand-phone-back">
-              <div className="landing-brand-phone-notch" aria-hidden="true" />
-              <LandingImage
-                className="landing-brand-phone-screen"
-                src="/landing/fallback-home-hero.png"
-                fallback="/landing/fallback-home-hero.png"
-                alt="Pantalla principal de Klinip en celular."
-              />
-            </div>
-            <div className="landing-brand-phone landing-brand-phone-front">
-              <div className="landing-brand-phone-notch" aria-hidden="true" />
-              <LandingImage
-                className="landing-brand-phone-screen"
-                src="/landing/fallback-radar-salud.png"
-                fallback="/landing/fallback-radar-salud.png"
-                alt="Pantalla de indicadores y resultados de Klinip en celular."
-              />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="personas" className="landing-brand-section">
-        <div className="landing-brand-shell">
-          <div className="landing-brand-split-card landing-reveal">
-            <div className="landing-brand-split-copy">
-              <span className="landing-brand-eyebrow">Personas</span>
-              <h2>Para personas, familias y cuidadores que necesitan más claridad en su salud.</h2>
-              <p>
-                Klinip está pensado para el momento real del cuidado: cuando hay que entender un documento,
-                seguir un tratamiento, recordar una cita o compartir contexto con alguien de confianza.
-              </p>
-            </div>
-            <div className="landing-brand-split-list">
-              {peopleBenefits.map((item) => (
-                <div key={item} className="landing-brand-split-item">
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="empresas" className="landing-brand-section landing-brand-section-soft">
-        <div className="landing-brand-shell">
-          <div className="landing-brand-enterprise landing-reveal">
-            <div className="landing-brand-enterprise-layout">
-              <div className="landing-brand-enterprise-head">
-                <span className="landing-brand-eyebrow">Empresas</span>
-                <h2>Presenta Klinip a la empresa como una experiencia de salud que sigue viva.</h2>
+      {!isBusinessAudience ? (
+        <>
+          <section className="landing-brand-section landing-brand-showcase">
+            <div className="landing-brand-shell landing-brand-showcase-grid">
+              <div className="landing-brand-showcase-copy landing-reveal">
+                <span className="landing-brand-eyebrow">Lectura clara</span>
+                <h2>
+                  Entiende tu salud <span>sin ser médico</span>
+                </h2>
                 <p>
-                  Imagina poder conectar Klinip con tu centro, beneficio o programa para que la información
-                  se cargue en el teléfono del usuario de forma automática, ordenada y lista para activar
-                  seguimiento.
+                  Klinip presenta resultados, contexto y progreso en una vista más clara para que la información
+                  clínica no se sienta lejana ni difícil de interpretar.
                 </p>
                 <p>
-                  En vez de dejar la experiencia cortada en documentos sueltos o instrucciones que se pierden,
-                  Klinip convierte cada atención en una capa digital más clara para la persona y más valiosa
-                  para la empresa.
+                  Con una interfaz más simple, puedes ver señales importantes, revisar tu avance y entender mejor
+                  qué está pasando en tu salud y en cada función clave.
                 </p>
-                <div className="landing-brand-enterprise-actions">
-                  <button
-                    type="button"
-                    className="landing-brand-btn is-secondary"
-                    onClick={() => handleLandingNav("planes")}
-                  >
-                    Ver estructura comercial
-                  </button>
-                  <Link className="landing-brand-btn is-primary" to="/register">
-                    Explorar Klinip
-                    <ArrowIcon />
-                  </Link>
+                <div className="landing-brand-showcase-tags" aria-label="Áreas de salud">
+                  {showcaseIndicators.map((item) => (
+                    <span key={item} className="landing-brand-showcase-tag">
+                      {item}
+                    </span>
+                  ))}
                 </div>
-                <div className="landing-brand-enterprise-outcomes" aria-label="Beneficios para la empresa">
-                  {companyOutcomeItems.map((item) => (
-                    <div key={item} className="landing-brand-enterprise-outcome">
+              </div>
+
+              <div className="landing-brand-showcase-phones landing-reveal">
+                <div className="landing-brand-phone landing-brand-phone-back">
+                  <div className="landing-brand-phone-notch" aria-hidden="true" />
+                  <LandingImage
+                    className="landing-brand-phone-screen"
+                    src="/landing/fallback-home-hero.png"
+                    fallback="/landing/fallback-home-hero.png"
+                    alt="Pantalla principal de Klinip en celular."
+                  />
+                </div>
+                <div className="landing-brand-phone landing-brand-phone-front">
+                  <div className="landing-brand-phone-notch" aria-hidden="true" />
+                  <LandingImage
+                    className="landing-brand-phone-screen"
+                    src="/landing/fallback-radar-salud.png"
+                    fallback="/landing/fallback-radar-salud.png"
+                    alt="Pantalla de indicadores y resultados de Klinip en celular."
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="personas" className="landing-brand-section">
+            <div className="landing-brand-shell">
+              <div className="landing-brand-split-card landing-reveal">
+                <div className="landing-brand-split-copy">
+                  <span className="landing-brand-eyebrow">Personas</span>
+                  <h2>Para personas, familias y cuidadores que necesitan más claridad en su salud.</h2>
+                  <p>
+                    Klinip está pensado para el momento real del cuidado: cuando hay que entender un documento,
+                    seguir un tratamiento, recordar una cita o compartir contexto con alguien de confianza.
+                  </p>
+                </div>
+                <div className="landing-brand-split-list">
+                  {peopleBenefits.map((item) => (
+                    <div key={item} className="landing-brand-split-item">
                       {item}
                     </div>
                   ))}
                 </div>
               </div>
-
-              <div className="landing-brand-enterprise-visual" aria-label="Flujo de información para empresas">
-                <div className="landing-brand-enterprise-flow">
-                  <div className="landing-brand-enterprise-node is-source">
-                    <small>Centro, empresa o programa</small>
-                    <strong>La información clínica se origina donde ocurre la atención.</strong>
-                    <span>Resultados, recetas, órdenes, indicaciones y contexto clínico.</span>
+            </div>
+          </section>
+        </>
+      ) : (
+        <section id="empresas" className="landing-brand-section landing-brand-section-soft">
+          <div className="landing-brand-shell">
+            <div className="landing-brand-enterprise landing-reveal">
+              <div className="landing-brand-enterprise-layout">
+                <div className="landing-brand-enterprise-head">
+                  <span className="landing-brand-eyebrow">Empresas</span>
+                  <h2>Una experiencia exclusiva para organizaciones que quieren dar continuidad real.</h2>
+                  <p>
+                    Klinip Empresas separa la experiencia personal de la operación institucional para que cada
+                    atención, beneficio o programa siga viva en el teléfono de la persona usuaria.
+                  </p>
+                  <p>
+                    En vez de dejar la experiencia cortada en documentos sueltos o instrucciones que se pierden,
+                    Klinip convierte cada atención en una capa digital más clara para la persona y más valiosa
+                    para la organización.
+                  </p>
+                  <div className="landing-brand-enterprise-actions">
+                    <button
+                      type="button"
+                      className="landing-brand-btn is-secondary"
+                      onClick={() => handleLandingNav("modulos")}
+                    >
+                      Ver capacidades
+                    </button>
+                    <Link className="landing-brand-btn is-primary" to="/register">
+                      Explorar Klinip Empresas
+                      <ArrowIcon />
+                    </Link>
                   </div>
+                  <div className="landing-brand-enterprise-outcomes" aria-label="Beneficios para la empresa">
+                    {companyOutcomeItems.map((item) => (
+                      <div key={item} className="landing-brand-enterprise-outcome">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
-                  <div className="landing-brand-enterprise-core">
-                    <span className="landing-brand-enterprise-core-label">Klinip</span>
-                    <strong>Ordena, activa y contextualiza</strong>
-                    <div className="landing-brand-enterprise-chip-list">
-                      {companyFlowItems.map((item) => (
-                        <span key={item} className="landing-brand-enterprise-chip">
-                          {item}
-                        </span>
-                      ))}
+                <div className="landing-brand-enterprise-visual" aria-label="Flujo de información para empresas">
+                  <div className="landing-brand-enterprise-flow">
+                    <div className="landing-brand-enterprise-node is-source">
+                      <small>Centro, empresa o programa</small>
+                      <strong>La información clínica se origina donde ocurre la atención.</strong>
+                      <span>Resultados, recetas, órdenes, indicaciones y contexto clínico.</span>
+                    </div>
+
+                    <div className="landing-brand-enterprise-core">
+                      <span className="landing-brand-enterprise-core-label">Klinip</span>
+                      <strong>Ordena, activa y contextualiza</strong>
+                      <div className="landing-brand-enterprise-chip-list">
+                        {companyFlowItems.map((item) => (
+                          <span key={item} className="landing-brand-enterprise-chip">
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="landing-brand-enterprise-node is-user">
+                      <small>En el teléfono de la persona usuaria</small>
+                      <strong>Todo aparece en una experiencia más comprensible y accionable.</strong>
+                      <span>Recordatorios, historial, Voice, permisos y siguientes pasos en un mismo lugar.</span>
                     </div>
                   </div>
 
-                  <div className="landing-brand-enterprise-node is-user">
-                    <small>En el teléfono del usuario</small>
-                    <strong>Todo aparece en una experiencia más comprensible y accionable.</strong>
-                    <span>Recordatorios, historial, Voice, permisos y siguientes pasos en un mismo lugar.</span>
+                  <div className="landing-brand-enterprise-ownership">
+                    <strong>La organización mejora la continuidad.</strong>
+                    <span>La persona usuaria sigue siendo dueña de su información de salud y decide cómo compartirla.</span>
                   </div>
                 </div>
+              </div>
 
-                <div className="landing-brand-enterprise-ownership">
-                  <strong>La empresa mejora la continuidad.</strong>
-                  <span>El usuario sigue siendo dueño de su información de salud y decide cómo compartirla.</span>
-                </div>
+              <div className="landing-brand-enterprise-grid">
+                {companyBenefits.map((item) => (
+                  <article key={item.title} className="landing-brand-enterprise-card">
+                    <h3>{item.title}</h3>
+                    <p>{item.description}</p>
+                  </article>
+                ))}
               </div>
             </div>
-
-            <div className="landing-brand-enterprise-grid">
-              {companyBenefits.map((item) => (
-                <article key={item.title} className="landing-brand-enterprise-card">
-                  <h3>{item.title}</h3>
-                  <p>{item.description}</p>
-                </article>
-              ))}
-            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section id="modulos" className="landing-brand-section">
         <div className="landing-brand-shell">
           <div className="landing-brand-section-head">
             <span className="landing-brand-eyebrow">Módulos Klinip</span>
-            <h2>Una experiencia comercial clara, con pilares concretos y visibles.</h2>
-            <p>
-              Cada bloque responde a un uso real: sacar una foto, activar seguimiento, sostener tratamientos,
-              entender consultas y compartir con criterio.
-            </p>
+            {isBusinessAudience ? (
+              <>
+                <h2>Capacidades visibles para una propuesta empresarial clara.</h2>
+                <p>
+                  Estos módulos permiten transformar documentos, indicaciones y seguimiento en una experiencia
+                  útil para la persona usuaria y trazable para la organización.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2>Una experiencia personal clara, con pilares concretos y visibles.</h2>
+                <p>
+                  Cada bloque responde a un uso real: sacar una foto, activar seguimiento, sostener tratamientos,
+                  entender consultas y compartir con criterio.
+                </p>
+              </>
+            )}
           </div>
 
           <div className="landing-brand-module-grid">
@@ -674,18 +773,28 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           <div className="landing-brand-trust-panel landing-reveal">
             <div className="landing-brand-section-head is-on-dark">
               <span className="landing-brand-eyebrow is-on-dark">Confianza</span>
-              <h2>Propiedad de datos, privacidad y continuidad antes que ruido visual.</h2>
+              <h2>
+                {isBusinessAudience
+                  ? "Privacidad, propiedad de datos y continuidad con reglas claras."
+                  : "Propiedad de datos, privacidad y continuidad antes que ruido visual."}
+              </h2>
               <p>
-                Klinip usa tecnología para hacer más útil la información clínica, pero con foco en control,
-                claridad y responsabilidad.
+                {isBusinessAudience
+                  ? "Klinip ayuda a extender la experiencia de salud sin romper el control de la persona usuaria sobre su información."
+                  : "Klinip usa tecnología para hacer más útil la información clínica, pero con foco en control, claridad y responsabilidad."}
               </p>
             </div>
 
             <div className="landing-brand-ownership-banner">
-              <strong>Eres dueño de tu información de salud.</strong>
+              <strong>
+                {isBusinessAudience
+                  ? "La persona usuaria sigue siendo dueña de su información de salud."
+                  : "Eres dueño de tu información de salud."}
+              </strong>
               <span>
-                Klinip la organiza, la vuelve más entendible y te ayuda a compartirla con criterio, pero no
-                la transforma en algo ajeno a ti.
+                {isBusinessAudience
+                  ? "Klinip organiza la información, la vuelve más entendible y permite compartirla con criterio, sin transferir su control a la organización."
+                  : "Klinip la organiza, la vuelve más entendible y te ayuda a compartirla con criterio, pero no la transforma en algo ajeno a ti."}
               </span>
             </div>
 
@@ -701,91 +810,100 @@ export default function Landing({ theme = "light", onToggleTheme }) {
         </div>
       </section>
 
-      <section id="planes" className="landing-brand-section">
-        <div className="landing-brand-shell">
-          <div className="landing-brand-section-head">
-            <span className="landing-brand-eyebrow">Planes</span>
-            <h2>Empieza como persona y escala cuando el contexto lo necesite.</h2>
-            <p>
-              La estructura de planes acompaña el crecimiento del uso: desde una cuenta personal hasta una
-              experiencia con más perfiles y colaboración familiar.
-            </p>
-          </div>
-
-          <div className="landing-brand-pricing-toolbar">
-            <div className="landing-brand-billing-toggle">
-              <span className={billing === "monthly" ? "is-active" : ""}>Mensual</span>
-              <button
-                type="button"
-                className={`landing-brand-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
-                onClick={() => setBilling((prev) => (prev === "monthly" ? "yearly" : "monthly"))}
-                aria-label="Cambiar facturación"
-              >
-                <span className="landing-brand-billing-thumb" />
-              </button>
-              <span className={billing === "yearly" ? "is-active" : ""}>Anual</span>
+      {!isBusinessAudience ? (
+        <section id="planes" className="landing-brand-section">
+          <div className="landing-brand-shell">
+            <div className="landing-brand-section-head">
+              <span className="landing-brand-eyebrow">Planes</span>
+              <h2>Empieza como persona y escala cuando el contexto lo necesite.</h2>
+              <p>
+                La estructura de planes acompaña el crecimiento del uso: desde una cuenta personal hasta una
+                experiencia con más perfiles y colaboración familiar.
+              </p>
             </div>
-            <span className="landing-brand-billing-badge">Ahorra 2 meses</span>
-          </div>
 
-          <div className="landing-brand-pricing-grid">
-            {plans.map((plan) => (
-              <article
-                key={plan.slug}
-                className={`landing-brand-price-card ${plan.recommended ? "is-featured" : ""}`}
-              >
-                {plan.recommended ? <span className="landing-brand-price-rec">Más elegido</span> : null}
-                <div className="landing-brand-price-top">
-                  <div>
-                    <div className="landing-brand-price-plan">{cleanUiText(plan.name)}</div>
-                    <p className="landing-brand-price-note">{cleanUiText(plan.note)}</p>
+            <div className="landing-brand-pricing-toolbar">
+              <div className="landing-brand-billing-toggle">
+                <span className={billing === "monthly" ? "is-active" : ""}>Mensual</span>
+                <button
+                  type="button"
+                  className={`landing-brand-billing-switch ${billing === "yearly" ? "is-yearly" : ""}`}
+                  onClick={() => setBilling((prev) => (prev === "monthly" ? "yearly" : "monthly"))}
+                  aria-label="Cambiar facturación"
+                >
+                  <span className="landing-brand-billing-thumb" />
+                </button>
+                <span className={billing === "yearly" ? "is-active" : ""}>Anual</span>
+              </div>
+              <span className="landing-brand-billing-badge">Ahorra 2 meses</span>
+            </div>
+
+            <div className="landing-brand-pricing-grid">
+              {plans.map((plan) => (
+                <article
+                  key={plan.slug}
+                  className={`landing-brand-price-card ${plan.recommended ? "is-featured" : ""}`}
+                >
+                  {plan.recommended ? <span className="landing-brand-price-rec">Más elegido</span> : null}
+                  <div className="landing-brand-price-top">
+                    <div>
+                      <div className="landing-brand-price-plan">{cleanUiText(plan.name)}</div>
+                      <p className="landing-brand-price-note">{cleanUiText(plan.note)}</p>
+                    </div>
+                    <div className={`landing-brand-price-amount ${plan.slug === "basico" ? "is-free" : ""}`}>
+                      {cleanUiText(billing === "monthly" ? plan.priceMonthly : plan.priceYearly)}
+                    </div>
                   </div>
-                  <div className={`landing-brand-price-amount ${plan.slug === "basico" ? "is-free" : ""}`}>
-                    {cleanUiText(billing === "monthly" ? plan.priceMonthly : plan.priceYearly)}
+
+                  <p className="landing-brand-price-summary">{cleanUiText(plan.summary)}</p>
+
+                  <div className="landing-brand-price-metrics">
+                    {Array.isArray(plan.metrics)
+                      ? plan.metrics.map((metric) => (
+                          <span key={`${metric.label}-${metric.value}`} className="landing-brand-metric-chip">
+                            {cleanUiText(metric.label)}: {cleanUiText(metric.value)}
+                          </span>
+                        ))
+                      : null}
                   </div>
-                </div>
 
-                <p className="landing-brand-price-summary">{cleanUiText(plan.summary)}</p>
+                  <ul className="landing-brand-price-features">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>{cleanUiText(feature)}</li>
+                    ))}
+                  </ul>
 
-                <div className="landing-brand-price-metrics">
-                  {Array.isArray(plan.metrics)
-                    ? plan.metrics.map((metric) => (
-                        <span key={`${metric.label}-${metric.value}`} className="landing-brand-metric-chip">
-                          {cleanUiText(metric.label)}: {cleanUiText(metric.value)}
-                        </span>
-                      ))
-                    : null}
-                </div>
-
-                <ul className="landing-brand-price-features">
-                  {plan.features.map((feature) => (
-                    <li key={feature}>{cleanUiText(feature)}</li>
-                  ))}
-                </ul>
-
-                <div className="landing-brand-price-actions">
-                  <Link className="landing-brand-btn is-primary" to={`/planes/${plan.slug}`}>
-                    Ver detalle
-                  </Link>
-                  <Link className="landing-brand-btn is-ghost" to="/register">
-                    {cleanUiText(plan.cta)}
-                  </Link>
-                </div>
-              </article>
-            ))}
+                  <div className="landing-brand-price-actions">
+                    <Link className="landing-brand-btn is-primary" to={`/planes/${plan.slug}`}>
+                      Ver detalle
+                    </Link>
+                    <Link className="landing-brand-btn is-ghost" to="/register">
+                      {cleanUiText(plan.cta)}
+                    </Link>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="landing-brand-section landing-brand-section-faq">
+      <section
+        id={isBusinessAudience ? "faq" : undefined}
+        className="landing-brand-section landing-brand-section-faq"
+      >
         <div className="landing-brand-shell landing-brand-shell-narrow">
           <div className="landing-brand-section-head">
             <span className="landing-brand-eyebrow">Preguntas frecuentes</span>
-            <h2>Una landing clara también tiene que responder rápido.</h2>
+            <h2>
+              {isBusinessAudience
+                ? "La propuesta para empresas también tiene que responder rápido."
+                : "Una landing clara también tiene que responder rápido."}
+            </h2>
           </div>
 
           <div className="landing-brand-faq">
-            {faqItems.map((item, index) => {
+            {faqEntries.map((item, index) => {
               const open = openFaq === index;
               return (
                 <div key={item.q} className={`landing-brand-faq-item ${open ? "is-open" : ""}`}>
@@ -813,19 +931,27 @@ export default function Landing({ theme = "light", onToggleTheme }) {
           <div className="landing-brand-cta-card">
             <div>
               <span className="landing-brand-eyebrow is-on-dark">Empezar</span>
-              <h2>Klinip se ve mejor cuando se entiende como un servicio real de continuidad.</h2>
+              <h2>
+                {isBusinessAudience
+                  ? "Klinip Empresas funciona mejor cuando la continuidad no se corta al salir de la atención."
+                  : "Klinip se ve mejor cuando se entiende como un servicio real de continuidad."}
+              </h2>
               <p>
-                Para personas, familias y futuros contextos empresariales, la promesa sigue siendo la misma:
-                más claridad, más seguimiento y más control sobre la información de salud.
+                {isBusinessAudience
+                  ? "Separa la experiencia personal de la operación institucional y lleva seguimiento claro a cada persona usuaria."
+                  : "Para personas, familias y cuidadores, la promesa sigue siendo la misma: más claridad, más seguimiento y más control sobre la información de salud."}
               </p>
             </div>
             <div className="landing-brand-cta-actions">
               <Link className="landing-brand-btn is-primary is-large" to="/register">
-                Crear cuenta gratis
+                {isBusinessAudience ? "Explorar solución" : "Crear cuenta gratis"}
                 <ArrowIcon />
               </Link>
-              <Link className="landing-brand-btn is-dark-ghost is-large" to="/login">
-                Ya tengo cuenta
+              <Link
+                className="landing-brand-btn is-dark-ghost is-large"
+                to={isBusinessAudience ? "/personas" : "/login"}
+              >
+                {isBusinessAudience ? "Ver landing personas" : "Ya tengo cuenta"}
               </Link>
             </div>
           </div>
@@ -841,7 +967,11 @@ export default function Landing({ theme = "light", onToggleTheme }) {
               nameClassName="landing-brand-logo-name"
               responsive
             />
-            <span>Salud personal y familiar con más claridad, continuidad y contexto.</span>
+            <span>
+              {isBusinessAudience
+                ? "Continuidad de salud para organizaciones con una experiencia clara para cada persona usuaria."
+                : "Salud personal y familiar con más claridad, continuidad y contexto."}
+            </span>
           </div>
           <div className="landing-brand-footer-copy">&copy; 2026 Klinip. Todos los derechos reservados.</div>
         </div>

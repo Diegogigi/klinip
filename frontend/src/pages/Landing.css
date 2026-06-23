@@ -251,7 +251,21 @@ body.theme-dark .landing-brand-btn.is-ghost {
   padding: 0.45rem 0.95rem;
   border-radius: 999px;
   cursor: pointer;
+  text-decoration: none;
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.landing-brand-segment:hover {
+  color: var(--lb-text);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.landing-brand-segment.is-active:hover {
+  color: #ffffff;
+}
+
+body.theme-dark .landing-brand-segment:hover {
+  background: rgba(139, 176, 255, 0.14);
 }
 
 .landing-brand-segment.is-active {
