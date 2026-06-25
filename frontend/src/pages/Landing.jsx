@@ -169,6 +169,7 @@ const moduleCards = [
       src: "/landing/documentos-en-casa.jpg",
       fallback: "/landing/fallback-mi-salud.jpeg",
       alt: "Documentos clínicos organizados dentro de Klinip.",
+      style: { objectPosition: "center 30%" },
     },
   },
   {
@@ -183,9 +184,14 @@ const moduleCards = [
       "Alertas más claras para el día a día",
     ],
     image: {
-      src: "/landing/fallback-home-hero.jpeg",
-      fallback: "/landing/fallback-home-hero.jpeg",
+      src: "/landing/fallback-citas-home.jpeg",
+      fallback: "/landing/fallback-citas-home.jpeg",
       alt: "Recordatorios y seguimiento diario en Klinip.",
+      style: {
+        objectFit: "contain",
+        objectPosition: "center top",
+        background: "linear-gradient(180deg, #eaf3ff 0%, #f8fbff 100%)",
+      },
     },
   },
   {
@@ -203,6 +209,11 @@ const moduleCards = [
       src: "/landing/fallback-radar-salud.jpeg",
       fallback: "/landing/fallback-radar-salud.jpeg",
       alt: "Radar de salud con prioridades visibles en Klinip.",
+      style: {
+        objectFit: "contain",
+        objectPosition: "center top",
+        background: "linear-gradient(180deg, #ecf4ff 0%, #f9fbff 100%)",
+      },
     },
   },
   {
@@ -217,9 +228,14 @@ const moduleCards = [
       "Más comprensión sin perder la fuente original",
     ],
     image: {
-      src: "/landing/consulta-acompanada.jpg",
-      fallback: "/landing/fallback-mi-salud.jpeg",
+      src: "/landing/fallback-voz-home.jpeg",
+      fallback: "/landing/fallback-voz-home.jpeg",
       alt: "Consulta clínica acompañada con continuidad a través de Klinip Voice.",
+      style: {
+        objectFit: "contain",
+        objectPosition: "center top",
+        background: "linear-gradient(180deg, #edf4ff 0%, #f8fbff 100%)",
+      },
     },
   },
   {
@@ -237,30 +253,23 @@ const moduleCards = [
       src: "/landing/familia-cuidando.jpg",
       fallback: "/landing/familia-cuidando.jpg",
       alt: "Familia y cuidadores siguiendo el proceso de salud desde Klinip.",
+      style: { objectPosition: "center 26%" },
     },
   },
 ];
 
 const trustCards = [
   {
-    title: "Tu información sigue siendo tuya",
-    description:
-      "Klinip ordena y hace útil tu información de salud, pero no te quita control sobre ella ni la convierte en una caja negra.",
+    title: "Tus datos siguen siendo tuyos",
+    description: "Klinip organiza tu información para usarla mejor, sin quitarte control sobre ella.",
   },
   {
     title: "Privacidad por diseño",
-    description:
-      "Perfiles, permisos y red familiar están pensados para compartir con criterio, no para abrir información sensible sin contexto.",
+    description: "Perfiles, permisos y red familiar ayudan a compartir con criterio y sin exponer de más.",
   },
   {
-    title: "IA que orienta, no reemplaza",
-    description:
-      "Klinip resume, explica y prioriza con contexto real. Las decisiones clínicas siguen siendo del usuario y del profesional.",
-  },
-  {
-    title: "Voice con doble lectura útil",
-    description:
-      "Una versión más clara para el usuario y una versión más compartible para el profesional ayudan a sostener continuidad real.",
+    title: "Más claridad, menos olvido",
+    description: "Documentos, recordatorios y Voice ayudan a mantener continuidad después de cada atención.",
   },
 ];
 
@@ -321,7 +330,7 @@ const StatCard = ({ value, label }) => (
   </div>
 );
 
-function LandingImage({ src, fallback, alt, className }) {
+function LandingImage({ src, fallback, alt, className, style }) {
   const [currentSrc, setCurrentSrc] = useState(src);
 
   useEffect(() => {
@@ -333,6 +342,7 @@ function LandingImage({ src, fallback, alt, className }) {
       className={className}
       src={currentSrc}
       alt={alt}
+      style={style}
       loading="lazy"
       decoding="async"
       onError={() => {
@@ -697,9 +707,9 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                   <div className="landing-brand-phone-notch" aria-hidden="true" />
                   <LandingImage
                     className="landing-brand-phone-screen"
-                    src="/landing/fallback-home-hero.jpeg"
-                    fallback="/landing/fallback-home-hero.jpeg"
-                    alt="Pantalla principal de Klinip con centro de control diario y seguimiento."
+                    src="/landing/fallback-confirmacion-home.jpeg"
+                    fallback="/landing/fallback-confirmacion-home.jpeg"
+                    alt="Pantalla de confirmación y resumen diario de Klinip."
                   />
                 </div>
                 <div className="landing-brand-phone landing-brand-phone-front">
@@ -842,6 +852,7 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                       src={item.image.src}
                       fallback={item.image.fallback}
                       alt={item.image.alt}
+                      style={item.image.style}
                     />
                     <div className="landing-brand-module-media-overlay">
                       <span className="landing-brand-module-eyebrow">{item.eyebrow}</span>
@@ -897,19 +908,13 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
             <div className="landing-brand-trust-panel landing-reveal">
               <div className="landing-brand-section-head is-on-dark">
                 <span className="landing-brand-eyebrow is-on-dark">Confianza</span>
-                <h2>Propiedad de datos, privacidad y continuidad antes que ruido visual.</h2>
-                <p>
-                  Klinip usa tecnología para hacer más útil la información clínica, pero con foco en control,
-                  claridad y responsabilidad.
-                </p>
+                <h2>Tus datos de salud siguen siendo tuyos.</h2>
+                <p>Klinip te ayuda a entender, ordenar y compartir mejor tu información, sin quitarte control.</p>
               </div>
 
               <div className="landing-brand-ownership-banner">
-                <strong>Eres dueño de tu información de salud.</strong>
-                <span>
-                  Klinip la organiza, la vuelve más entendible y te ayuda a compartirla con criterio, pero no
-                  la transforma en algo ajeno a ti.
-                </span>
+                <strong>Privacidad clara y continuidad real.</strong>
+                <span>La información se organiza para ayudarte, no para volverse ajena a ti.</span>
               </div>
 
               <div className="landing-brand-trust-grid">
