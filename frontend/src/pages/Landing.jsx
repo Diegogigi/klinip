@@ -156,7 +156,7 @@ const showcaseIndicators = [
 const moduleCards = [
   {
     title: "Documentos que activan seguimiento",
-    eyebrow: "OCR clínico",
+    eyebrow: "Lee y ordena documentos",
     description:
       "Sacas una foto y Klinip ordena recetas, órdenes o resultados para que dejen de ser archivos sueltos.",
     spotlight: "Del documento a un siguiente paso visible.",
@@ -351,7 +351,7 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
   const [billing, setBilling] = useState("monthly");
   const [plans, setPlans] = useState(PLAN_CATALOG);
   const [activeNavSection, setActiveNavSection] = useState(landingNavItems[0].id);
-  const [openFaq, setOpenFaq] = useState(0);
+  const [openFaq, setOpenFaq] = useState(null);
 
   const heroHighlights = isBusinessAudience ? businessHeroHighlights : peopleHeroHighlights;
   const faqEntries = isBusinessAudience ? businessFaqItems : faqItems;

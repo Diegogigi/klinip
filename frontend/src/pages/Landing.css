@@ -1665,6 +1665,7 @@ body.theme-dark .landing-brand-metric-chip {
 .landing-brand-faq-answer {
   display: grid;
   grid-template-rows: 0fr;
+  overflow: hidden;
   transition: grid-template-rows 0.22s ease;
 }
 
@@ -1676,9 +1677,16 @@ body.theme-dark .landing-brand-metric-chip {
   min-height: 0;
   overflow: hidden;
   margin: 0;
-  padding: 0 1.25rem 1.18rem;
+  padding: 0 1.25rem;
   color: var(--lb-text-soft);
   line-height: 1.7;
+  opacity: 0;
+  transition: opacity 0.18s ease, padding 0.18s ease;
+}
+
+.landing-brand-faq-item.is-open .landing-brand-faq-answer p {
+  padding: 0 1.25rem 1.18rem;
+  opacity: 1;
 }
 
 .landing-brand-cta {
@@ -2154,6 +2162,10 @@ body.theme-dark .landing-brand-cta-card {
   }
 
   .landing-brand-faq-answer p {
+    padding: 0 1rem;
+  }
+
+  .landing-brand-faq-item.is-open .landing-brand-faq-answer p {
     padding: 0 1rem 1rem;
   }
 
