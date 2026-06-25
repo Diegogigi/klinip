@@ -324,7 +324,7 @@ body.theme-dark .landing-brand-btn.is-ghost {
   color: #ffffff;
 }
 
-.landing-brand-stage-chip-hero {
+.landing-brand-hero-immersive .landing-brand-stage-chip-hero {
   left: auto;
   right: 1.2rem;
   width: fit-content;
@@ -332,7 +332,7 @@ body.theme-dark .landing-brand-btn.is-ghost {
   justify-content: flex-start;
 }
 
-.landing-brand-stage-photo-note-hero {
+.landing-brand-hero-immersive .landing-brand-stage-photo-note-hero {
   left: auto;
   right: 2rem;
   bottom: 2rem;
@@ -1852,12 +1852,12 @@ body.theme-dark .landing-brand-cta-card {
     padding: 1.4rem;
   }
 
-  .landing-brand-stage-chip-hero {
+  .landing-brand-hero-immersive .landing-brand-stage-chip-hero {
     left: auto;
     right: 1rem;
   }
 
-  .landing-brand-stage-photo-note-hero {
+  .landing-brand-hero-immersive .landing-brand-stage-photo-note-hero {
     left: auto;
     right: 1.4rem;
     bottom: 1.4rem;
@@ -1970,7 +1970,7 @@ body.theme-dark .landing-brand-cta-card {
     right: 0.8rem;
   }
 
-  .landing-brand-stage-chip-hero {
+  .landing-brand-hero-immersive .landing-brand-stage-chip-hero {
     left: auto;
     right: 0.8rem;
     max-width: min(18rem, calc(100% - 1.6rem));
@@ -1989,7 +1989,7 @@ body.theme-dark .landing-brand-cta-card {
     border-radius: 1rem;
   }
 
-  .landing-brand-stage-photo-note-hero {
+  .landing-brand-hero-immersive .landing-brand-stage-photo-note-hero {
     left: auto;
     right: 0.8rem;
     bottom: 0.8rem;

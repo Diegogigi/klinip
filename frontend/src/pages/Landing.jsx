@@ -184,14 +184,10 @@ const moduleCards = [
       "Alertas más claras para el día a día",
     ],
     image: {
-      src: "/landing/fallback-citas-home.jpeg",
-      fallback: "/landing/fallback-citas-home.jpeg",
-      alt: "Recordatorios y seguimiento diario en Klinip.",
-      style: {
-        objectFit: "contain",
-        objectPosition: "center top",
-        background: "linear-gradient(180deg, #eaf3ff 0%, #f8fbff 100%)",
-      },
+      src: "/landing/hero-giselle.jpeg",
+      fallback: "/landing/hero-giselle.jpeg",
+      alt: "Persona usando Klinip para seguir medicamentos, citas y recordatorios diarios.",
+      style: { objectPosition: "center 24%" },
     },
   },
   {
@@ -206,14 +202,10 @@ const moduleCards = [
       "Mejor continuidad entre consulta y hogar",
     ],
     image: {
-      src: "/landing/fallback-radar-salud.jpeg",
-      fallback: "/landing/fallback-radar-salud.jpeg",
-      alt: "Radar de salud con prioridades visibles en Klinip.",
-      style: {
-        objectFit: "contain",
-        objectPosition: "center top",
-        background: "linear-gradient(180deg, #ecf4ff 0%, #f9fbff 100%)",
-      },
+      src: "/landing/empresa-dos.jpeg",
+      fallback: "/landing/empresa-dos.jpeg",
+      alt: "Personas recibiendo orientación de salud con Klinip para priorizar lo importante.",
+      style: { objectPosition: "center 38%" },
     },
   },
   {
@@ -228,14 +220,10 @@ const moduleCards = [
       "Más comprensión sin perder la fuente original",
     ],
     image: {
-      src: "/landing/fallback-voz-home.jpeg",
-      fallback: "/landing/fallback-voz-home.jpeg",
+      src: "/landing/consulta-acompanada.jpg",
+      fallback: "/landing/consulta-acompanada.jpg",
       alt: "Consulta clínica acompañada con continuidad a través de Klinip Voice.",
-      style: {
-        objectFit: "contain",
-        objectPosition: "center top",
-        background: "linear-gradient(180deg, #edf4ff 0%, #f8fbff 100%)",
-      },
+      style: { objectPosition: "center 32%" },
     },
   },
   {
@@ -707,18 +695,18 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                   <div className="landing-brand-phone-notch" aria-hidden="true" />
                   <LandingImage
                     className="landing-brand-phone-screen"
-                    src="/landing/fallback-confirmacion-home.jpeg"
-                    fallback="/landing/fallback-confirmacion-home.jpeg"
-                    alt="Pantalla de confirmación y resumen diario de Klinip."
+                    src="/landing/fallback-home-hero.jpeg"
+                    fallback="/landing/fallback-home-hero.jpeg"
+                    alt="Pantalla principal de Klinip con centro de control diario y seguimiento."
                   />
                 </div>
                 <div className="landing-brand-phone landing-brand-phone-front">
                   <div className="landing-brand-phone-notch" aria-hidden="true" />
                   <LandingImage
                     className="landing-brand-phone-screen"
-                    src="/landing/fallback-radar-salud.jpeg"
-                    fallback="/landing/fallback-radar-salud.jpeg"
-                    alt="Pantalla de Atención de hoy con radar de salud, medicamentos y documentos."
+                    src="/landing/fallback-confirmacion-home.jpeg"
+                    fallback="/landing/fallback-confirmacion-home.jpeg"
+                    alt="Pantalla de confirmación y resumen diario de Klinip."
                   />
                 </div>
               </div>
