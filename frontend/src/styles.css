@@ -32672,19 +32672,6 @@ body.theme-dark .clinical-report-tag {
   line-height: 1.45;
 }
 
-.medication-intake-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.7rem;
-}
-
-.medication-intake-actions .secondary-btn {
-  min-height: 34px;
-  padding: 0.35rem 0.72rem;
-  font-size: 0.76rem;
-}
-
 .medication-intake-empty {
   padding: 0.95rem 1rem;
   border-radius: 16px;
@@ -49785,6 +49772,36 @@ body.theme-dark .health-hub-quick-card.tone-green {
 
 .clp-card-link:hover { text-decoration: underline; }
 
+.clp-card-link-primary {
+  min-height: 2rem;
+  padding: 0.48rem 0.78rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  transition:
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.clp-card-link-primary:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.clp-card-link-primary:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.clp-card-link-primary svg {
+  width: 12px;
+  height: 12px;
+}
+
 .clp-card-metric {
   display: inline-flex;
   align-items: center;
@@ -49974,6 +49991,17 @@ body.theme-dark .health-hub-quick-card.tone-green {
   border-color: #16a34a;
   color: #ffffff;
   cursor: default;
+}
+
+.clp-med-check.is-pending {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #dc2626;
+}
+
+.clp-med-check.is-pending:hover:not(:disabled) {
+  background: #ffe4e6;
+  border-color: #fb7185;
 }
 
 .clp-med-check svg {
@@ -50316,6 +50344,17 @@ body.theme-dark .clp-more-link {
   color: #60a5fa;
 }
 
+body.theme-dark .clp-card-link-primary {
+  color: #ffffff;
+  background: linear-gradient(180deg, #3b82f6 0%, #1d4ed8 100%);
+  box-shadow: 0 12px 30px rgba(29, 78, 216, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+body.theme-dark .clp-card-link-primary:hover {
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%);
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
 body.theme-dark .clp-card-metric {
   border-color: rgba(71, 85, 105, 0.6);
   background: rgba(15, 23, 42, 0.8);
@@ -50372,6 +50411,17 @@ body.theme-dark .clp-med-check.is-done {
   background: #16a34a;
   border-color: #16a34a;
   color: #ffffff;
+}
+
+body.theme-dark .clp-med-check.is-pending {
+  background: rgba(220, 38, 38, 0.16);
+  border-color: rgba(251, 113, 133, 0.44);
+  color: #fda4af;
+}
+
+body.theme-dark .clp-med-check.is-pending:hover:not(:disabled) {
+  background: rgba(220, 38, 38, 0.24);
+  border-color: rgba(251, 113, 133, 0.72);
 }
 
 body.theme-dark .clp-quick-heading {
@@ -50533,6 +50583,11 @@ body.theme-dark .clp-loading-pulse {
 
   .clp-card-link {
     font-size: 0.72rem;
+  }
+
+  .clp-card-link-primary {
+    min-height: 1.9rem;
+    padding: 0.42rem 0.7rem;
   }
 
   .clp-card-sub {

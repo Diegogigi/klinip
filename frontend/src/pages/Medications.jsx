@@ -38,6 +38,11 @@ import {
 import RowActionsMenu from "../components/RowActionsMenu";
 import SuccessSheet from "../components/SuccessSheet";
 import { cleanUiText } from "../utils/textEncoding";
+import {
+  buildMedicationCreateSuccess,
+  buildMedicationIntakeSuccess,
+  getMedicationIntakeStatusLabel as getSharedMedicationIntakeStatusLabel,
+} from "../utils/medicationIntakeSuccess";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
@@ -767,7 +772,12 @@ export default function Medications() {
       setShowForm(false);
       // Confirmación visual solo al CREAR un medicamento nuevo (no al editar).
       if (!payload.id && savedMedication) {
-        setMedSuccess(savedMedication);
+        setMedSuccess(
+          buildMedicationCreateSuccess({
+            medication: savedMedication,
+            profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+          })
+        );
       }
     } catch (err) {
       console.error("Error al guardar medicamento:", err);
@@ -936,10 +946,18 @@ export default function Medications() {
             ? options.scheduledAt.toISOString()
             : options.scheduledAt;
       }
-      await recordMedicationIntake(med.id, payload);
+      const savedIntake = await recordMedicationIntake(med.id, payload);
       await refreshMedicationStateAfterIntake(
-        `success:Dosis registrada: ${med.name}`,
-        `info:Dosis registrada: ${med.name}. Actualiza la lista si no ves el cambio.`
+        "",
+        "info:La dosis quedó guardada. Actualiza la lista si no ves el cambio.",
+        {
+          showFeedback: false,
+          successSheet: buildMedicationIntakeSuccess({
+            intake: savedIntake,
+            medication: med,
+            profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+          }),
+        }
       );
     } catch (err) {
       console.error(err);
@@ -990,15 +1008,28 @@ export default function Medications() {
 
   const refreshMedicationStateAfterIntake = async (
     successMessage,
-    refreshFailureMessage
+    refreshFailureMessage,
+    options = {}
   ) => {
+    const {
+      showFeedback = true,
+      successSheet = null,
+    } = options;
     notifyMedicationDataChanged();
     try {
       await load();
-      showTimedIntakeFeedback(successMessage);
+      if (showFeedback && successMessage) {
+        showTimedIntakeFeedback(successMessage);
+      }
     } catch (error) {
       console.error("No se pudo refrescar la lista de medicamentos", error);
-      showTimedIntakeFeedback(refreshFailureMessage || successMessage);
+      if (refreshFailureMessage || successMessage) {
+        showTimedIntakeFeedback(refreshFailureMessage || successMessage);
+      }
+    } finally {
+      if (successSheet) {
+        setMedSuccess(successSheet);
+      }
     }
   };
 
@@ -1041,17 +1072,25 @@ export default function Medications() {
 
   const handleTakenFromAlert = async () => {
     if (!notifyTarget || !canEditActiveProfile) return;
-    setNotifyActionLoading(true);
+      setNotifyActionLoading(true);
     try {
-      await recordTakenFromReminder(notifyTarget, "reminder_prompt", notifyTriggeredAt);
+      const savedIntake = await recordTakenFromReminder(notifyTarget, "reminder_prompt", notifyTriggeredAt);
       if (notifyPromptKey) {
         localStorage.setItem(notifyPromptKey, "taken");
       }
       resetReminderPromptState();
       navigate("/medications", { replace: true });
       await refreshMedicationStateAfterIntake(
-        `success:Toma registrada: ${notifyTarget.name}`,
-        `info:Toma registrada: ${notifyTarget.name}. Actualiza la lista si no ves el cambio.`
+        "",
+        "info:La toma quedó guardada. Actualiza la lista si no ves el cambio.",
+        {
+          showFeedback: false,
+          successSheet: buildMedicationIntakeSuccess({
+            intake: savedIntake,
+            medication: notifyTarget,
+            profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+          }),
+        }
       );
     } catch (err) {
       console.error(err);
@@ -1072,8 +1111,9 @@ export default function Medications() {
     ];
     setNotifyActionLoading(true);
     try {
+      let lastSavedIntake = null;
       for (const item of batch) {
-        await recordTakenFromReminder(item.med, "reminder_batch", item.triggeredAt);
+        lastSavedIntake = await recordTakenFromReminder(item.med, "reminder_batch", item.triggeredAt);
         if (item.key) {
           localStorage.setItem(item.key, "taken");
         }
@@ -1082,8 +1122,17 @@ export default function Medications() {
       resetReminderPromptState();
       navigate("/medications", { replace: true });
       await refreshMedicationStateAfterIntake(
-        `success:Tomas registradas: ${batch.length}`,
-        "info:Las tomas quedaron registradas. Actualiza la lista si no ves el cambio."
+        "",
+        "info:Las tomas quedaron guardadas. Actualiza la lista si no ves el cambio.",
+        {
+          showFeedback: false,
+          successSheet: buildMedicationIntakeSuccess({
+            intake: lastSavedIntake,
+            medication: null,
+            profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+            count: batch.length,
+          }),
+        }
       );
     } catch (err) {
       console.error(err);
@@ -1130,7 +1179,7 @@ export default function Medications() {
     if (!routeReminderMedication || !canEditActiveProfile) return;
     setNotifyActionLoading(true);
     try {
-      await recordTakenFromReminder(
+      const savedIntake = await recordTakenFromReminder(
         routeReminderMedication,
         "reminder_prompt",
         routeReminderTrigger
@@ -1140,8 +1189,16 @@ export default function Medications() {
       }
       dismissRouteReminder();
       await refreshMedicationStateAfterIntake(
-        `success:Dosis registrada: ${routeReminderMedication.name}`,
-        `info:Dosis registrada: ${routeReminderMedication.name}. Actualiza la lista si no ves el cambio.`
+        "",
+        "info:La dosis quedó guardada. Actualiza la lista si no ves el cambio.",
+        {
+          showFeedback: false,
+          successSheet: buildMedicationIntakeSuccess({
+            intake: savedIntake,
+            medication: routeReminderMedication,
+            profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+          }),
+        }
       );
     } catch (err) {
       console.error(err);
@@ -1583,11 +1640,7 @@ export default function Medications() {
   };
 
   const getIntakeStatusLabel = (status) => {
-    const normalized = String(status || "taken").toLowerCase();
-    if (normalized === "late") return "Tomada fuera de horario";
-    if (normalized === "missed") return "Pendiente de confirmar";
-    if (normalized === "skipped") return "No tomada";
-    return "Tomada";
+    return getSharedMedicationIntakeStatusLabel(status);
   };
 
   const getIntakeHeadline = (item) => {
@@ -1622,40 +1675,6 @@ export default function Medications() {
       return "La dosis se registró manualmente.";
     }
     return "";
-  };
-
-  const handleTimelineStatusUpdate = async (item, nextStatus) => {
-    if (!canEditActiveProfile || !detailTarget?.id) return;
-    try {
-      await recordMedicationIntake(detailTarget.id, {
-        status: nextStatus,
-        source: "timeline_update",
-        scheduled_at: item.scheduled_at || item.taken_at || item.created_at || new Date().toISOString(),
-        notes:
-          nextStatus === "late"
-            ? "Actualizado desde la línea de tiempo como tomada fuera de horario."
-            : "Actualizado desde la línea de tiempo como no tomada.",
-      });
-      await Promise.all([load(), loadDetailIntakeItems(detailTarget.id)]);
-      notifyClinicalDataChanged({
-        profileId: activeProfile?.id,
-        sources: ["medications", "health-radar", "adherence"],
-      });
-      setIntakeFeedback(
-        nextStatus === "late"
-          ? "success:Evento actualizado como tomada fuera de horario."
-          : "info:Evento actualizado como no tomada."
-      );
-      if (feedbackTimer.current) {
-        clearTimeout(feedbackTimer.current);
-      }
-      feedbackTimer.current = setTimeout(() => {
-        setIntakeFeedback("");
-      }, 2600);
-    } catch (error) {
-      console.error(error);
-      alert("No se pudo actualizar el evento de adherencia.");
-    }
   };
 
   return (
@@ -2567,36 +2586,12 @@ export default function Medications() {
       <SuccessSheet
         open={!!medSuccess}
         onClose={() => setMedSuccess(null)}
-        kicker="Medicamento agregado"
-        title="Todo listo"
-        copy="El medicamento quedó registrado y ya forma parte de tu seguimiento clínico."
-        referenceId={medSuccess?.id}
-        rows={[
-          {
-            icon: "profile",
-            label: "Perfil activo",
-            value: cleanUiText(activeProfile?.display_name || activeProfile?.full_name || "Mi perfil"),
-          },
-          {
-            icon: "pill",
-            label: "Medicamento",
-            value: cleanUiText(medSuccess?.name || "Medicamento"),
-          },
-          {
-            icon: "clock",
-            label: "Dosis y frecuencia",
-            value: cleanUiText(
-              [medSuccess?.dose, medSuccess?.frequency].filter(Boolean).join(" · ") || "Por confirmar",
-            ),
-          },
-        ]}
-        primaryLabel="Ver detalle"
-        onPrimary={() => {
-          const target = medSuccess;
+        {...(medSuccess || {})}
+        onPrimary={medSuccess?.targetMedication ? () => {
+          const target = medSuccess?.targetMedication;
           setMedSuccess(null);
           if (target) handleOpenDetail(target);
-        }}
-        secondaryLabel="Volver a medicamentos"
+        } : undefined}
       />
 
       {detailOpen && detailTarget && createPortal(
@@ -2867,26 +2862,6 @@ export default function Medications() {
                               </div>
                             ) : null}
                             {intakeNote ? <p>{intakeNote}</p> : null}
-                            {canEditActiveProfile ? (
-                              <div className="medication-intake-actions">
-                                <button
-                                  type="button"
-                                  className="secondary-btn"
-                                  onClick={() => handleTimelineStatusUpdate(item, "late")}
-                                  disabled={normalizedStatus === "late"}
-                                >
-                                  La tomó más tarde
-                                </button>
-                                <button
-                                  type="button"
-                                  className="secondary-btn"
-                                  onClick={() => handleTimelineStatusUpdate(item, "skipped")}
-                                  disabled={normalizedStatus === "skipped"}
-                                >
-                                  No la tomó
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         </article>
                       );

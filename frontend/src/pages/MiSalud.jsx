@@ -23,6 +23,8 @@ import {
   notifyClinicalDataChanged,
   subscribeClinicalDataChanged,
 } from "../utils/clinicalRefresh";
+import SuccessSheet from "../components/SuccessSheet";
+import { buildMedicationIntakeSuccess } from "../utils/medicationIntakeSuccess";
 
 /* ── helpers ───────────────────────────────────────────────── */
 function parseDate(str) {
@@ -83,6 +85,38 @@ function describeMedicationStatus(medication, nextDose, now = new Date()) {
   return "Sin horario definido";
 }
 
+const MEDICATION_CTA_LEAD_MS = 45 * 60 * 1000;
+const MEDICATION_CTA_GRACE_MS = 90 * 60 * 1000;
+const MEDICATION_CTA_DONE_MS = 75 * 60 * 1000;
+
+function getMedicationActionState(medication, nextDose, recentConfirmation, now = new Date()) {
+  const confirmedTakenAt = parseDate(recentConfirmation?.takenAt || null);
+  const confirmedScheduledAt = parseDate(recentConfirmation?.scheduledAt || null);
+
+  if (
+    confirmedTakenAt &&
+    now.getTime() - confirmedTakenAt.getTime() <= MEDICATION_CTA_DONE_MS
+  ) {
+    return {
+      kind: "done",
+      label: "Ya la tomé",
+      scheduledAt: confirmedScheduledAt || confirmedTakenAt,
+    };
+  }
+
+  if (!nextDose) return null;
+
+  const deltaMs = nextDose.getTime() - now.getTime();
+  if (deltaMs > MEDICATION_CTA_LEAD_MS) return null;
+  if (deltaMs < -MEDICATION_CTA_GRACE_MS) return null;
+
+  return {
+    kind: "pending",
+    label: "Pendiente",
+    scheduledAt: nextDose,
+  };
+}
+
 function timeAgo(str) {
   const d = parseDate(str);
   if (!d) return "";
@@ -133,6 +167,8 @@ export default function MiSalud() {
   const [timeline, setTimeline] = useState([]);
   const [biometricDashboard, setBiometricDashboard] = useState(null);
   const [intakeBusy, setIntakeBusy] = useState(null);
+  const [recentMedicationConfirmations, setRecentMedicationConfirmations] = useState({});
+  const [intakeSuccess, setIntakeSuccess] = useState(null);
 
   const loadPanelData = useCallback(async () => {
     const [profRes, apptRes, medRes, docRes, tlRes, bioRes] = await Promise.allSettled([
@@ -173,17 +209,37 @@ export default function MiSalud() {
     setIntakeBusy(medication.id);
     try {
       const payload = { status: "taken", source: "manual_health_card" };
+      const resolvedScheduledAt =
+        scheduledAt instanceof Date ? scheduledAt.toISOString() : (scheduledAt || new Date().toISOString());
       if (scheduledAt) {
-        payload.scheduled_at =
-          scheduledAt instanceof Date ? scheduledAt.toISOString() : scheduledAt;
+        payload.scheduled_at = resolvedScheduledAt;
       }
-      await recordMedicationIntake(medication.id, payload);
+      const savedIntake = await recordMedicationIntake(medication.id, payload);
+      setRecentMedicationConfirmations((prev) => ({
+        ...prev,
+        [medication.id]: {
+          scheduledAt: savedIntake?.scheduled_at || resolvedScheduledAt,
+          takenAt: savedIntake?.taken_at || new Date().toISOString(),
+        },
+      }));
       notifyClinicalDataChanged({
         profileId: profile?.id,
         sources: ["medications", "health-radar", "adherence"],
       });
-      await loadPanelData();
-    } catch { /* silently fail */ }
+      try {
+        await loadPanelData();
+      } finally {
+        setIntakeSuccess(
+          buildMedicationIntakeSuccess({
+            intake: savedIntake,
+            medication,
+            profileLabel: profile?.display_name || profile?.full_name || "Mi perfil",
+          })
+        );
+      }
+    } catch {
+      window.alert("No se pudo registrar la toma. Intenta nuevamente.");
+    }
     setIntakeBusy(null);
   }, [intakeBusy, loadPanelData, profile?.id]);
 
@@ -231,7 +287,13 @@ export default function MiSalud() {
   }
 
   return (
-    <div className="clp-page">
+    <>
+      <SuccessSheet
+        open={Boolean(intakeSuccess)}
+        onClose={() => setIntakeSuccess(null)}
+        {...(intakeSuccess || {})}
+      />
+      <div className="clp-page">
 
       {/* ═══ PATIENT HEADER ═══ */}
       <section className="clp-page-intro" aria-label="Resumen principal">
@@ -265,7 +327,7 @@ export default function MiSalud() {
             </div>
             <div className="clp-card-head-meta">
               <span className="clp-card-metric">{appointments.length} {appointments.length === 1 ? "cita" : "citas"}</span>
-              <Link to="/appointments" className="clp-card-link">Ver todas <IcoChevron /></Link>
+              <Link to="/appointments" className="clp-card-link clp-card-link-primary">Ver todas <IcoChevron /></Link>
             </div>
           </div>
         </div>
@@ -308,7 +370,7 @@ export default function MiSalud() {
             </div>
             <div className="clp-card-head-meta">
               <span className="clp-card-metric">{activeMeds.length} {activeMeds.length === 1 ? "activo" : "activos"}</span>
-              <Link to="/medications" className="clp-card-link">Ver todos <IcoChevron /></Link>
+              <Link to="/medications" className="clp-card-link clp-card-link-primary">Ver todos <IcoChevron /></Link>
             </div>
           </div>
         </div>
@@ -317,6 +379,12 @@ export default function MiSalud() {
             {activeMeds.slice(0, 5).map((med) => {
               const busy = intakeBusy === med.id;
               const nextDose = getNextMedicationDose(med);
+              const actionState = getMedicationActionState(
+                med,
+                nextDose,
+                recentMedicationConfirmations[med.id],
+                now
+              );
               return (
                 <div key={med.id} className="clp-med-row" role="listitem">
                   <div className="clp-med-info">
@@ -329,17 +397,27 @@ export default function MiSalud() {
                       {describeMedicationStatus(med, nextDose, now)}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="clp-med-check"
-                    disabled={busy}
-                    onClick={() => markIntake(med, nextDose || med.start_at || null)}
-                    aria-label={`Marcar ${med.name} como tomado`}
-                    title="Usa este boton solo cuando ya hayas tomado esta dosis"
-                  >
-                    {busy ? <span className="clp-med-spin" /> : <IcoCheck />}
-                    <span className="clp-med-check-label">{busy ? "Guardando..." : "Ya la tome"}</span>
-                  </button>
+                  {actionState ? (
+                    <button
+                      type="button"
+                      className={`clp-med-check ${actionState.kind === "done" ? "is-done" : "is-pending"}`}
+                      disabled={busy || actionState.kind === "done"}
+                      onClick={() => markIntake(med, actionState.scheduledAt || nextDose || med.start_at || null)}
+                      aria-label={
+                        actionState.kind === "done"
+                          ? `${med.name} ya fue marcada como tomada`
+                          : `Marcar ${med.name} como tomada`
+                      }
+                      title={
+                        actionState.kind === "done"
+                          ? "La dosis ya quedó confirmada"
+                          : "Marca esta dosis cuando ya la hayas tomado"
+                      }
+                    >
+                      {busy ? <span className="clp-med-spin" /> : actionState.kind === "done" ? <IcoCheck /> : <IcoAlert />}
+                      <span className="clp-med-check-label">{busy ? "Guardando..." : actionState.label}</span>
+                    </button>
+                  ) : null}
                 </div>
               );
             })}
@@ -367,7 +445,7 @@ export default function MiSalud() {
             </div>
             <div className="clp-card-head-meta">
               <span className="clp-card-metric">{documents.length} {documents.length === 1 ? "archivo" : "archivos"}</span>
-              <Link to="/documents" className="clp-card-link">Ver todos <IcoChevron /></Link>
+              <Link to="/documents" className="clp-card-link clp-card-link-primary">Ver todos <IcoChevron /></Link>
             </div>
           </div>
         </div>
@@ -488,6 +566,7 @@ export default function MiSalud() {
         </nav>
       </div>
 
-    </div>
+      </div>
+    </>
   );
 }
