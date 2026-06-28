@@ -37,6 +37,7 @@ import {
 import { ensureArray } from "../utils/arrays";
 import BrandLogo from "../components/BrandLogo";
 import DocumentUploadWizard from "../components/DocumentUploadWizard";
+import SuccessSheet from "../components/SuccessSheet";
 
 const RADAR_REFRESH_POLL_LIMIT = 8;
 
@@ -650,6 +651,7 @@ export default function Dashboard({
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteMenuOpenId, setNoteMenuOpenId] = useState(null);
+  const [noteSuccess, setNoteSuccess] = useState(null);
   const [activeQuickActionIndex, setActiveQuickActionIndex] = useState(0);
   const [adherenceGuideOpen, setAdherenceGuideOpen] = useState(false);
   const notesStorageKey = activeProfile?.id ? `klinip:home-notes:${activeProfile.id}` : null;
@@ -1651,9 +1653,20 @@ export default function Dashboard({
   const handleMarkNoteDone = async (noteId) => {
     if (!canEditActiveProfile || !activeProfile?.id) return;
     try {
+      const targetNote = quickNotes.find((item) => item.id === noteId);
       await updateProfileNote(activeProfile.id, noteId, { visibility: "done" });
       setQuickNotes((prev) => prev.filter((n) => n.id !== noteId));
       setNoteMenuOpenId(null);
+      setNoteSuccess({
+        kicker: "Nota completada",
+        title: "Pendiente resuelto",
+        copy: "La nota quedó marcada como resuelta y salió de tus pendientes rápidos.",
+        referenceId: noteId,
+        rows: [
+          { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+          { icon: "doc", label: "Nota", value: (targetNote?.note || targetNote?.text || "Pendiente clínico").slice(0, 96) },
+        ],
+      });
     } catch {
       window.alert("No pudimos marcar la nota. Intenta nuevamente.");
     }
@@ -1712,6 +1725,17 @@ export default function Dashboard({
         setQuickNotes((prev) =>
           prev.map((item) => (item.id === editingNoteId ? updated : item)).slice(0, 6)
         );
+        setNoteSuccess({
+          kicker: "Nota actualizada",
+          title: "Cambios aplicados",
+          copy: "La nota quedó actualizada dentro del perfil activo.",
+          referenceId: updated?.id || editingNoteId,
+          rows: [
+            { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+            { icon: "doc", label: "Nota", value: value.slice(0, 96) },
+            { icon: "clock", label: "Recordatorio", value: noteReminder ? parseDate(reminderUtc)?.toLocaleString?.("es-CL") || "Programado" : "Sin recordatorio" },
+          ],
+        });
       } else {
         const created = await createProfileNote(activeProfile.id, {
           note: value,
@@ -1720,6 +1744,17 @@ export default function Dashboard({
           reminder_at: reminderUtc,
         });
         setQuickNotes((prev) => [created, ...prev].slice(0, 6));
+        setNoteSuccess({
+          kicker: "Nota guardada",
+          title: "Pendiente registrado",
+          copy: "La nota quedó guardada y ya forma parte de tus recordatorios rápidos.",
+          referenceId: created?.id,
+          rows: [
+            { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+            { icon: "doc", label: "Nota", value: value.slice(0, 96) },
+            { icon: "clock", label: "Recordatorio", value: noteReminder ? parseDate(reminderUtc)?.toLocaleString?.("es-CL") || "Programado" : "Sin recordatorio" },
+          ],
+        });
       }
       handleCancelNote();
     } catch {
@@ -2482,6 +2517,12 @@ export default function Dashboard({
 
   return (
     <>
+      <SuccessSheet
+        open={Boolean(noteSuccess)}
+        onClose={() => setNoteSuccess(null)}
+        secondaryLabel="Seguir revisando"
+        {...(noteSuccess || {})}
+      />
       <section className="home-editorial">
         <div className="home-editorial-layout home-editorial-layout-clinical">
           <div className="home-editorial-top">

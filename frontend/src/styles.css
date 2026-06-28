@@ -3503,6 +3503,8 @@ body.theme-dark .family-management-card {
 
 body.theme-dark .family-inline-muted,
 body.theme-dark .family-role-meta,
+body.theme-dark .family-inv-note,
+body.theme-dark .family-inv-section-note,
 body.theme-dark .family-smart-alert-body,
 body.theme-dark .family-report-inline-stats p,
 body.theme-dark .family-report-progress-meta,
@@ -3642,6 +3644,12 @@ body.theme-dark .family-status-pill.is-accepted {
   background: rgba(20, 83, 45, 0.32);
   border-color: #166534;
   color: #86efac;
+}
+
+body.theme-dark .family-status-pill.is-active {
+  background: rgba(20, 83, 45, 0.32);
+  border-color: #166534;
+  color: #bbf7d0;
 }
 
 body.theme-dark .family-status-pill.is-revoked {
@@ -11605,6 +11613,13 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   text-transform: uppercase;
 }
 
+.family-inv-section-note {
+  margin: 0 0 0.75rem;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
 .family-status-pill {
   display: inline-flex;
   align-items: center;
@@ -11624,6 +11639,12 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   color: #16a34a;
 }
 
+.family-status-pill.is-active {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
 .family-status-pill.is-revoked {
   background: #f8fafc;
   border-color: #e2e8f0;
@@ -11634,6 +11655,13 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   background: #eff6ff;
   border-color: #bfdbfe;
   color: #2563eb;
+}
+
+.family-inv-note {
+  margin: 0.35rem 0 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .family-notes-textarea {

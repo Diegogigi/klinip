@@ -1409,6 +1409,15 @@ class VoiceFamilyShareOut(BaseModel):
         return dt.strftime('%Y-%m-%dT%H:%M:%S')
 
 
+class VoiceShareConfirmationOut(BaseModel):
+    saved_in_profile: bool = True
+    share_mode: str = "manual"
+    include_audio: bool = True
+    recipient_count: int = 0
+    recipient_names: list[str] = []
+    notified_recipient_count: int = 0
+
+
 class VoiceSessionOut(BaseModel):
     id: int
     profile_id: int
@@ -1432,6 +1441,7 @@ class VoiceSessionOut(BaseModel):
     audio_available: bool = True
     family_share_active_count: int = 0
     family_shares: list[VoiceFamilyShareOut] = []
+    share_confirmation: Optional[VoiceShareConfirmationOut] = None
 
     @field_serializer('created_at', 'compartido_en', 'link_expira_en', 'shared_at')
     def serialize_voice_datetime(self, dt: Optional[datetime], _info):

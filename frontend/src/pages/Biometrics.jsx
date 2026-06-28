@@ -23,6 +23,7 @@ import {
   getBiometricMetricLabel,
   getBiometricTrendLabel,
 } from "../utils/biometrics";
+import SuccessSheet from "../components/SuccessSheet";
 
 const METRIC_OPTIONS = Object.keys(BIOMETRIC_METRIC_CONFIG);
 const TONE_COLORS = {
@@ -412,6 +413,7 @@ export default function Biometrics() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [entrySuccess, setEntrySuccess] = useState(null);
   const [dashboard, setDashboard] = useState(null);
   const [activeProfile, setActiveProfile] = useState(null);
   const [form, setForm] = useState(() =>
@@ -524,7 +526,7 @@ export default function Biometrics() {
     if (!canEdit || saving) return;
     setSaving(true);
     try {
-      await createBiometricReading({
+      const savedReading = await createBiometricReading({
         ...form,
         value_primary: Number(form.value_primary),
         value_secondary:
@@ -536,6 +538,13 @@ export default function Biometrics() {
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["biometrics"],
+      });
+      setEntrySuccess({
+        id: savedReading?.id,
+        profileLabel: activeProfile?.display_name || activeProfile?.full_name || "Perfil activo",
+        metricLabel: getBiometricMetricLabel(savedReading?.metric_type || form.metric_type),
+        valueLabel: formatBiometricValue(savedReading || form, savedReading?.metric_type || form.metric_type),
+        measuredAtLabel: formatBiometricMeasuredAt(savedReading?.measured_at || form.measured_at),
       });
       setForm(buildBiometricEmptyForm(form.metric_type));
       setIsEntryModalOpen(false);
@@ -715,9 +724,28 @@ export default function Biometrics() {
         )
       : null;
 
+  const biometricSuccessSheet = (
+    <SuccessSheet
+      open={Boolean(entrySuccess)}
+      onClose={() => setEntrySuccess(null)}
+      kicker="Biométrico guardado"
+      title="Registro agregado"
+      copy="La medición quedó guardada y ya forma parte del seguimiento clínico del perfil."
+      referenceId={entrySuccess?.id}
+      rows={[
+        { icon: "profile", label: "Perfil", value: entrySuccess?.profileLabel || "Perfil activo" },
+        { icon: "doc", label: "Parámetro", value: entrySuccess?.metricLabel || "Biométrico" },
+        { icon: "pill", label: "Valor", value: entrySuccess?.valueLabel || "Registro guardado" },
+        { icon: "clock", label: "Fecha", value: entrySuccess?.measuredAtLabel || "Ahora" },
+      ]}
+      secondaryLabel="Seguir revisando"
+    />
+  );
+
   if (loading) {
     return (
       <>
+        {biometricSuccessSheet}
         <div className="bio-page">
           <div className="bio-loading">
             <div className="bio-loading-pulse" />
@@ -732,6 +760,7 @@ export default function Biometrics() {
   if (!isMetricDetail) {
     return (
       <>
+        {biometricSuccessSheet}
         <div className="bio-page">
           <section className="bio-hero-card bio-summary-hero">
             <div className="bio-hero-copy">
@@ -879,6 +908,7 @@ export default function Biometrics() {
 
   return (
     <>
+      {biometricSuccessSheet}
       <div className="bio-page bio-page-detail">
         <section className="bio-detail-topbar">
           <button

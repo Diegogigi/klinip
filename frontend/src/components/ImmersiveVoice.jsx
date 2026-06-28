@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import SuccessSheet from "./SuccessSheet";
 import {
   processVoiceSession,
   voiceShareLink,
@@ -19,6 +20,7 @@ import {
   getVoiceProfessionalMeta,
   parseVoiceTechnicalSections,
 } from "../utils/voiceTranscriptFormat";
+import { cleanUiText } from "../utils/textEncoding";
 
 /* ── Audio Player ─────────────────────────────────────────────────────────── */
 
@@ -142,6 +144,63 @@ const CLEAN_PROFESSIONAL_ROLE_OPTIONS = [
   { value: "otro", label: "Otro profesional", helper: "Otro rol de salud." },
 ];
 
+function formatVoiceShareRecipients(recipientNames = [], recipientCount = 0) {
+  const names = recipientNames.map((item) => cleanUiText(item)).filter(Boolean);
+  if (!names.length) {
+    return recipientCount === 1 ? "1 integrante" : `${recipientCount} integrantes`;
+  }
+  if (recipientCount <= 1 || names.length === 1) return names[0];
+  if (recipientCount === 2 && names.length >= 2) return `${names[0]} y ${names[1]}`;
+  const remaining = Math.max(0, recipientCount - 2);
+  if (!remaining && names.length >= 2) return `${names[0]} y ${names[1]}`;
+  return `${names[0]}, ${names[1]} y ${remaining} más`;
+}
+
+function buildVoiceShareSuccessContent(confirmation, variant = "manual") {
+  if (!confirmation) return null;
+  const recipientCount = Number(confirmation.recipient_count || 0);
+  const notifiedCount = Number(confirmation.notified_recipient_count || 0);
+  const includeAudio = confirmation.include_audio !== false;
+  const recipientsLabel = formatVoiceShareRecipients(
+    Array.isArray(confirmation.recipient_names) ? confirmation.recipient_names : [],
+    recipientCount
+  );
+
+  let copy = "La atención quedó actualizada en la ficha clínica.";
+  if (recipientCount > 0 && variant === "automatic") {
+    copy = `La atención quedó guardada y compartida con ${recipientsLabel}.`;
+  } else if (recipientCount > 0) {
+    copy = `El compartido quedó aplicado para ${recipientsLabel}.`;
+  }
+
+  let notificationValue = "Disponible en la bandeja compartida";
+  if (recipientCount > 0 && notifiedCount >= recipientCount) {
+    notificationValue = recipientCount === 1
+      ? "Aviso enviado a 1 familiar"
+      : `Avisos enviados a ${recipientCount} familiares`;
+  } else if (notifiedCount > 0 && recipientCount > 0) {
+    notificationValue = `Aviso enviado a ${notifiedCount} de ${recipientCount} familiares`;
+  } else if (recipientCount > 0) {
+    notificationValue = "Quedó disponible aunque no todos tenían notificaciones activas";
+  }
+
+  return {
+    kicker: variant === "automatic" ? "Klinip Voice guardado" : "Compartido confirmado",
+    title: variant === "automatic" ? "Consulta guardada y compartida" : "Compartido aplicado",
+    copy,
+    rows: [
+      { icon: "doc", label: "Guardado en", value: "Ficha clínica del perfil activo" },
+      { icon: "profile", label: "Compartido con", value: recipientCount > 0 ? recipientsLabel : "Sin destinatarios" },
+      {
+        icon: "clock",
+        label: "Contenido compartido",
+        value: includeAudio ? "Resumen, indicaciones y audio" : "Resumen e indicaciones, sin audio",
+      },
+      { icon: "building", label: "Notificación", value: notificationValue },
+    ],
+  };
+}
+
 function TabParaTiClean({ result }) {
   const indicaciones = Array.isArray(result?.indicaciones) ? result.indicaciones : [];
   const meta = result?.metadata_clinica || {};
@@ -249,6 +308,7 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
   const [emailError, setEmailError] = useState("");
   const [familyError, setFamilyError] = useState("");
   const [familyStatus, setFamilyStatus] = useState("");
+  const [familyShareSuccess, setFamilyShareSuccess] = useState(null);
   const [includeAudio, setIncludeAudio] = useState(true);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
 
@@ -263,6 +323,7 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
     setSelectedRecipients(activeFamilyShares.map((item) => item.recipient_user_id));
     setFamilyError("");
     setFamilyStatus("");
+    setFamilyShareSuccess(null);
   }, [result?.id]);
 
   async function handleShareLink() {
@@ -333,7 +394,8 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
         include_audio: includeAudio,
       });
       onSessionUpdated?.(updated);
-      setFamilyStatus("Atención compartida con la familia.");
+      setFamilyStatus("Compartido confirmado para tu grupo familiar.");
+      setFamilyShareSuccess(updated?.share_confirmation || null);
     } catch (err) {
       setFamilyError(err?.response?.data?.detail || "No se pudo compartir con la familia.");
     }
@@ -356,6 +418,14 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
 
   return (
     <div className="iv-tab-content">
+      <SuccessSheet
+        open={Boolean(familyShareSuccess)}
+        onClose={() => setFamilyShareSuccess(null)}
+        referenceId={result?.id}
+        secondaryLabel="Seguir revisando"
+        {...(buildVoiceShareSuccessContent(familyShareSuccess, "manual") || {})}
+      />
+
       <h3 className="iv-share-title">Compartir con el profesional</h3>
       <p className="iv-share-subtitle">Audio y transcripción técnica</p>
 
@@ -382,7 +452,7 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
           <span className="iv-share-card-icon iv-share-icon-green"><WhatsAppIcon /></span>
           <div className="iv-share-card-info">
             <span className="iv-share-card-title">WhatsApp</span>
-            <span className="iv-share-card-sub">Link seguro · expira en 48h</span>
+            <span className="iv-share-card-sub">Link seguro · expira en 48 h</span>
           </div>
         </button>
 
@@ -416,6 +486,8 @@ function TabCompartirClean({ result, shareTargets, onSessionUpdated }) {
               <h4 className="iv-family-share-title">Compartir con tu grupo familiar</h4>
               <p className="iv-family-share-copy">
                 Comparte el resumen simple, las indicaciones y, si quieres, el audio original.
+                Cada familiar lo verá en su bandeja compartida y, si tiene notificaciones activas,
+                recibirá un aviso en su dispositivo.
               </p>
             </div>
             <label className="iv-family-audio-toggle">
@@ -552,6 +624,7 @@ export default function ImmersiveVoice({
   const [micReady, setMicReady] = useState(false);
   const [wakeLockState, setWakeLockState] = useState("idle");
   const [audioLevels, setAudioLevels] = useState(() => DEFAULT_WAVE_LEVELS);
+  const [autoShareSuccess, setAutoShareSuccess] = useState(null);
 
   const sheetRef = useRef(null);
   const dragRef = useRef({ active: false, startY: 0, startH: 0 });
@@ -566,6 +639,7 @@ export default function ImmersiveVoice({
   const analyserRef = useRef(null);
   const sourceNodeRef = useRef(null);
   const analyserFrameRef = useRef(0);
+  const autoShareShownSessionRef = useRef(null);
 
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
@@ -756,6 +830,14 @@ export default function ImmersiveVoice({
     }
   }, [result?.access_scope, result?.id]);
 
+  useEffect(() => {
+    if (!result?.id) return;
+    if (result?.share_confirmation?.share_mode !== "automatic") return;
+    if (autoShareShownSessionRef.current === result.id) return;
+    autoShareShownSessionRef.current = result.id;
+    setAutoShareSuccess(result.share_confirmation);
+  }, [result?.id, result?.share_confirmation]);
+
   const availableTabs = [
     { key: "parati", label: "Para ti" },
     ...(result?.can_view_technical ? [{ key: "tecnica", label: "Técnica" }] : []),
@@ -929,6 +1011,7 @@ export default function ImmersiveVoice({
     consentBlobRef.current = null;
     setConsentPreviewBlob(null);
     setSessionPreviewBlob(null);
+    setAutoShareSuccess(null);
     setWakeLockState("idle");
     setStage("consent");
   }
@@ -938,12 +1021,14 @@ export default function ImmersiveVoice({
     releaseWakeLock();
     setConsentPreviewBlob(null);
     setSessionPreviewBlob(null);
+    setAutoShareSuccess(null);
     animateClose(() => {
       if (stage === "done" && result && onDone) onDone(result);
     });
   }
 
   function handleSaveAndClose() {
+    setAutoShareSuccess(null);
     animateClose(() => {
       if (onDone && result) onDone(result);
     });
@@ -1040,7 +1125,21 @@ export default function ImmersiveVoice({
 
   if (stage === "done" && result) {
     return renderOverlay(
-      <div className={`iv-overlay iv-overlay-done ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
+      <>
+        <SuccessSheet
+          open={Boolean(autoShareSuccess)}
+          onClose={() => setAutoShareSuccess(null)}
+          referenceId={result?.id}
+          primaryLabel={result?.can_manage_family_shares ? "Revisar compartido" : undefined}
+          onPrimary={result?.can_manage_family_shares ? () => {
+            setAutoShareSuccess(null);
+            setActiveTab("compartir");
+          } : undefined}
+          secondaryLabel="Seguir revisando"
+          {...(buildVoiceShareSuccessContent(autoShareSuccess, "automatic") || {})}
+        />
+
+        <div className={`iv-overlay iv-overlay-done ${closing ? "iv-fade-out" : "iv-fade-in"}`}>
         <button type="button" className="iv-close" onClick={handleCancel} aria-label="Cerrar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -1126,6 +1225,7 @@ export default function ImmersiveVoice({
           </div>
         </div>
       </div>
+      </>
     );
   }
 

@@ -18773,16 +18773,22 @@ async def revoke_profile_invitation(
         removed_user_id = invitee_user_id
         if not invitee_user_id:
             raise HTTPException(status_code=400, detail="No se pudo resolver el usuario invitado")
-        granted_link = (
-            db.query(models.ProfileRelationship)
-            .filter(
-                models.ProfileRelationship.profile_id == profile_id,
-                models.ProfileRelationship.user_id == invitee_user_id,
+        if invitee_user_id == current_user.id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "No puedes revocar tu propio acceso desde Invitaciones. "
+                    "Ese acceso ya esta activo. Si necesitas salir del perfil, otro administrador "
+                    "debe quitarlo desde Roles y accesos."
+                ),
             )
-            .first()
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Esta invitacion ya fue aceptada y ahora es un acceso activo. "
+                "Si necesitas cambiar permisos o quitar ese acceso, usa Roles y accesos."
+            ),
         )
-        if granted_link:
-            db.delete(granted_link)
     elif invitation.status not in ("pending",):
         raise HTTPException(status_code=400, detail="Esta invitacion ya no puede modificarse")
 
@@ -20078,6 +20084,35 @@ def _voice_family_share_out(
     )
 
 
+def _voice_share_confirmation_out(
+    shares: list[models.VoiceFamilyShare],
+    notified_recipient_count: int = 0,
+) -> schemas.VoiceShareConfirmationOut | None:
+    if not shares:
+        return None
+    first_share = shares[0]
+    recipient_names: list[str] = []
+    seen_names: set[str] = set()
+    for share in shares:
+        recipient = getattr(share, "recipient_user", None)
+        label = (
+            getattr(recipient, "name", None)
+            or getattr(recipient, "email", None)
+            or f"Usuario #{int(share.recipient_user_id)}"
+        ).strip()
+        if label and label not in seen_names:
+            recipient_names.append(label)
+            seen_names.add(label)
+    return schemas.VoiceShareConfirmationOut(
+        saved_in_profile=True,
+        share_mode=((first_share.share_mode or "manual").strip().lower() or "manual"),
+        include_audio=all(bool(item.include_audio) for item in shares),
+        recipient_count=len(shares),
+        recipient_names=recipient_names,
+        notified_recipient_count=max(0, int(notified_recipient_count)),
+    )
+
+
 def _voice_manager_can_access(
     session: models.VoiceSession,
     profile: models.HealthProfile,
@@ -20134,6 +20169,7 @@ def _voice_session_out(
     active_share: models.VoiceFamilyShare | None = None,
     family_shares_map: dict[int, list[models.VoiceFamilyShare]] | None = None,
     relationship_map: dict[int, models.ProfileRelationship] | None = None,
+    share_confirmation: schemas.VoiceShareConfirmationOut | None = None,
 ) -> schemas.VoiceSessionOut:
     is_manager = _voice_manager_can_access(session, profile, current_user)
     shared_rows = []
@@ -20171,6 +20207,7 @@ def _voice_session_out(
             audio_available=bool(active_share.include_audio and audio_file_exists),
             family_share_active_count=0,
             family_shares=[],
+            share_confirmation=None,
         )
 
     manager_scope = "owner" if int(profile.owner_user_id) == int(current_user.id) else "creator"
@@ -20202,6 +20239,7 @@ def _voice_session_out(
         audio_available=audio_file_exists,
         family_share_active_count=family_share_active_count,
         family_shares=family_shares,
+        share_confirmation=share_confirmation,
     )
 
 
@@ -20320,10 +20358,10 @@ def _send_voice_family_share_push(
         db,
         int(share.recipient_user_id),
         {
-            "title": "Nueva atencion compartida",
+            "title": "Nueva atención compartida",
             "body": (
-                f"{sender_name} compartio una atencion de {profile.full_name or 'tu perfil'} "
-                "en Klinip Voice."
+                f"{sender_name} compartió una atención de "
+                f"{profile.full_name or 'este perfil'} contigo en Klinip Voice."
             ),
             "url": (
                 f"/voice?view=shared&profile_id={int(profile.id)}&share_id={int(share.id)}"
@@ -20334,6 +20372,8 @@ def _send_voice_family_share_push(
             "profileId": int(profile.id),
             "voiceSessionId": int(share.voice_session_id),
             "shareId": int(share.id),
+            "shareMode": share.share_mode or "manual",
+            "includeAudio": bool(share.include_audio),
         },
     )
 
@@ -20555,6 +20595,7 @@ async def voice_process(
         raise HTTPException(status_code=500, detail="Error al guardar la sesión de voz.")
 
     auto_shared = []
+    auto_notified_recipient_count = 0
     try:
         _assert_collaboration_enabled(current_user, db=db, owner_user_id=profile.owner_user_id)
         automation = _profile_automation_settings(profile)
@@ -20586,7 +20627,8 @@ async def voice_process(
                 )
                 db.commit()
                 for item in auto_shared:
-                    _send_voice_family_share_push(db, item, profile)
+                    if _send_voice_family_share_push(db, item, profile) > 0:
+                        auto_notified_recipient_count += 1
     except HTTPException:
         pass
     except Exception as exc:
@@ -20606,6 +20648,10 @@ async def voice_process(
         current_user,
         family_shares_map=family_shares_map,
         relationship_map=relationship_map,
+        share_confirmation=_voice_share_confirmation_out(
+            auto_shared,
+            notified_recipient_count=auto_notified_recipient_count,
+        ),
     )
 
 
@@ -20819,8 +20865,10 @@ async def share_voice_with_family(
         },
     )
     db.commit()
+    notified_recipient_count = 0
     for item in shares:
-        _send_voice_family_share_push(db, item, profile)
+        if _send_voice_family_share_push(db, item, profile) > 0:
+            notified_recipient_count += 1
     family_shares_map = _voice_session_family_shares_map(db, [int(session.id)])
     relationship_map = _voice_share_relationship_map(
         db,
@@ -20834,6 +20882,10 @@ async def share_voice_with_family(
         current_user,
         family_shares_map=family_shares_map,
         relationship_map=relationship_map,
+        share_confirmation=_voice_share_confirmation_out(
+            shares,
+            notified_recipient_count=notified_recipient_count,
+        ),
     )
 
 

@@ -1,6 +1,7 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
+import SuccessSheet from "../components/SuccessSheet";
 import StepUpModal from "../components/StepUpModal";
 import { isHandheldViewport } from "../utils/mobileViewport";
 import {
@@ -163,6 +164,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const [privacyNotice, setPrivacyNotice] = useState("");
   const [privacySuccessMessage, setPrivacySuccessMessage] = useState("");
   const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
+  const [settingsSuccess, setSettingsSuccess] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection || "perfil");
 
@@ -241,6 +243,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     }
     return "Solo puedes revisar la información compartida.";
   };
+  const openSettingsSuccess = (payload) => {
+    setSettingsSuccess({
+      secondaryLabel: "Seguir revisando",
+      ...payload,
+    });
+  };
   const getActivityNotePreview = (entry) => {
     const preview = entry?.metadata?.note_preview;
     return typeof preview === "string" ? preview.trim() : "";
@@ -264,6 +272,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const [emailReminderStatus, setEmailReminderStatus] = useState("");
   const profileDisplayName = profile.name || "Usuario Klinip";
   const profileDisplayEmail = profile.email || "sin-correo";
+  const normalizedProfileEmail = String(profile.email || "").trim().toLowerCase();
   const profileInitial = (profileDisplayName || profileDisplayEmail).trim().charAt(0).toUpperCase();
   const isFamilyStandalone = (initialSection || "perfil") === "familia";
   const familyNameInputRef = useRef(null);
@@ -275,8 +284,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const normalizeCaregivers = (items) => {
     const seen = new Set();
     return ensureArray(items).filter((row) => {
+      const rowEmail = String(row?.user_email || "").trim().toLowerCase();
       const isSelfRow =
-        Number(row?.user_id || 0) === Number(profile?.id || 0) ||
+        (normalizedProfileEmail && rowEmail === normalizedProfileEmail) ||
         String(row?.relationship_type || "").toLowerCase() === "self";
       if (isSelfRow) return false;
 
@@ -606,6 +616,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       });
       onUserUpdate?.(updated);
       setTimezoneStatus("Zona horaria actualizada");
+      openSettingsSuccess({
+        kicker: "Preferencias guardadas",
+        title: "Horario actualizado",
+        copy: "La zona horaria y la hora sugerida para recordatorios quedaron actualizadas.",
+        rows: [
+          { icon: "profile", label: "Zona horaria", value: timezone || "Sin definir" },
+          { icon: "clock", label: "Hora sugerida", value: reminderPreferredTime || "Sin definir" },
+        ],
+      });
     } catch (err) {
       setTimezoneStatus("No se pudo actualizar la zona horaria");
       console.error("Error actualizando zona horaria:", err);
@@ -714,7 +733,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       const link = `${window.location.origin}/#share=${encoded}`;
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
-        window.alert("Enlace de compartición copiado al portapapeles.");
+        openSettingsSuccess({
+          kicker: "Enlace copiado",
+          title: "Compartido listo",
+          copy: "El enlace quedó copiado al portapapeles para que lo envíes cuando quieras.",
+          rows: [
+            { icon: "doc", label: "Contenido", value: "Citas y documentos exportados" },
+            { icon: "profile", label: "Destino", value: "Portapapeles del dispositivo" },
+          ],
+        });
       } else {
         prompt("Copia este enlace", link);
       }
@@ -947,6 +974,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       });
       onUserUpdate?.(updated);
       setHealthProfileStatus("Perfil de salud actualizado");
+      openSettingsSuccess({
+        kicker: "Perfil actualizado",
+        title: "Cambios aplicados",
+        copy: "La información base de salud quedó actualizada en tu cuenta.",
+        rows: [
+          { icon: "doc", label: "Condición crónica", value: (chronicCondition || "Sin especificar").trim() || "Sin especificar" },
+          { icon: "building", label: "Centro principal", value: (primaryCareCenter || "Sin especificar").trim() || "Sin especificar" },
+        ],
+      });
     } catch (err) {
       setHealthProfileStatus("No se pudo actualizar el perfil de salud");
       console.error("Error actualizando perfil de salud:", err);
@@ -962,6 +998,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       const active = await setActiveHealthProfile(nextId);
       setActiveFamilyProfileId(active?.id || nextId);
       setFamilyStatus(`Perfil activo: ${active?.full_name || "actualizado"}`);
+      openSettingsSuccess({
+        kicker: "Perfil activo cambiado",
+        title: "Contexto actualizado",
+        copy: "Klinip ahora usará este perfil como contexto principal para tus acciones.",
+        rows: [
+          { icon: "profile", label: "Perfil activo", value: active?.full_name || `Perfil #${nextId}` },
+        ],
+      });
     } catch (err) {
       console.error("No se pudo cambiar perfil activo:", err);
       setFamilyStatus("No se pudo cambiar el perfil activo");
@@ -993,6 +1037,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setFamilyPanelCards(ensureArray(cards));
       setFamilyStandalonePanel(null);
       setFamilyStatus(`Perfil ${created?.full_name || ""} creado correctamente`);
+      openSettingsSuccess({
+        kicker: "Perfil creado",
+        title: "Nuevo perfil familiar listo",
+        copy: "El perfil quedó creado y ya puedes comenzar a cargar información o invitar apoyo.",
+        rows: [
+          { icon: "profile", label: "Perfil", value: created?.full_name || cleanName },
+          { icon: "doc", label: "Relación", value: (created?.relation_with_owner || newFamilyProfile.relation_with_owner || "Sin especificar").trim() || "Sin especificar" },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo crear el perfil");
@@ -1048,6 +1101,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setInviteForm({ email: "", role: "viewer", relationship_type: "" });
       setFamilyStandalonePanel(null);
       setFamilyStatus("Invitación creada correctamente");
+      openSettingsSuccess({
+        kicker: "Invitación enviada",
+        title: "Acceso en preparación",
+        copy: "La invitación quedó enviada. Cuando la persona la acepte, aparecerá dentro del perfil compartido.",
+        rows: [
+          { icon: "profile", label: "Correo", value: email },
+          { icon: "doc", label: "Rol inicial", value: familyRoleLabel(inviteForm.role) },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo crear la invitación");
@@ -1072,6 +1134,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setFamilyPanelCards(ensureArray(cards));
       setMyPendingInvitations(ensureArray(pendingForMe));
       setFamilyStatus("Invitación aceptada correctamente");
+      openSettingsSuccess({
+        kicker: "Invitación aceptada",
+        title: "Acceso disponible",
+        copy: "El perfil compartido ya quedó disponible dentro de tu cuenta.",
+        rows: [
+          { icon: "profile", label: "Perfil activo", value: active?.full_name || "Perfil compartido" },
+        ],
+      });
       setActiveSection("familia");
       navigate("/settings/familia");
       if (isMobileSettings) {
@@ -1111,6 +1181,16 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setCaregivers(normalizeCaregivers(careList));
       setActivityLog(ensureArray(actList));
       setFamilyStatus("Rol actualizado");
+      const caregiver = caregivers.find((item) => Number(item.id) === Number(relationshipId));
+      openSettingsSuccess({
+        kicker: "Permiso actualizado",
+        title: "Rol modificado",
+        copy: "El nivel de acceso quedó actualizado para este colaborador.",
+        rows: [
+          { icon: "profile", label: "Colaborador", value: caregiver?.name || caregiver?.email || `Acceso #${relationshipId}` },
+          { icon: "doc", label: "Nuevo rol", value: familyRoleLabel(nextRole) },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo actualizar el rol");
@@ -1148,12 +1228,74 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setInvitations(ensureArray(invList));
       setActivityLog(ensureArray(actList));
       setFamilyStatus("Invitación revocada");
+      openSettingsSuccess({
+        kicker: "Invitación revocada",
+        title: "Acceso cancelado",
+        copy: "La invitación pendiente quedó cancelada y ya no podrá usarse para entrar al perfil.",
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo revocar la invitación");
       console.error("Error revocando invitación:", err);
     }
   };
+
+  const invitationStatusClassName = (status) => {
+    if (status === "accepted") return "is-active";
+    if (status === "revoked") return "is-revoked";
+    return "is-pending";
+  };
+
+  const invitationStatusLabel = (status) => {
+    if (status === "accepted") return "Acceso activo";
+    if (status === "revoked") return "Revocada";
+    return "Pendiente";
+  };
+
+  const invitationHelpText = (inv) => {
+    const isOwnActiveAccess =
+      inv.status === "accepted" &&
+      normalizedProfileEmail &&
+      String(inv.invitee_email || "").trim().toLowerCase() === normalizedProfileEmail;
+
+    if (inv.status === "accepted") {
+      if (isOwnActiveAccess) {
+        return "Este acceso ya está activo en tu cuenta. Para evitar errores, ya no puedes revocarlo desde Invitaciones.";
+      }
+      return "Esta invitación ya fue aceptada y hoy funciona como un acceso activo. Si necesitas cambiar permisos o quitar ese acceso, usa Roles y accesos.";
+    }
+    if (inv.status === "pending") {
+      return "Todavía no ha sido aceptada. Puedes cancelarla mientras siga pendiente.";
+    }
+    return "Esta invitación ya quedó cerrada y no hace cambios sobre el acceso actual.";
+  };
+
+  const renderManagedInvitation = (inv) => (
+    <article className="family-inv-row" key={inv.id}>
+      <div className="family-role-body">
+        <p className="family-role-name">{inv.invitee_email}</p>
+        <p className="family-role-meta">
+          Rol: {familyRoleLabel(inv.role)}
+          {inv.relationship_type ? ` · Relación: ${inv.relationship_type}` : ""}
+        </p>
+        <p className="family-inv-note">{invitationHelpText(inv)}</p>
+      </div>
+      <div className="family-role-actions">
+        <span className={`family-status-pill ${invitationStatusClassName(inv.status)}`}>
+          {invitationStatusLabel(inv.status)}
+        </span>
+        {inv.status === "pending" ? (
+          <button
+            className="secondary-btn danger"
+            type="button"
+            onClick={() => handleRevokeInvitation(inv.id)}
+          >
+            Cancelar invitación
+          </button>
+        ) : null}
+      </div>
+    </article>
+  );
 
   const handleToggleAutomationSetting = (key, value) => {
     setAutomationSettings((prev) => ({ ...prev, [key]: !!value }));
@@ -1168,6 +1310,16 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setAutomationStatus("Automatizaciones actualizadas");
       const alerts = await getFamilyAlerts().catch(() => []);
       setFamilyAlerts(ensureArray(alerts));
+      const enabledCount = Object.values(updated || automationSettings).filter(Boolean).length;
+      openSettingsSuccess({
+        kicker: "Automatizaciones guardadas",
+        title: "Preferencias actualizadas",
+        copy: "Las reglas automáticas de este perfil quedaron actualizadas.",
+        rows: [
+          { icon: "profile", label: "Perfil", value: familyProfiles.find((item) => Number(item.id) === Number(activeFamilyProfileId))?.full_name || "Perfil activo" },
+          { icon: "doc", label: "Reglas activas", value: String(enabledCount) },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setAutomationStatus(detail || "No se pudo actualizar automatizaciones");
@@ -1191,6 +1343,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setFamilyAlerts(ensureArray(alerts));
       setFamilyReport(report || null);
       setFamilyAiContext(aiContext || null);
+      openSettingsSuccess({
+        kicker: "Automatizaciones ejecutadas",
+        title: "Ejecución completada",
+        copy: "Klinip revisó las reglas activas y actualizó el contexto familiar.",
+        rows: [
+          { icon: "doc", label: "Alertas generadas", value: String(executed.alerts_generated || 0) },
+          { icon: "profile", label: "Correos enviados", value: String(executed.emails_sent || 0) },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setAutomationStatus(detail || "No se pudieron ejecutar automatizaciones");
@@ -1215,6 +1376,15 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       setActivityLog(ensureArray(actList));
       setNewProfileNote("");
       setFamilyStatus("Nota colaborativa guardada");
+      openSettingsSuccess({
+        kicker: "Nota guardada",
+        title: "Seguimiento actualizado",
+        copy: "La nota colaborativa quedó disponible dentro del perfil compartido.",
+        rows: [
+          { icon: "profile", label: "Perfil", value: familyProfiles.find((item) => Number(item.id) === Number(activeFamilyProfileId))?.full_name || "Perfil activo" },
+          { icon: "doc", label: "Nota", value: note.slice(0, 96) },
+        ],
+      });
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFamilyStatus(detail || "No se pudo guardar la nota");
@@ -1233,6 +1403,17 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       });
       onUserUpdate?.(updated);
       setEmailReminderStatus(enabled ? "Recordatorios por correo activados" : "Recordatorios por correo desactivados");
+      openSettingsSuccess({
+        kicker: "Correo actualizado",
+        title: enabled ? "Recordatorios activados" : "Recordatorios desactivados",
+        copy: enabled
+          ? "Klinip volverá a enviarte recordatorios por correo cuando corresponda."
+          : "Klinip dejará de usar correo para este tipo de recordatorios.",
+        rows: [
+          { icon: "doc", label: "Canal", value: "Correo electrónico" },
+          { icon: "profile", label: "Estado", value: enabled ? "Activo" : "Inactivo" },
+        ],
+      });
     } catch (err) {
       setEmailRemindersEnabled(previous);
       localStorage.setItem("klinip_email_reminders_enabled", previous ? "true" : "false");
@@ -1567,7 +1748,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                   <option value="caregiver">Editor</option>
                   <option value="viewer">Lector</option>
                 </select>
-                {row.user_id !== profile?.id ? (
+                {String(row?.user_email || "").trim().toLowerCase() !== normalizedProfileEmail &&
+                String(row?.relationship_type || "").toLowerCase() !== "self" ? (
                   <button
                     className="secondary-btn danger"
                     type="button"
@@ -1583,42 +1765,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
         <div className="family-invitations-block">
           <p className="family-subsection-label">Invitaciones</p>
+          <p className="family-inv-section-note">
+            Pendiente significa que la persona aún no entra al perfil. Acceso activo significa que la invitación ya fue aceptada y ahora se gestiona desde Roles y accesos.
+          </p>
           <div className="family-invitations-list">
             {invitations.length ? (
-              invitations.map((inv) => (
-                <article className="family-inv-row" key={inv.id}>
-                  <div className="family-role-body">
-                    <p className="family-role-name">{inv.invitee_email}</p>
-                    <p className="family-role-meta">Rol: {familyRoleLabel(inv.role)}</p>
-                  </div>
-                  <div className="family-role-actions">
-                    <span
-                      className={`family-status-pill ${
-                        inv.status === "accepted"
-                          ? "is-accepted"
-                          : inv.status === "revoked"
-                          ? "is-revoked"
-                          : "is-pending"
-                      }`}
-                    >
-                      {inv.status === "accepted"
-                        ? "Aceptada"
-                        : inv.status === "revoked"
-                        ? "Revocada"
-                        : "Pendiente"}
-                    </span>
-                    {inv.status === "pending" || inv.status === "accepted" ? (
-                      <button
-                        className="secondary-btn danger"
-                        type="button"
-                        onClick={() => handleRevokeInvitation(inv.id)}
-                      >
-                        Quitar
-                      </button>
-                    ) : null}
-                  </div>
-                </article>
-              ))
+              invitations.map((inv) => renderManagedInvitation(inv))
             ) : null}
 
             {myPendingInvitations.map((inv) => (
@@ -2197,7 +2349,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                         <option value="caregiver">Editor</option>
                         <option value="viewer">Lector</option>
                       </select>
-                      {row.user_id !== profile?.id ? (
+                      {String(row?.user_email || "").trim().toLowerCase() !== normalizedProfileEmail &&
+                      String(row?.relationship_type || "").toLowerCase() !== "self" ? (
                         <button
                           className="secondary-btn danger"
                           type="button"
@@ -2213,42 +2366,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
               <div className="family-invitations-block">
                 <p className="family-subsection-label">Invitaciones</p>
+                <p className="family-inv-section-note">
+                  Pendiente significa que la persona aún no entra al perfil. Acceso activo significa que la invitación ya fue aceptada y ahora se gestiona desde Roles y accesos.
+                </p>
                 <div className="family-invitations-list">
                   {invitations.length ? (
-                    invitations.map((inv) => (
-                      <article className="family-inv-row" key={inv.id}>
-                        <div className="family-role-body">
-                          <p className="family-role-name">{inv.invitee_email}</p>
-                          <p className="family-role-meta">Rol: {familyRoleLabel(inv.role)}</p>
-                        </div>
-                        <div className="family-role-actions">
-                          <span
-                            className={`family-status-pill ${
-                              inv.status === "accepted"
-                                ? "is-accepted"
-                                : inv.status === "revoked"
-                                ? "is-revoked"
-                                : "is-pending"
-                            }`}
-                          >
-                            {inv.status === "accepted"
-                              ? "Aceptada"
-                              : inv.status === "revoked"
-                              ? "Revocada"
-                              : "Pendiente"}
-                          </span>
-                          {inv.status === "pending" || inv.status === "accepted" ? (
-                            <button
-                              className="secondary-btn danger"
-                              type="button"
-                              onClick={() => handleRevokeInvitation(inv.id)}
-                            >
-                              Quitar
-                            </button>
-                          ) : null}
-                        </div>
-                      </article>
-                    ))
+                    invitations.map((inv) => renderManagedInvitation(inv))
                   ) : (
                     <p className="muted">No hay invitaciones registradas para este perfil.</p>
                   )}
@@ -3391,6 +3514,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       )}
         </div>
       </div>
+
+      <SuccessSheet
+        open={Boolean(settingsSuccess)}
+        onClose={() => setSettingsSuccess(null)}
+        {...(settingsSuccess || {})}
+      />
 
       {showDeleteConfirm && (
         <div className="modal-backdrop">

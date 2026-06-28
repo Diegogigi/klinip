@@ -14,6 +14,7 @@ import {
   sendTestPush,
 } from "../services/httpApi";
 import { getMe, updateMe } from "../api";
+import SuccessSheet from "./SuccessSheet";
 import "./NotificationSettings.css";
 
 export default function NotificationSettings({ onClose, embedded = false }) {
@@ -44,8 +45,16 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       hours2: true,
       minutes30: true,
       minutes5: true,
-    },
+      },
   });
+  const [successSheet, setSuccessSheet] = useState(null);
+
+  const openSuccessSheet = (payload) => {
+    setSuccessSheet({
+      secondaryLabel: "Entendido",
+      ...payload,
+    });
+  };
 
   useEffect(() => {
     loadNotificationStatus();
@@ -170,9 +179,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
 
       await loadPushStatus();
 
-      window.alert(
-        "Notificaciones push habilitadas correctamente. Recibir\u00e1s recordatorios autom\u00e1ticos."
-      );
+      openSuccessSheet({
+        kicker: "Push activado",
+        title: "Notificaciones listas",
+        copy: "Klinip ya puede enviarte recordatorios automáticos incluso cuando la app esté cerrada.",
+        rows: [
+          { icon: "doc", label: "Canal", value: "Notificaciones push del dispositivo" },
+          { icon: "profile", label: "Estado", value: "Suscripción activa" },
+        ],
+      });
     } catch (error) {
       console.error("Error habilitando push:", error);
 
@@ -204,7 +219,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
       localStorage.setItem("klinip_push_enabled", "false");
       setPushEnabled(false);
       await loadPushStatus();
-      window.alert("Notificaciones push deshabilitadas.");
+      openSuccessSheet({
+        kicker: "Push desactivado",
+        title: "Cambio aplicado",
+        copy: "Klinip dejó de enviar notificaciones push a este dispositivo.",
+        rows: [
+          { icon: "doc", label: "Canal", value: "Notificaciones push del dispositivo" },
+          { icon: "profile", label: "Estado", value: "Suscripción desactivada" },
+        ],
+      });
     } catch (error) {
       console.error("Error deshabilitando push:", error);
     } finally {
@@ -217,9 +240,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
 
     clearScheduledNotifications();
     updateStats();
-    window.alert(
-      "Se limpiaron los recordatorios locales heredados. Klinip enviará recordatorios por push."
-    );
+    openSuccessSheet({
+      kicker: "Limpieza completada",
+      title: "Recordatorios locales eliminados",
+      copy: "Los recordatorios heredados del navegador se borraron. Klinip seguirá usando push para avisarte.",
+      rows: [
+        { icon: "doc", label: "Acción", value: "Recordatorios locales antiguos" },
+        { icon: "profile", label: "Resultado", value: "Quedaron eliminados" },
+      ],
+    });
   };
 
   const handleTestPush = async () => {
@@ -240,7 +269,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
     try {
       const result = await sendTestPush();
       if (result.sent || result.ok) {
-        window.alert("Notificaci\u00f3n de prueba enviada. Deber\u00edas recibirla en unos segundos.");
+        openSuccessSheet({
+          kicker: "Prueba enviada",
+          title: "Notificación en camino",
+          copy: "Deberías recibir la notificación de prueba en unos segundos en este dispositivo.",
+          rows: [
+            { icon: "doc", label: "Tipo", value: "Notificación push de prueba" },
+            { icon: "clock", label: "Entrega esperada", value: "En unos segundos" },
+          ],
+        });
       } else {
         window.alert("No se pudo enviar la notificaci\u00f3n de prueba.");
       }
@@ -269,6 +306,11 @@ export default function NotificationSettings({ onClose, embedded = false }) {
 
   const panelContent = (
     <div className="notification-settings-panel" onClick={(event) => !embedded && event.stopPropagation()}>
+      <SuccessSheet
+        open={Boolean(successSheet)}
+        onClose={() => setSuccessSheet(null)}
+        {...(successSheet || {})}
+      />
       {!embedded && (
         <div className="settings-header">
           <h2>Configuraci&oacute;n de notificaciones</h2>
@@ -477,7 +519,15 @@ export default function NotificationSettings({ onClose, embedded = false }) {
             onClick={async () => {
               await loadPushStatus();
               updateStats();
-              window.alert("Estado de notificaciones actualizado.");
+              openSuccessSheet({
+                kicker: "Estado actualizado",
+                title: "Revisión completada",
+                copy: "Klinip volvió a revisar permisos, suscripción push y recordatorios locales de este dispositivo.",
+                rows: [
+                  { icon: "profile", label: "Push", value: pushEnabled ? "Activo" : "Inactivo" },
+                  { icon: "doc", label: "Suscripciones", value: String(pushSubscriptionCount || 0) },
+                ],
+              });
             }}
           >
             Actualizar estado
