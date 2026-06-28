@@ -1,63 +1,33 @@
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Reposición de medicamento</title>
-  </head>
-  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
-            <tr>
-              <td style="padding:28px 32px;background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:#ffffff;">
-                <div style="margin-bottom:16px;"><span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#ffffff;font-family:'Poppins','Inter',system-ui,sans-serif;">Klinip</span></div>
-                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Seguimiento de medicación</div>
-                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Reposición de medicamento</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:32px;">
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
-                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
-                  {% if is_assignee %}
-                  Te avisamos porque te corresponde la próxima compra de medicamento.
-                  {% else %}
-                  Te informamos quién quedó a cargo de la próxima compra.
-                  {% endif %}
-                </p>
-                <p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#0f172a;">
-                  {% if is_assignee %}
-                  Te toca comprar <strong>{{ medication_name }}</strong> para <strong>{{ patient_name }}</strong>.
-                  {% else %}
-                  A <strong>{{ assignee_name }}</strong> le toca comprar <strong>{{ medication_name }}</strong> para <strong>{{ patient_name }}</strong>.
-                  {% endif %}
-                </p>
-                <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
-                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Medicamento:</strong> {{ medication_name }}</p>
-                  {% if dose %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Dosis:</strong> {{ dose }}</p>{% endif %}
-                  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Dosis restantes:</strong> {{ remaining_doses }}</p>
-                  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Umbral de alerta:</strong> {{ threshold_doses }}</p>
-                </div>
-                <p style="margin:18px 0 0;font-size:14px;line-height:1.8;color:#475569;">
-                  Revisa {{ app_name }} para confirmar la compra y mantener el tratamiento actualizado.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
-                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
-                  Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
-                </p>
-                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
-                  {{ app_name }} | Control de medicación familiar | {{ year }}
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
+{% extends "email/_base.html" %}
+{% set accent_from = "#9a3412" %}
+{% set accent_to = "#f59e0b" %}
+{% set eyebrow = "Seguimiento de medicación" %}
+{% set hero_text = "Klinip coordina a la familia cuando una reposición se acerca para evitar quiebres en el tratamiento." %}
+{% block title %}Reposición de medicamento{% endblock %}
+{% block headline %}La próxima compra ya tiene responsable{% endblock %}
+{% block content %}
+<p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
+<p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#334155;">
+  {% if is_assignee %}
+  Te avisamos porque te corresponde la próxima compra de medicamento.
+  {% else %}
+  Te informamos quién quedó a cargo de la próxima compra.
+  {% endif %}
+</p>
+<p style="margin:0 0 18px;font-size:15px;line-height:1.8;color:#0f172a;">
+  {% if is_assignee %}
+  Te toca comprar <strong>{{ medication_name }}</strong> para <strong>{{ patient_name }}</strong>.
+  {% else %}
+  A <strong>{{ assignee_name }}</strong> le toca comprar <strong>{{ medication_name }}</strong> para <strong>{{ patient_name }}</strong>.
+  {% endif %}
+</p>
+<div style="padding:18px 20px;border:1px solid #fed7aa;border-radius:18px;background:#fff7ed;">
+  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Medicamento:</strong> {{ medication_name }}</p>
+  {% if dose %}<p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Dosis:</strong> {{ dose }}</p>{% endif %}
+  <p style="margin:0 0 8px;font-size:14px;line-height:1.7;"><strong>Dosis restantes:</strong> {{ remaining_doses }}</p>
+  <p style="margin:0;font-size:14px;line-height:1.7;"><strong>Umbral de alerta:</strong> {{ threshold_doses }}</p>
+</div>
+<p style="margin:18px 0 0;font-size:14px;line-height:1.8;color:#475569;">
+  Revisa {{ app_name }} para confirmar la compra y mantener el tratamiento actualizado.
+</p>
+{% endblock %}

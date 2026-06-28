@@ -1,54 +1,29 @@
-<!doctype html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bienvenido a {{ app_name }}</title>
-  </head>
-  <body style="margin:0;padding:0;background:#eef3f8;font-family:'Poppins','Inter',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="padding:32px 12px;background:#eef3f8;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#ffffff;border:1px solid #d9e2ec;border-radius:20px;overflow:hidden;box-shadow:0 18px 48px rgba(15,23,42,0.08);">
-            <tr>
-              <td style="padding:28px 32px;background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:#ffffff;">
-                <div style="margin-bottom:16px;"><span style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#ffffff;font-family:'Poppins','Inter',system-ui,sans-serif;">Klinip</span></div>
-                <div style="font-size:12px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.82;margin-bottom:10px;">Mensaje de bienvenida</div>
-                <h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:700;">Bienvenido a {{ app_name }}</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:32px;">
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
-                <p style="margin:0 0 16px;font-size:15px;line-height:1.8;color:#334155;">
-                  Tu cuenta fue creada correctamente. Desde ahora puedes organizar medicamentos,
-                  citas y documentos en un solo lugar, con una experiencia clara y segura.
-                </p>
-                <div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:16px;background:#f8fbff;">
-                  <p style="margin:0 0 8px;font-size:14px;color:#1e3a8a;"><strong>Que puedes hacer ahora</strong></p>
-                  <p style="margin:0;font-size:14px;line-height:1.8;color:#475569;">
-                    Registrar tratamientos, guardar documentos médicos y mantener tu historial de salud
-                    siempre disponible.
-                  </p>
-                </div>
-                <p style="margin:20px 0 0;font-size:15px;line-height:1.8;color:#334155;">
-                  Gracias por confiar en {{ app_name }}.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:22px 32px;border-top:1px solid #e2e8f0;background:#f8fafc;">
-                <p style="margin:0 0 8px;font-size:12px;line-height:1.7;color:#64748b;">
-                  Este es un correo informativo enviado por {{ app_name }}. Por favor, no respondas a este mensaje.
-                </p>
-                <p style="margin:0;font-size:12px;line-height:1.7;color:#94a3b8;">
-                  {{ app_name }} | Tu salud organizada en un solo lugar | {{ year }}
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>
+{% extends "email/_base.html" %}
+{% set eyebrow = "Bienvenida" %}
+{% set hero_text = "Klinip te ayuda a ordenar tu salud con claridad, continuidad y control sobre tu información." %}
+{% block title %}Bienvenido a {{ app_name }}{% endblock %}
+{% block headline %}Tu cuenta ya está lista{% endblock %}
+{% block content %}
+<p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Hola {{ user_name }},</p>
+<p style="margin:0 0 16px;font-size:15px;line-height:1.8;color:#334155;">
+  Tu cuenta fue creada correctamente. Desde ahora puedes organizar medicamentos,
+  citas, documentos y recordatorios en una experiencia clara y segura.
+</p>
+<div style="padding:18px 20px;border:1px solid #dbeafe;border-radius:18px;background:#f8fbff;">
+  <p style="margin:0 0 8px;font-size:14px;color:#0f3ea8;"><strong>Qué puedes hacer ahora</strong></p>
+  <p style="margin:0;font-size:14px;line-height:1.8;color:#475569;">
+    Guardar documentos de salud, seguir tratamientos, registrar consultas y compartir contexto
+    con tu red familiar cuando tú lo decidas.
+  </p>
+</div>
+<div style="margin-top:16px;padding:18px 20px;border:1px solid #dce8f8;border-radius:18px;background:#ffffff;">
+  <p style="margin:0 0 8px;font-size:14px;color:#0f172a;"><strong>Tu información sigue siendo tuya</strong></p>
+  <p style="margin:0;font-size:14px;line-height:1.8;color:#475569;">
+    Klinip la ordena y la vuelve más fácil de entender, pero el control de compartirla
+    sigue en tus manos.
+  </p>
+</div>
+<p style="margin:20px 0 0;font-size:15px;line-height:1.8;color:#334155;">
+  Gracias por confiar en {{ app_name }}.
+</p>
+{% endblock %}

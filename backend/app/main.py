@@ -1,4 +1,4 @@
-from fastapi import (
+﻿from fastapi import (
     FastAPI,
     Depends,
     HTTPException,
@@ -3158,7 +3158,7 @@ def _queue_appointment_creation_notifications(
                 recipient_user_id,
                 {
                     "title": f"{category} agendada",
-                    "body": f"{appt.specialty or appt.type.value} en {appt.center or 'Centro mÃ©dico'}\n{when_text}",
+                    "body": f"{appt.specialty or appt.type.value} en {appt.center or 'Centro médico'}\n{when_text}",
                     "url": "/appointments",
                     "priority": "normal",
                     "sound": "appointment",
@@ -4414,7 +4414,7 @@ def _send_medication_programmed_notifications(
                 db,
                 user_id,
                 {
-                    "title": "Medicamento programado",
+                    "title": "Tratamiento programado",
                     "body": body,
                     "url": "/medications",
                     "priority": "high",
@@ -5268,7 +5268,7 @@ def _job_send_medication_reminders(
                         email_tag = (
                             f"medication-email-{med.id}-{trigger_exact_ms}-lead-{offset_minutes}"
                         )
-                        title = f"Medicacion: {med.name}"
+                        title = f"Medicamento: {med.name}"
                         prefix = (
                             "Ahora" if offset_minutes == 0 else f"En {offset_minutes} minutos"
                         )
@@ -18351,9 +18351,9 @@ async def create_profile_invitation(
                 db,
                 existing_user.id,
                 {
-                    "title": "Nueva invitacion familiar",
+                    "title": "Invitación familiar",
                     "body": (
-                        f"{current_user.name or current_user.email} te invito al perfil "
+                        f"{current_user.name or current_user.email} te invitó al perfil "
                         f"{profile.full_name or 'de salud'} con rol {role}."
                     ),
                     "url": "/family",
@@ -18405,9 +18405,9 @@ async def create_profile_invitation(
             db,
             existing_user.id,
             {
-                "title": "Nueva invitacion familiar",
+                "title": "Invitación familiar",
                 "body": (
-                    f"{current_user.name or current_user.email} te invito al perfil "
+                    f"{current_user.name or current_user.email} te invitó al perfil "
                     f"{profile.full_name or 'de salud'} con rol {role}."
                 ),
                 "url": "/family",
@@ -18581,8 +18581,8 @@ async def accept_profile_invitation(
         db,
         current_user.id,
         {
-            "title": "Invitacion aceptada",
-            "body": f"Ya puedes colaborar en {invited_profile_name} con rol {invited_role}.",
+            "title": "Invitación aceptada",
+            "body": f"Ya puedes colaborar en {invited_profile_name} con el rol {invited_role}.",
             "url": "/family",
             "priority": "high",
             "sound": "default",
@@ -18595,9 +18595,9 @@ async def accept_profile_invitation(
         db,
         inviter_user.id,
         {
-            "title": "Invitacion aceptada",
+            "title": "Invitación aceptada",
             "body": (
-                f"{invitee_display} acepto tu invitacion y ya esta vinculado a "
+                f"{invitee_display} aceptó tu invitación y ya está vinculado a "
                 f"{invited_profile_name} con rol {invited_role}."
             ),
             "url": "/family",
@@ -18721,7 +18721,7 @@ async def remove_profile_relationship(
         {
             "title": "Acceso removido",
             "body": (
-                f"{remover_name} te quito del perfil {removed_profile_name}. "
+                f"{remover_name} removió tu acceso al perfil {removed_profile_name}. "
                 "Ya no podrás ver ni editar su información."
             ),
             "url": "/family",
@@ -18823,7 +18823,7 @@ async def revoke_profile_invitation(
             {
                 "title": "Acceso removido",
                 "body": (
-                    f"{remover_name} revoco tu acceso al perfil {profile_name}. "
+                    f"{remover_name} revocó tu acceso al perfil {profile_name}. "
                     "Ya no podrás ver ni editar su información."
                 ),
                 "url": "/family",
@@ -24981,7 +24981,7 @@ def _build_feed_notification_payload(
     profile_name = post.profile.full_name if post.profile else ""
     content_preview = (post.content or "")[:60]
     if len(post.content or "") > 60:
-        content_preview += "…"
+        content_preview += "..."
 
     if notification_type == "post":
         title = f"Nueva publicación de {actor_name}"
@@ -24991,7 +24991,7 @@ def _build_feed_notification_payload(
         comment_content = extra.get("comment_content") or ""
         comment_text = comment_content[:60]
         if len(comment_content) > 60:
-            comment_text += "…"
+            comment_text += "..."
         mention_user_ids = set(extra.get("mention_user_ids") or [])
         parent_comment_user_id = extra.get("parent_comment_user_id")
         if recipient_user_id in mention_user_ids:

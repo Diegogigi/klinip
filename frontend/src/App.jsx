@@ -1756,8 +1756,8 @@ export default function App() {
         reg?.showNotification
       ) {
         reg
-          .showNotification("Actualizacion disponible", {
-            body: "Hay una nueva version de Klinip. Actualiza para aplicar cambios.",
+          .showNotification("Actualización de Klinip disponible", {
+            body: "Hay una nueva versión lista. Actualiza para ver los cambios más recientes.",
             icon: "/icons/android-chrome-192x192.png?v=20260523a",
           })
           .then(() => {

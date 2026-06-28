@@ -1,4 +1,4 @@
-import { parseDate, toLocaleDateTimeOrEmpty } from "../utils/dates";
+﻿import { parseDate, toLocaleDateTimeOrEmpty } from "../utils/dates";
 import { buildMedicationScheduleEventsBetween as sharedBuildMedicationScheduleEventsBetween } from "../utils/medicationSchedule";
 
 // Constantes
@@ -488,8 +488,8 @@ export function scheduleReminderNotifications(reminders, customOffsets = null) {
         minutes
       };
 
-      const title = `${appointmentLabel} - Recordatorio: ${label}`;
-      const body = `${rem.specialty || rem.type || "Cita"} en ${rem.center || "Centro médico"}
+      const title = `${appointmentLabel}: ${label}`;
+      const body = `${rem.specialty || rem.type || "Atención"} en ${rem.center || "Centro médico"}
 ${toLocaleDateTimeOrEmpty(rem.date_time)}${rem.notes ? `
 ${rem.notes}` : ""}`;
 
@@ -681,7 +681,7 @@ export function scheduleMedicationNotifications(medications) {
           type: "medication"
         };
 
-        const title = `Medicación: ${med.name || "Tratamiento"}`;
+        const title = `Medicamento: ${med.name || "Tratamiento"}`;
         const prefix = offsetMinutes === 0 ? "Ahora" : `En ${offsetMinutes} minutos`;
         const body = `${prefix}
 ${med.dose ? `Dosis: ${med.dose}
@@ -713,7 +713,7 @@ ${med.dose ? `Dosis: ${med.dose}
 
   notificationManager.cleanOldNotifications();
   armRuntimeScheduler("medication");
-  console.log("Recordatorios de medicacion reprogramados");
+  console.log("Recordatorios de medicación reprogramados");
 }
 
 /**
