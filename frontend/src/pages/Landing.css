@@ -1962,6 +1962,26 @@ body.theme-dark .landing-brand-cta-card {
     gap: 0.6rem;
   }
 
+  /* En el header móvil, Iniciar sesión y Crear cuenta comparten una sola
+     fila (en vez de apilarse a ancho completo) para un header más compacto. */
+  .landing-brand-nav-actions {
+    width: 100%;
+  }
+
+  .landing-brand-nav-actions .landing-brand-btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+
+  /* Toolbar de planes: el toggle Mensual/Anual y el badge se ordenan en
+     una columna alineada a la izquierda en vez de quedar descolgados. */
+  .landing-brand-pricing-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+
   .landing-brand-stage-photo {
     min-height: 26rem;
     border-radius: 1.35rem;
