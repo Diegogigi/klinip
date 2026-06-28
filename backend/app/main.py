@@ -9044,6 +9044,51 @@ def _get_profile_access_or_404(
     return profile, link
 
 
+def _first_available_profile_link(
+    db: Session,
+    current_user: models.User,
+) -> models.ProfileRelationship | None:
+    return (
+        db.query(models.ProfileRelationship)
+        .join(models.HealthProfile, models.HealthProfile.id == models.ProfileRelationship.profile_id)
+        .filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_archived.is_(False),
+        )
+        .order_by(
+            models.HealthProfile.is_primary_profile.desc(),
+            models.ProfileRelationship.created_at.asc(),
+        )
+        .first()
+    )
+
+
+def _resolve_active_profile_link(
+    db: Session,
+    current_user: models.User,
+) -> tuple[models.HealthProfile, models.ProfileRelationship]:
+    active_id = getattr(current_user, "active_health_profile_id", None)
+    if active_id:
+        try:
+            return _get_profile_access_or_404(db, current_user, int(active_id))
+        except HTTPException as exc:
+            if exc.status_code != 404:
+                raise
+
+    link = _first_available_profile_link(db, current_user)
+    if not link or not link.profile:
+        raise HTTPException(status_code=404, detail="No tienes perfiles activos")
+
+    if getattr(current_user, "active_health_profile_id", None) != link.profile_id:
+        current_user.active_health_profile_id = link.profile_id
+        db.add(current_user)
+        db.commit()
+        db.refresh(current_user)
+
+    return link.profile, link
+
+
 def _get_active_profile_context(
     db: Session,
     current_user: models.User,
@@ -9053,32 +9098,7 @@ def _get_active_profile_context(
     Resuelve el perfil activo y devuelve (profile, link, owner_user_id).
     owner_user_id corresponde al dueño real de los datos clínicos.
     """
-    active_id = getattr(current_user, "active_health_profile_id", None)
-    if active_id:
-        profile, link = _get_profile_access_or_404(db, current_user, int(active_id))
-    else:
-        links = (
-            db.query(models.ProfileRelationship)
-            .join(models.HealthProfile, models.HealthProfile.id == models.ProfileRelationship.profile_id)
-            .filter(
-                models.ProfileRelationship.user_id == current_user.id,
-                models.ProfileRelationship.status == "accepted",
-                models.HealthProfile.is_archived.is_(False),
-            )
-            .order_by(
-                models.HealthProfile.is_primary_profile.desc(),
-                models.ProfileRelationship.created_at.asc(),
-            )
-            .all()
-        )
-        if not links:
-            raise HTTPException(status_code=404, detail="No tienes perfiles activos")
-        link = links[0]
-        profile = link.profile
-        current_user.active_health_profile_id = profile.id
-        db.add(current_user)
-        db.commit()
-        db.refresh(current_user)
+    profile, link = _resolve_active_profile_link(db, current_user)
 
     if require_write:
         _require_role(link, "caregiver")
@@ -17985,37 +18005,8 @@ async def get_active_health_profile(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    active_id = getattr(current_user, "active_health_profile_id", None)
-    if active_id:
-        profile, link = _get_profile_access_or_404(db, current_user, int(active_id))
-        return _profile_out(profile, link)
-
-    links = (
-        db.query(models.ProfileRelationship)
-        .join(
-            models.HealthProfile,
-            models.HealthProfile.id == models.ProfileRelationship.profile_id,
-        )
-        .filter(
-            models.ProfileRelationship.user_id == current_user.id,
-            models.ProfileRelationship.status == "accepted",
-            models.HealthProfile.is_archived.is_(False),
-        )
-        .order_by(
-            models.HealthProfile.is_primary_profile.desc(),
-            models.HealthProfile.created_at.asc(),
-        )
-        .all()
-    )
-    if not links:
-        raise HTTPException(status_code=404, detail="No tienes perfiles de salud disponibles")
-
-    active_link = links[0]
-    current_user.active_health_profile_id = active_link.profile_id
-    db.add(current_user)
-    db.commit()
-    db.refresh(current_user)
-    return _profile_out(active_link.profile, active_link)
+    profile, link = _resolve_active_profile_link(db, current_user)
+    return _profile_out(profile, link)
 
 
 @app.post("/health-profiles", response_model=schemas.HealthProfileOut)

@@ -1147,25 +1147,18 @@ export default function App() {
       }
       familyContextLoadingRef.current = true;
       try {
-        const [plan, profiles, active] = await Promise.all([
+        const [plan, profiles, activeResult] = await Promise.allSettled([
           getMyPlan(),
           getHealthProfiles(),
           getActiveHealthProfile(),
         ]);
         if (!mounted) return;
-        setPlanInfo(plan || null);
-        const list = Array.isArray(profiles) ? profiles : [];
+        setPlanInfo(plan.status === "fulfilled" ? (plan.value || null) : null);
+        const list = profiles.status === "fulfilled" && Array.isArray(profiles.value) ? profiles.value : [];
         setHealthProfiles(list);
+        const active = activeResult.status === "fulfilled" ? activeResult.value : null;
         setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
         lastFamilyContextRefreshRef.current = Date.now();
-      } catch (err) {
-        if (!mounted) return;
-        if (!isAuthSessionError(err)) {
-          console.error("No se pudo cargar contexto familiar para header:", err);
-        }
-        setPlanInfo(null);
-        setHealthProfiles([]);
-        setActiveHealthProfileId(null);
       } finally {
         familyContextLoadingRef.current = false;
       }
@@ -1189,12 +1182,15 @@ export default function App() {
     const refreshOnRoute = async () => {
       familyContextLoadingRef.current = true;
       try {
-        const [profiles, active] = await Promise.all([
+        const [profilesResult, activeResult] = await Promise.allSettled([
           getHealthProfiles(),
           getActiveHealthProfile(),
         ]);
         if (cancelled) return;
-        const list = Array.isArray(profiles) ? profiles : [];
+        const list = profilesResult.status === "fulfilled" && Array.isArray(profilesResult.value)
+          ? profilesResult.value
+          : [];
+        const active = activeResult.status === "fulfilled" ? activeResult.value : null;
         setHealthProfiles(list);
         setActiveHealthProfileId(active?.id || list?.[0]?.id || null);
         lastFamilyContextRefreshRef.current = Date.now();
