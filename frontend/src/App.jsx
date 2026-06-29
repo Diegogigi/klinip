@@ -2221,10 +2221,11 @@ export default function App() {
   const isFamilyRoute = location.pathname === "/family";
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;
+  const pinLockVisible = Boolean(appLocked && user);
 
   return (
     <div className="app-shell">
-      {appLocked && user ? (
+      {pinLockVisible ? (
         <PinLock
           user={user}
           hasExistingPin={isPinProtectionActive(user)}
@@ -2235,7 +2236,7 @@ export default function App() {
           onLogout={handleLogout}
         />
       ) : null}
-      {consentOpen && (
+      {!pinLockVisible && consentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card" role="dialog" aria-modal="true">
             <p className="consent-kicker">Asistente Klinip</p>
@@ -2277,7 +2278,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {notifConsentOpen && (
+      {!pinLockVisible && notifConsentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card notification-consent" role="dialog" aria-modal="true">
             <p className="consent-kicker">Recordatorios</p>
@@ -2323,7 +2324,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {onboardingOpen && (
+      {!pinLockVisible && onboardingOpen && (
         <div className="ob-backdrop">
           <div className="ob-overlay" role="dialog" aria-modal="true" aria-label="Bienvenida a Klinip">
             {onboardingStep < 4 && (
@@ -2611,6 +2612,7 @@ export default function App() {
           </div>
         </div>
       )}
+      {!pinLockVisible ? (
       <div className="layout">
         {showAppChrome || showAiNavbar ? (
           <Sidebar
@@ -2927,6 +2929,7 @@ export default function App() {
           />
         ) : null}
       </div>
+      ) : null}
     </div>
   );
 }
