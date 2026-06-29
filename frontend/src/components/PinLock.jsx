@@ -7,7 +7,15 @@ const PIN_LENGTH = 4;
 
 function BackspaceIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M21 5H8.5a2 2 0 0 0-1.5.7L3 12l4 6.3a2 2 0 0 0 1.5.7H21a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z" />
       <path d="M11 9.5l5 5M16 9.5l-5 5" />
     </svg>
@@ -26,18 +34,16 @@ export default function PinLock({
     const name = (user?.name || "").trim();
     return name ? name.split(/\s+/)[0] : "";
   }, [user?.name]);
+
   const isChangingExistingPin = forceSetup && hasExistingPin;
   const handleRecoveryLogout = useCallback(() => {
     markPinRecoveryLogin();
     onLogout?.();
   }, [onLogout]);
 
-  // setup = crear PIN; unlock = ingresar PIN existente. forceSetup fuerza la
-  // creación (usado desde Ajustes para "crear" o "cambiar" PIN).
   const [mode] = useState(() =>
     forceSetup ? "setup" : hasExistingPin ? "unlock" : "setup"
   );
-  // En setup: stage "create" pide el PIN nuevo y "confirm" lo repite.
   const [stage, setStage] = useState("create");
   const [firstPin, setFirstPin] = useState("");
   const [entry, setEntry] = useState("");
@@ -70,7 +76,7 @@ export default function PinLock({
           }
           return;
         }
-        // setup
+
         if (stage === "create") {
           setFirstPin(code);
           setEntry("");
@@ -78,7 +84,7 @@ export default function PinLock({
           setStage("confirm");
           return;
         }
-        // confirm
+
         if (code === firstPin) {
           try {
             await setAppPin(code);
@@ -104,8 +110,7 @@ export default function PinLock({
     if (entry.length === PIN_LENGTH && !busy) {
       handleComplete(entry);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry]);
+  }, [busy, entry, handleComplete]);
 
   const pressDigit = useCallback(
     (digit) => {
@@ -122,7 +127,6 @@ export default function PinLock({
     setEntry((prev) => prev.slice(0, -1));
   }, [busy]);
 
-  // Soporte de teclado físico (escritorio).
   useEffect(() => {
     const onKey = (event) => {
       if (event.key >= "0" && event.key <= "9") {
@@ -135,17 +139,17 @@ export default function PinLock({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pressDigit, pressBackspace, onCancel]);
+  }, [onCancel, pressBackspace, pressDigit]);
 
   const title =
     mode === "setup"
       ? stage === "create"
         ? isChangingExistingPin
-          ? "Cambia tu PIN"
-          : "Crea tu PIN"
+          ? "Cambiar PIN"
+          : "Crear PIN"
         : isChangingExistingPin
-        ? "Confirma tu nuevo PIN"
-        : "Confirma tu PIN"
+        ? "Confirmar nuevo PIN"
+        : "Confirmar PIN"
       : firstName
       ? `Hola ${firstName}`
       : "Hola de nuevo";
@@ -164,10 +168,19 @@ export default function PinLock({
   const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
   return (
-    <div className="pinlock-backdrop" role="dialog" aria-modal="true" aria-label="Bloqueo de seguridad">
+    <div
+      className="pinlock-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bloqueo de seguridad"
+    >
       <div className="pinlock-shell">
         <div className="pinlock-head">
-          <BrandMark variant="solid" className="pinlock-logo" imgClassName="pinlock-logo-img" />
+          <BrandMark
+            variant="solid"
+            className="pinlock-logo"
+            imgClassName="pinlock-logo-img"
+          />
           <h1 className="pinlock-title">{title}</h1>
           <p className="pinlock-subtitle">{subtitle}</p>
         </div>
@@ -182,7 +195,10 @@ export default function PinLock({
         </div>
 
         <p className={`pinlock-message ${error ? "is-error" : ""}`} role="status" aria-live="polite">
-          {error || (forgotHint ? "Para restaurar tu PIN, cierra sesión y vuelve a entrar con tu contraseña." : "\u00A0")}
+          {error ||
+            (forgotHint
+              ? "Para restaurar tu PIN, cierra sesión y vuelve a entrar con tu contraseña."
+              : "\u00A0")}
         </p>
 
         <div className="pinlock-keypad">

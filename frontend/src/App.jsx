@@ -945,6 +945,9 @@ const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
 const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v2";
+const ONBOARDING_TOTAL_STEPS = 6;
+const ONBOARDING_PIN_STEP = 4;
+const ONBOARDING_FINAL_STEP = ONBOARDING_TOTAL_STEPS - 1;
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
@@ -1106,6 +1109,9 @@ export default function App() {
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingNotifLoading, setOnboardingNotifLoading] = useState(false);
   const [onboardingNotifMessage, setOnboardingNotifMessage] = useState("");
+  const [onboardingPinFlowOpen, setOnboardingPinFlowOpen] = useState(false);
+  const [onboardingPinSyncing, setOnboardingPinSyncing] = useState(false);
+  const [onboardingPinMessage, setOnboardingPinMessage] = useState("");
   const [planInfo, setPlanInfo] = useState(null);
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
@@ -2168,6 +2174,54 @@ export default function App() {
     }
   };
 
+  const refreshUserPinState = async () => {
+    const [me, pinStatus] = await Promise.all([
+      getMe(),
+      getAppPinStatus().catch(() => null),
+    ]);
+    const mergedUser = {
+      ...me,
+      pin_set:
+        typeof pinStatus?.pin_set === "boolean"
+          ? pinStatus.pin_set
+          : me?.pin_set,
+      pin_enabled:
+        typeof pinStatus?.pin_enabled === "boolean"
+          ? pinStatus.pin_enabled
+          : me?.pin_enabled,
+    };
+    setUser(mergedUser);
+    return mergedUser;
+  };
+
+  const handleOpenOnboardingPinSetup = () => {
+    setOnboardingPinMessage("");
+    setOnboardingPinFlowOpen(true);
+  };
+
+  const handleOnboardingPinDone = async () => {
+    setOnboardingPinFlowOpen(false);
+    setOnboardingPinSyncing(true);
+    try {
+      const mergedUser = await refreshUserPinState();
+      setOnboardingPinMessage(
+        mergedUser?.pin_enabled
+          ? "PIN activado. Se pedirá al volver a abrir Klinip."
+          : "PIN actualizado para tu cuenta."
+      );
+      setOnboardingStep(ONBOARDING_FINAL_STEP);
+    } catch (err) {
+      console.error("No se pudo refrescar el estado del PIN en onboarding", err);
+      setOnboardingPinMessage("El PIN se guardó, pero no pudimos actualizar el estado al instante.");
+    } finally {
+      setOnboardingPinSyncing(false);
+    }
+  };
+
+  const handleOnboardingPinCancel = () => {
+    setOnboardingPinFlowOpen(false);
+  };
+
   const handleSwitchActiveProfile = async (profileId) => {
     const nextId = Number(profileId || 0);
     if (!nextId || Number.isNaN(nextId)) return;
@@ -2298,6 +2352,16 @@ export default function App() {
           onLogout={handleLogout}
         />
       ) : null}
+      {!appGateVisible && !pinLockVisible && onboardingPinFlowOpen && user ? (
+        <PinLock
+          user={user}
+          forceSetup
+          hasExistingPin={Boolean(user?.pin_set || user?.pin_enabled)}
+          onUnlock={handleOnboardingPinDone}
+          onLogout={handleLogout}
+          onCancel={handleOnboardingPinCancel}
+        />
+      ) : null}
       {!appGateVisible && !pinLockVisible && consentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card" role="dialog" aria-modal="true">
@@ -2389,14 +2453,14 @@ export default function App() {
       {!appGateVisible && !pinLockVisible && onboardingOpen && (
         <div className="ob-backdrop">
           <div className="ob-overlay" role="dialog" aria-modal="true" aria-label="Bienvenida a Klinip">
-            {onboardingStep < 4 && (
+            {onboardingStep < ONBOARDING_FINAL_STEP && (
               <button
                 className="ob-skip"
                 type="button"
                 onClick={handleSkipOnboarding}
                 disabled={onboardingSaving}
               >
-                {onboardingStep + 1}/5 &nbsp; Saltar
+                {onboardingStep + 1}/{ONBOARDING_TOTAL_STEPS} &nbsp; Saltar
               </button>
             )}
 
@@ -2484,7 +2548,7 @@ export default function App() {
                   <path d="M162 96l4 5 8-9" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
-              {onboardingStep === 4 && (
+              {onboardingStep === ONBOARDING_PIN_STEP && (
                 <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="130" cy="115" r="80" fill="rgba(255,255,255,0.12)" />
                   <path d="M130 42c0 0-36 35-36 76 0 18 12 30 36 36 24-6 36-18 36-36 0-41-36-76-36-76z" fill="rgba(255,255,255,0.93)" />
@@ -2506,6 +2570,24 @@ export default function App() {
                   <rect x="152" y="182" width="56" height="30" rx="8" fill="rgba(255,255,255,0.22)" />
                   <rect x="159" y="190" width="26" height="3.5" rx="2" fill="#fff" />
                   <rect x="159" y="197" width="18" height="3.5" rx="2" fill="rgba(255,255,255,0.7)" />
+                </svg>
+              )}
+              {onboardingStep === ONBOARDING_FINAL_STEP && (
+                <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="114" r="82" fill="rgba(255,255,255,0.12)" />
+                  <rect x="74" y="68" width="112" height="122" rx="20" fill="rgba(255,255,255,0.94)" />
+                  <rect x="92" y="88" width="76" height="12" rx="6" fill="#dbeafe" />
+                  <rect x="92" y="108" width="54" height="8" rx="4" fill="#bfdbfe" />
+                  <rect x="92" y="123" width="62" height="8" rx="4" fill="#e2e8f0" />
+                  <rect x="92" y="138" width="70" height="8" rx="4" fill="#e2e8f0" />
+                  <circle cx="184" cy="78" r="26" fill="rgba(37,99,235,0.18)" />
+                  <path d="M173 78l7 7 15-16" stroke="#2563eb" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="76" cy="84" r="18" fill="rgba(255,255,255,0.22)" />
+                  <path d="M68 84h16M76 76v16" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" />
+                  <circle cx="68" cy="165" r="16" fill="rgba(255,255,255,0.2)" />
+                  <path d="M61 165h14" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+                  <circle cx="198" cy="160" r="16" fill="rgba(255,255,255,0.2)" />
+                  <path d="M191 160l4 4 7-8" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
             </div>
@@ -2604,10 +2686,63 @@ export default function App() {
                     </div>
                   </>
                 )}
-                {onboardingStep === 4 && (
+                {onboardingStep === ONBOARDING_PIN_STEP && (
+                  <>
+                    <h2 className="ob-title">Protege tu cuenta con un PIN</h2>
+                    <p className="ob-text">
+                      Activa un PIN de 4 dígitos para que Klinip lo solicite al volver a abrir la app.
+                    </p>
+                    <div className="ob-security-card">
+                      <div className="ob-security-head">
+                        <div>
+                          <p className="ob-security-kicker">Seguridad de acceso</p>
+                          <h3 className="ob-security-title">
+                            {user?.pin_enabled ? "PIN activo en tu cuenta" : "Puedes configurarlo ahora"}
+                          </h3>
+                        </div>
+                        <span className={`ob-security-pill${user?.pin_enabled ? " is-on" : " is-off"}`}>
+                          {user?.pin_enabled ? "Activado" : "Opcional"}
+                        </span>
+                      </div>
+                      <ul className="ob-security-list">
+                        <li>Se usa el mismo PIN en todos tus dispositivos.</li>
+                        <li>Se pedirá solo al reabrir Klinip, no en cada pantalla.</li>
+                        <li>Si lo olvidas, puedes restaurarlo entrando con tu contraseña.</li>
+                      </ul>
+                    </div>
+                    <div className="ob-actions-col">
+                      <button
+                        className="ob-action-btn ob-action-primary"
+                        type="button"
+                        onClick={handleOpenOnboardingPinSetup}
+                        disabled={onboardingPinSyncing}
+                      >
+                        {onboardingPinSyncing
+                          ? "Actualizando..."
+                          : user?.pin_enabled
+                          ? "Cambiar PIN"
+                          : "Crear PIN ahora"}
+                      </button>
+                      <button
+                        className="ob-action-btn ob-action-ghost"
+                        type="button"
+                        onClick={() => setOnboardingStep(ONBOARDING_FINAL_STEP)}
+                        disabled={onboardingPinSyncing}
+                      >
+                        Lo haré después
+                      </button>
+                    </div>
+                    {onboardingPinMessage ? <p className="ob-msg">{onboardingPinMessage}</p> : null}
+                  </>
+                )}
+                {onboardingStep === ONBOARDING_FINAL_STEP && (
                   <>
                     <h2 className="ob-title">¡Listo para comenzar!</h2>
-                    <p className="ob-text">Elige por dónde empezar o explora Klinip por tu cuenta.</p>
+                    <p className="ob-text">
+                      {user?.pin_enabled
+                        ? "Tu cuenta ya quedó protegida con PIN. Elige por dónde empezar o explora Klinip por tu cuenta."
+                        : "Elige por dónde empezar o explora Klinip por tu cuenta."}
+                    </p>
                     <div className="ob-quick-actions">
                       <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/documents"); }}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 3.5h7l3 3.5V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z" /><path d="M14 3.5v4h3" /><path d="M9 12h6M9 15h4" /></svg>
@@ -2628,7 +2763,7 @@ export default function App() {
 
               <div className="ob-footer">
                 <div className="ob-dots">
-                  {[0, 1, 2, 3, 4].map((i) => (
+                  {Array.from({ length: ONBOARDING_TOTAL_STEPS }, (_, i) => i).map((i) => (
                     <span key={i} className={`ob-dot${onboardingStep === i ? " ob-dot-active" : ""}`} />
                   ))}
                 </div>
@@ -2644,19 +2779,26 @@ export default function App() {
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="15 18 9 12 15 6" /></svg>
                     </button>
                   )}
-                  {onboardingStep < 4 ? (
+                  {onboardingStep < ONBOARDING_FINAL_STEP ? (
                     <button
                       className="ob-cta"
                       type="button"
-                      onClick={() => setOnboardingStep((prev) => Math.min(prev + 1, 4))}
+                      onClick={() => {
+                        if (onboardingStep === ONBOARDING_PIN_STEP) {
+                          setOnboardingStep(ONBOARDING_FINAL_STEP);
+                          return;
+                        }
+                        setOnboardingStep((prev) => Math.min(prev + 1, ONBOARDING_FINAL_STEP));
+                      }}
                       disabled={
                         onboardingSaving ||
+                        onboardingPinSyncing ||
                         (onboardingStep === 3 &&
                           onboardingData.hasChronicCondition === "yes" &&
                           !(onboardingData.chronicCondition || "").trim())
                       }
                     >
-                      Continuar
+                      {onboardingStep === ONBOARDING_PIN_STEP ? "Más tarde" : "Continuar"}
                     </button>
                   ) : (
                     <button
