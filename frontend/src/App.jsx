@@ -27,6 +27,12 @@ import {
   parseScheduleTimeValue,
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
+import PinLock from "./components/PinLock";
+import {
+  hasPin as hasAppPin,
+  clearPin as clearAppPin,
+  isPinSupported,
+} from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
 
 const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
@@ -913,6 +919,7 @@ const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v2";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
+const APP_LOCK_GRACE_MS = 60000;
 const MED_ALERT_INITIAL_DELAY_MS = 15000;
 const FAMILY_CONTEXT_ROUTE_REFRESH_MS = 30000;
 const BOOTSTRAP_SESSION_TIMEOUT_MS = 12000;
@@ -1044,6 +1051,8 @@ export default function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState(null);
+  const [appLocked, setAppLocked] = useState(false);
+  const pinHiddenAtRef = useRef(0);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [activeUpdateKey, setActiveUpdateKey] = useState("");
@@ -1163,6 +1172,33 @@ export default function App() {
     window.addEventListener("klinip:session-expired", onSessionExpired);
     return () => window.removeEventListener("klinip:session-expired", onSessionExpired);
   }, [navigate]);
+
+  // Bloqueo con PIN: al abrir la app con sesión activa, exigir PIN (o crearlo
+  // la primera vez). Se desbloquea sólo en memoria, así que cada nueva apertura
+  // o recarga vuelve a pedirlo.
+  useEffect(() => {
+    if (booting) return;
+    setAppLocked(Boolean(user?.id) && isPinSupported());
+  }, [booting, user?.id]);
+
+  // Re-bloqueo al volver de segundo plano tras un periodo de inactividad.
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    const handleVisibility = () => {
+      if (document.hidden) {
+        pinHiddenAtRef.current = Date.now();
+        return;
+      }
+      const hiddenFor = pinHiddenAtRef.current
+        ? Date.now() - pinHiddenAtRef.current
+        : 0;
+      if (hiddenFor > APP_LOCK_GRACE_MS && hasAppPin(user.id)) {
+        setAppLocked(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [user?.id]);
 
   useEffect(() => {
     let mounted = true;
@@ -1842,7 +1878,10 @@ export default function App() {
     if (user?.id) {
       const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
       localStorage.removeItem(key);
+      // "Cierra sesión para restaurar el PIN": al salir limpiamos el PIN local.
+      clearAppPin(user.id);
     }
+    setAppLocked(false);
     setUser(null);
     setBooting(false);
     navigate("/login", { replace: true });
@@ -2112,6 +2151,13 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {appLocked && user ? (
+        <PinLock
+          user={user}
+          onUnlock={() => setAppLocked(false)}
+          onLogout={handleLogout}
+        />
+      ) : null}
       {consentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card" role="dialog" aria-modal="true">
