@@ -1,96 +1,276 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  uploadDocument,
+  activateDocumentItems,
   getDocumentAnalysis,
   updateDocument,
-  activateDocumentItems,
+  uploadDocument,
 } from "../services/httpApi";
-import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 import SuccessSheet from "./SuccessSheet";
-
-/**
- * Asistente de subida de documentos (wizard) — pensado para que cualquier
- * persona, incluidos adultos mayores, registre su salud con una foto.
- *
- * Flujo: 1) tomar foto / subir archivo → 2) Klinip analiza →
- * 3) resumen amigable con lo detectado y confirmación.
- *
- * Reutiliza el pipeline existente (OCR + extracción) vía:
- *   POST /documents  →  GET /documents/{id}/analysis  →  PUT /documents/{id}
- */
-
-// ─── Branding Klinip ─────────────────────────────────────────────────────────
-const BRAND = {
-  primary: "#0D47F7",
-  primarySoft: "#EAF2FF",
-  ink: "#080F19",
-  slate: "#334155",
-  muted: "#647488",
-  green: "#22C55E",
-  amber: "#FFB020",
-  surface: "#FFFFFF",
-  line: "#CDD5E1",
-};
-const FONT = 'var(--font-brand), "Nunito", system-ui, sans-serif';
-
-const TYPE_LABELS = {
-  receta: "una receta",
-  orden: "una orden médica",
-  resultado: "un resultado de examen",
-  informe: "un informe médico",
-  otro: "un documento de salud",
-};
-const TYPE_OPTIONS = [
-  { value: "receta", label: "Receta" },
-  { value: "orden", label: "Orden médica" },
-  { value: "resultado", label: "Resultado de examen" },
-  { value: "informe", label: "Informe" },
-  { value: "otro", label: "Otro" },
-];
+import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import { cleanUiText } from "../utils/textEncoding";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_MS = 45000;
 const ACTIVE_OCR = new Set(["pending", "processing", ""]);
+const LIVE_CAMERA_CONSTRAINTS = {
+  audio: false,
+  video: {
+    facingMode: { ideal: "environment" },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 },
+  },
+};
+
+const TYPE_COPY = {
+  receta: {
+    article: "una receta",
+    short: "Receta",
+    confirm:
+      "Klinip puede convertir esta receta en un tratamiento más fácil de seguir.",
+    next:
+      "Luego podrás revisar medicamentos, recordatorios y continuidad desde un solo lugar.",
+  },
+  orden: {
+    article: "una orden médica",
+    short: "Orden médica",
+    confirm:
+      "Klinip puede dejar esta orden lista para revisar citas, exámenes o próximos pasos.",
+    next:
+      "Luego podrás revisar si corresponde activar una cita o mantenerla solo como respaldo.",
+  },
+  resultado: {
+    article: "un resultado de examen",
+    short: "Resultado",
+    confirm:
+      "Klinip puede resumir este examen en lenguaje simple y dejarlo visible para futuras consultas.",
+    next:
+      "Luego podrás revisar valores destacados y usar el resumen como contexto clínico.",
+  },
+  informe: {
+    article: "un informe médico",
+    short: "Informe",
+    confirm:
+      "Klinip puede resumir este informe y dejar los hallazgos más importantes a la vista.",
+    next:
+      "Luego podrás revisarlo con más contexto desde tus documentos.",
+  },
+  otro: {
+    article: "un documento de salud",
+    short: "Documento",
+    confirm:
+      "Klinip lo guardará y usará la lectura automática como apoyo para entenderlo mejor.",
+    next: "Luego podrás reclasificarlo si corresponde.",
+  },
+};
+
+const TYPE_OPTIONS = [
+  { value: "receta", label: "Receta" },
+  { value: "orden", label: "Orden médica" },
+  { value: "resultado", label: "Resultado de examen" },
+  { value: "informe", label: "Informe médico" },
+  { value: "otro", label: "Otro documento" },
+];
+
+const CAPTURE_TIPS = [
+  "Incluye el documento completo dentro de la foto.",
+  "Evita sombras, reflejos y fondos recargados.",
+  "Acércate hasta que el texto principal se vea legible.",
+  "Si son varias hojas, súbelas en PDF cuando puedas.",
+];
+
+const LIVE_CAMERA_TIPS = [
+  "Alinea el papel dentro del marco antes de capturar.",
+  "Espera a que el texto se vea nítido y sin movimiento.",
+  "Si la cámara no abre, usa la cámara del dispositivo o sube el archivo.",
+];
 
 function isOcrActive(status) {
   return ACTIVE_OCR.has(String(status || "").trim().toLowerCase());
 }
 
-function entityIcon(entityType) {
-  if (entityType === "medication_instruction") return "💊";
-  if (entityType === "lab_value") return "🔬";
-  if (entityType === "diagnosis") return "🩺";
-  return "•";
+function getTypeCopy(type) {
+  return TYPE_COPY[type] || TYPE_COPY.otro;
 }
 
-// Marcas suaves (sin alarmismo): solo informamos que conviene revisar.
-function flagChip(flag) {
-  const f = String(flag || "").toLowerCase();
-  if (["high", "low", "critical", "abnormal"].includes(f)) {
-    return { text: "Para revisar", color: BRAND.amber };
+function getFriendlyTypeLabel(type) {
+  return getTypeCopy(type).short;
+}
+
+function buildEntityGroups(entities) {
+  const groups = {
+    medication_instruction: [],
+    lab_value: [],
+    diagnosis: [],
+    other: [],
+  };
+
+  (Array.isArray(entities) ? entities : []).forEach((entity) => {
+    const key = groups[entity?.entity_type] ? entity.entity_type : "other";
+    groups[key].push(entity);
+  });
+
+  return groups;
+}
+
+function buildSuggestedActions({ type, isHistorical, entities, requiresReview }) {
+  const meds = entities.medication_instruction.length;
+  const labs = entities.lab_value.length;
+  const diagnoses = entities.diagnosis.length;
+
+  if (isHistorical && type === "receta") {
+    return [
+      "Puedes dejarla solo como respaldo o activar el tratamiento si sigue vigente.",
+      "Si la activas, Klinip podrá usarla para continuidad y recordatorios.",
+    ];
   }
-  if (f === "normal") return { text: "Normal", color: BRAND.green };
-  return null;
+
+  if (isHistorical && type === "orden") {
+    return [
+      "Puedes dejarla como respaldo o activar la orden si aún necesitas ese control.",
+      "Si la activas, Klinip podrá usarla para seguimiento de la próxima cita o examen.",
+    ];
+  }
+
+  if (type === "receta") {
+    return [
+      meds
+        ? `Detecté ${meds} indicación${meds === 1 ? "" : "es"} de medicamento para revisar.`
+        : "Klinip intentará convertir esta receta en un tratamiento más fácil de seguir.",
+      "Después podrás revisar dosis, frecuencia y recordatorios desde Medicamentos.",
+    ];
+  }
+
+  if (type === "orden") {
+    return [
+      "Klinip dejará esta orden lista para seguir el próximo paso clínico asociado.",
+      "Después podrás revisar si corresponde una cita, un examen o solo dejarla como respaldo.",
+    ];
+  }
+
+  if (type === "resultado") {
+    return [
+      labs
+        ? `Detecté ${labs} valor${labs === 1 ? "" : "es"} legible${labs === 1 ? "" : "s"} para revisar.`
+        : "Klinip resumirá el examen con lo más importante en lenguaje simple.",
+      requiresReview
+        ? "Hay datos que conviene revisar antes de tomar decisiones con este resultado."
+        : "Después podrás revisar valores destacados y usar este resultado como contexto clínico.",
+    ];
+  }
+
+  if (type === "informe") {
+    return [
+      diagnoses
+        ? `Detecté ${diagnoses} hallazgo${diagnoses === 1 ? "" : "s"} o impresión${diagnoses === 1 ? "" : "es"} clínica${diagnoses === 1 ? "" : "s"} para resumir.`
+        : "Klinip usará este informe para resumir los hallazgos más relevantes.",
+      "Después podrás revisarlo con una lectura más clara dentro de tus documentos.",
+    ];
+  }
+
+  return [
+    "Klinip guardará el documento y mantendrá esta lectura disponible como contexto clínico.",
+    "Si el tipo no coincide, puedes corregirlo antes de cerrar.",
+  ];
+}
+
+function formatEntityPrimary(entity) {
+  const name = cleanUiText(entity?.entity_name, "").trim();
+  const value = cleanUiText(entity?.entity_value, "").trim();
+  const unit = cleanUiText(entity?.unit, "").trim();
+  const combinedValue = [value, unit].filter(Boolean).join(" ").trim();
+  return [name, combinedValue].filter(Boolean).join(": ").trim() || "Dato detectado";
+}
+
+function formatEntitySecondary(entity) {
+  const parts = [];
+  const range = cleanUiText(entity?.reference_range, "").trim();
+  const flag = cleanUiText(entity?.flag, "").trim();
+  if (range) parts.push(`Referencia ${range}`);
+  if (flag && !["normal", "unknown"].includes(flag.toLowerCase())) parts.push("Conviene revisarlo");
+  return parts.join(" · ");
+}
+
+function buildSuccessCopy(type, histChoice) {
+  if (histChoice === "activated") {
+    return "El documento quedó guardado y también activado para tu seguimiento actual.";
+  }
+  if (histChoice === "historical") {
+    return "El documento quedó guardado como parte de tu historial de salud.";
+  }
+  if (type === "receta") {
+    return "La receta quedó guardada y lista para apoyar el seguimiento de tu tratamiento.";
+  }
+  if (type === "orden") {
+    return "La orden quedó guardada y lista para apoyar tus próximos pasos clínicos.";
+  }
+  if (type === "resultado") {
+    return "El resultado quedó guardado y listo para resumirse con una lectura más simple.";
+  }
+  if (type === "informe") {
+    return "El informe quedó guardado y listo para consultarlo con más contexto.";
+  }
+  return "El documento quedó guardado y ya forma parte de tu seguimiento clínico.";
+}
+
+function getCameraErrorMessage(error) {
+  const errorName = String(error?.name || "");
+  if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError") {
+    return "No pudimos abrir la cámara en vivo porque el permiso fue rechazado. Puedes autorizarlo o usar la cámara del dispositivo.";
+  }
+  if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+    return "No encontramos una cámara disponible en este dispositivo. Usa la carga por archivo para continuar.";
+  }
+  if (errorName === "NotReadableError" || errorName === "TrackStartError") {
+    return "La cámara está siendo usada por otra aplicación. Ciérrala allí o usa la carga por archivo.";
+  }
+  return "No pudimos iniciar la cámara en vivo. Puedes reintentar o usar la cámara del dispositivo como respaldo.";
 }
 
 export default function DocumentUploadWizard({ open, onClose, profileId, onUploaded }) {
-  const [step, setStep] = useState("choose"); // choose | processing | result | error
+  const [step, setStep] = useState("choose");
   const [analysis, setAnalysis] = useState(null);
   const [docId, setDocId] = useState(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [editingType, setEditingType] = useState(false);
   const [savingType, setSavingType] = useState(false);
-  const [histChoice, setHistChoice] = useState(null); // null | "historical" | "activated"
+  const [histChoice, setHistChoice] = useState(null);
   const [activating, setActivating] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState("");
+  const [selectedSource, setSelectedSource] = useState("");
+  const [cameraBusy, setCameraBusy] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState("");
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const cancelledRef = useRef(false);
 
+  const cameraSupported = useMemo(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    return Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia);
+  }, []);
+
   useMobileOverlayLock(open);
+
+  const stopCameraStream = useCallback(() => {
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.pause?.();
+      videoRef.current.srcObject = null;
+    }
+    setCameraReady(false);
+    setCameraBusy(false);
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -100,30 +280,38 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setDocId(null);
       setErrorMsg("");
       setEditingType(false);
+      setSavingType(false);
       setHistChoice(null);
+      setActivating(false);
       setDoneOpen(false);
+      setSelectedFileName("");
+      setSelectedSource("");
+      setCameraError("");
+      setCameraReady(false);
+      setCameraBusy(false);
+    } else {
+      stopCameraStream();
     }
+
     return () => {
       cancelledRef.current = true;
+      stopCameraStream();
     };
-  }, [open]);
+  }, [open, stopCameraStream]);
 
   const pollAnalysis = useCallback(
     async (id) => {
       const startedAt = Date.now();
-      // Primer intento inmediato y luego cada POLL_INTERVAL_MS.
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         if (cancelledRef.current) return null;
         let data = null;
         try {
           data = await getDocumentAnalysis(id, profileId);
-        } catch (err) {
-          // Ignorar errores transitorios y reintentar hasta el timeout.
+        } catch (_) {
           data = null;
         }
         if (data && !isOcrActive(data.ocr_status)) return data;
-        if (Date.now() - startedAt > POLL_MAX_MS) return data; // devolver lo que haya
+        if (Date.now() - startedAt > POLL_MAX_MS) return data;
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
     },
@@ -131,10 +319,13 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   );
 
   const handleFile = useCallback(
-    async (file) => {
+    async (file, source = "") => {
       if (!file) return;
+      stopCameraStream();
+      setSelectedFileName(String(file.name || "documento"));
+      setSelectedSource(source);
       if (file.size > MAX_BYTES) {
-        setErrorMsg("El archivo supera los 10 MB. Toma la foto de nuevo o reduce el tamaño.");
+        setErrorMsg("El archivo supera los 10 MB. Toma la foto de nuevo o sube una versión más liviana.");
         setStep("error");
         return;
       }
@@ -145,14 +336,13 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
         const id = created?.id;
         if (!id) throw new Error("upload_no_id");
         setDocId(id);
-        if (typeof onUploaded === "function") onUploaded();
+        onUploaded?.();
 
         const data = await pollAnalysis(id);
         if (cancelledRef.current) return;
         if (!data) {
-          // Se subió, pero el análisis tardó: igual queda guardado.
           setErrorMsg(
-            "Tu documento se guardó correctamente. Klinip lo seguirá analizando; podrás verlo en unos momentos.",
+            "Tu documento se guardó correctamente. Klinip seguirá leyéndolo en segundo plano y aparecerá en Documentos en unos momentos.",
           );
           setStep("error");
           return;
@@ -163,17 +353,129 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
         if (cancelledRef.current) return;
         const status = err?.response?.status;
         if (status === 403) {
-          setErrorMsg("Este perfil es de solo lectura. No puedes subir documentos aquí.");
+          setErrorMsg("Este perfil está en modo solo lectura. No puedes subir documentos aquí.");
         } else if (status === 401) {
-          setErrorMsg("Tu sesión expiró. Vuelve a iniciar sesión e intenta de nuevo.");
+          setErrorMsg("Tu sesión expiró. Vuelve a iniciar sesión e inténtalo de nuevo.");
         } else {
-          setErrorMsg("No pudimos subir el documento. Revisa tu conexión e intenta otra vez.");
+          setErrorMsg("No pudimos subir el documento. Revisa tu conexión e inténtalo otra vez.");
         }
         setStep("error");
       }
     },
-    [onUploaded, pollAnalysis],
+    [onUploaded, pollAnalysis, stopCameraStream],
   );
+
+  const startCameraPreview = useCallback(async () => {
+    if (!cameraSupported) {
+      setCameraError("La vista previa en vivo no está disponible aquí. Puedes usar la cámara del dispositivo como respaldo.");
+      return;
+    }
+
+    stopCameraStream();
+    setCameraError("");
+    setCameraBusy(true);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(LIVE_CAMERA_CONSTRAINTS);
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      setCameraReady(true);
+    } catch (error) {
+      stopCameraStream();
+      setCameraError(getCameraErrorMessage(error));
+    } finally {
+      setCameraBusy(false);
+    }
+  }, [cameraSupported, stopCameraStream]);
+
+  useEffect(() => {
+    if (!open || step !== "camera") {
+      stopCameraStream();
+      return undefined;
+    }
+
+    startCameraPreview();
+    return () => stopCameraStream();
+  }, [open, startCameraPreview, step, stopCameraStream]);
+
+  const handleOpenLiveCamera = useCallback(() => {
+    setCameraError("");
+    if (!cameraSupported) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    setStep("camera");
+  }, [cameraSupported]);
+
+  const handleDeviceCameraFallback = useCallback(() => {
+    stopCameraStream();
+    cameraInputRef.current?.click();
+  }, [stopCameraStream]);
+
+  const handleLibraryFallback = useCallback(() => {
+    stopCameraStream();
+    fileInputRef.current?.click();
+  }, [stopCameraStream]);
+
+  const handleCaptureFrame = useCallback(async () => {
+    if (cameraBusy) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+      setCameraError("Aún no hay una imagen lista para capturar. Espera un momento o vuelve a intentarlo.");
+      return;
+    }
+
+    setCameraBusy(true);
+    setCameraError("");
+
+    try {
+      const maxWidth = 1800;
+      const scale = Math.min(1, maxWidth / video.videoWidth);
+      const width = Math.max(1, Math.round(video.videoWidth * scale));
+      const height = Math.max(1, Math.round(video.videoHeight * scale));
+
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d", { alpha: false });
+      if (!context) throw new Error("canvas_context_unavailable");
+
+      context.drawImage(video, 0, 0, width, height);
+
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(
+          (value) => {
+            if (value) {
+              resolve(value);
+            } else {
+              reject(new Error("capture_failed"));
+            }
+          },
+          "image/jpeg",
+          0.92,
+        );
+      });
+
+      const file = new File([blob], `captura-klinip-${Date.now()}.jpg`, {
+        type: "image/jpeg",
+      });
+
+      await handleFile(file, "live-camera");
+    } catch (_) {
+      setCameraError("No pudimos capturar la foto. Reintenta o usa la cámara del dispositivo.");
+    } finally {
+      setCameraBusy(false);
+    }
+  }, [cameraBusy, handleFile]);
 
   const handleChangeType = useCallback(
     async (newType) => {
@@ -181,17 +483,18 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setSavingType(true);
       try {
         await updateDocument(docId, { doc_type: newType });
-        if (typeof onUploaded === "function") onUploaded();
+        onUploaded?.();
         const data = await getDocumentAnalysis(docId, profileId);
         setAnalysis(data);
         setEditingType(false);
-      } catch (err) {
+      } catch (_) {
         setErrorMsg("No pudimos cambiar el tipo. Intenta de nuevo.");
+        setStep("error");
       } finally {
         setSavingType(false);
       }
     },
-    [docId, profileId, onUploaded],
+    [docId, onUploaded, profileId],
   );
 
   const handleActivate = useCallback(async () => {
@@ -199,363 +502,504 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
     setActivating(true);
     try {
       await activateDocumentItems(docId);
-      if (typeof onUploaded === "function") onUploaded();
+      onUploaded?.();
       setHistChoice("activated");
-    } catch (err) {
-      setErrorMsg("No pudimos activar los recordatorios. Intenta de nuevo.");
+    } catch (_) {
+      setErrorMsg("No pudimos activar este documento para tu seguimiento actual. Intenta de nuevo.");
+      setStep("error");
     } finally {
       setActivating(false);
     }
   }, [docId, onUploaded]);
 
-  if (!open) return null;
+  const handleConfirmResult = useCallback(() => {
+    setDoneOpen(true);
+  }, []);
 
-  const tipo = analysis?.doc_type || "otro";
-  const tipoLabel = TYPE_LABELS[tipo] || TYPE_LABELS.otro;
-  const entities = Array.isArray(analysis?.entities) ? analysis.entities : [];
-  const friendly = analysis?.summary?.patient_friendly_explanation || "";
+  const handleCloseWizard = useCallback(() => {
+    if (step === "processing") return;
+    stopCameraStream();
+    onClose?.();
+  }, [onClose, step, stopCameraStream]);
+
+  const analysisType = analysis?.doc_type || "otro";
+  const typeCopy = getTypeCopy(analysisType);
+  const entities = useMemo(() => buildEntityGroups(analysis?.entities || []), [analysis?.entities]);
+  const totalEntities = (analysis?.entities || []).length;
+  const isCameraSource = selectedSource === "camera" || selectedSource === "live-camera";
+  const friendlyExplanation = cleanUiText(
+    analysis?.summary?.patient_friendly_explanation ||
+      analysis?.summary?.summary_plain ||
+      typeCopy.confirm,
+    typeCopy.confirm,
+  );
+  const requiresReview = Boolean(analysis?.summary?.requires_review);
   const isHistorical = Boolean(analysis?.is_historical);
-  const showHistoricalAsk = isHistorical && histChoice === null && ["receta", "orden"].includes(tipo);
+  const showHistoricalAsk = isHistorical && histChoice === null && ["receta", "orden"].includes(analysisType);
+  const suggestedActions = useMemo(
+    () =>
+      buildSuggestedActions({
+        type: analysisType,
+        isHistorical,
+        entities,
+        requiresReview,
+      }),
+    [analysisType, entities, isHistorical, requiresReview],
+  );
 
-  // Centro y fecha desde los puntos clave del resumen (para la tarjeta final).
   const keyPoints = Array.isArray(analysis?.summary?.key_points_json)
-    ? analysis.summary.key_points_json.map((k) => String(k))
+    ? analysis.summary.key_points_json.map((item) => cleanUiText(item).trim()).filter(Boolean)
     : [];
-  const pickKp = (prefix) => {
-    const hit = keyPoints.find((k) => k.toLowerCase().startsWith(prefix));
-    return hit ? hit.slice(hit.indexOf(":") + 1).trim() : "";
-  };
-  const centerVal = pickKp("centro");
-  const dateVal = pickKp("fecha");
+
+  const centerVal =
+    keyPoints.find((item) => item.toLowerCase().startsWith("centro:"))?.split(":").slice(1).join(":").trim() || "";
+  const dateVal =
+    keyPoints.find((item) => item.toLowerCase().startsWith("fecha:"))?.split(":").slice(1).join(":").trim() || "";
+
+  if (!open) return null;
 
   return (
     <>
-    {createPortal(
-    <div style={styles.backdrop} role="dialog" aria-modal="true" aria-label="Asistente de documentos">
-      <div style={styles.sheet}>
-        <button type="button" onClick={onClose} style={styles.closeBtn} aria-label="Cerrar">
-          ✕
-        </button>
-
-        {/* Inputs ocultos (cámara y archivo) */}
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: "none" }}
-          onChange={(e) => handleFile(e.target.files?.[0])}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,application/pdf"
-          style={{ display: "none" }}
-          onChange={(e) => handleFile(e.target.files?.[0])}
-        />
-
-        {step === "choose" && (
-          <div style={styles.body}>
-            <div style={styles.bigIcon}>📄</div>
-            <h2 style={styles.title}>Agrega un documento</h2>
-            <p style={styles.subtitle}>
-              Toma una foto o sube un archivo (receta, orden, examen o informe).
-              Klinip lo lee y lo guarda por ti.
-            </p>
-            <button type="button" style={styles.primaryBtn} onClick={() => cameraInputRef.current?.click()}>
-              📷 Tomar una foto
+      {createPortal(
+        <div className="documents-wizard-backdrop" role="dialog" aria-modal="true" aria-label="Asistente para documentos">
+          <div className="documents-wizard-shell">
+            <button
+              type="button"
+              className="documents-wizard-close"
+              onClick={handleCloseWizard}
+              aria-label="Cerrar"
+            >
+              ×
             </button>
-            <button type="button" style={styles.secondaryBtn} onClick={() => fileInputRef.current?.click()}>
-              📁 Subir un archivo
-            </button>
-          </div>
-        )}
 
-        {step === "processing" && (
-          <div style={styles.body}>
-            <div style={styles.spinner} />
-            <h2 style={styles.title}>Analizando tu documento…</h2>
-            <p style={styles.subtitle}>
-              Estoy leyendo lo que dice. Esto toma unos segundos, quédate en esta pantalla.
-            </p>
-          </div>
-        )}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                handleFile(file, "camera");
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              style={{ display: "none" }}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                handleFile(file, "file");
+              }}
+            />
 
-        {step === "result" && (
-          <div style={styles.body}>
-            <div style={styles.bigIcon}>📄</div>
-            <h2 style={styles.title}>Esto fue lo que leí</h2>
-            <p style={styles.subtitle}>
-              Parece <strong>{tipoLabel}</strong>. Revisa y confirma.
-            </p>
-
-            {entities.length > 0 && (
-              <div style={styles.card}>
-                <div style={styles.cardLabel}>Esto fue lo que entendí:</div>
-                <ul style={styles.list}>
-                  {entities.slice(0, 8).map((ent) => {
-                    const chip = flagChip(ent.flag);
-                    return (
-                      <li key={ent.id} style={styles.listItem}>
-                        <span style={styles.entIcon}>{entityIcon(ent.entity_type)}</span>
-                        <span style={styles.entName}>
-                          {ent.entity_name}
-                          {ent.entity_value ? ` · ${ent.entity_value}` : ""}
-                          {ent.unit ? ` ${ent.unit}` : ""}
-                        </span>
-                        {chip && (
-                          <span style={{ ...styles.chip, color: chip.color, borderColor: chip.color }}>
-                            {chip.text}
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {friendly && <p style={styles.friendly}>{friendly}</p>}
-
-            {showHistoricalAsk ? (
-              <div style={styles.card}>
-                <div style={styles.cardLabel}>📅 Parece de tu historial</div>
-                <p style={styles.friendly}>
-                  Este documento es de hace un tiempo. Lo guardé en tu historial y la IA lo
-                  usará como contexto. ¿Es un {tipo === "receta" ? "tratamiento" : "trámite"} vigente?
-                </p>
-                <button
-                  type="button"
-                  style={styles.primaryBtn}
-                  disabled={activating}
-                  onClick={handleActivate}
-                >
-                  {activating
-                    ? "Activando…"
-                    : tipo === "receta"
-                    ? "Sí, está vigente — activar recordatorios"
-                    : "Sí, está vigente — agendar la cita"}
-                </button>
-                <button
-                  type="button"
-                  style={styles.secondaryBtn}
-                  onClick={() => setHistChoice("historical")}
-                >
-                  No, solo guardar en mi historial
-                </button>
-              </div>
-            ) : (
-              <>
-                {histChoice === "activated" && (
-                  <p style={styles.friendly}>
-                    ✓ Listo. Activé los {tipo === "receta" ? "recordatorios" : "datos de la cita"} de este documento.
+            {step === "choose" ? (
+              <div className="documents-wizard-body">
+                <div className="documents-wizard-hero">
+                  <span className="documents-wizard-kicker">Klinip IA</span>
+                  <h2>Saca una foto y deja que Klinip haga el resto</h2>
+                  <p>
+                    Klinip detecta si es receta, orden, resultado o informe, lo guarda en tu perfil y te muestra una
+                    lectura simple antes de cerrar.
                   </p>
-                )}
-                {histChoice === "historical" && (
-                  <p style={styles.friendly}>
-                    ✓ Guardado en tu historial. La IA lo usará como contexto, sin recordatorios.
+                </div>
+
+                <div className="documents-wizard-source-grid">
+                  <button
+                    type="button"
+                    className="documents-wizard-source-card is-primary"
+                    onClick={handleOpenLiveCamera}
+                  >
+                    <strong>Tomar foto en vivo</strong>
+                    <span>Abre una vista previa, alinea el documento en el marco y captúralo sin salir del flujo.</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="documents-wizard-source-card"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <strong>Subir PDF o imagen</strong>
+                    <span>Úsalo si ya tienes el archivo en tu teléfono o computador.</span>
+                  </button>
+                </div>
+
+                <div className="documents-wizard-source-note">
+                  {cameraSupported
+                    ? "Si prefieres, también puedes usar la cámara nativa de tu dispositivo como respaldo."
+                    : "En este navegador abriré la cámara del dispositivo como respaldo, porque la vista previa en vivo no está disponible."}
+                </div>
+
+                <div className="documents-wizard-section">
+                  <div className="documents-wizard-section-head">
+                    <strong>Antes de capturarlo</strong>
+                    <span>Así la lectura sale más clara.</span>
+                  </div>
+                  <ul className="documents-wizard-checklist">
+                    {CAPTURE_TIPS.map((tip) => (
+                      <li key={tip}>{tip}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="documents-wizard-section">
+                  <div className="documents-wizard-section-head">
+                    <strong>Qué hará Klinip por ti</strong>
+                    <span>Sin pedir pasos técnicos extra.</span>
+                  </div>
+                  <div className="documents-wizard-pill-row">
+                    <span className="documents-wizard-pill">Receta → tratamiento y recordatorios</span>
+                    <span className="documents-wizard-pill">Orden → cita o examen</span>
+                    <span className="documents-wizard-pill">Resultado → lectura simple</span>
+                    <span className="documents-wizard-pill">Informe → resumen con contexto</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {step === "camera" ? (
+              <div className="documents-wizard-body">
+                <div className="documents-wizard-hero">
+                  <span className="documents-wizard-kicker">Vista previa en vivo</span>
+                  <h2>Alinea el documento dentro del marco</h2>
+                  <p>
+                    Toma la foto desde aquí para que Klinip reciba una imagen más clara. Si algo falla, puedes usar la
+                    cámara del dispositivo o subir el archivo manualmente.
                   </p>
-                )}
-                {!editingType ? (
-                  <>
-                    <button type="button" style={styles.primaryBtn} onClick={() => setDoneOpen(true)}>
-                      Sí, está bien
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.linkBtn}
-                      onClick={() => setEditingType(true)}
+                </div>
+
+                <div className="documents-wizard-camera-shell">
+                  <div className="documents-wizard-camera-stage">
+                    <video
+                      ref={videoRef}
+                      className="documents-wizard-camera-video"
+                      autoPlay
+                      muted
+                      playsInline
+                    />
+                    <div className="documents-wizard-camera-mask" aria-hidden="true">
+                      <div className="documents-wizard-camera-frame">
+                        <span className="documents-wizard-camera-frame-label">Documento completo dentro del marco</span>
+                      </div>
+                    </div>
+                    <div
+                      className={`documents-wizard-camera-status${
+                        cameraError ? " is-error" : cameraReady ? " is-ready" : ""
+                      }`}
+                      aria-live="polite"
                     >
-                      No es {tipoLabel} — cambiar tipo
-                    </button>
-                  </>
-                ) : (
-                  <div style={styles.card}>
-                    <div style={styles.cardLabel}>¿Qué tipo de documento es?</div>
-                    <div style={styles.typeGrid}>
-                      {TYPE_OPTIONS.map((opt) => (
+                      {cameraError
+                        ? cameraError
+                        : cameraReady
+                        ? "Cámara lista para capturar."
+                        : "Abriendo cámara..."}
+                    </div>
+                  </div>
+
+                  <canvas ref={canvasRef} className="documents-wizard-hidden-canvas" aria-hidden="true" />
+
+                  <div className="documents-wizard-section">
+                    <div className="documents-wizard-section-head">
+                      <strong>Cómo lograr una mejor captura</strong>
+                      <span>Solo necesitas una imagen clara y completa.</span>
+                    </div>
+                    <ul className="documents-wizard-checklist is-compact">
+                      {LIVE_CAMERA_TIPS.map((tip) => (
+                        <li key={tip}>{tip}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="documents-wizard-button-stack">
+                  <button
+                    type="button"
+                    className="primary-btn"
+                    disabled={cameraBusy || !cameraReady}
+                    onClick={handleCaptureFrame}
+                  >
+                    {cameraBusy ? "Preparando captura..." : "Capturar foto"}
+                  </button>
+                  <button type="button" className="secondary-btn" onClick={handleDeviceCameraFallback}>
+                    Usar cámara del dispositivo
+                  </button>
+                </div>
+
+                <div className="documents-wizard-inline-actions">
+                  <button type="button" className="documents-wizard-inline-action" onClick={startCameraPreview}>
+                    Reintentar cámara
+                  </button>
+                  <button type="button" className="documents-wizard-inline-action" onClick={handleLibraryFallback}>
+                    Subir PDF o imagen
+                  </button>
+                  <button type="button" className="documents-wizard-inline-action" onClick={() => setStep("choose")}>
+                    Volver
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {step === "processing" ? (
+              <div className="documents-wizard-body">
+                <div className="documents-wizard-processing-spinner" aria-hidden="true" />
+                <div className="documents-wizard-hero is-centered">
+                  <span className="documents-wizard-kicker">Leyendo tu documento</span>
+                  <h2>Klinip está organizando lo importante</h2>
+                  <p>
+                    {selectedFileName ? `Archivo: ${selectedFileName}. ` : ""}
+                    {isCameraSource
+                      ? "Estoy leyendo la foto y tratando de entender el tipo de documento, el contenido principal y los próximos pasos."
+                      : "Estoy leyendo el archivo y tratando de entender el tipo de documento, el contenido principal y los próximos pasos."}
+                  </p>
+                </div>
+
+                <div className="documents-wizard-progress-list">
+                  <article className="documents-wizard-progress-card is-active">
+                    <strong>1. Guardado seguro</strong>
+                    <span>El archivo ya quedó asociado a tu perfil de salud.</span>
+                  </article>
+                  <article className="documents-wizard-progress-card is-active">
+                    <strong>2. Lectura automática</strong>
+                    <span>Klinip está leyendo texto, fecha, centro y tipo de documento.</span>
+                  </article>
+                  <article className="documents-wizard-progress-card">
+                    <strong>3. Confirmación simple</strong>
+                    <span>Te mostraré solo lo necesario para confirmar antes de cerrar.</span>
+                  </article>
+                </div>
+              </div>
+            ) : null}
+
+            {step === "result" ? (
+              <div className="documents-wizard-body">
+                <div className="documents-wizard-hero">
+                  <span className="documents-wizard-kicker">Lectura lista</span>
+                  <h2>Klinip cree que es {typeCopy.article}</h2>
+                  <p>{friendlyExplanation}</p>
+                </div>
+
+                <div className="documents-wizard-summary-bar">
+                  <span className="documents-wizard-summary-chip">{getFriendlyTypeLabel(analysisType)}</span>
+                  <span className="documents-wizard-summary-chip is-muted">
+                    {totalEntities > 0
+                      ? `${totalEntities} dato${totalEntities === 1 ? "" : "s"} detectado${totalEntities === 1 ? "" : "s"}`
+                      : "Sin datos estructurados"}
+                  </span>
+                  {requiresReview ? (
+                    <span className="documents-wizard-summary-chip is-warning">Conviene revisarlo</span>
+                  ) : null}
+                </div>
+
+                {keyPoints.length ? (
+                  <div className="documents-wizard-section">
+                    <div className="documents-wizard-section-head">
+                      <strong>Resumen rápido</strong>
+                      <span>Lo más útil a primera vista.</span>
+                    </div>
+                    <ul className="documents-wizard-checklist is-compact">
+                      {keyPoints.slice(0, 4).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {totalEntities > 0 ? (
+                  <div className="documents-wizard-section">
+                    <div className="documents-wizard-section-head">
+                      <strong>Esto fue lo que entendí</strong>
+                      <span>Solo los datos más visibles.</span>
+                    </div>
+                    <div className="documents-wizard-entity-grid">
+                      {[
+                        {
+                          key: "medication_instruction",
+                          title: "Tratamientos o indicaciones",
+                          items: entities.medication_instruction,
+                        },
+                        {
+                          key: "lab_value",
+                          title: "Valores de examen",
+                          items: entities.lab_value,
+                        },
+                        {
+                          key: "diagnosis",
+                          title: "Hallazgos o impresiones",
+                          items: entities.diagnosis,
+                        },
+                      ]
+                        .filter((group) => group.items.length)
+                        .map((group) => (
+                          <article key={group.key} className="documents-wizard-entity-card">
+                            <strong>{group.title}</strong>
+                            <ul>
+                              {group.items.slice(0, 4).map((entity) => (
+                                <li key={entity.id}>
+                                  <span>{formatEntityPrimary(entity)}</span>
+                                  {formatEntitySecondary(entity) ? (
+                                    <small>{formatEntitySecondary(entity)}</small>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </article>
+                        ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="documents-wizard-section">
+                  <div className="documents-wizard-section-head">
+                    <strong>Qué pasará después</strong>
+                    <span>Para que no tengas que adivinar el siguiente paso.</span>
+                  </div>
+                  <div className="documents-wizard-action-list">
+                    {suggestedActions.map((item) => (
+                      <article key={item} className="documents-wizard-action-card">
+                        <span>{item}</span>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+
+                {showHistoricalAsk ? (
+                  <div className="documents-wizard-section is-highlight">
+                    <div className="documents-wizard-section-head">
+                      <strong>Parece parte de tu historial</strong>
+                      <span>Klinip ya lo guardó. Solo necesito saber si sigue vigente.</span>
+                    </div>
+                    <p className="documents-wizard-helper">
+                      {analysisType === "receta"
+                        ? "Si este tratamiento sigue vigente, puedo dejarlo activo para continuidad y recordatorios."
+                        : "Si esta orden sigue vigente, puedo dejarla activa para el seguimiento actual."}
+                    </p>
+                    <div className="documents-wizard-button-stack">
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        disabled={activating}
+                        onClick={handleActivate}
+                      >
+                        {activating
+                          ? "Activando..."
+                          : analysisType === "receta"
+                          ? "Sí, sigue vigente"
+                          : "Sí, aún corresponde"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => setHistChoice("historical")}
+                      >
+                        Guardarlo solo como historial
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!showHistoricalAsk && histChoice === "activated" ? (
+                  <div className="documents-wizard-inline-notice is-success">
+                    Klinip dejó este documento activo para tu seguimiento actual.
+                  </div>
+                ) : null}
+
+                {!showHistoricalAsk && histChoice === "historical" ? (
+                  <div className="documents-wizard-inline-notice">
+                    El documento quedó guardado solo como parte de tu historial.
+                  </div>
+                ) : null}
+
+                <div className="documents-wizard-section">
+                  <div className="documents-wizard-section-head">
+                    <strong>Solo necesito que confirmes esto</strong>
+                    <span>Si el tipo no coincide, corrígelo aquí mismo.</span>
+                  </div>
+                  {!editingType ? (
+                    <>
+                      <p className="documents-wizard-helper">
+                        {requiresReview
+                          ? `Klinip cree que es ${typeCopy.article}, pero encontró partes que conviene revisar antes de darlo por cerrado.`
+                          : `Klinip lo clasificó como ${typeCopy.article}. Si te hace sentido, puedes guardarlo así.`}
+                      </p>
+                      <div className="documents-wizard-button-stack">
+                        <button type="button" className="primary-btn" onClick={handleConfirmResult}>
+                          Guardar así
+                        </button>
                         <button
-                          key={opt.value}
                           type="button"
-                          disabled={savingType}
-                          style={{
-                            ...styles.typeBtn,
-                            ...(opt.value === tipo ? styles.typeBtnActive : {}),
-                          }}
-                          onClick={() => handleChangeType(opt.value)}
+                          className="secondary-btn"
+                          onClick={() => setEditingType(true)}
                         >
-                          {opt.label}
+                          Cambiar tipo
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="documents-wizard-type-grid">
+                      {TYPE_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`documents-wizard-type-btn${
+                            option.value === analysisType ? " is-active" : ""
+                          }`}
+                          disabled={savingType}
+                          onClick={() => handleChangeType(option.value)}
+                        >
+                          {option.label}
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
+                  )}
+                </div>
+              </div>
+            ) : null}
 
-        {step === "error" && (
-          <div style={styles.body}>
-            <div style={styles.bigIcon}>📄</div>
-            <h2 style={styles.title}>Listo</h2>
-            <p style={styles.subtitle}>{errorMsg}</p>
-            <button type="button" style={styles.primaryBtn} onClick={onClose}>
-              Entendido
-            </button>
-            <button type="button" style={styles.secondaryBtn} onClick={() => setStep("choose")}>
-              Subir otro documento
-            </button>
+            {step === "error" ? (
+              <div className="documents-wizard-body">
+                <div className="documents-wizard-hero is-centered">
+                  <span className="documents-wizard-kicker">Estado del documento</span>
+                  <h2>Tu documento está a salvo</h2>
+                  <p>{errorMsg}</p>
+                </div>
+                <div className="documents-wizard-button-stack">
+                  <button type="button" className="primary-btn" onClick={onClose}>
+                    Entendido
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() => setStep("choose")}
+                  >
+                    Subir otro documento
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        )}
-      </div>
-    </div>,
-    document.body,
-    )}
+        </div>,
+        document.getElementById("overlay-root") || document.body,
+      )}
 
-    <SuccessSheet
-      open={doneOpen}
-      onClose={() => {
-        setDoneOpen(false);
-        onClose();
-      }}
-      kicker="Documento guardado"
-      title="Todo listo"
-      copy="El documento quedó guardado y ya forma parte de tu seguimiento clínico."
-      referenceId={docId}
-      rows={[
-        { icon: "doc", label: "Tipo de documento", value: TYPE_LABELS[tipo]?.replace(/^un[a]? /, "") || "Documento" },
-        { icon: "building", label: "Centro", value: centerVal || "Sin centro registrado" },
-        { icon: "clock", label: "Fecha", value: dateVal || "Sin fecha" },
-      ]}
-      secondaryLabel="Volver a documentos"
-    />
+      <SuccessSheet
+        open={doneOpen}
+        onClose={() => {
+          setDoneOpen(false);
+          onClose?.();
+        }}
+        kicker="Documento guardado"
+        title="Todo listo"
+        copy={buildSuccessCopy(analysisType, histChoice)}
+        referenceId={docId}
+        rows={[
+          { icon: "doc", label: "Tipo de documento", value: getFriendlyTypeLabel(analysisType) },
+          { icon: "building", label: "Centro", value: centerVal || "Sin centro registrado" },
+          { icon: "clock", label: "Fecha", value: dateVal || "Sin fecha" },
+        ]}
+        secondaryLabel="Volver a documentos"
+      />
     </>
   );
 }
-
-const styles = {
-  backdrop: {
-    position: "fixed",
-    inset: 0,
-    background: "rgba(8, 15, 25, 0.55)",
-    display: "flex",
-    alignItems: "flex-end",
-    justifyContent: "center",
-    zIndex: 9999,
-    fontFamily: FONT,
-  },
-  sheet: {
-    position: "relative",
-    width: "100%",
-    maxWidth: 480,
-    background: BRAND.surface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderRadius: 28,
-    margin: "auto 12px 12px",
-    padding: "28px 22px 26px",
-    boxShadow: "0 -8px 40px rgba(8,15,25,0.25)",
-  },
-  closeBtn: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    border: "none",
-    background: BRAND.primarySoft,
-    color: BRAND.primary,
-    fontSize: 18,
-    cursor: "pointer",
-    fontFamily: FONT,
-  },
-  body: { display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14 },
-  bigIcon: { fontSize: 52, lineHeight: 1, marginTop: 6 },
-  title: { fontSize: 24, fontWeight: 800, color: BRAND.ink, margin: 0 },
-  subtitle: { fontSize: 17, color: BRAND.muted, margin: 0, lineHeight: 1.45 },
-  primaryBtn: {
-    width: "100%",
-    minHeight: 58,
-    borderRadius: 18,
-    border: "none",
-    background: BRAND.primary,
-    color: "#fff",
-    fontSize: 19,
-    fontWeight: 800,
-    cursor: "pointer",
-    fontFamily: FONT,
-    marginTop: 6,
-  },
-  secondaryBtn: {
-    width: "100%",
-    minHeight: 58,
-    borderRadius: 18,
-    border: `2px solid ${BRAND.primary}`,
-    background: "#fff",
-    color: BRAND.primary,
-    fontSize: 19,
-    fontWeight: 800,
-    cursor: "pointer",
-    fontFamily: FONT,
-  },
-  linkBtn: {
-    background: "none",
-    border: "none",
-    color: BRAND.muted,
-    fontSize: 16,
-    fontWeight: 700,
-    cursor: "pointer",
-    fontFamily: FONT,
-    textDecoration: "underline",
-  },
-  card: {
-    width: "100%",
-    background: "#F5F7FA",
-    borderRadius: 18,
-    padding: "16px 16px",
-    textAlign: "left",
-  },
-  cardLabel: { fontSize: 15, fontWeight: 800, color: BRAND.slate, marginBottom: 10 },
-  list: { listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 },
-  listItem: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  entIcon: { fontSize: 20 },
-  entName: { fontSize: 17, color: BRAND.ink, fontWeight: 700, flex: 1 },
-  chip: {
-    fontSize: 13,
-    fontWeight: 800,
-    border: "1.5px solid",
-    borderRadius: 999,
-    padding: "2px 10px",
-    background: "#fff",
-  },
-  friendly: { fontSize: 15, color: BRAND.muted, margin: 0, lineHeight: 1.5 },
-  typeGrid: { display: "flex", flexDirection: "column", gap: 8 },
-  typeBtn: {
-    width: "100%",
-    minHeight: 50,
-    borderRadius: 14,
-    border: `2px solid ${BRAND.line}`,
-    background: "#fff",
-    color: BRAND.slate,
-    fontSize: 17,
-    fontWeight: 700,
-    cursor: "pointer",
-    fontFamily: FONT,
-  },
-  typeBtnActive: {
-    borderColor: BRAND.primary,
-    color: BRAND.primary,
-    background: BRAND.primarySoft,
-  },
-  spinner: {
-    width: 52,
-    height: 52,
-    borderRadius: "50%",
-    border: `5px solid ${BRAND.primarySoft}`,
-    borderTopColor: BRAND.primary,
-    animation: "klinipSpin 0.9s linear infinite",
-    marginTop: 6,
-  },
-};

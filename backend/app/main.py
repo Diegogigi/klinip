@@ -256,6 +256,8 @@ def ensure_user_schema():
             ("mfa_enabled", "BOOLEAN NOT NULL DEFAULT FALSE", "BOOLEAN NOT NULL DEFAULT 0"),
             ("mfa_secret", "VARCHAR"),
             ("mfa_backup_codes_json", "TEXT"),
+            ("app_pin_hash", "VARCHAR"),
+            ("app_pin_enabled", "BOOLEAN DEFAULT FALSE", "BOOLEAN DEFAULT 0"),
         ],
         label="ensure_user_schema",
         post_add_sql=[
@@ -1733,6 +1735,13 @@ def _mail_from_notifications() -> str | None:
         or os.getenv("SMTP_FROM_NOTIFICATIONS")
         or os.getenv("SMTP_FROM")
         or os.getenv("SMTP_USER")
+        # Ultimo recurso: si solo esta configurado el remitente de seguridad,
+        # usarlo tambien para notificaciones (evita que invitaciones/alertas
+        # fallen en silencio cuando el reset de contrasena si funciona).
+        or os.getenv("EMAIL_FROM_SECURITY")
+        or os.getenv("MAIL_FROM_SECURITY")
+        or os.getenv("RESEND_FROM_SECURITY")
+        or os.getenv("SMTP_FROM_SECURITY")
     )
 
 
@@ -2741,8 +2750,16 @@ def _send_profile_invitation_email_safe(
                 "year": datetime.utcnow().year,
             },
         )
+        print(f"DEBUG EMAIL invitacion enviado -> {to_email} | provider={_email_provider()}")
     except Exception as exc:
-        print(f"ERROR sending profile invitation email async: {exc}")
+        import traceback
+        print(
+            "ERROR EMAIL invitacion: no se pudo enviar"
+            f" -> {to_email} | provider={_email_provider()}"
+            f" | resend={_resend_enabled()} | from={_mail_from_notifications()!r}"
+            f" | detalle={exc}"
+        )
+        traceback.print_exc()
 
 
 def _send_profile_access_removed_email_safe(
@@ -8951,9 +8968,12 @@ def _generate_smart_alerts_for_profile(
 
 
 def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship | None = None):
+    owner = getattr(profile, "owner_user", None)
     return schemas.HealthProfileOut(
         id=profile.id,
         owner_user_id=profile.owner_user_id,
+        owner_name=(owner.name if owner else ""),
+        owner_email=(owner.email if owner else ""),
         full_name=profile.full_name,
         birth_date=profile.birth_date,
         gender=profile.gender or "",
@@ -17929,6 +17949,64 @@ async def update_me(
     return current_user
 
 
+def _validate_app_pin(pin: str) -> str:
+    pin = (pin or "").strip()
+    if not pin.isdigit() or len(pin) != 4:
+        raise HTTPException(status_code=400, detail="El PIN debe tener 4 digitos.")
+    return pin
+
+
+@app.get("/me/app-pin", response_model=schemas.AppPinStatusOut)
+async def get_app_pin_status(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    return {
+        "pin_set": bool(current_user.app_pin_hash),
+        "pin_enabled": bool(current_user.app_pin_enabled and current_user.app_pin_hash),
+    }
+
+
+@app.post("/me/app-pin", response_model=schemas.AppPinStatusOut)
+async def set_app_pin(
+    payload: schemas.AppPinSet,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    pin = _validate_app_pin(payload.pin)
+    # Si ya existe un PIN y se envia el actual, validarlo antes de cambiarlo.
+    if current_user.app_pin_hash and payload.current_pin is not None:
+        if not auth.verify_password(payload.current_pin, current_user.app_pin_hash):
+            raise HTTPException(status_code=400, detail="El PIN actual no es correcto.")
+    current_user.app_pin_hash = auth.get_password_hash(pin)
+    current_user.app_pin_enabled = True
+    db.add(current_user)
+    db.commit()
+    return {"pin_set": True, "pin_enabled": True}
+
+
+@app.post("/me/app-pin/verify", response_model=schemas.AppPinVerifyOut)
+async def verify_app_pin(
+    payload: schemas.AppPinVerify,
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    if not current_user.app_pin_hash:
+        return {"valid": False, "pin_enabled": False}
+    valid = auth.verify_password((payload.pin or "").strip(), current_user.app_pin_hash)
+    return {"valid": valid, "pin_enabled": bool(current_user.app_pin_enabled)}
+
+
+@app.post("/me/app-pin/disable", response_model=schemas.AppPinStatusOut)
+async def disable_app_pin(
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    current_user.app_pin_hash = None
+    current_user.app_pin_enabled = False
+    db.add(current_user)
+    db.commit()
+    return {"pin_set": False, "pin_enabled": False}
+
+
 @app.get("/plans/me", response_model=schemas.PlanInfoOut)
 async def read_my_plan(
     db: Session = Depends(auth.get_db),
@@ -18347,7 +18425,8 @@ async def create_profile_invitation(
                         f"{current_user.name or current_user.email} te invitó al perfil "
                         f"{profile.full_name or 'de salud'} con rol {role}."
                     ),
-                    "url": "/family",
+                    "url": f"/settings?family_invite_token={pending.token}",
+                    "token": pending.token,
                     "priority": "high",
                     "sound": "default",
                     "kind": "family-invitation",
@@ -18401,7 +18480,8 @@ async def create_profile_invitation(
                     f"{current_user.name or current_user.email} te invitó al perfil "
                     f"{profile.full_name or 'de salud'} con rol {role}."
                 ),
-                "url": "/family",
+                "url": f"/settings?family_invite_token={invitation.token}",
+                "token": invitation.token,
                 "priority": "high",
                 "sound": "default",
                 "kind": "family-invitation",
@@ -18638,6 +18718,12 @@ async def update_profile_relationship(
     if link.user_id == current_user.id:
         raise HTTPException(status_code=400, detail="No puedes cambiar tu propio rol desde esta accion")
 
+    # El titular/dueno del plan no puede ser modificado por ningun colaborador.
+    if link.user_id == profile.owner_user_id:
+        raise HTTPException(status_code=403, detail="No puedes cambiar el rol del titular del plan")
+
+    # El titular y cualquier administrador autorizado pueden gestionar roles de
+    # otros colaboradores, incluidos otros administradores (salvo el titular y uno mismo).
     role = _normalize_role(payload.role)
     link.role = role
     if payload.relationship_type is not None:
@@ -18680,8 +18766,14 @@ async def remove_profile_relationship(
     )
     if not link:
         raise HTTPException(status_code=404, detail="Relacion no encontrada")
+    # No puedes eliminar tu propio acceso (dueno de la sesion).
     if link.user_id == current_user.id:
         raise HTTPException(status_code=400, detail="No puedes eliminar tu propio acceso administrador")
+    # El titular/dueno del plan es intocable: nadie puede quitarlo.
+    if link.user_id == profile.owner_user_id:
+        raise HTTPException(status_code=403, detail="No puedes quitar el acceso del titular del plan")
+    # El titular y cualquier administrador autorizado pueden quitar a otros
+    # colaboradores, incluidos otros administradores (salvo el titular y uno mismo).
 
     email = link.user.email if link.user else ""
     removed_user_id = link.user_id

@@ -34,6 +34,8 @@ class UserOut(BaseModel):
     notification_settings_json: str | None = None
     plan_type: str | None = None
     active_health_profile_id: int | None = None
+    pin_set: bool = False
+    pin_enabled: bool = False
     created_at: datetime
 
     @field_serializer('created_at', 'notifications_last_prompt')
@@ -60,6 +62,25 @@ class UserUpdate(BaseModel):
     reminder_preferred_time: Optional[str] = None
     email_reminders_enabled: Optional[bool] = None
     notification_settings_json: Optional[str] = None
+
+
+class AppPinSet(BaseModel):
+    pin: str
+    current_pin: Optional[str] = None
+
+
+class AppPinVerify(BaseModel):
+    pin: str
+
+
+class AppPinStatusOut(BaseModel):
+    pin_set: bool
+    pin_enabled: bool
+
+
+class AppPinVerifyOut(BaseModel):
+    valid: bool
+    pin_enabled: bool = False
 
 
 class PlanInfoOut(BaseModel):
@@ -119,6 +140,8 @@ class HealthProfileUpdate(BaseModel):
 class HealthProfileOut(BaseModel):
     id: int
     owner_user_id: int
+    owner_name: Optional[str] = ""
+    owner_email: Optional[str] = ""
     full_name: str
     birth_date: Optional[datetime] = None
     gender: Optional[str] = ""

@@ -167,6 +167,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const [privacySuccessMessage, setPrivacySuccessMessage] = useState("");
   const [showPrivacySuccessModal, setShowPrivacySuccessModal] = useState(false);
   const [settingsSuccess, setSettingsSuccess] = useState(null);
+  const [inviteConfirm, setInviteConfirm] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection || "perfil");
 
@@ -429,6 +430,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       : isPrimaryProfile
       ? familyRoleAccessSummary(item.access_role)
       : `Acceso otorgado desde otra cuenta. ${familyRoleAccessSummary(item.access_role)}`;
+    const ownerName = (item.owner_name || item.owner_email || "").trim();
+    const ownerLabel = !isOwnProfile && ownerName ? ownerName : "";
     return {
       ...item,
       tone,
@@ -438,6 +441,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       badgeLabel,
       accessSummary,
       accessHint,
+      ownerLabel,
       isOwner: isOwnProfile,
     };
   });
@@ -477,6 +481,22 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     !!activeHealthProfile && (isActiveHealthProfileOwner || ["admin", "caregiver"].includes(activeHealthProfileRole));
   const canManageActiveFamilyProfile =
     !!activeHealthProfile && (isActiveHealthProfileOwner || activeHealthProfileRole === "admin");
+  // Reglas comunes: el titular del plan es intocable y nadie puede actuar sobre
+  // su propia fila (dueno de la sesion).
+  const isUntouchableRow = (row) => {
+    if (!row) return true;
+    const ownerUserId = Number(activeHealthProfile?.owner_user_id);
+    if (ownerUserId && Number(row.user_id) === ownerUserId) return true; // titular del plan
+    const rowEmail = String(row.user_email || "").trim().toLowerCase();
+    if (rowEmail && rowEmail === normalizedProfileEmail) return true; // uno mismo
+    if (String(row.relationship_type || "").toLowerCase() === "self") return true;
+    return false;
+  };
+  // Eliminar y cambiar rol: el titular y cualquier administrador autorizado
+  // pueden gestionar a otros colaboradores, incluidos otros administradores
+  // (salvo el titular del plan y uno mismo, que son intocables).
+  const canRemoveCaregiverRow = (row) => !isUntouchableRow(row);
+  const canManageCaregiverRow = (row) => !isUntouchableRow(row);
   const shouldLoadFamilyAnalytics = !isFamilyStandalone;
   const shouldLoadFamilyActivity = !isFamilyStandalone;
   const shouldLoadFamilyAutomation = !isFamilyStandalone;
@@ -1232,19 +1252,44 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     }
   };
 
+  const confirmAcceptInvitation = async () => {
+    const token = inviteConfirm?.token;
+    setInviteConfirm(null);
+    if (token) {
+      await handleAcceptInvitation(token);
+    }
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(location.search || "");
     const token = (params.get("family_invite_token") || "").trim();
     if (!token || !profile?.id) return;
-    handleAcceptInvitation(token).finally(() => {
-      const nextParams = new URLSearchParams(location.search || "");
-      nextParams.delete("family_invite_token");
-      const nextSearch = nextParams.toString();
-      navigate(
-        { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
-        { replace: true }
-      );
-    });
+    // Limpia el parametro de inmediato para no re-disparar en cada render/recarga.
+    const nextParams = new URLSearchParams(location.search || "");
+    nextParams.delete("family_invite_token");
+    const nextSearch = nextParams.toString();
+    navigate(
+      { pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : "" },
+      { replace: true }
+    );
+    // En vez de aceptar automaticamente, pedimos confirmacion explicita al usuario.
+    (async () => {
+      let details = null;
+      try {
+        const pending = await getMyPendingProfileInvitations();
+        const list = ensureArray(pending);
+        setMyPendingInvitations(list);
+        details = list.find((inv) => (inv.token || "").trim() === token) || null;
+      } catch (_e) {
+        details = null;
+      }
+      setInviteConfirm({
+        token,
+        inviterName: details?.inviter_name || "",
+        role: details?.role || "",
+        profileName: details?.profile_name || "",
+      });
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, profile?.id]);
 
@@ -1706,6 +1751,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
               <div>
                 <p className="family-member-name">{item.full_name}</p>
                 <p className="family-member-meta">{item.relationshipLabel}</p>
+                {item.ownerLabel ? (
+                  <p className="family-member-owner">Titular: {item.ownerLabel}</p>
+                ) : null}
               </div>
             </div>
             <div className="family-member-summary-row">
@@ -1821,13 +1869,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                   className="select-field"
                   value={row.role || "viewer"}
                   onChange={(e) => handleRoleChange(row.id, e.target.value)}
+                  disabled={!canManageCaregiverRow(row)}
                 >
                   <option value="admin">Administrador</option>
                   <option value="caregiver">Editor</option>
                   <option value="viewer">Lector</option>
                 </select>
-                {String(row?.user_email || "").trim().toLowerCase() !== normalizedProfileEmail &&
-                String(row?.relationship_type || "").toLowerCase() !== "self" ? (
+                {canRemoveCaregiverRow(row) ? (
                   <button
                     className="secondary-btn danger"
                     type="button"
@@ -1864,7 +1912,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                   <button
                     className="secondary-btn"
                     type="button"
-                    onClick={() => handleAcceptInvitation(inv.token)}
+                    onClick={() =>
+                      setInviteConfirm({
+                        token: inv.token,
+                        inviterName: inv.inviter_name || "",
+                        role: inv.role || "",
+                        profileName: inv.profile_name || "",
+                      })
+                    }
                   >
                     Aceptar
                   </button>
@@ -2262,6 +2317,9 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                 <div>
                   <p className="family-member-name">{item.full_name}</p>
                   <p className="family-member-meta">{item.relationshipLabel}</p>
+                  {item.ownerLabel ? (
+                    <p className="family-member-owner">Titular: {item.ownerLabel}</p>
+                  ) : null}
                   <span
                     className={`family-member-badge ${item.isOwner ? "is-owner" : "is-managed"}`}
                     style={
@@ -2422,13 +2480,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                         className="select-field"
                         value={row.role || "viewer"}
                         onChange={(e) => handleRoleChange(row.id, e.target.value)}
+                        disabled={!canManageCaregiverRow(row)}
                       >
                         <option value="admin">Administrador</option>
                         <option value="caregiver">Editor</option>
                         <option value="viewer">Lector</option>
                       </select>
-                      {String(row?.user_email || "").trim().toLowerCase() !== normalizedProfileEmail &&
-                      String(row?.relationship_type || "").toLowerCase() !== "self" ? (
+                      {canRemoveCaregiverRow(row) ? (
                         <button
                           className="secondary-btn danger"
                           type="button"
@@ -2467,7 +2525,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                         <button
                           className="secondary-btn"
                           type="button"
-                          onClick={() => handleAcceptInvitation(inv.token)}
+                          onClick={() =>
+                            setInviteConfirm({
+                              token: inv.token,
+                              inviterName: inv.inviter_name || "",
+                              role: inv.role || "",
+                              profileName: inv.profile_name || "",
+                            })
+                          }
                         >
                           Aceptar
                         </button>
@@ -3692,6 +3757,37 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
               </button>
               <button className="primary-btn" type="button" onClick={handleDeleteAccount}>
                 Sí, eliminar definitivamente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inviteConfirm && (
+        <div className="modal-backdrop" onClick={() => setInviteConfirm(null)}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Aceptar invitación familiar</h3>
+            <p className="muted">
+              {inviteConfirm.inviterName
+                ? `${inviteConfirm.inviterName} te invitó a colaborar`
+                : "Recibiste una invitación para colaborar"}
+              {inviteConfirm.profileName ? ` en el perfil de ${inviteConfirm.profileName}` : ""}
+              {inviteConfirm.role ? ` con el rol de ${familyRoleLabel(inviteConfirm.role)}` : ""}.
+            </p>
+            <p className="muted">
+              Al aceptar, este perfil quedará vinculado a tu cuenta y podrás verlo y gestionarlo según tu rol.
+            </p>
+            <div className="modal-actions">
+              <button className="secondary-btn" type="button" onClick={() => setInviteConfirm(null)}>
+                Cancelar
+              </button>
+              <button className="primary-btn" type="button" onClick={confirmAcceptInvitation}>
+                Aceptar invitación
               </button>
             </div>
           </div>

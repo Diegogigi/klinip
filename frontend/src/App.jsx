@@ -245,10 +245,12 @@ function getHealthProfileAccessLabel(item, userId) {
   if (!item) return "";
   const isOwnProfile = Number(item.owner_user_id) === Number(userId);
   if (isOwnProfile) return "propio";
-  if (item.is_primary_profile) return "titular";
+  const ownerName = (item.owner_name || item.owner_email || "").trim();
+  const ownerSuffix = ownerName ? ` · de ${ownerName.split(" ")[0]}` : "";
+  if (item.is_primary_profile) return `titular${ownerSuffix}`;
   const role = (item.access_role || "").toLowerCase();
-  if (role === "admin") return "admin";
-  return "invitado";
+  if (role === "admin") return `admin${ownerSuffix}`;
+  return `invitado${ownerSuffix}`;
 }
 
 function Sidebar({

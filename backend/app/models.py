@@ -77,6 +77,17 @@ class User(Base):
     family_ai_needs_refresh = Column(Boolean, default=False)
     family_ai_refresh_requested_at = Column(DateTime, nullable=True)
     family_ai_last_refreshed_at = Column(DateTime, nullable=True)
+    # Bloqueo de la app con PIN (a nivel de cuenta, sincronizado entre dispositivos)
+    app_pin_hash = Column(String, nullable=True)
+    app_pin_enabled = Column(Boolean, default=False)
+
+    @property
+    def pin_set(self) -> bool:
+        return bool(self.app_pin_hash)
+
+    @property
+    def pin_enabled(self) -> bool:
+        return bool(self.app_pin_enabled and self.app_pin_hash)
 
     appointments = relationship(
         "Appointment", back_populates="user", cascade="all, delete-orphan"

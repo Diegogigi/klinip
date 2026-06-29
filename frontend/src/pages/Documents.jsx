@@ -806,7 +806,7 @@ export default function Documents() {
       <div className="card documents-surface-free documents-intro">
         <h2 className="card-title">Documentos de salud</h2>
         <p className="muted">
-          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip IA puede leerlos, completar datos y activar acciones clínicas vinculadas al perfil activo.
+          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip IA puede leerlos, entender qué tipo de documento es y dejarlo listo para tu seguimiento.
         </p>
       </div>
 
@@ -834,12 +834,12 @@ export default function Documents() {
             ) : null}
           </div>
           <p className="muted">
-            Si subes una receta, Klinip puede crear medicamentos. Si detecta una orden médica, puede vincular una cita o examen. Los resultados e informes quedan listos para resumen clínico.
+            Saca una foto y Klinip intentará clasificar el documento, resumirlo en lenguaje simple y prepararlo para medicamentos, citas o contexto clínico según corresponda.
           </p>
           <div className="documents-ocr-pills" aria-hidden="true">
-            <span className="documents-ocr-pill">Receta → medicamento</span>
+            <span className="documents-ocr-pill">Receta → tratamiento</span>
             <span className="documents-ocr-pill">Orden → cita o examen</span>
-            <span className="documents-ocr-pill">Resultado → resumen IA</span>
+            <span className="documents-ocr-pill">Resultado → lectura simple</span>
           </div>
           {ocrBannerModel ? (
             <div className={`documents-ocr-banner${ocrBannerModel.tone === "stalled" ? " is-stalled" : ""}`}>
@@ -879,7 +879,7 @@ export default function Documents() {
       {canEditActiveProfile ? (
         <div className="card documents-surface-free documents-create">
           <button className="primary-btn" type="button" style={{ width: "100%" }} onClick={() => setWizardOpen(true)}>
-            📷 Agregar con una foto
+            Agregar con una foto
           </button>
           <button
             type="button"
@@ -920,7 +920,7 @@ export default function Documents() {
         onClose={() => setDocSuccess(null)}
         kicker="Documento guardado"
         title="Todo listo"
-        copy="El documento quedó guardado. Klinip lo está analizando y puede crear medicamentos, citas o resúmenes según lo que detecte."
+        copy="El documento quedó guardado. Klinip lo está analizando para resumirlo y dejarlo listo según lo que detecte."
         referenceId={docSuccess?.id}
         rows={[
           { icon: "profile", label: "Perfil activo", value: activeProfileLabel },
@@ -1141,7 +1141,7 @@ export default function Documents() {
                 <div className="documents-ai-panel-head">
                   <div>
                     <span className="documents-ocr-kicker">Klinip IA</span>
-                    <h4>Lo que Klinip IA leyó en tu documento</h4>
+                    <h4>Lo que Klinip entendió de tu documento</h4>
                   </div>
                   {detailIntelligence?.requires_review ? (
                     <span className="detail-chip detail-chip-status pendiente">Revisar</span>
@@ -1215,7 +1215,7 @@ export default function Documents() {
                   </>
                 ) : (
                   <p className="documents-ai-empty">
-                    Klinip IA ya leyó este documento, pero todavía no tiene un resumen estructurado disponible.
+                    Klinip IA ya leyó este documento, pero todavía no tiene un resumen claro disponible.
                   </p>
                 )}
               </div>
