@@ -293,17 +293,22 @@ function Sidebar({
   }, { appointments: 0, medications: 0, documents: 0, calendar: 0 });
 
   const links = [
-    { to: "/", label: "Inicio", icon: icons.home },
-    { to: "/ai", label: "Asistente", icon: icons.ai },
-    { to: "/voice", label: "Voz", icon: icons.voice },
-    { to: "/family", label: "Familia", icon: icons.family, activePaths: ["/family", "/feed"] },
+    { to: "/", label: "Inicio", icon: icons.home, section: "main" },
+    { to: "/ai", label: "Asistente", icon: icons.ai, section: "main" },
+    { to: "/voice", label: "Voz", icon: icons.voice, section: "main" },
+    { to: "/family", label: "Familia", icon: icons.family, activePaths: ["/family", "/feed"], section: "care" },
     {
       to: "/mi-salud",
       label: "Mi salud",
       icon: icons.heart,
       badge: notificationCounts.medications + notificationCounts.documents,
       activePaths: HEALTH_SECTION_PATHS,
+      section: "care",
     },
+  ];
+  const desktopNavGroups = [
+    { id: "main", label: "Principal" },
+    { id: "care", label: "Salud y familia" },
   ];
   const mobilePrimaryLinks = ["/", "/voice", "/family", "/mi-salud"]
     .map((path) => links.find((item) => item.to === path))
@@ -442,11 +447,6 @@ function Sidebar({
       )}
 
       <nav className={`sidebar-nav ${isMobile ? "sidebar-nav-mobile" : ""}`}>
-        {!isMobile && (
-          <div className="sidebar-section-label" aria-hidden="true">
-            Navegación clínica
-          </div>
-        )}
         {isMobile ? (
           <>
             {mobilePrimaryLinks.slice(0, 2).map((link) => renderMobileLink(link))}
@@ -503,23 +503,54 @@ function Sidebar({
             )}
           </>
         ) : (
-          links.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`sidebar-link ${isSidebarLinkActive(location.pathname, link) ? "active" : ""}`}
-              aria-label={link.label}
+          <>
+            <button
+              type="button"
+              className="sidebar-scan-cta"
+              onClick={() => onOpenOcr?.()}
             >
-              <span className="sidebar-icon">{link.icon}</span>
-              {link.badge > 0 && (
-                <span className="sidebar-badge">{link.badge}</span>
-              )}
-              <span className="sidebar-label">{link.label}</span>
-              <span className="sidebar-tooltip" role="presentation">
-                {link.label}
+              <span className="sidebar-scan-cta-icon" aria-hidden="true">
+                {icons.ocr}
               </span>
-            </Link>
-          ))
+              <span className="sidebar-scan-cta-copy">
+                <span className="sidebar-scan-cta-title">Escanear documento</span>
+                <span className="sidebar-scan-cta-sub">Sube un examen o receta</span>
+              </span>
+            </button>
+            {desktopNavGroups.map((group) => {
+              const groupLinks = links.filter((link) => link.section === group.id);
+              if (groupLinks.length === 0) return null;
+              return (
+                <div className="sidebar-nav-group" key={group.id}>
+                  <div className="sidebar-section-label" aria-hidden="true">
+                    {group.label}
+                  </div>
+                  {groupLinks.map((link) => {
+                    const active = isSidebarLinkActive(location.pathname, link);
+                    return (
+                      <Link
+                        key={link.to}
+                        to={link.to}
+                        className={`sidebar-link ${active ? "active" : ""}`}
+                        aria-label={link.label}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span className="sidebar-link-rail" aria-hidden="true" />
+                        <span className="sidebar-icon">{link.icon}</span>
+                        {link.badge > 0 && (
+                          <span className="sidebar-badge">{link.badge}</span>
+                        )}
+                        <span className="sidebar-label">{link.label}</span>
+                        <span className="sidebar-tooltip" role="presentation">
+                          {link.label}
+                        </span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </>
         )}
       </nav>
 
@@ -878,7 +909,7 @@ const PUSH_ENDPOINT_KEY_BASE = "klinip_push_endpoint";
 const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
-const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v1";
+const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v2";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;

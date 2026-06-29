@@ -756,7 +756,7 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
   const handleClearLocal = () => {
     if (!window.confirm("¿Borrar los datos locales de Klinip en este navegador?")) return;
-    const keys = [
+    const exactKeys = [
       "klinip_users",
       "klinip_session",
       "klinip_appointments",
@@ -764,8 +764,23 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       "klinip_medications",
       "klinip_onboarding_seen",
       "klinip_onboarding_completed_v1",
+      "klinip_onboarding_completed_v2",
     ];
-    keys.forEach((k) => localStorage.removeItem(k));
+    const prefixKeys = [
+      "klinip_onboarding_completed_v1_",
+      "klinip_onboarding_completed_v2_",
+      "klinip_notifications_consent_",
+      "klinip_notifications_last_prompt_",
+      "klinip_notifications_prompt_count_",
+      "klinip_push_registered_",
+      "klinip_push_endpoint_",
+    ];
+    exactKeys.forEach((k) => localStorage.removeItem(k));
+    Object.keys(localStorage).forEach((key) => {
+      if (prefixKeys.some((prefix) => key.startsWith(prefix))) {
+        localStorage.removeItem(key);
+      }
+    });
     alert("Datos locales borrados. Vuelve a iniciar sesión para continuar.");
     window.location.reload();
   };
