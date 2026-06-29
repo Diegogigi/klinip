@@ -1383,7 +1383,9 @@ export default function Medications() {
       alert("Este perfil está en modo solo lectura. No puedes finalizar medicamentos.");
       return;
     }
-    if (!med?.id || isMedicationFinished(med)) return;
+    // Permite cerrar un tratamiento que ya venció por fecha pero sigue sin
+    // marcarse como completado (antes quedaba bloqueado por isMedicationFinished).
+    if (!med?.id || med.completed) return;
     const medicationName = cleanUiText(med.name || "este tratamiento");
     const confirmMsg = `¿Finalizar ${medicationName} ahora? Dejará de aparecer como un tratamiento activo hasta que lo renueves.`;
     if (!window.confirm(confirmMsg)) return;

@@ -3726,21 +3726,51 @@ def _nearest_medication_due_slot(
     return min(candidate_slots, key=lambda item: abs(item - reference_dt))
 
 
+def _closest_medication_slot(
+    med: models.Medication,
+    reference_dt: datetime,
+) -> datetime | None:
+    """Devuelve el horario programado más cercano (pasado o futuro) a una fecha
+    de referencia. Se usa para alinear a la grilla real un slot enviado por el
+    cliente, corrigiendo desfases de zona horaria y asociándolo a la dosis
+    correcta (p. ej. la dosis de hoy aunque se tome antes de su hora)."""
+    candidate_slots = _medication_schedule_events_between(
+        med,
+        reference_dt - timedelta(days=2),
+        reference_dt + timedelta(days=2),
+    )
+    if not candidate_slots:
+        return None
+    return min(candidate_slots, key=lambda item: abs(item - reference_dt))
+
+
 def _build_medication_event_defaults(
     med: models.Medication,
     status: str,
     scheduled_at: datetime | None,
     taken_at: datetime | None,
 ) -> tuple[datetime | None, datetime | None, str]:
-    now = datetime.now()
-    # Strip timezone info upfront to avoid TypeError when comparing with timezone-naive datetimes
-    if scheduled_at and getattr(scheduled_at, "tzinfo", None) is not None:
-        scheduled_at = scheduled_at.replace(tzinfo=None)
-    if taken_at and getattr(taken_at, "tzinfo", None) is not None:
-        taken_at = taken_at.replace(tzinfo=None)
+    # Los horarios de la grilla se generan en hora local (DEFAULT_TZ). El cliente
+    # suele enviar las fechas en UTC; si solo quitáramos la zona, el slot quedaría
+    # desfasado y nunca coincidiría con la grilla (la dosis seguiría "pendiente").
+    # Por eso convertimos a hora local naive antes de comparar.
+    local_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+
+    def _to_local_naive(dt: datetime | None) -> datetime | None:
+        if dt is None:
+            return None
+        if getattr(dt, "tzinfo", None) is not None:
+            if local_tz is not None:
+                dt = dt.astimezone(local_tz)
+            return dt.replace(tzinfo=None)
+        return dt
+
+    now = datetime.now(local_tz).replace(tzinfo=None) if local_tz else datetime.now()
+    scheduled_at = _to_local_naive(scheduled_at)
+    taken_at = _to_local_naive(taken_at)
     # Si el cliente indicó explícitamente a qué dosis corresponde la toma
-    # (p. ej. la dosis de hoy tomada antes de su hora), respetamos ese slot y
-    # no lo movemos a un día anterior.
+    # (p. ej. la dosis de hoy tomada antes de su hora), respetamos esa dosis y la
+    # alineamos a la grilla real (sin moverla a un día anterior).
     explicit_schedule = scheduled_at is not None
     schedule_dt = scheduled_at
     actual_taken_at = taken_at
@@ -3748,6 +3778,10 @@ def _build_medication_event_defaults(
     if not schedule_dt:
         reference_dt = actual_taken_at or now
         schedule_dt = _nearest_medication_due_slot(med, reference_dt)
+    elif explicit_schedule:
+        snapped = _closest_medication_slot(med, schedule_dt)
+        if snapped is not None:
+            schedule_dt = snapped
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
     if (
@@ -13230,12 +13264,15 @@ def _build_health_alert_candidates(
                 "evidence_json": missing_flags,
             }
         )
+    # Solo tratamientos vencidos hace poco (<= 30 días): pasado ese plazo dejamos
+    # de insistir para no dejar la alerta "pegada" indefinidamente.
     stale_active = [
         med
         for med in medications
         if not bool(med.completed)
         and _normalize_dt_for_tz(_medication_end_at(med), compare_tz)
         and _normalize_dt_for_tz(_medication_end_at(med), compare_tz) < now
+        and (now - _normalize_dt_for_tz(_medication_end_at(med), compare_tz)).days <= 30
     ]
     if stale_active:
         alerts.append(
@@ -22670,8 +22707,10 @@ async def get_ai_health_radar(
         .order_by(models.HealthAlert.detected_at.desc())
         .all()
     )
-    # Limpieza oportunista: resolver alertas de medicamentos que ya fueron
-    # cerrados/completados, sin esperar a la próxima re-ejecución del radar.
+    # Limpieza oportunista: re-validar en vivo las alertas ligadas a un
+    # medicamento y resolver las que ya no aplican (tratamiento cerrado,
+    # renovado, borrado o cuya condición ya no se cumple), sin esperar a la
+    # próxima re-ejecución del radar.
     med_linked_types = {"incomplete_treatment", "medication_running_out"}
     linked_med_ids = {
         int((a.evidence_json or {}).get("medication_id") or 0)
@@ -22679,29 +22718,45 @@ async def get_ai_health_radar(
         if a.alert_type in med_linked_types
     }
     linked_med_ids.discard(0)
-    completed_med_ids: set[int] = set()
+    linked_meds: dict[int, models.Medication] = {}
     if linked_med_ids:
-        completed_rows = (
-            db.query(models.Medication.id)
-            .filter(
-                models.Medication.id.in_(linked_med_ids),
-                models.Medication.completed.is_(True),
-            )
+        rows = (
+            db.query(models.Medication)
+            .filter(models.Medication.id.in_(linked_med_ids))
             .all()
         )
-        completed_med_ids = {int(row[0]) for row in completed_rows}
+        linked_meds = {int(m.id): m for m in rows}
+
+    compare_tz = _safe_zoneinfo(DEFAULT_TZ_NAME)
+    now_cmp = datetime.now(compare_tz)
+
+    def _med_alert_still_valid(alert: models.HealthAlert) -> bool:
+        mid = int((alert.evidence_json or {}).get("medication_id") or 0)
+        if not mid:
+            return True
+        med = linked_meds.get(mid)
+        if med is None:
+            return False  # medicamento borrado
+        if bool(getattr(med, "completed", False)):
+            return False  # tratamiento cerrado/completado
+        end_at = _normalize_dt_for_tz(_medication_end_at(med), compare_tz)
+        if alert.alert_type == "incomplete_treatment":
+            # sigue vencido sin cerrar y dentro de la ventana de 30 días
+            return bool(end_at and end_at < now_cmp and (now_cmp - end_at).days <= 30)
+        if alert.alert_type == "medication_running_out":
+            return bool(end_at and end_at >= now_cmp)  # aún por terminar
+        return True
+
     visible: list[models.HealthAlert] = []
     changed = False
     now = datetime.now()
     for alert in alerts:
-        if alert.alert_type in med_linked_types:
-            mid = int((alert.evidence_json or {}).get("medication_id") or 0)
-            if mid and mid in completed_med_ids:
-                alert.status = "resolved"
-                alert.updated_at = now
-                db.add(alert)
-                changed = True
-                continue
+        if alert.alert_type in med_linked_types and not _med_alert_still_valid(alert):
+            alert.status = "resolved"
+            alert.updated_at = now
+            db.add(alert)
+            changed = True
+            continue
         visible.append(alert)
     if changed:
         db.commit()
