@@ -49984,6 +49984,10 @@ body.theme-dark .health-hub-quick-card.tone-green {
   flex-shrink: 0;
 }
 
+.clp-card-head-meta-action-only {
+  justify-content: flex-end;
+}
+
 .clp-card-icon {
   flex-shrink: 0;
   width: 36px;
@@ -50805,6 +50809,10 @@ body.theme-dark .clp-loading-pulse {
   .clp-card-head-meta {
     width: 100%;
     justify-content: space-between;
+  }
+
+  .clp-card-head-meta-action-only {
+    justify-content: flex-end;
   }
 
   .clp-appt-title {

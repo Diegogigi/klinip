@@ -479,7 +479,7 @@ export default function MiSalud() {
               <h2 className="clp-card-title" id="clp-bio-h">Parámetros biométricos</h2>
               <p className="clp-card-sub">Glucosa, presión, frecuencia cardiaca y temperatura.</p>
             </div>
-            <div className="clp-card-head-meta">
+            <div className="clp-card-head-meta clp-card-head-meta-action-only">
               <Link to="/mi-salud/biometricos" className="clp-card-link clp-card-link-primary">Abrir panel <IcoChevron /></Link>
             </div>
           </div>
@@ -526,7 +526,7 @@ export default function MiSalud() {
                 <h2 className="clp-card-title" id="clp-activity-h">Lo último que pasó</h2>
                 <p className="clp-card-sub">Tu actividad de salud reciente</p>
               </div>
-              <div className="clp-card-head-meta">
+              <div className="clp-card-head-meta clp-card-head-meta-action-only">
                 <Link to="/timeline" className="clp-card-link clp-card-link-primary">Historia <IcoChevron /></Link>
               </div>
             </div>
