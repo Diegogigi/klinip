@@ -229,8 +229,10 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_document_schema()
 
 
-def ensure_user_schema():
+def ensure_user_schema(force: bool = False):
     """Garantiza que la tabla users tenga columnas nuevas usadas por la app."""
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
     ensure_columns(
         engine,
         "users",
@@ -1541,12 +1543,11 @@ def _push_delivery_options(payload: dict | None) -> tuple[int, dict[str, str]]:
 
 
 def ensure_login_security_schema():
-    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED:
-        return
     """
     Refuerzo puntual para entornos donde el esquema de users quedó desfasado
     respecto del flujo de login.
     """
+    ensure_user_schema(force=True)
     backend = engine.url.get_backend_name()
     try:
         with engine.begin() as conn:
@@ -16998,11 +16999,20 @@ def login(
     email = (form_data.username or "").lower().strip()
     try:
         user = auth.get_user_by_email(db, email)
-    except ProgrammingError as exc:
+    except DBAPIError as exc:
         db.rollback()
         detail = str(getattr(exc, "orig", exc) or "").lower()
-        if "failed_login_attempts" in detail or "locked_until" in detail:
-            ensure_login_security_schema()
+        if (
+            "failed_login_attempts" in detail
+            or "locked_until" in detail
+            or "app_pin_hash" in detail
+            or "app_pin_enabled" in detail
+            or "mfa_enabled" in detail
+            or "token_version" in detail
+            or "column" in detail
+            or "users." in detail
+        ):
+            ensure_user_schema(force=True)
             user = auth.get_user_by_email(db, email)
         else:
             raise
@@ -17624,6 +17634,7 @@ def token_refresh(
     db: Session = Depends(auth.get_db),
 ):
     """Rota el refresh token y emite un nuevo access token."""
+    ensure_login_security_schema()
     result = auth.rotate_refresh_token(
         db,
         payload.refresh_token,
@@ -17634,7 +17645,23 @@ def token_refresh(
         raise HTTPException(status_code=401, detail="Refresh token inválido o expirado")
 
     new_refresh, user_id = result
-    user = db.query(models.User).filter(models.User.id == user_id).first()
+    try:
+        user = db.query(models.User).filter(models.User.id == user_id).first()
+    except DBAPIError as exc:
+        db.rollback()
+        detail = str(getattr(exc, "orig", exc) or "").lower()
+        if (
+            "app_pin_hash" in detail
+            or "app_pin_enabled" in detail
+            or "mfa_enabled" in detail
+            or "token_version" in detail
+            or "column" in detail
+            or "users." in detail
+        ):
+            ensure_user_schema(force=True)
+            user = db.query(models.User).filter(models.User.id == user_id).first()
+        else:
+            raise
     if not user or getattr(user, "deleted", False):
         raise HTTPException(status_code=401, detail="Usuario no válido")
 

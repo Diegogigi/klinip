@@ -4,7 +4,6 @@ import { login, getMe, verifyMfaLogin } from "../api";
 import BrandLogo from "../components/BrandLogo";
 import { clearAppCaches } from "../utils/cache";
 import { extractApiError } from "../utils/errors";
-import { markPinFreshLogin } from "../utils/pinLock";
 
 export default function Login({ onAuthenticated }) {
   const [email, setEmail] = useState("");
@@ -28,7 +27,6 @@ export default function Login({ onAuthenticated }) {
       throw new Error("La sesión no coincide con el usuario ingresado. Intenta de nuevo.");
     }
     // Recién autenticado con contraseña: esta sesión no pide PIN de inmediato.
-    markPinFreshLogin();
     onAuthenticated(me);
   };
 

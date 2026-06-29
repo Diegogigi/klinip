@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "./BrandLogo";
 import { setAppPin, verifyAppPin } from "../api";
+import { markPinRecoveryLogin } from "../utils/pinLock";
 
 const PIN_LENGTH = 4;
 
@@ -26,6 +27,10 @@ export default function PinLock({
     return name ? name.split(/\s+/)[0] : "";
   }, [user?.name]);
   const isChangingExistingPin = forceSetup && hasExistingPin;
+  const handleRecoveryLogout = useCallback(() => {
+    markPinRecoveryLogin();
+    onLogout?.();
+  }, [onLogout]);
 
   // setup = crear PIN; unlock = ingresar PIN existente. forceSetup fuerza la
   // creación (usado desde Ajustes para "crear" o "cambiar" PIN).
@@ -229,7 +234,7 @@ export default function PinLock({
               <button
                 type="button"
                 className="pinlock-link pinlock-link-strong"
-                onClick={() => onLogout?.()}
+                onClick={handleRecoveryLogout}
               >
                 Cierra sesión para restaurar el PIN
               </button>

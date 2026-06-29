@@ -28,7 +28,7 @@ import {
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
 import PinLock from "./components/PinLock";
-import { consumePinFreshLogin } from "./utils/pinLock";
+import { consumePinRecoveryLogin } from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
 
 const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
@@ -1171,18 +1171,16 @@ export default function App() {
     return () => window.removeEventListener("klinip:session-expired", onSessionExpired);
   }, [navigate]);
 
-  // Bloqueo con PIN: al abrir la app con sesión activa, exigir PIN (o crearlo
-  // la primera vez). Se desbloquea sólo en memoria, así que cada nueva apertura
-  // o recarga vuelve a pedirlo.
+  // Bloqueo con PIN: al abrir la app con sesión activa, exigir PIN si está
+  // activo. Solo se omite una vez cuando el propio usuario cerró sesión para
+  // restaurarlo tras olvidarlo.
   useEffect(() => {
     if (booting) return;
     if (!user?.id) {
       setAppLocked(false);
       return;
     }
-    // Si acaba de iniciar sesión con su contraseña, no pedimos el PIN ahora
-    // (ya se autenticó). El bloqueo vuelve a aplicarse en la próxima apertura.
-    if (consumePinFreshLogin()) {
+    if (consumePinRecoveryLogin()) {
       setAppLocked(false);
       return;
     }
