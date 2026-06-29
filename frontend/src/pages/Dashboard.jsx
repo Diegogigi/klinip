@@ -150,6 +150,23 @@ function getHealthProfileRoleLabel(item, userId) {
   return "Invitado";
 }
 
+function getHealthProfileDisplayName(item, user) {
+  if (!item) return "Perfil";
+  const fullName = String(item.full_name || "").trim();
+  const ownerName = String(item.owner_name || "").trim();
+  const accountName = String(user?.name || "").trim();
+  const isOwnProfile = Number(item.owner_user_id) === Number(user?.id);
+  const sameAsAccount =
+    fullName &&
+    accountName &&
+    fullName.localeCompare(accountName, undefined, { sensitivity: "accent" }) === 0;
+
+  if (!isOwnProfile && ownerName && (item.is_primary_profile || !fullName || sameAsAccount)) {
+    return ownerName;
+  }
+  return fullName || ownerName || "Perfil de salud";
+}
+
 function getHealthProfileAccessLabel(item, user) {
   if (!item) return "";
   const roleLabel = getHealthProfileRoleLabel(item, user?.id);
@@ -162,7 +179,8 @@ function getHealthProfileAccessLabel(item, user) {
 function getHealthProfileMenuLabel(item, user) {
   if (!item) return "Perfil";
   const context = getHealthProfileAccessLabel(item, user);
-  return context ? `${item.full_name} (${context})` : item.full_name;
+  const displayName = getHealthProfileDisplayName(item, user);
+  return context ? `${displayName} (${context})` : displayName;
 }
 
 function profileInitials(name) {
@@ -1680,7 +1698,7 @@ export default function Dashboard({
         copy: "La nota quedó marcada como resuelta y salió de tus pendientes rápidos.",
         referenceId: noteId,
         rows: [
-          { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+          { icon: "profile", label: "Perfil", value: getHealthProfileDisplayName(activeProfile, user) },
           { icon: "doc", label: "Nota", value: (targetNote?.note || targetNote?.text || "Pendiente clínico").slice(0, 96) },
         ],
       });
@@ -1748,7 +1766,7 @@ export default function Dashboard({
           copy: "La nota quedó actualizada dentro del perfil activo.",
           referenceId: updated?.id || editingNoteId,
           rows: [
-            { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+            { icon: "profile", label: "Perfil", value: getHealthProfileDisplayName(activeProfile, user) },
             { icon: "doc", label: "Nota", value: value.slice(0, 96) },
             { icon: "clock", label: "Recordatorio", value: noteReminder ? parseDate(reminderUtc)?.toLocaleString?.("es-CL") || "Programado" : "Sin recordatorio" },
           ],
@@ -1767,7 +1785,7 @@ export default function Dashboard({
           copy: "La nota quedó guardada y ya forma parte de tus recordatorios rápidos.",
           referenceId: created?.id,
           rows: [
-            { icon: "profile", label: "Perfil", value: activeProfile?.full_name || "Perfil activo" },
+            { icon: "profile", label: "Perfil", value: getHealthProfileDisplayName(activeProfile, user) },
             { icon: "doc", label: "Nota", value: value.slice(0, 96) },
             { icon: "clock", label: "Recordatorio", value: noteReminder ? parseDate(reminderUtc)?.toLocaleString?.("es-CL") || "Programado" : "Sin recordatorio" },
           ],
@@ -1781,7 +1799,9 @@ export default function Dashboard({
     }
   };
 
-  const activeProfileName = activeProfile?.full_name || user?.name || "Mi perfil";
+  const activeProfileName = activeProfile
+    ? getHealthProfileDisplayName(activeProfile, user)
+    : user?.name || "Mi perfil";
   const userName = activeProfileName;
   const firstName = activeProfileName.split(" ")[0] || userName;
   const userInitial = (user?.name || userName).trim().slice(0, 1).toUpperCase() || "K";

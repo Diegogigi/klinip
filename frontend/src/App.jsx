@@ -254,6 +254,23 @@ function getHealthProfileRoleLabel(item, userId) {
   return "Invitado";
 }
 
+function getHealthProfileDisplayName(item, user) {
+  if (!item) return "Perfil";
+  const fullName = String(item.full_name || "").trim();
+  const ownerName = String(item.owner_name || "").trim();
+  const accountName = String(user?.name || "").trim();
+  const isOwnProfile = Number(item.owner_user_id) === Number(user?.id);
+  const sameAsAccount =
+    fullName &&
+    accountName &&
+    fullName.localeCompare(accountName, undefined, { sensitivity: "accent" }) === 0;
+
+  if (!isOwnProfile && ownerName && (item.is_primary_profile || !fullName || sameAsAccount)) {
+    return ownerName;
+  }
+  return fullName || ownerName || "Perfil de salud";
+}
+
 function getHealthProfileAccessLabel(item, user) {
   if (!item) return "";
   const roleLabel = getHealthProfileRoleLabel(item, user?.id);
@@ -266,7 +283,8 @@ function getHealthProfileAccessLabel(item, user) {
 function getHealthProfileMenuLabel(item, user) {
   if (!item) return "Perfil";
   const context = getHealthProfileAccessLabel(item, user);
-  return context ? `${item.full_name} (${context})` : item.full_name;
+  const displayName = getHealthProfileDisplayName(item, user);
+  return context ? `${displayName} (${context})` : displayName;
 }
 
 function isPinProtectionActive(user) {
@@ -354,10 +372,13 @@ function Sidebar({
   const activeProfileAccessLabel = activeProfile
     ? getHealthProfileAccessLabel(activeProfile, user)
     : "Perfil principal";
+  const activeProfileDisplayName = activeProfile
+    ? getHealthProfileDisplayName(activeProfile, user)
+    : user?.name || "Perfil personal";
   const sidebarAlertsCount = notifications?.length || 0;
   const sidebarHealthCount =
     notificationCounts.medications + notificationCounts.documents;
-  const sidebarInitial = (user?.name || "Klinip").slice(0, 1).toUpperCase();
+  const sidebarInitial = (activeProfileDisplayName || "Klinip").slice(0, 1).toUpperCase();
   useEffect(() => {
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
@@ -410,7 +431,7 @@ function Sidebar({
               <div className="sidebar-desktop-profile-copy">
                 <p className="sidebar-desktop-profile-label">Perfil activo</p>
                 <p className="sidebar-desktop-profile-name">
-                  {activeProfile?.full_name || user?.name || "Perfil personal"}
+                  {activeProfileDisplayName}
                 </p>
               </div>
             </div>
@@ -714,7 +735,7 @@ function Topbar({
             <div className="topbar-highlight-card">
               <span className="topbar-highlight-label">Perfil actual</span>
               <strong className="topbar-highlight-value">
-                {activeProfile?.full_name || user?.name || "Perfil personal"}
+                {activeProfileDisplayName}
               </strong>
               <span className="topbar-highlight-note">
                 {activeProfileLabel}
@@ -819,7 +840,7 @@ function Topbar({
                 </div>
                 <p className="topbar-user-menu-profile-name">
                   {activeProfile
-                    ? getHealthProfileMenuLabel(activeProfile, user)
+                    ? `${activeProfileDisplayName} (${activeProfileLabel})`
                     : user?.name || "Perfil personal"}
                 </p>
                 {canSwitchProfiles ? (
