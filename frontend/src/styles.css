@@ -6568,6 +6568,60 @@ body.theme-dark .kfeed-family-panel-btn:focus-visible {
   border-color: #fca5a5;
 }
 
+.security-inline-notice.is-info {
+  color: #0d47f7;
+  background: #eaf2ff;
+  border-color: #bfdbfe;
+}
+
+.security-inline-notice.is-warning {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+/* Tarjeta de bloqueo con PIN */
+.security-pin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.security-pin-row strong {
+  display: block;
+  font-size: 0.96rem;
+  color: #0b1226;
+}
+
+.security-pin-row .muted {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+}
+
+body.theme-dark .security-inline-notice.is-info {
+  color: #93c5fd;
+  background: rgba(13, 71, 247, 0.16);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+body.theme-dark .security-inline-notice.is-warning {
+  color: #fcd34d;
+  background: rgba(180, 83, 9, 0.18);
+  border-color: rgba(217, 119, 6, 0.4);
+}
+
+body.theme-dark .security-pin-row {
+  border-top-color: rgba(51, 65, 85, 0.7);
+}
+
+body.theme-dark .security-pin-row strong {
+  color: #e2e8f0;
+}
+
 .security-step-list {
   display: flex;
   flex-direction: column;

@@ -5,6 +5,7 @@
 
 const PIN_HASH_KEY = "klinip_pin_hash_v1";
 const PIN_SALT_KEY = "klinip_pin_salt_v1";
+const PIN_ENABLED_KEY = "klinip_pin_enabled_v1";
 
 const storageKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
@@ -57,6 +58,27 @@ export function clearPin(userId) {
   try {
     localStorage.removeItem(storageKey(PIN_HASH_KEY, userId));
     localStorage.removeItem(storageKey(PIN_SALT_KEY, userId));
+  } catch (_) {
+    // noop
+  }
+}
+
+// Preferencia de bloqueo. Por defecto activado: la seguridad viene encendida y
+// el usuario puede desactivarla desde Ajustes.
+export function isPinLockEnabled(userId) {
+  try {
+    return localStorage.getItem(storageKey(PIN_ENABLED_KEY, userId)) !== "false";
+  } catch (_) {
+    return true;
+  }
+}
+
+export function setPinLockEnabled(userId, enabled) {
+  try {
+    localStorage.setItem(
+      storageKey(PIN_ENABLED_KEY, userId),
+      enabled ? "true" : "false"
+    );
   } catch (_) {
     // noop
   }

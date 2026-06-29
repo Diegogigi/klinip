@@ -3,6 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import NotificationSettings from "../components/NotificationSettings";
 import SuccessSheet from "../components/SuccessSheet";
 import StepUpModal from "../components/StepUpModal";
+import PinLock from "../components/PinLock";
+import {
+  hasPin as hasAppPin,
+  clearPin as clearAppPin,
+  isPinSupported,
+  isPinLockEnabled,
+  setPinLockEnabled,
+} from "../utils/pinLock";
 import { isHandheldViewport } from "../utils/mobileViewport";
 import {
   updateMe,
@@ -167,6 +175,50 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const [settingsSuccess, setSettingsSuccess] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [activeSection, setActiveSection] = useState(initialSection || "perfil");
+
+  // ── PIN de la app ──
+  const pinSupported = isPinSupported();
+  const [pinEnabled, setPinEnabled] = useState(() => isPinLockEnabled(user?.id));
+  const [pinHasSet, setPinHasSet] = useState(() => hasAppPin(user?.id));
+  const [pinFlow, setPinFlow] = useState(null); // null | "enable" | "change"
+  const [pinNotice, setPinNotice] = useState("");
+
+  const handlePinToggle = (next) => {
+    setPinNotice("");
+    if (next) {
+      // Activar: si aún no hay PIN, pedir crearlo; si ya existe, basta el flag.
+      setPinLockEnabled(user?.id, true);
+      setPinEnabled(true);
+      if (!hasAppPin(user?.id)) {
+        setPinFlow("enable");
+      } else {
+        setPinNotice("Bloqueo con PIN activado.");
+      }
+    } else {
+      // Desactivar: apagar flag y borrar el PIN guardado.
+      setPinLockEnabled(user?.id, false);
+      clearAppPin(user?.id);
+      setPinEnabled(false);
+      setPinHasSet(false);
+      setPinNotice("Bloqueo con PIN desactivado.");
+    }
+  };
+
+  const handlePinFlowDone = () => {
+    setPinHasSet(hasAppPin(user?.id));
+    setPinEnabled(isPinLockEnabled(user?.id));
+    setPinNotice(pinFlow === "change" ? "PIN actualizado." : "PIN creado y bloqueo activado.");
+    setPinFlow(null);
+  };
+
+  const handlePinFlowCancel = () => {
+    // Si canceló la creación inicial, no dejamos el bloqueo activado sin PIN.
+    if (pinFlow === "enable" && !hasAppPin(user?.id)) {
+      setPinLockEnabled(user?.id, false);
+      setPinEnabled(false);
+    }
+    setPinFlow(null);
+  };
 
   // ── MFA state ──
   const [mfaStatus, setMfaStatus] = useState(null); // { mfa_enabled, backup_codes_remaining }
@@ -3117,6 +3169,74 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
             </div>
           </div>
 
+          <div className="privacy-card security-pin-card">
+            <div className="privacy-card-header security-card-heading">
+              <div>
+                <h4>Bloqueo con PIN</h4>
+                <p className="muted">
+                  Pide un PIN de 4 dígitos cada vez que abres Klinip en este dispositivo.
+                  Es una protección local adicional a tu sesión.
+                </p>
+              </div>
+              <span className={`privacy-status-pill ${pinEnabled ? "is-on" : "is-off"}`}>
+                {pinEnabled ? "Activado" : "Desactivado"}
+              </span>
+            </div>
+
+            {pinNotice ? (
+              <div className="security-inline-notice is-info">
+                <span>{pinNotice}</span>
+              </div>
+            ) : null}
+
+            {!pinSupported ? (
+              <div className="security-inline-notice is-warning">
+                <span>
+                  Tu navegador no permite activar el bloqueo con PIN aquí (requiere una
+                  conexión segura).
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className="security-pin-row">
+                  <div>
+                    <strong>Activar bloqueo con PIN</strong>
+                    <p className="muted">
+                      {pinEnabled
+                        ? pinHasSet
+                          ? "El PIN se pedirá al abrir o volver a la app."
+                          : "Crea tu PIN para terminar de activarlo."
+                        : "Actívalo para proteger el acceso con un PIN."}
+                    </p>
+                  </div>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={pinEnabled}
+                      onChange={(e) => handlePinToggle(e.target.checked)}
+                    />
+                    <span className="switch-slider" />
+                  </label>
+                </div>
+
+                {pinEnabled && pinHasSet ? (
+                  <div className="privacy-actions">
+                    <button
+                      className="secondary-btn"
+                      type="button"
+                      onClick={() => {
+                        setPinNotice("");
+                        setPinFlow("change");
+                      }}
+                    >
+                      Cambiar PIN
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+
           <div className="security-grid">
             <div className="privacy-card security-mfa-card">
               <div className="privacy-card-header security-card-heading">
@@ -3586,6 +3706,14 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         hasMfa={!!mfaStatus?.mfa_enabled}
         actionLabel={stepUpPending === "deleteAccount" ? "eliminar tu cuenta" : "esta acción"}
       />
+      {pinFlow ? (
+        <PinLock
+          user={user}
+          forceSetup
+          onUnlock={handlePinFlowDone}
+          onCancel={handlePinFlowCancel}
+        />
+      ) : null}
     </>
   );
 }

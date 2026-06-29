@@ -32,6 +32,7 @@ import {
   hasPin as hasAppPin,
   clearPin as clearAppPin,
   isPinSupported,
+  isPinLockEnabled,
 } from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
 
@@ -1178,7 +1179,9 @@ export default function App() {
   // o recarga vuelve a pedirlo.
   useEffect(() => {
     if (booting) return;
-    setAppLocked(Boolean(user?.id) && isPinSupported());
+    setAppLocked(
+      Boolean(user?.id) && isPinSupported() && isPinLockEnabled(user.id)
+    );
   }, [booting, user?.id]);
 
   // Re-bloqueo al volver de segundo plano tras un periodo de inactividad.
@@ -1192,7 +1195,11 @@ export default function App() {
       const hiddenFor = pinHiddenAtRef.current
         ? Date.now() - pinHiddenAtRef.current
         : 0;
-      if (hiddenFor > APP_LOCK_GRACE_MS && hasAppPin(user.id)) {
+      if (
+        hiddenFor > APP_LOCK_GRACE_MS &&
+        isPinLockEnabled(user.id) &&
+        hasAppPin(user.id)
+      ) {
         setAppLocked(true);
       }
     };

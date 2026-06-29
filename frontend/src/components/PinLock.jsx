@@ -13,15 +13,18 @@ function BackspaceIcon() {
   );
 }
 
-export default function PinLock({ user, onUnlock, onLogout }) {
+export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, onCancel }) {
   const userId = user?.id;
   const firstName = useMemo(() => {
     const name = (user?.name || "").trim();
     return name ? name.split(/\s+/)[0] : "";
   }, [user?.name]);
 
-  // setup = crear PIN por primera vez; unlock = ingresar PIN existente.
-  const [mode] = useState(() => (hasPin(userId) ? "unlock" : "setup"));
+  // setup = crear PIN; unlock = ingresar PIN existente. forceSetup fuerza la
+  // creación (usado desde Ajustes para "crear" o "cambiar" PIN).
+  const [mode] = useState(() =>
+    forceSetup ? "setup" : hasPin(userId) ? "unlock" : "setup"
+  );
   // En setup: stage "create" pide el PIN nuevo y "confirm" lo repite.
   const [stage, setStage] = useState("create");
   const [firstPin, setFirstPin] = useState("");
@@ -104,11 +107,13 @@ export default function PinLock({ user, onUnlock, onLogout }) {
         pressDigit(event.key);
       } else if (event.key === "Backspace") {
         pressBackspace();
+      } else if (event.key === "Escape" && onCancel) {
+        onCancel();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pressDigit, pressBackspace]);
+  }, [pressDigit, pressBackspace, onCancel]);
 
   const title =
     mode === "setup"
@@ -183,7 +188,11 @@ export default function PinLock({ user, onUnlock, onLogout }) {
         </div>
 
         <div className="pinlock-footer">
-          {mode === "unlock" ? (
+          {onCancel ? (
+            <button type="button" className="pinlock-link" onClick={() => onCancel()}>
+              Cancelar
+            </button>
+          ) : mode === "unlock" ? (
             <>
               <button
                 type="button"
