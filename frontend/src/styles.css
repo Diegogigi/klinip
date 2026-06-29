@@ -4268,6 +4268,81 @@ body.theme-dark .primary-btn {
   animation: badge-pulse 2s ease-in-out infinite;
 }
 
+/* ── Navegación agrupada + acciones (rediseño escritorio) ── */
+.sidebar-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+/* Scan CTA — estado colapsado (rail angosto): solo icono */
+.sidebar-scan-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+  padding: 0.62rem;
+  border: none;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #44c4ff 0%, #2563eb 60%, #1d4ed8 100%);
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  box-shadow: 0 10px 22px rgba(37, 99, 235, 0.28);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  margin-bottom: 0.45rem;
+}
+
+.sidebar-scan-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.36);
+}
+
+.sidebar-scan-cta:active {
+  transform: scale(0.97);
+  transition-duration: 0.08s;
+}
+
+.sidebar-scan-cta-icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sidebar-scan-cta-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar-scan-cta-copy {
+  display: none;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+  text-align: left;
+}
+
+.sidebar-scan-cta-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.sidebar-scan-cta-sub {
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.88;
+  line-height: 1.2;
+}
+
+/* Rail de acento del enlace activo (solo visible en escritorio expandido) */
+.sidebar-link-rail {
+  display: none;
+}
+
 .sidebar-footer {
   margin-top: 1.2rem;
   border-top: 1px solid #e5e7eb;
@@ -22927,6 +23002,22 @@ body.theme-dark .home-notes-dialog-backdrop {
   background: rgba(2, 6, 23, 0.62);
 }
 
+/* Escritorio amplio / notebook grande: más aire y mejor balance de columnas */
+@media (min-width: 1440px) {
+  .home-editorial-layout {
+    column-gap: 1.6rem;
+    row-gap: 1.6rem;
+  }
+
+  .home-editorial-layout-clinical {
+    grid-template-columns: minmax(0, 1.32fr) 400px;
+  }
+
+  .home-panel-card {
+    padding: 1.6rem;
+  }
+}
+
 @media (max-width: 1180px) {
   .home-editorial {
     width: 100%;
@@ -32309,6 +32400,17 @@ body.theme-dark .ai-chat-report-strip button {
   gap: 0.9rem;
 }
 
+/* Escritorio: limitar el ancho de lectura para que la lista no se estire
+   y dar un poco más de aire entre bloques. */
+@media (min-width: 1024px) {
+  .clinical-reports-page {
+    max-width: 1180px;
+    width: 100%;
+    margin: 0 auto;
+    gap: 1.15rem;
+  }
+}
+
 .clinical-reports-list-head,
 .clinical-report-row,
 .clinical-report-row-actions {
@@ -34964,6 +35066,117 @@ body.theme-dark .ob-quick-btn {
   color: #2563eb;
 }
 
+/* ── Onboarding: adaptación a escritorio (tarjeta centrada amplia) ── */
+@media (min-width: 768px) {
+  .ob-backdrop {
+    padding: 2.5rem;
+    background: rgba(15, 23, 42, 0.62);
+    backdrop-filter: blur(5px);
+  }
+
+  .ob-overlay {
+    max-width: 600px;
+    height: auto;
+    max-height: min(880px, 92vh);
+    border-radius: 32px;
+    box-shadow: 0 40px 110px rgba(15, 23, 42, 0.5);
+  }
+
+  .ob-skip {
+    top: 1.4rem;
+    right: 1.5rem;
+    font-size: 0.8rem;
+    padding: 0.42rem 1.1rem;
+  }
+
+  .ob-illus-wrap {
+    flex: none;
+    padding: 3.2rem 2.5rem 1.2rem;
+  }
+
+  .ob-illus {
+    max-width: 300px;
+  }
+
+  .ob-card {
+    flex: none;
+    max-height: none;
+    border-radius: 36px 36px 32px 32px;
+    padding: 2.2rem 2.8rem 2.4rem;
+    gap: 1.4rem;
+  }
+
+  .ob-card-content {
+    gap: 0.85rem;
+  }
+
+  .ob-title {
+    font-size: 1.62rem;
+  }
+
+  .ob-text {
+    font-size: 0.98rem;
+    line-height: 1.6;
+    max-width: 44ch;
+    margin: 0 auto;
+  }
+
+  .ob-footer {
+    gap: 1.1rem;
+  }
+
+  .ob-cta {
+    padding: 0.95rem 2.2rem;
+    font-size: 1.02rem;
+  }
+
+  .ob-back-btn {
+    width: 50px;
+    height: 50px;
+  }
+
+  .ob-form {
+    gap: 0.7rem;
+  }
+
+  .ob-input {
+    padding: 0.82rem 1.1rem;
+    font-size: 0.95rem;
+  }
+
+  .ob-toggle-btn {
+    padding: 0.8rem;
+    font-size: 0.95rem;
+  }
+
+  .ob-quick-actions {
+    gap: 0.7rem;
+  }
+
+  .ob-quick-btn {
+    padding: 1.05rem 0.6rem;
+    font-size: 0.8rem;
+    gap: 0.55rem;
+  }
+
+  .ob-quick-btn svg {
+    width: 26px;
+    height: 26px;
+  }
+}
+
+/* En pantallas anchas, centramos el contenido del card para que no quede
+   estirado a lo ancho y mantenga una lectura cómoda. */
+@media (min-width: 768px) {
+  .ob-actions-col,
+  .ob-form {
+    max-width: 400px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    KlinipFeed — LinkedIn-style health social feed
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -36894,6 +37107,18 @@ body.theme-dark .kfeed-video-name { color: #f1f5f9; }
 @media (min-width: 1050px) {
   .kfeed-sidebar {
     display: flex;
+  }
+}
+
+/* Escritorio amplio: dar un poco más de ancho al feed y al panel de familia
+   para que no quede una columna tan angosta perdida en la pantalla. */
+@media (min-width: 1440px) {
+  .kfeed-layout-wrapper {
+    max-width: 1140px;
+    gap: 1.8rem;
+  }
+  .kfeed-layout-wrapper .kfeed-page {
+    max-width: 720px;
   }
 }
 
@@ -57427,34 +57652,37 @@ body.theme-dark .bio-metric-card.is-selected {
     font-weight: 600;
   }
 
-  /* ── Profile: sin caja, solo contenido limpio ── */
+  /* ── Profile: tarjeta sutil y moderna ── */
   .sidebar-desktop-profile-card {
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    padding: 0.35rem 0.25rem 0.55rem;
+    border-radius: 18px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    background:
+      radial-gradient(circle at top right, rgba(68, 196, 255, 0.12), transparent 46%),
+      linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.05);
+    padding: 0.85rem;
     gap: 0.7rem;
   }
   .sidebar-desktop-profile-head {
     gap: 0.7rem;
   }
   .sidebar-desktop-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 12px;
-    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.18);
-    font-size: 0.92rem;
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    box-shadow: 0 8px 16px rgba(37, 99, 235, 0.22);
+    font-size: 0.95rem;
   }
   .sidebar-desktop-profile-label {
     color: #94a3b8;
-    font-size: 0.64rem;
+    font-size: 0.62rem;
     letter-spacing: 0.1em;
   }
   .sidebar-desktop-profile-name {
     color: #0b1226;
-    font-size: 0.95rem;
+    font-size: 0.96rem;
     font-weight: 800;
-    margin-top: 0.1rem;
+    margin-top: 0.12rem;
   }
 
   /* Quitamos los "pills" de rol/email — eran ruido visual */
@@ -57467,7 +57695,7 @@ body.theme-dark .bio-metric-card.is-selected {
     min-height: 36px;
     border-radius: 10px;
     border: 1px solid #e2e8f0;
-    background: #f8fafc;
+    background: rgba(255, 255, 255, 0.85);
     box-shadow: none;
     font-size: 0.82rem;
     font-weight: 600;
@@ -57480,20 +57708,35 @@ body.theme-dark .bio-metric-card.is-selected {
     outline-offset: 1px;
   }
 
-  /* ── Métricas: flat, sin caja con sombra ── */
+  /* ── Métricas: tarjetas con acento ── */
   .sidebar-desktop-metrics {
-    gap: 0.5rem;
+    gap: 0.55rem;
   }
   .sidebar-desktop-metric {
-    background: #f8fafc;
-    border: 1px solid rgba(226, 232, 240, 0.7);
-    border-radius: 12px;
-    box-shadow: none;
-    padding: 0.62rem 0.7rem;
-    gap: 0.12rem;
+    position: relative;
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.85);
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04);
+    padding: 0.66rem 0.72rem 0.66rem 0.82rem;
+    gap: 0.14rem;
+    overflow: hidden;
+  }
+  .sidebar-desktop-metric::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #44c4ff, #2563eb);
+    border-radius: 0 3px 3px 0;
+  }
+  .sidebar-desktop-metric:last-child::before {
+    background: linear-gradient(180deg, #fbbf24, #f97316);
   }
   .sidebar-desktop-metric-value {
-    font-size: 1.1rem;
+    font-size: 1.18rem;
     font-weight: 800;
     color: #0b1226;
   }
@@ -57502,6 +57745,49 @@ body.theme-dark .bio-metric-card.is-selected {
     font-size: 0.66rem;
     font-weight: 700;
     letter-spacing: 0.06em;
+  }
+
+  /* ── Acción de escaneo expandida ── */
+  .sidebar-scan-cta {
+    justify-content: flex-start;
+    gap: 0.72rem;
+    padding: 0.82rem 0.95rem;
+    border-radius: 16px;
+    margin-bottom: 0.55rem;
+  }
+  .sidebar-scan-cta-copy {
+    display: flex;
+  }
+
+  /* ── Agrupado de navegación ── */
+  .sidebar-nav-group {
+    gap: 0.28rem;
+  }
+  .sidebar-nav-group + .sidebar-nav-group {
+    margin-top: 0.5rem;
+  }
+
+  /* ── Rail de acento del enlace activo ── */
+  .sidebar-link {
+    position: relative;
+  }
+  .sidebar-link-rail {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%) scaleY(0.3);
+    width: 3px;
+    height: 56%;
+    border-radius: 0 4px 4px 0;
+    background: transparent;
+    opacity: 0;
+    transition: transform 0.18s ease, opacity 0.18s ease;
+  }
+  .sidebar-link.active .sidebar-link-rail {
+    opacity: 1;
+    transform: translateY(-50%) scaleY(1);
+    background: rgba(255, 255, 255, 0.92);
   }
 
   /* ── Sección de nav: label más sutil ── */
@@ -57579,9 +57865,11 @@ body.theme-dark .bio-metric-card.is-selected {
     border-right-color: rgba(51, 65, 85, 0.55);
   }
   body.theme-dark .sidebar-desktop-profile-card {
-    background: transparent;
-    border: none;
-    box-shadow: none;
+    background:
+      radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 46%),
+      linear-gradient(180deg, #0f172a 0%, #0b1224 100%);
+    border-color: rgba(51, 65, 85, 0.7);
+    box-shadow: 0 8px 18px rgba(2, 6, 23, 0.28);
   }
   body.theme-dark .sidebar-desktop-metric {
     background: rgba(15, 23, 42, 0.6);
