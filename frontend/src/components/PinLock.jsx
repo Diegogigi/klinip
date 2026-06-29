@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { BrandMark } from "./BrandLogo";
-import { hasPin, setPin, verifyPin } from "../utils/pinLock";
+import { setAppPin, verifyAppPin } from "../api";
 
 const PIN_LENGTH = 4;
 
@@ -13,17 +13,24 @@ function BackspaceIcon() {
   );
 }
 
-export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, onCancel }) {
-  const userId = user?.id;
+export default function PinLock({
+  user,
+  onUnlock,
+  onLogout,
+  forceSetup = false,
+  hasExistingPin = false,
+  onCancel,
+}) {
   const firstName = useMemo(() => {
     const name = (user?.name || "").trim();
     return name ? name.split(/\s+/)[0] : "";
   }, [user?.name]);
+  const isChangingExistingPin = forceSetup && hasExistingPin;
 
   // setup = crear PIN; unlock = ingresar PIN existente. forceSetup fuerza la
   // creación (usado desde Ajustes para "crear" o "cambiar" PIN).
   const [mode] = useState(() =>
-    forceSetup ? "setup" : hasPin(userId) ? "unlock" : "setup"
+    forceSetup ? "setup" : hasExistingPin ? "unlock" : "setup"
   );
   // En setup: stage "create" pide el PIN nuevo y "confirm" lo repite.
   const [stage, setStage] = useState("create");
@@ -46,11 +53,15 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
       setBusy(true);
       try {
         if (mode === "unlock") {
-          const ok = await verifyPin(userId, code);
-          if (ok) {
-            onUnlock?.();
-          } else {
-            triggerError("PIN incorrecto. Inténtalo de nuevo.");
+          try {
+            const res = await verifyAppPin(code);
+            if (res?.valid) {
+              onUnlock?.();
+            } else {
+              triggerError("PIN incorrecto. Inténtalo de nuevo.");
+            }
+          } catch (_) {
+            triggerError("No pudimos verificar tu PIN. Revisa tu conexión.");
           }
           return;
         }
@@ -64,8 +75,14 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
         }
         // confirm
         if (code === firstPin) {
-          await setPin(userId, code);
-          onUnlock?.();
+          try {
+            await setAppPin(code);
+            onUnlock?.();
+          } catch (_) {
+            setFirstPin("");
+            setStage("create");
+            triggerError("No pudimos guardar tu PIN. Revisa tu conexión.");
+          }
         } else {
           setFirstPin("");
           setStage("create");
@@ -75,7 +92,7 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
         setBusy(false);
       }
     },
-    [mode, stage, firstPin, userId, onUnlock, triggerError]
+    [mode, stage, firstPin, onUnlock, triggerError]
   );
 
   useEffect(() => {
@@ -118,7 +135,11 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
   const title =
     mode === "setup"
       ? stage === "create"
-        ? "Crea tu PIN"
+        ? isChangingExistingPin
+          ? "Cambia tu PIN"
+          : "Crea tu PIN"
+        : isChangingExistingPin
+        ? "Confirma tu nuevo PIN"
         : "Confirma tu PIN"
       : firstName
       ? `Hola ${firstName}`
@@ -127,9 +148,13 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
   const subtitle =
     mode === "setup"
       ? stage === "create"
-        ? "Elige un PIN de 4 dígitos para proteger tu app."
+        ? isChangingExistingPin
+          ? "Define un nuevo PIN de 4 dígitos para tu cuenta."
+          : "Elige un PIN de 4 dígitos para proteger tu cuenta."
+        : isChangingExistingPin
+        ? "Vuelve a ingresar el nuevo PIN para confirmarlo."
         : "Vuelve a ingresar el PIN para confirmarlo."
-      : "Ingresa tu PIN para continuar";
+      : "Ingresa el PIN de tu cuenta para continuar";
 
   const keypad = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
@@ -152,7 +177,7 @@ export default function PinLock({ user, onUnlock, onLogout, forceSetup = false, 
         </div>
 
         <p className={`pinlock-message ${error ? "is-error" : ""}`} role="status" aria-live="polite">
-          {error || (forgotHint ? "Para restaurar tu PIN, cierra sesión y vuelve a entrar." : " ")}
+          {error || (forgotHint ? "Para restaurar tu PIN, cierra sesión y vuelve a entrar con tu contraseña." : "\u00A0")}
         </p>
 
         <div className="pinlock-keypad">

@@ -364,6 +364,29 @@ export async function updateMe(payload) {
   return res.data;
 }
 
+export async function getAppPinStatus() {
+  const res = await api.get("/me/app-pin");
+  return res.data;
+}
+
+export async function setAppPin(pin, currentPin) {
+  const res = await api.post("/me/app-pin", {
+    pin,
+    current_pin: currentPin ?? null,
+  });
+  return res.data;
+}
+
+export async function verifyAppPin(pin) {
+  const res = await api.post("/me/app-pin/verify", { pin });
+  return res.data;
+}
+
+export async function disableAppPin() {
+  const res = await api.post("/me/app-pin/disable");
+  return res.data;
+}
+
 export async function getMyPlan() {
   const res = await api.get("/plans/me");
   return res.data;

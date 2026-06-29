@@ -1,92 +1,28 @@
-// Bloqueo local de la app con PIN de 4 dígitos.
-// Es una capa de conveniencia sobre la sesión JWT: guardamos sólo un hash
-// salteado del PIN en localStorage (nunca el PIN en claro). No reemplaza la
-// autenticación del backend; protege el acceso rápido a la app en el dispositivo.
+// Bloqueo de la app con PIN de 4 dígitos.
+//
+// El PIN ahora vive en el backend (asociado a la cuenta), por lo que es el
+// mismo en todos los dispositivos. Aquí sólo manejamos una marca de sesión:
+// cuando el usuario inicia sesión con su contraseña, esa sesión queda
+// "desbloqueada" (no le pedimos el PIN inmediatamente, porque ya se autenticó).
+// Esto también sirve de recuperación: si olvidó el PIN, cierra sesión, vuelve
+// a entrar con su contraseña y puede cambiarlo desde Ajustes.
 
-const PIN_HASH_KEY = "klinip_pin_hash_v1";
-const PIN_SALT_KEY = "klinip_pin_salt_v1";
-const PIN_ENABLED_KEY = "klinip_pin_enabled_v1";
+const FRESH_LOGIN_KEY = "klinip_pin_fresh_login";
 
-const storageKey = (base, userId) => (userId ? `${base}_${userId}` : base);
-
-function toHex(bytes) {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function randomSalt() {
-  const arr = new Uint8Array(16);
-  crypto.getRandomValues(arr);
-  return toHex(arr);
-}
-
-async function hashPin(salt, pin) {
-  const data = new TextEncoder().encode(`${salt}:${pin}`);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  return toHex(new Uint8Array(digest));
-}
-
-export function hasPin(userId) {
+export function markPinFreshLogin() {
   try {
-    return Boolean(localStorage.getItem(storageKey(PIN_HASH_KEY, userId)));
-  } catch (_) {
-    return false;
-  }
-}
-
-export async function setPin(userId, pin) {
-  const salt = randomSalt();
-  const hash = await hashPin(salt, pin);
-  localStorage.setItem(storageKey(PIN_SALT_KEY, userId), salt);
-  localStorage.setItem(storageKey(PIN_HASH_KEY, userId), hash);
-}
-
-export async function verifyPin(userId, pin) {
-  try {
-    const salt = localStorage.getItem(storageKey(PIN_SALT_KEY, userId));
-    const stored = localStorage.getItem(storageKey(PIN_HASH_KEY, userId));
-    if (!salt || !stored) return false;
-    const hash = await hashPin(salt, pin);
-    return hash === stored;
-  } catch (_) {
-    return false;
-  }
-}
-
-export function clearPin(userId) {
-  try {
-    localStorage.removeItem(storageKey(PIN_HASH_KEY, userId));
-    localStorage.removeItem(storageKey(PIN_SALT_KEY, userId));
+    sessionStorage.setItem(FRESH_LOGIN_KEY, "1");
   } catch (_) {
     // noop
   }
 }
 
-// Preferencia de bloqueo. Por defecto activado: la seguridad viene encendida y
-// el usuario puede desactivarla desde Ajustes.
-export function isPinLockEnabled(userId) {
+export function consumePinFreshLogin() {
   try {
-    return localStorage.getItem(storageKey(PIN_ENABLED_KEY, userId)) !== "false";
+    const value = sessionStorage.getItem(FRESH_LOGIN_KEY) === "1";
+    sessionStorage.removeItem(FRESH_LOGIN_KEY);
+    return value;
   } catch (_) {
-    return true;
+    return false;
   }
-}
-
-export function setPinLockEnabled(userId, enabled) {
-  try {
-    localStorage.setItem(
-      storageKey(PIN_ENABLED_KEY, userId),
-      enabled ? "true" : "false"
-    );
-  } catch (_) {
-    // noop
-  }
-}
-
-// El navegador necesita un contexto seguro (https o localhost) para WebCrypto.
-export function isPinSupported() {
-  return Boolean(
-    typeof crypto !== "undefined" && crypto.subtle && window.isSecureContext
-  );
 }

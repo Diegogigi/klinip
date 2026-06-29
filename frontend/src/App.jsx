@@ -28,12 +28,7 @@ import {
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
 import PinLock from "./components/PinLock";
-import {
-  hasPin as hasAppPin,
-  clearPin as clearAppPin,
-  isPinSupported,
-  isPinLockEnabled,
-} from "./utils/pinLock";
+import { consumePinFreshLogin } from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
 
 const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
@@ -1179,10 +1174,18 @@ export default function App() {
   // o recarga vuelve a pedirlo.
   useEffect(() => {
     if (booting) return;
-    setAppLocked(
-      Boolean(user?.id) && isPinSupported() && isPinLockEnabled(user.id)
-    );
-  }, [booting, user?.id]);
+    if (!user?.id) {
+      setAppLocked(false);
+      return;
+    }
+    // Si acaba de iniciar sesión con su contraseña, no pedimos el PIN ahora
+    // (ya se autenticó). El bloqueo vuelve a aplicarse en la próxima apertura.
+    if (consumePinFreshLogin()) {
+      setAppLocked(false);
+      return;
+    }
+    setAppLocked(Boolean(user.pin_enabled));
+  }, [booting, user?.id, user?.pin_enabled]);
 
   // Re-bloqueo al volver de segundo plano tras un periodo de inactividad.
   useEffect(() => {
@@ -1195,17 +1198,13 @@ export default function App() {
       const hiddenFor = pinHiddenAtRef.current
         ? Date.now() - pinHiddenAtRef.current
         : 0;
-      if (
-        hiddenFor > APP_LOCK_GRACE_MS &&
-        isPinLockEnabled(user.id) &&
-        hasAppPin(user.id)
-      ) {
+      if (hiddenFor > APP_LOCK_GRACE_MS && user.pin_enabled) {
         setAppLocked(true);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [user?.id]);
+  }, [user?.id, user?.pin_enabled]);
 
   useEffect(() => {
     let mounted = true;
@@ -1885,8 +1884,6 @@ export default function App() {
     if (user?.id) {
       const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
       localStorage.removeItem(key);
-      // "Cierra sesión para restaurar el PIN": al salir limpiamos el PIN local.
-      clearAppPin(user.id);
     }
     setAppLocked(false);
     setUser(null);
@@ -2161,6 +2158,7 @@ export default function App() {
       {appLocked && user ? (
         <PinLock
           user={user}
+          hasExistingPin={Boolean(user.pin_set)}
           onUnlock={() => setAppLocked(false)}
           onLogout={handleLogout}
         />

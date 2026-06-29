@@ -4,6 +4,7 @@ import { register, login, getMe } from "../api";
 import { clearAppCaches } from "../utils/cache";
 import { extractApiError } from "../utils/errors";
 import { validatePassword, validatePasswordMatch } from "../utils/validation";
+import { markPinFreshLogin } from "../utils/pinLock";
 import BrandLogo from "../components/BrandLogo";
 
 export default function Register({ onRegistered }) {
@@ -42,6 +43,10 @@ export default function Register({ onRegistered }) {
       
       if (session?.access_token) {
         localStorage.setItem("token", session.access_token);
+        if (session.refresh_token) {
+          localStorage.setItem("refresh_token", session.refresh_token);
+        }
+        markPinFreshLogin();
         console.log("Token guardado:", session.access_token.substring(0, 20) + "...");
         
         // Esperar un momento para asegurar que el token se guardó
