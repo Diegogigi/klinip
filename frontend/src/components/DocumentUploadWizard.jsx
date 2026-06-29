@@ -80,12 +80,6 @@ const CAPTURE_TIPS = [
   "Si son varias hojas, súbelas en PDF cuando puedas.",
 ];
 
-const LIVE_CAMERA_TIPS = [
-  "Alinea el papel dentro del marco antes de capturar.",
-  "Espera a que el texto se vea nítido y sin movimiento.",
-  "Si la cámara no abre, usa la cámara del dispositivo o sube el archivo.",
-];
-
 function isOcrActive(status) {
   return ACTIVE_OCR.has(String(status || "").trim().toLowerCase());
 }
@@ -661,15 +655,6 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
 
             {step === "camera" ? (
               <div className="documents-wizard-body">
-                <div className="documents-wizard-hero">
-                  <span className="documents-wizard-kicker">Vista previa en vivo</span>
-                  <h2>Alinea el documento dentro del marco</h2>
-                  <p>
-                    Toma la foto desde aquí para que Klinip reciba una imagen más clara. Si algo falla, puedes usar la
-                    cámara del dispositivo o subir el archivo manualmente.
-                  </p>
-                </div>
-
                 <div className="documents-wizard-camera-shell">
                   <div className="documents-wizard-camera-stage">
                     <video
@@ -680,9 +665,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                       playsInline
                     />
                     <div className="documents-wizard-camera-mask" aria-hidden="true">
-                      <div className="documents-wizard-camera-frame">
-                        <span className="documents-wizard-camera-frame-label">Documento completo dentro del marco</span>
-                      </div>
+                      <div className="documents-wizard-camera-frame" />
                     </div>
                     <div
                       className={`documents-wizard-camera-status${
@@ -693,24 +676,12 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                       {cameraError
                         ? cameraError
                         : cameraReady
-                        ? "Cámara lista para capturar."
+                        ? "Encuadra el documento y captura"
                         : "Abriendo cámara..."}
                     </div>
                   </div>
 
                   <canvas ref={canvasRef} className="documents-wizard-hidden-canvas" aria-hidden="true" />
-
-                  <div className="documents-wizard-section">
-                    <div className="documents-wizard-section-head">
-                      <strong>Cómo lograr una mejor captura</strong>
-                      <span>Solo necesitas una imagen clara y completa.</span>
-                    </div>
-                    <ul className="documents-wizard-checklist is-compact">
-                      {LIVE_CAMERA_TIPS.map((tip) => (
-                        <li key={tip}>{tip}</li>
-                      ))}
-                    </ul>
-                  </div>
                 </div>
 
                 <div className="documents-wizard-button-stack">
@@ -728,11 +699,13 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                 </div>
 
                 <div className="documents-wizard-inline-actions">
-                  <button type="button" className="documents-wizard-inline-action" onClick={startCameraPreview}>
-                    Reintentar cámara
-                  </button>
+                  {cameraError ? (
+                    <button type="button" className="documents-wizard-inline-action" onClick={startCameraPreview}>
+                      Reintentar cámara
+                    </button>
+                  ) : null}
                   <button type="button" className="documents-wizard-inline-action" onClick={handleLibraryFallback}>
-                    Subir PDF o imagen
+                    Subir archivo
                   </button>
                   <button type="button" className="documents-wizard-inline-action" onClick={() => setStep("choose")}>
                     Volver

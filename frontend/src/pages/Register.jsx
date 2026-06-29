@@ -5,6 +5,7 @@ import { clearAppCaches } from "../utils/cache";
 import { extractApiError } from "../utils/errors";
 import { validatePassword, validatePasswordMatch } from "../utils/validation";
 import BrandLogo from "../components/BrandLogo";
+import { markPinRecentPasswordLogin } from "../utils/pinLock";
 
 export default function Register({ onRegistered }) {
   const [name, setName] = useState("");
@@ -66,12 +67,14 @@ export default function Register({ onRegistered }) {
             );
           }
           console.log("Usuario obtenido:", me);
+          markPinRecentPasswordLogin();
           onRegistered(me);
           navigate("/");
         } catch (meError) {
           console.error("Error al obtener usuario:", meError);
           // Si falla getMe pero tenemos token, intentar de nuevo
           const me = await getMe();
+          markPinRecentPasswordLogin();
           onRegistered(me);
           navigate("/");
         }

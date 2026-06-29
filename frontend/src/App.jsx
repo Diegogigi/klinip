@@ -31,6 +31,7 @@ import BrandLogo, { BrandMark } from "./components/BrandLogo";
 import PinLock from "./components/PinLock";
 import {
   clearPinRelockRequired,
+  consumePinRecentPasswordLogin,
   consumePinRecoveryLogin,
   hasPinRelockRequired,
   markPinRelockRequired,
@@ -1080,6 +1081,7 @@ export default function App() {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [appLocked, setAppLocked] = useState(false);
+  const [pinStatusReady, setPinStatusReady] = useState(false);
   const pinHiddenAtRef = useRef(0);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
@@ -1165,9 +1167,13 @@ export default function App() {
     async function bootstrap() {
       const token = localStorage.getItem("token");
       if (!token) {
-        if (active) setBooting(false);
+        if (active) {
+          setPinStatusReady(true);
+          setBooting(false);
+        }
         return;
       }
+      if (active) setPinStatusReady(false);
       try {
         const me = await withTimeout(
           getMe(),
@@ -1194,6 +1200,7 @@ export default function App() {
         } catch (_) {
           resolvedUser = me;
         }
+        if (!active) return;
         setUser(resolvedUser);
       } catch (err) {
         if (!active) return;
@@ -1201,7 +1208,10 @@ export default function App() {
         localStorage.removeItem("refresh_token");
         setUser(null);
       } finally {
-        if (active) setBooting(false);
+        if (active) {
+          setPinStatusReady(true);
+          setBooting(false);
+        }
       }
     }
     bootstrap();
@@ -1209,6 +1219,51 @@ export default function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setPinStatusReady(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setPinStatusReady(false);
+
+    const syncPinStatus = async () => {
+      try {
+        const pinStatus = await withTimeout(
+          getAppPinStatus(),
+          BOOTSTRAP_SESSION_TIMEOUT_MS,
+          "La validacion del PIN tardó demasiado."
+        );
+        if (cancelled) return;
+        setUser((current) => {
+          if (!current || Number(current.id) !== Number(user.id)) return current;
+          return {
+            ...current,
+            pin_set:
+              typeof pinStatus?.pin_set === "boolean"
+                ? pinStatus.pin_set
+                : current?.pin_set,
+            pin_enabled:
+              typeof pinStatus?.pin_enabled === "boolean"
+                ? pinStatus.pin_enabled
+                : current?.pin_enabled,
+          };
+        });
+      } catch (_) {
+        // noop: mantenemos el último estado disponible del usuario.
+      } finally {
+        if (!cancelled) {
+          setPinStatusReady(true);
+        }
+      }
+    };
+
+    syncPinStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   // Redirect to login when session expires (refresh token failed)
   useEffect(() => {
@@ -1224,8 +1279,13 @@ export default function App() {
   // activo. Solo se omite una vez cuando el propio usuario cerró sesión para
   // restaurarlo tras olvidarlo.
   useEffect(() => {
-    if (booting) return;
+    if (booting || !pinStatusReady) return;
     if (!user?.id) {
+      clearPinRelockRequired();
+      setAppLocked(false);
+      return;
+    }
+    if (consumePinRecentPasswordLogin()) {
       clearPinRelockRequired();
       setAppLocked(false);
       return;
@@ -1236,7 +1296,7 @@ export default function App() {
       return;
     }
     setAppLocked(isPinProtectionActive(user));
-  }, [booting, user?.id, user?.pin_enabled, user?.pin_set]);
+  }, [booting, pinStatusReady, user?.id, user?.pin_enabled, user?.pin_set]);
 
   // Re-bloqueo al volver de segundo plano. Si el PIN está activo, se vuelve a
   // pedir cada vez que la app reaparece.
@@ -2222,10 +2282,12 @@ export default function App() {
   const isSettingsRoute = location.pathname.startsWith("/settings");
   const isDashboardRoute = location.pathname === "/" && !!user;
   const pinLockVisible = Boolean(appLocked && user);
+  const appGateVisible = Boolean(booting || (user?.id && !pinStatusReady));
 
   return (
     <div className="app-shell">
-      {pinLockVisible ? (
+      {appGateVisible ? <RouteLoadingFallback /> : null}
+      {!appGateVisible && pinLockVisible ? (
         <PinLock
           user={user}
           hasExistingPin={isPinProtectionActive(user)}
@@ -2236,7 +2298,7 @@ export default function App() {
           onLogout={handleLogout}
         />
       ) : null}
-      {!pinLockVisible && consentOpen && (
+      {!appGateVisible && !pinLockVisible && consentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card" role="dialog" aria-modal="true">
             <p className="consent-kicker">Asistente Klinip</p>
@@ -2278,7 +2340,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {!pinLockVisible && notifConsentOpen && (
+      {!appGateVisible && !pinLockVisible && notifConsentOpen && (
         <div className="consent-backdrop">
           <div className="consent-card notification-consent" role="dialog" aria-modal="true">
             <p className="consent-kicker">Recordatorios</p>
@@ -2324,7 +2386,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {!pinLockVisible && onboardingOpen && (
+      {!appGateVisible && !pinLockVisible && onboardingOpen && (
         <div className="ob-backdrop">
           <div className="ob-overlay" role="dialog" aria-modal="true" aria-label="Bienvenida a Klinip">
             {onboardingStep < 4 && (
@@ -2612,7 +2674,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {!pinLockVisible ? (
+      {!appGateVisible && !pinLockVisible ? (
       <div className="layout">
         {showAppChrome || showAiNavbar ? (
           <Sidebar
