@@ -4,7 +4,7 @@ import NotificationSettings from "../components/NotificationSettings";
 import SuccessSheet from "../components/SuccessSheet";
 import StepUpModal from "../components/StepUpModal";
 import PinLock from "../components/PinLock";
-import { getMe, disableAppPin } from "../api";
+import { getMe, getAppPinStatus, disableAppPin } from "../api";
 import { isHandheldViewport } from "../utils/mobileViewport";
 import {
   updateMe,
@@ -186,10 +186,24 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
 
   const refreshUserAfterPin = async () => {
     try {
-      const me = await getMe();
-      onUserUpdate?.(me);
-      setPinEnabled(Boolean(me?.pin_enabled));
-      setPinHasSet(Boolean(me?.pin_set));
+      const [me, pinStatus] = await Promise.all([
+        getMe(),
+        getAppPinStatus().catch(() => null),
+      ]);
+      const mergedUser = {
+        ...me,
+        pin_set:
+          typeof pinStatus?.pin_set === "boolean"
+            ? pinStatus.pin_set
+            : me?.pin_set,
+        pin_enabled:
+          typeof pinStatus?.pin_enabled === "boolean"
+            ? pinStatus.pin_enabled
+            : me?.pin_enabled,
+      };
+      onUserUpdate?.(mergedUser);
+      setPinEnabled(Boolean(mergedUser?.pin_enabled));
+      setPinHasSet(Boolean(mergedUser?.pin_set));
     } catch (_) {
       // noop
     }

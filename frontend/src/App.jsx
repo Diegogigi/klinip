@@ -29,7 +29,12 @@ import {
 } from "./utils/medicationSchedule";
 import BrandLogo, { BrandMark } from "./components/BrandLogo";
 import PinLock from "./components/PinLock";
-import { consumePinRecoveryLogin } from "./utils/pinLock";
+import {
+  clearPinRelockRequired,
+  consumePinRecoveryLogin,
+  hasPinRelockRequired,
+  markPinRelockRequired,
+} from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
 
 const LAZY_ROUTE_RELOAD_PREFIX = "klinip-lazy-route-reload";
@@ -1221,10 +1226,12 @@ export default function App() {
   useEffect(() => {
     if (booting) return;
     if (!user?.id) {
+      clearPinRelockRequired();
       setAppLocked(false);
       return;
     }
     if (consumePinRecoveryLogin()) {
+      clearPinRelockRequired();
       setAppLocked(false);
       return;
     }
@@ -1235,20 +1242,36 @@ export default function App() {
   // pedir cada vez que la app reaparece.
   useEffect(() => {
     if (!user?.id) return undefined;
-    const handleVisibility = () => {
-      if (document.hidden) {
-        pinHiddenAtRef.current = Date.now();
-        return;
-      }
+    const markBackgroundExit = () => {
+      pinHiddenAtRef.current = Date.now();
+      markPinRelockRequired();
+    };
+    const requestRelockIfNeeded = () => {
+      if (!isPinProtectionActive(user)) return;
       const hiddenFor = pinHiddenAtRef.current
         ? Date.now() - pinHiddenAtRef.current
         : 0;
-      if (hiddenFor > APP_LOCK_GRACE_MS && isPinProtectionActive(user)) {
+      if (hiddenFor > APP_LOCK_GRACE_MS || hasPinRelockRequired()) {
         setAppLocked(true);
       }
     };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        markBackgroundExit();
+        return;
+      }
+      requestRelockIfNeeded();
+    };
+    window.addEventListener("focus", requestRelockIfNeeded);
+    window.addEventListener("pageshow", requestRelockIfNeeded);
+    window.addEventListener("pagehide", markBackgroundExit);
     document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", requestRelockIfNeeded);
+      window.removeEventListener("pageshow", requestRelockIfNeeded);
+      window.removeEventListener("pagehide", markBackgroundExit);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [user?.id, user?.pin_enabled, user?.pin_set]);
 
   useEffect(() => {
@@ -1930,6 +1953,7 @@ export default function App() {
       const key = getUserKey(NOTIFICATION_STORAGE_KEY_BASE, user.id);
       localStorage.removeItem(key);
     }
+    clearPinRelockRequired();
     setAppLocked(false);
     setUser(null);
     setBooting(false);
@@ -2204,7 +2228,10 @@ export default function App() {
         <PinLock
           user={user}
           hasExistingPin={isPinProtectionActive(user)}
-          onUnlock={() => setAppLocked(false)}
+          onUnlock={() => {
+            clearPinRelockRequired();
+            setAppLocked(false);
+          }}
           onLogout={handleLogout}
         />
       ) : null}
