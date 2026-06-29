@@ -474,11 +474,15 @@ export default function MiSalud() {
       <section className="clp-card tone-indigo" aria-labelledby="clp-bio-h">
         <div className="clp-card-head">
           <span className="clp-card-icon tone-indigo"><IcoBiometric /></span>
-          <div className="clp-card-titles">
-            <h2 className="clp-card-title" id="clp-bio-h">Parámetros biométricos</h2>
-            <p className="clp-card-sub">Glucosa, presión, frecuencia cardiaca y temperatura.</p>
+          <div className="clp-card-head-main">
+            <div className="clp-card-titles">
+              <h2 className="clp-card-title" id="clp-bio-h">Parámetros biométricos</h2>
+              <p className="clp-card-sub">Glucosa, presión, frecuencia cardiaca y temperatura.</p>
+            </div>
+            <div className="clp-card-head-meta">
+              <Link to="/mi-salud/biometricos" className="clp-card-link clp-card-link-primary">Abrir panel <IcoChevron /></Link>
+            </div>
           </div>
-          <Link to="/mi-salud/biometricos" className="clp-card-link">Abrir panel <IcoChevron /></Link>
         </div>
         {latestBiometricMetric?.latest_reading ? (
           <div className="clp-biometric-body">
@@ -517,11 +521,15 @@ export default function MiSalud() {
         <section className="clp-card tone-indigo" aria-labelledby="clp-activity-h">
           <div className="clp-card-head">
             <span className="clp-card-icon tone-indigo"><IcoActivity /></span>
-            <div className="clp-card-titles">
-              <h2 className="clp-card-title" id="clp-activity-h">Lo último que pasó</h2>
-              <p className="clp-card-sub">Tu actividad de salud reciente</p>
+            <div className="clp-card-head-main">
+              <div className="clp-card-titles">
+                <h2 className="clp-card-title" id="clp-activity-h">Lo último que pasó</h2>
+                <p className="clp-card-sub">Tu actividad de salud reciente</p>
+              </div>
+              <div className="clp-card-head-meta">
+                <Link to="/timeline" className="clp-card-link clp-card-link-primary">Historia <IcoChevron /></Link>
+              </div>
             </div>
-            <Link to="/timeline" className="clp-card-link">Historia <IcoChevron /></Link>
           </div>
           <div className="clp-activity-list" role="list">
             {recentEvents.map((ev, i) => (
