@@ -10122,7 +10122,7 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   border: 1.5px solid #bfdbfe;
   background: #ffffff;
   color: #2563eb;
-  font-family: "Plus Jakarta Sans", sans-serif;
+  font-family: var(--font-brand);
   font-size: 0.9rem;
   font-weight: 600;
   outline: none;
@@ -12086,7 +12086,7 @@ body.theme-dark .medications-pagination-btn:hover:not(:disabled) {
   font-size: 1.7rem;
   font-weight: 500;
   line-height: 1;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-brand);
 }
 
 .family-report-kpi span {
@@ -16945,7 +16945,7 @@ body.theme-dark .home-ops-action-icon {
 }
 
 .home-upcoming-date strong {
-  font-family: "Georgia", "Times New Roman", serif;
+  font-family: var(--font-brand);
   font-size: 1.45rem;
   line-height: 1;
   color: #0f172a;
