@@ -3738,6 +3738,10 @@ def _build_medication_event_defaults(
         scheduled_at = scheduled_at.replace(tzinfo=None)
     if taken_at and getattr(taken_at, "tzinfo", None) is not None:
         taken_at = taken_at.replace(tzinfo=None)
+    # Si el cliente indicó explícitamente a qué dosis corresponde la toma
+    # (p. ej. la dosis de hoy tomada antes de su hora), respetamos ese slot y
+    # no lo movemos a un día anterior.
+    explicit_schedule = scheduled_at is not None
     schedule_dt = scheduled_at
     actual_taken_at = taken_at
     normalized_status = _normalize_adherence_status(status)
@@ -3746,7 +3750,12 @@ def _build_medication_event_defaults(
         schedule_dt = _nearest_medication_due_slot(med, reference_dt)
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
-    if normalized_status in {"taken", "late"} and schedule_dt and actual_taken_at:
+    if (
+        not explicit_schedule
+        and normalized_status in {"taken", "late"}
+        and schedule_dt
+        and actual_taken_at
+    ):
         future_margin = timedelta(minutes=15)
         nearest_due_slot = _nearest_medication_due_slot(med, actual_taken_at)
         if nearest_due_slot is not None:
@@ -13288,6 +13297,41 @@ def _sync_health_alerts(
     )
 
 
+def _resolve_medication_health_alerts(
+    db: Session,
+    profile: models.HealthProfile,
+    medication_id: int,
+    alert_types: tuple[str, ...] = ("incomplete_treatment", "medication_running_out"),
+) -> bool:
+    """Resuelve de inmediato las alertas del radar vinculadas a un medicamento
+    (p. ej. al completarlo), sin esperar a la próxima re-ejecución del radar."""
+    if not profile or not medication_id:
+        return False
+    now = datetime.now()
+    alerts = (
+        db.query(models.HealthAlert)
+        .filter(
+            models.HealthAlert.profile_id == profile.id,
+            models.HealthAlert.status == "active",
+            models.HealthAlert.alert_type.in_(list(alert_types)),
+        )
+        .all()
+    )
+    changed = False
+    for alert in alerts:
+        evidence = alert.evidence_json or {}
+        try:
+            evidence_med_id = int(evidence.get("medication_id") or 0)
+        except (TypeError, ValueError):
+            evidence_med_id = 0
+        if evidence_med_id == int(medication_id):
+            alert.status = "resolved"
+            alert.updated_at = now
+            db.add(alert)
+            changed = True
+    return changed
+
+
 def _build_advanced_health_context(
     db: Session,
     profile: models.HealthProfile,
@@ -22617,7 +22661,7 @@ async def get_ai_health_radar(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
-    return (
+    alerts = (
         db.query(models.HealthAlert)
         .filter(
             models.HealthAlert.profile_id == profile.id,
@@ -22626,6 +22670,42 @@ async def get_ai_health_radar(
         .order_by(models.HealthAlert.detected_at.desc())
         .all()
     )
+    # Limpieza oportunista: resolver alertas de medicamentos que ya fueron
+    # cerrados/completados, sin esperar a la próxima re-ejecución del radar.
+    med_linked_types = {"incomplete_treatment", "medication_running_out"}
+    linked_med_ids = {
+        int((a.evidence_json or {}).get("medication_id") or 0)
+        for a in alerts
+        if a.alert_type in med_linked_types
+    }
+    linked_med_ids.discard(0)
+    completed_med_ids: set[int] = set()
+    if linked_med_ids:
+        completed_rows = (
+            db.query(models.Medication.id)
+            .filter(
+                models.Medication.id.in_(linked_med_ids),
+                models.Medication.completed.is_(True),
+            )
+            .all()
+        )
+        completed_med_ids = {int(row[0]) for row in completed_rows}
+    visible: list[models.HealthAlert] = []
+    changed = False
+    now = datetime.now()
+    for alert in alerts:
+        if alert.alert_type in med_linked_types:
+            mid = int((alert.evidence_json or {}).get("medication_id") or 0)
+            if mid and mid in completed_med_ids:
+                alert.status = "resolved"
+                alert.updated_at = now
+                db.add(alert)
+                changed = True
+                continue
+        visible.append(alert)
+    if changed:
+        db.commit()
+    return visible
 
 
 @app.post("/ai/health-radar/run", response_model=List[schemas.HealthAlertOut])
@@ -23148,6 +23228,11 @@ async def update_medication(
         med.refill_last_notified_at = None
         med.refill_last_notified_remaining = None
     refresh_episode_links_for_record(db, profile, "medication", med)
+
+    # Al completar un tratamiento, resolver de inmediato sus alertas del radar
+    # (tratamiento incompleto / por terminar) para que no queden "pegadas".
+    if bool(getattr(med, "completed", False)):
+        _resolve_medication_health_alerts(db, profile, med.id)
 
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()

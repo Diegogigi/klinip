@@ -272,6 +272,18 @@ function getMedicationDoseContext(med, now = new Date()) {
       };
     }
     if (persistedNextDose.getTime() > now.getTime() + toleranceMs) {
+      // Si la próxima dosis es HOY, permitir registrarla aunque aún no sea su
+      // hora (tomada anticipadamente cuenta como la dosis de hoy). Así deja de
+      // aparecer como pendiente y reaparece recién en la siguiente toma.
+      if (persistedNextDose.toDateString() === now.toDateString()) {
+        return {
+          kind: "due_today_early",
+          actionableAt: persistedNextDose,
+          headline: `Dosis de hoy: ${formatMedicationDateTime(persistedNextDose)}`,
+          helper: "Si ya la tomaste, regístrala como la dosis de hoy.",
+          actionLabel: "Registrar la dosis de hoy",
+        };
+      }
       return {
         kind: "upcoming",
         actionableAt: null,
@@ -316,6 +328,15 @@ function getMedicationDoseContext(med, now = new Date()) {
   }
 
   if (nextDose) {
+    if (nextDose.toDateString() === now.toDateString()) {
+      return {
+        kind: "due_today_early",
+        actionableAt: nextDose,
+        headline: `Dosis de hoy: ${formatMedicationDateTime(nextDose)}`,
+        helper: "Si ya la tomaste, regístrala como la dosis de hoy.",
+        actionLabel: "Registrar la dosis de hoy",
+      };
+    }
     return {
       kind: "upcoming",
       actionableAt: null,
@@ -356,6 +377,7 @@ export default function Medications() {
   const [notifyActionLoading, setNotifyActionLoading] = useState(false);
   const [missingFrequency, setMissingFrequency] = useState(null);
   const [intakeFeedback, setIntakeFeedback] = useState("");
+  const [dismissedFinishedIds, setDismissedFinishedIds] = useState(() => new Set());
   const feedbackTimer = useRef(null);
   const doseCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const [form, setForm] = useState({
@@ -1394,6 +1416,76 @@ export default function Medications() {
     }
   };
 
+  const finishedDismissStorageKey = `klinip_dismissed_finished_meds_${activeProfile?.id || "default"}`;
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(finishedDismissStorageKey);
+      const ids = raw ? JSON.parse(raw) : [];
+      setDismissedFinishedIds(new Set(Array.isArray(ids) ? ids.map(Number) : []));
+    } catch (_e) {
+      setDismissedFinishedIds(new Set());
+    }
+  }, [finishedDismissStorageKey]);
+
+  const persistDismissedFinishedIds = (idSet) => {
+    try {
+      window.localStorage.setItem(
+        finishedDismissStorageKey,
+        JSON.stringify(Array.from(idSet)),
+      );
+    } catch (_e) {
+      // localStorage no disponible: el descarte solo dura esta sesión.
+    }
+  };
+
+  // Oculta temporalmente el banner. Vuelve a aparecer si finaliza un tratamiento
+  // nuevo (su id no está descartado) o al limpiar los datos del navegador.
+  const dismissFinishedBanner = (ids) => {
+    setDismissedFinishedIds((prev) => {
+      const next = new Set(prev);
+      (ids || []).forEach((id) => next.add(Number(id)));
+      persistDismissedFinishedIds(next);
+      return next;
+    });
+  };
+
+  // Cierra definitivamente un tratamiento ya vencido por fecha (lo marca como
+  // completado). Quita la tarjeta del banner y resuelve su alerta del radar.
+  const handleCloseFinishedMedication = async (med) => {
+    if (!canEditActiveProfile) {
+      alert("Este perfil está en modo solo lectura. No puedes cerrar tratamientos.");
+      return;
+    }
+    if (!med?.id) return;
+    const medicationName = cleanUiText(med.name || "este tratamiento");
+    if (!window.confirm(`¿Cerrar ${medicationName}? Quedará marcado como finalizado y dejará de aparecer aquí.`)) {
+      return;
+    }
+    try {
+      const updatedMedication = await saveMedication({ id: med.id, completed: true });
+      await load();
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["medications", "health-radar", "adherence"],
+      });
+      setMedSuccess(
+        buildMedicationCompletedSuccess({
+          medication: updatedMedication || { ...med, completed: true },
+          profileLabel:
+            activeProfile?.display_name || activeProfile?.full_name || "Mi perfil",
+          completedAt: med.end_date || buildLocalMinuteTimestamp(),
+        }),
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudo cerrar el tratamiento: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido"),
+      );
+    }
+  };
+
   const medsMissingFrequency = (meds || []).filter(
     (m) => !m.frequency || m.frequency.trim() === ""
   );
@@ -1458,6 +1550,7 @@ export default function Medications() {
     return (meds || [])
       .filter((med) => {
         if (med.completed) return false;
+        if (dismissedFinishedIds.has(Number(med.id))) return false;
         const endAt = getMedicationEffectiveEndAt(med);
         if (!endAt) return false;
         const ts = endAt.getTime();
@@ -3001,6 +3094,15 @@ export default function Medications() {
                   : `${recentlyFinishedMeds.length} tratamientos llegaron a su fecha de término. Decide qué hacer con ellos.`}
               </p>
             </div>
+            <button
+              type="button"
+              className="med-finished-banner-dismiss"
+              aria-label="Ocultar este aviso"
+              title="Ocultar por ahora"
+              onClick={() => dismissFinishedBanner(recentlyFinishedMeds.map((m) => m.id))}
+            >
+              Ocultar
+            </button>
           </div>
           <ul className="med-finished-banner-list">
             {recentlyFinishedMeds.map((med) => {
@@ -3022,6 +3124,13 @@ export default function Medications() {
                         onClick={() => handleRenewMedication(med)}
                       >
                         Renovar
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        onClick={() => handleCloseFinishedMedication(med)}
+                      >
+                        Cerrar
                       </button>
                     </div>
                   ) : null}

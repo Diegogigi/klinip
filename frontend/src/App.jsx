@@ -707,6 +707,9 @@ function Topbar({
   const activeProfileLabel = activeProfile
     ? getHealthProfileAccessLabel(activeProfile, user)
     : "Perfil principal";
+  const activeProfileDisplayName = activeProfile
+    ? getHealthProfileDisplayName(activeProfile, user)
+    : user?.name || "Perfil personal";
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute || (!user && location.pathname === "/")) return null;
 

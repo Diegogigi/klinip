@@ -9302,6 +9302,31 @@ body.theme-dark .medications-mobile-card.is-finished {
 
 .med-finished-banner-head {
   margin-bottom: 0.75rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.med-finished-banner-dismiss {
+  flex: 0 0 auto;
+  border: 1px solid #fcd34d;
+  background: transparent;
+  color: #b45309;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.med-finished-banner-dismiss:hover {
+  background: #fef3c7;
+}
+
+body.theme-dark .med-finished-banner-dismiss {
+  border-color: #b45309;
+  color: #fcd34d;
 }
 
 .med-finished-banner-list {
