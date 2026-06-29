@@ -17126,6 +17126,30 @@ body.theme-dark .home-ops-action-icon {
   grid-template-columns: minmax(0, 1.2fr) 380px;
 }
 
+/* En escritorio (2 columnas) la tarjeta azul de Inicio ocupa todo el ancho
+   superior, en vez de dejar la columna derecha vacía. La copia crece para
+   llenar el espacio y el aro/métricas quedan a la derecha sin hueco. */
+@media (min-width: 1181px) {
+  .home-editorial-layout-clinical .home-editorial-top {
+    grid-column: 1 / -1;
+  }
+
+  .home-editorial-layout-clinical .home-clinical-copy-wrap {
+    max-width: none;
+  }
+
+  .home-editorial-layout-clinical .home-clinical-side {
+    flex: 0 0 clamp(248px, 24vw, 320px);
+    width: clamp(248px, 24vw, 320px);
+  }
+
+  /* Líneas de texto con largo cómodo aunque la tarjeta sea ancha */
+  .home-editorial-layout-clinical .home-clinical-headline,
+  .home-editorial-layout-clinical .home-clinical-summary {
+    max-width: 660px;
+  }
+}
+
 .home-clinical-hero {
   min-height: 100%;
 }
