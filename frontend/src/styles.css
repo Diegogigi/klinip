@@ -59567,11 +59567,14 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar.sidebar-mobile-shell {
-    left: 0.85rem;
-    right: 0.85rem;
-    bottom: calc(0.9rem + env(safe-area-inset-bottom));
-    width: auto;
+    position: fixed;
+    left: 50%;
+    right: auto;
+    bottom: calc(0.82rem + env(safe-area-inset-bottom));
+    width: min(calc(100vw - 1.7rem), 23.2rem);
+    max-width: 23.2rem;
     height: auto;
+    min-height: 0;
     padding: 0.62rem 0.48rem calc(0.62rem + env(safe-area-inset-bottom));
     border-radius: 2rem;
     background: rgba(255, 255, 255, 0.72);
@@ -59580,6 +59583,9 @@ body.theme-dark .bio-unified-chart-legend-item small {
     backdrop-filter: blur(22px);
     -webkit-backdrop-filter: blur(22px);
     overflow: hidden;
+    transform: translateX(-50%);
+    z-index: 1000;
+    transition: none;
   }
 
   body.theme-dark .sidebar {
@@ -60381,7 +60387,14 @@ body.theme-dark .bio-unified-chart-legend-item small {
   }
 
   .sidebar.sidebar-mobile-shell {
+    top: auto !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: calc(0.82rem + env(safe-area-inset-bottom)) !important;
+    width: min(calc(100vw - 1.7rem), 23.2rem) !important;
+    max-width: 23.2rem !important;
     height: auto !important;
+    min-height: 0 !important;
     border-radius: 1.9rem !important;
     border: 1px solid rgba(226, 232, 240, 0.62) !important;
     background:
@@ -60392,6 +60405,7 @@ body.theme-dark .bio-unified-chart-legend-item small {
     backdrop-filter: blur(22px) saturate(1.08) !important;
     -webkit-backdrop-filter: blur(22px) saturate(1.08) !important;
     overflow: hidden !important;
+    transform: translateX(-50%) !important;
     isolation: isolate;
   }
 

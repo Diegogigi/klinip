@@ -242,16 +242,31 @@ function getRouteTransitionDirection(fromPath, toPath) {
   return toIndex >= fromIndex ? "forward" : "backward";
 }
 
-function getHealthProfileAccessLabel(item, userId) {
+function getHealthProfileRoleLabel(item, userId) {
   if (!item) return "";
   const isOwnProfile = Number(item.owner_user_id) === Number(userId);
-  if (isOwnProfile) return "propio";
-  const ownerName = (item.owner_name || item.owner_email || "").trim();
-  const ownerSuffix = ownerName ? ` · de ${ownerName.split(" ")[0]}` : "";
-  if (item.is_primary_profile) return `titular${ownerSuffix}`;
+  if (isOwnProfile) return "Propio";
+  if (item.is_primary_profile) return "Titular";
   const role = (item.access_role || "").toLowerCase();
-  if (role === "admin") return `admin${ownerSuffix}`;
-  return `invitado${ownerSuffix}`;
+  if (role === "admin") return "Administrador";
+  if (role === "caregiver") return "Editor";
+  if (role === "viewer") return "Lector";
+  return "Invitado";
+}
+
+function getHealthProfileAccessLabel(item, user) {
+  if (!item) return "";
+  const roleLabel = getHealthProfileRoleLabel(item, user?.id);
+  const isOwnProfile = Number(item.owner_user_id) === Number(user?.id);
+  if (isOwnProfile) return "Perfil personal";
+  const accountName = (user?.name || user?.email || "Usuario").trim();
+  return accountName ? `${accountName} · ${roleLabel}` : roleLabel;
+}
+
+function getHealthProfileMenuLabel(item, user) {
+  if (!item) return "Perfil";
+  const context = getHealthProfileAccessLabel(item, user);
+  return context ? `${item.full_name} (${context})` : item.full_name;
 }
 
 function isPinProtectionActive(user) {
@@ -337,28 +352,12 @@ function Sidebar({
       ? "Plan Plus"
       : "Plan Básico";
   const activeProfileAccessLabel = activeProfile
-    ? getHealthProfileAccessLabel(activeProfile, user?.id)
-    : "principal";
+    ? getHealthProfileAccessLabel(activeProfile, user)
+    : "Perfil principal";
   const sidebarAlertsCount = notifications?.length || 0;
   const sidebarHealthCount =
     notificationCounts.medications + notificationCounts.documents;
   const sidebarInitial = (user?.name || "Klinip").slice(0, 1).toUpperCase();
-  const mobileSidebarShellStyle = isMobile
-    ? {
-        left: "50%",
-        right: "auto",
-        bottom: "calc(0.78rem + env(safe-area-inset-bottom))",
-        width: "min(calc(100vw - 2.2rem), 23.2rem)",
-        maxWidth: "23.2rem",
-        height: "auto",
-        padding: "0.46rem 0.54rem 0.42rem",
-        borderRadius: "1.9rem",
-        transform: "translateX(-50%)",
-        overflow: "visible",
-        isolation: "isolate",
-      }
-    : undefined;
-
   useEffect(() => {
     setShowMobileMenu(false);
   }, [location.pathname, isMobile]);
@@ -386,7 +385,6 @@ function Sidebar({
   return (
     <aside
       className={`sidebar ${isMobile ? "sidebar-mobile-shell" : ""}`}
-      style={mobileSidebarShellStyle}
     >
       <div className="sidebar-brand">
         <BrandLogo
@@ -416,12 +414,12 @@ function Sidebar({
                 </p>
               </div>
             </div>
-            <div className="sidebar-desktop-profile-meta">
-              <span className="sidebar-desktop-profile-role">
-                Acceso {activeProfileAccessLabel}
-              </span>
-              <span className="sidebar-desktop-profile-email">
-                {user?.email || "sin-correo"}
+              <div className="sidebar-desktop-profile-meta">
+                <span className="sidebar-desktop-profile-role">
+                  {activeProfileAccessLabel}
+                </span>
+                <span className="sidebar-desktop-profile-email">
+                  {user?.email || "sin-correo"}
               </span>
             </div>
             {canSwitchProfiles ? (
@@ -434,8 +432,7 @@ function Sidebar({
               >
                 {(healthProfiles || []).map((item) => (
                   <option value={item.id} key={item.id}>
-                    {item.full_name}
-                    {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                    {getHealthProfileMenuLabel(item, user)}
                   </option>
                 ))}
               </select>
@@ -687,8 +684,8 @@ function Topbar({
       ? "Plan Plus"
       : "Plan Básico";
   const activeProfileLabel = activeProfile
-    ? getHealthProfileAccessLabel(activeProfile, user?.id)
-    : "principal";
+    ? getHealthProfileAccessLabel(activeProfile, user)
+    : "Perfil principal";
 
   if (isAuthRoute || isPlansRoute || isLegalRoute || isSharedVoiceRoute || (!user && location.pathname === "/")) return null;
 
@@ -720,7 +717,7 @@ function Topbar({
                 {activeProfile?.full_name || user?.name || "Perfil personal"}
               </strong>
               <span className="topbar-highlight-note">
-                Acceso {activeProfileLabel}
+                {activeProfileLabel}
               </span>
             </div>
           </div>
@@ -822,7 +819,7 @@ function Topbar({
                 </div>
                 <p className="topbar-user-menu-profile-name">
                   {activeProfile
-                    ? `${activeProfile.full_name} (${getHealthProfileAccessLabel(activeProfile, user?.id)})`
+                    ? getHealthProfileMenuLabel(activeProfile, user)
                     : user?.name || "Perfil personal"}
                 </p>
                 {canSwitchProfiles ? (
@@ -834,8 +831,7 @@ function Topbar({
                   >
                     {(healthProfiles || []).map((item) => (
                       <option value={item.id} key={item.id}>
-                        {item.full_name}
-                        {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                        {getHealthProfileMenuLabel(item, user)}
                       </option>
                     ))}
                   </select>

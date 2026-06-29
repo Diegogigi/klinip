@@ -138,14 +138,31 @@ function toRelativeDayLabel(date) {
   return "Reciente";
 }
 
-function getHealthProfileAccessLabel(item, userId) {
+function getHealthProfileRoleLabel(item, userId) {
   if (!item) return "";
   const isOwnProfile = Number(item.owner_user_id) === Number(userId);
-  if (isOwnProfile) return "propio";
-  if (item.is_primary_profile) return "titular";
+  if (isOwnProfile) return "Propio";
+  if (item.is_primary_profile) return "Titular";
   const role = (item.access_role || "").toLowerCase();
-  if (role === "admin") return "admin";
-  return "invitado";
+  if (role === "admin") return "Administrador";
+  if (role === "caregiver") return "Editor";
+  if (role === "viewer") return "Lector";
+  return "Invitado";
+}
+
+function getHealthProfileAccessLabel(item, user) {
+  if (!item) return "";
+  const roleLabel = getHealthProfileRoleLabel(item, user?.id);
+  const isOwnProfile = Number(item.owner_user_id) === Number(user?.id);
+  if (isOwnProfile) return "Perfil personal";
+  const accountName = (user?.name || user?.email || "Usuario").trim();
+  return accountName ? `${accountName} · ${roleLabel}` : roleLabel;
+}
+
+function getHealthProfileMenuLabel(item, user) {
+  if (!item) return "Perfil";
+  const context = getHealthProfileAccessLabel(item, user);
+  return context ? `${item.full_name} (${context})` : item.full_name;
 }
 
 function profileInitials(name) {
@@ -1764,9 +1781,9 @@ export default function Dashboard({
     }
   };
 
-  const userName = user?.name || activeProfile?.full_name || "tu cuenta";
-  const activeProfileName = activeProfile?.full_name || "Mi perfil";
-  const firstName = (user?.name || activeProfile?.full_name || "").split(" ")[0] || userName;
+  const activeProfileName = activeProfile?.full_name || user?.name || "Mi perfil";
+  const userName = activeProfileName;
+  const firstName = activeProfileName.split(" ")[0] || userName;
   const userInitial = (user?.name || userName).trim().slice(0, 1).toUpperCase() || "K";
   const normalizedPlan = (planInfo?.plan_type || "basico").toLowerCase();
   const canSwitchProfiles = safeMenuHealthProfiles.length > 1;
@@ -2099,7 +2116,7 @@ export default function Dashboard({
               </div>
               <p className="topbar-user-menu-profile-name">
                 {activeMenuProfile
-                  ? `${activeMenuProfile.full_name} (${getHealthProfileAccessLabel(activeMenuProfile, user?.id)})`
+                  ? getHealthProfileMenuLabel(activeMenuProfile, user)
                   : user?.name || "Perfil personal"}
               </p>
               {canSwitchProfiles ? (
@@ -2111,8 +2128,7 @@ export default function Dashboard({
                 >
                   {safeMenuHealthProfiles.map((item) => (
                     <option value={item.id} key={item.id}>
-                      {item.full_name}
-                      {` (${getHealthProfileAccessLabel(item, user?.id)})`}
+                      {getHealthProfileMenuLabel(item, user)}
                     </option>
                   ))}
                 </select>
