@@ -45673,6 +45673,48 @@ body.theme-dark {
   z-index: 1;
 }
 
+/* ── Hero cards (Voz, Asistente, Familia): padding y aire consistentes
+   en escritorio. Sin padding, el contenido tocaba los bordes. ── */
+@media (min-width: 769px) {
+  .vp2-header {
+    padding: 1.5rem 1.7rem;
+    margin-bottom: 1.15rem;
+  }
+
+  .kfeed-page-header {
+    padding: 1.6rem 1.8rem 1.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .ai-landing-center {
+    padding: 3.2rem 2.8rem 2.6rem;
+  }
+
+  /* Más respiro entre los bloques internos del hero de Familia */
+  .kfeed-hero-meta-row {
+    margin-top: 1.05rem;
+  }
+
+  .kfeed-hero-bottom {
+    margin-top: 1.2rem;
+  }
+
+  .kfeed-hero-activity {
+    padding: 1.1rem 1.25rem;
+  }
+}
+
+/* En pantallas anchas, un poco más de presencia todavía */
+@media (min-width: 1280px) {
+  .vp2-header {
+    padding: 1.7rem 2rem;
+  }
+
+  .kfeed-page-header {
+    padding: 1.8rem 2.1rem 1.7rem;
+  }
+}
+
 .ai-landing-center h1,
 .ai-landing-center h2,
 .ai-landing-center h3,
@@ -57683,28 +57725,18 @@ body.theme-dark .bio-metric-card.is-selected {
     box-shadow: none;
     padding: 1.15rem 0.85rem 1rem;
     /* En pantallas bajas el contenido (CTA, perfil, métricas, nav y ajustes)
-       no cabe: permitimos scroll vertical para poder subir y bajar. */
+       no cabe: permitimos scroll vertical para poder subir y bajar,
+       pero con la barra de scroll oculta. */
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
   .sidebar::-webkit-scrollbar {
-    width: 7px;
-  }
-  .sidebar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .sidebar::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.4);
-    border-radius: 999px;
-    border: 2px solid transparent;
-    background-clip: padding-box;
-  }
-  .sidebar:hover::-webkit-scrollbar-thumb {
-    background: rgba(100, 116, 139, 0.55);
-    background-clip: padding-box;
+    width: 0;
+    height: 0;
+    display: none;
   }
 
   /* ── Plan row: minimalista ── */
