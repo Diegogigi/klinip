@@ -915,7 +915,7 @@ const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v2";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
-const APP_LOCK_GRACE_MS = 60000;
+const APP_LOCK_GRACE_MS = 0;
 const MED_ALERT_INITIAL_DELAY_MS = 15000;
 const FAMILY_CONTEXT_ROUTE_REFRESH_MS = 30000;
 const BOOTSTRAP_SESSION_TIMEOUT_MS = 12000;
@@ -1187,7 +1187,8 @@ export default function App() {
     setAppLocked(Boolean(user.pin_enabled));
   }, [booting, user?.id, user?.pin_enabled]);
 
-  // Re-bloqueo al volver de segundo plano tras un periodo de inactividad.
+  // Re-bloqueo al volver de segundo plano. Si el PIN está activo, se vuelve a
+  // pedir cada vez que la app reaparece.
   useEffect(() => {
     if (!user?.id) return undefined;
     const handleVisibility = () => {
