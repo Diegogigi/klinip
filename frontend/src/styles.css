@@ -57674,6 +57674,29 @@ body.theme-dark .bio-metric-card.is-selected {
     border-right: 1px solid rgba(226, 232, 240, 0.7);
     box-shadow: none;
     padding: 1.15rem 0.85rem 1rem;
+    /* En pantallas bajas el contenido (CTA, perfil, métricas, nav y ajustes)
+       no cabe: permitimos scroll vertical para poder subir y bajar. */
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.45) transparent;
+  }
+  .sidebar::-webkit-scrollbar {
+    width: 7px;
+  }
+  .sidebar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .sidebar::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .sidebar:hover::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.55);
+    background-clip: padding-box;
   }
 
   /* ── Plan row: minimalista ── */
