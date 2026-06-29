@@ -2,6 +2,7 @@
 import { Routes, Route, Navigate, useLocation, Link, useNavigate } from "react-router-dom";
 import {
   getMe,
+  getAppPinStatus,
   getAppointments,
   getMedications,
   updateMe,
@@ -251,6 +252,10 @@ function getHealthProfileAccessLabel(item, userId) {
   const role = (item.access_role || "").toLowerCase();
   if (role === "admin") return `admin${ownerSuffix}`;
   return `invitado${ownerSuffix}`;
+}
+
+function isPinProtectionActive(user) {
+  return Boolean(user?.pin_enabled || user?.pin_set);
 }
 
 function Sidebar({
@@ -1145,7 +1150,26 @@ export default function App() {
           "La sesion inicial tardó demasiado."
         );
         if (!active) return;
-        setUser(me);
+        let resolvedUser = me;
+        try {
+          const pinStatus = await withTimeout(
+            getAppPinStatus(),
+            BOOTSTRAP_SESSION_TIMEOUT_MS,
+            "La validacion del PIN tardó demasiado."
+          );
+          if (!active) return;
+          resolvedUser = {
+            ...me,
+            pin_set: typeof pinStatus?.pin_set === "boolean" ? pinStatus.pin_set : me?.pin_set,
+            pin_enabled:
+              typeof pinStatus?.pin_enabled === "boolean"
+                ? pinStatus.pin_enabled
+                : me?.pin_enabled,
+          };
+        } catch (_) {
+          resolvedUser = me;
+        }
+        setUser(resolvedUser);
       } catch (err) {
         if (!active) return;
         localStorage.removeItem("token");
@@ -1184,8 +1208,8 @@ export default function App() {
       setAppLocked(false);
       return;
     }
-    setAppLocked(Boolean(user.pin_enabled));
-  }, [booting, user?.id, user?.pin_enabled]);
+    setAppLocked(isPinProtectionActive(user));
+  }, [booting, user?.id, user?.pin_enabled, user?.pin_set]);
 
   // Re-bloqueo al volver de segundo plano. Si el PIN está activo, se vuelve a
   // pedir cada vez que la app reaparece.
@@ -1199,13 +1223,13 @@ export default function App() {
       const hiddenFor = pinHiddenAtRef.current
         ? Date.now() - pinHiddenAtRef.current
         : 0;
-      if (hiddenFor > APP_LOCK_GRACE_MS && user.pin_enabled) {
+      if (hiddenFor > APP_LOCK_GRACE_MS && isPinProtectionActive(user)) {
         setAppLocked(true);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [user?.id, user?.pin_enabled]);
+  }, [user?.id, user?.pin_enabled, user?.pin_set]);
 
   useEffect(() => {
     let mounted = true;
@@ -2159,7 +2183,7 @@ export default function App() {
       {appLocked && user ? (
         <PinLock
           user={user}
-          hasExistingPin={Boolean(user.pin_set)}
+          hasExistingPin={isPinProtectionActive(user)}
           onUnlock={() => setAppLocked(false)}
           onLogout={handleLogout}
         />
