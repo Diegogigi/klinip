@@ -24932,7 +24932,6 @@ def _get_shared_family_owner_ids_for_user(db: Session, current_user) -> set[int]
         ).filter(
             models.ProfileRelationship.user_id == current_user.id,
             models.ProfileRelationship.status == "accepted",
-            models.HealthProfile.is_primary_profile.is_(True),
             models.HealthProfile.is_archived.is_(False),
             models.HealthProfile.owner_user_id != current_user.id,
         ).distinct().all()
@@ -24962,16 +24961,15 @@ def _get_feed_profile_ids_for_user(db: Session, current_user) -> set[int]:
         if row and row[0] is not None
     }
     shared_owner_ids = _get_shared_family_owner_ids_for_user(db, current_user)
-    shared_secondary_profile_ids = {
+    shared_owner_profile_ids = {
         int(row[0])
         for row in db.query(models.HealthProfile.id).filter(
             models.HealthProfile.owner_user_id.in_(shared_owner_ids),
-            models.HealthProfile.is_primary_profile.is_(False),
             models.HealthProfile.is_archived.is_(False),
         ).all()
         if row and row[0] is not None
     } if shared_owner_ids else set()
-    return owned_profile_ids | linked_profile_ids | shared_secondary_profile_ids
+    return owned_profile_ids | linked_profile_ids | shared_owner_profile_ids
 
 
 def _get_feed_profile_user_ids(db: Session, profile_id: int | None) -> set[int]:
@@ -24985,28 +24983,22 @@ def _get_feed_profile_user_ids(db: Session, profile_id: int | None) -> set[int]:
     if not profile:
         return set()
 
+    owner_profile_ids = {
+        int(row[0])
+        for row in db.query(models.HealthProfile.id).filter(
+            models.HealthProfile.owner_user_id == int(profile.owner_user_id),
+            models.HealthProfile.is_archived.is_(False),
+        ).all()
+        if row and row[0] is not None
+    }
     accepted_user_ids = {
         int(row[0])
         for row in db.query(models.ProfileRelationship.user_id).filter(
-            models.ProfileRelationship.profile_id == int(profile.id),
+            models.ProfileRelationship.profile_id.in_(owner_profile_ids or {int(profile.id)}),
             models.ProfileRelationship.status == "accepted",
         ).distinct().all()
         if row and row[0] is not None
     }
-    owner_primary_profile = db.query(models.HealthProfile.id).filter(
-        models.HealthProfile.owner_user_id == int(profile.owner_user_id),
-        models.HealthProfile.is_primary_profile.is_(True),
-        models.HealthProfile.is_archived.is_(False),
-    ).first()
-    if owner_primary_profile and int(owner_primary_profile[0]) != int(profile.id):
-        accepted_user_ids.update(
-            int(row[0])
-            for row in db.query(models.ProfileRelationship.user_id).filter(
-                models.ProfileRelationship.profile_id == int(owner_primary_profile[0]),
-                models.ProfileRelationship.status == "accepted",
-            ).distinct().all()
-            if row and row[0] is not None
-        )
     accepted_user_ids.add(int(profile.owner_user_id))
     return accepted_user_ids
 

@@ -62567,7 +62567,7 @@ body.theme-dark .kl-flower-mark { color: rgba(132, 163, 255, 0.07); }
 /* Teléfonos: compactar para que TODO entre sin irse hacia abajo */
 @media (max-width: 767px) {
   .pinlock-backdrop {
-    align-items: flex-start;
+    align-items: center;
     padding: calc(1rem + env(safe-area-inset-top)) 1rem
       calc(1rem + env(safe-area-inset-bottom));
   }

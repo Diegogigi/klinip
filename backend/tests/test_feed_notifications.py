@@ -77,6 +77,36 @@ def test_feed_profile_ids_include_secondary_profiles_from_shared_primary_group(d
     assert main._get_feed_profile_ids_for_user(db_session, invited) == {primary.id, secondary.id}
 
 
+def test_feed_profile_ids_include_owner_group_when_access_came_from_secondary_profile(db_session):
+    owner = _make_user("owner-group@example.com", "Owner Group")
+    invited = _make_user("invited-group@example.com", "Invited Group")
+    db_session.add_all([owner, invited])
+    db_session.commit()
+
+    primary = models.HealthProfile(
+        owner_user_id=owner.id,
+        full_name="Mamá",
+        created_by_user_id=owner.id,
+        is_primary_profile=True,
+        is_archived=False,
+    )
+    secondary = _make_profile(owner.id, "Hermano", owner.id)
+    db_session.add_all([primary, secondary])
+    db_session.commit()
+
+    db_session.add(
+        models.ProfileRelationship(
+            profile_id=secondary.id,
+            user_id=invited.id,
+            role="viewer",
+            status="accepted",
+        )
+    )
+    db_session.commit()
+
+    assert main._get_feed_profile_ids_for_user(db_session, invited) == {primary.id, secondary.id}
+
+
 def test_feed_profile_user_ids_include_primary_group_on_secondary_profiles(db_session):
     owner = _make_user("owner-secondary@example.com", "Owner Secondary")
     invited = _make_user("invited-secondary@example.com", "Invited Secondary")
@@ -114,6 +144,45 @@ def test_feed_profile_user_ids_include_primary_group_on_secondary_profiles(db_se
     db_session.commit()
 
     assert main._get_feed_profile_user_ids(db_session, secondary.id) == {owner.id, invited.id, teammate.id}
+
+
+def test_feed_profile_user_ids_include_group_members_from_secondary_shared_access(db_session):
+    owner = _make_user("owner-group-users@example.com", "Owner Group Users")
+    invited = _make_user("invited-group-users@example.com", "Invited Group Users")
+    teammate = _make_user("teammate-group-users@example.com", "Teammate Group Users")
+    db_session.add_all([owner, invited, teammate])
+    db_session.commit()
+
+    primary = models.HealthProfile(
+        owner_user_id=owner.id,
+        full_name="Mamá",
+        created_by_user_id=owner.id,
+        is_primary_profile=True,
+        is_archived=False,
+    )
+    secondary = _make_profile(owner.id, "Hermano", owner.id)
+    db_session.add_all([primary, secondary])
+    db_session.commit()
+
+    db_session.add_all(
+        [
+            models.ProfileRelationship(
+                profile_id=secondary.id,
+                user_id=invited.id,
+                role="viewer",
+                status="accepted",
+            ),
+            models.ProfileRelationship(
+                profile_id=primary.id,
+                user_id=teammate.id,
+                role="viewer",
+                status="accepted",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert main._get_feed_profile_user_ids(db_session, primary.id) == {owner.id, invited.id, teammate.id}
 
 
 def test_feed_post_notification_targets_current_profile_members_only(db_session, monkeypatch):
