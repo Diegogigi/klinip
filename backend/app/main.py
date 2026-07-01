@@ -9186,6 +9186,16 @@ def _document_scope_filter(profile: models.HealthProfile, target_user_id: int):
     return base_filter, models.Document.profile_id == int(profile.id)
 
 
+def _appointment_scope_filter(profile: models.HealthProfile, target_user_id: int):
+    base_filter = models.Appointment.user_id == int(target_user_id)
+    if bool(getattr(profile, "is_primary_profile", False)):
+        return base_filter, or_(
+            models.Appointment.profile_id == int(profile.id),
+            models.Appointment.profile_id.is_(None),
+        )
+    return base_filter, models.Appointment.profile_id == int(profile.id)
+
+
 def _assert_profile_creation_allowed(db: Session, current_user: models.User):
     plan_info = _build_plan_info(current_user, db)
     if plan_info["current_profiles"] >= plan_info["max_profiles"]:
@@ -22963,10 +22973,11 @@ async def list_appointments(
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
-    _, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     return (
         db.query(models.Appointment)
-        .filter(models.Appointment.user_id == target_user_id)
+        .filter(base_filter, profile_filter)
         .order_by(models.Appointment.date_time)
         .all()
     )
@@ -23028,11 +23039,13 @@ async def update_appointment(
 ):
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     appt = (
         db.query(models.Appointment)
         .filter(
             models.Appointment.id == appointment_id,
-            models.Appointment.user_id == target_user_id,
+            base_filter,
+            profile_filter,
         )
         .first()
     )
@@ -23073,11 +23086,13 @@ async def delete_appointment(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     appt = (
         db.query(models.Appointment)
         .filter(
             models.Appointment.id == appointment_id,
-            models.Appointment.user_id == target_user_id,
+            base_filter,
+            profile_filter,
         )
         .first()
     )

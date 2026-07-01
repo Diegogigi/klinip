@@ -28,6 +28,10 @@ import { notifyClinicalDataChanged, subscribeClinicalDataChanged } from "../util
 import { cleanUiText, repairMojibakeText } from "../utils/textEncoding";
 import { ensureArray } from "../utils/arrays";
 import {
+  getHealthProfileDisplayName,
+  getHealthProfileMenuLabel,
+} from "../utils/healthProfiles";
+import {
   getNextMedicationDose,
   isMedicationFinished,
 } from "../utils/medicationSchedule";
@@ -285,7 +289,7 @@ function Ring({ value }) {
   );
 }
 
-export default function AiKlinip() {
+export default function AiKlinip({ user }) {
   const navigate = useNavigate();
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [conversations, setConversations] = useState([]);
@@ -341,6 +345,17 @@ export default function AiKlinip() {
   const mediaStreamRef = useRef(null);
   const voiceChunksRef = useRef([]);
   const voiceStopTimerRef = useRef(null);
+  const selectedInsightsProfile = useMemo(() => {
+    if (radarProfileId === "active") {
+      return resources.profile || null;
+    }
+    return (
+      radarProfiles.find((item) => Number(item.id) === Number(radarProfileId)) ||
+      resources.profile ||
+      null
+    );
+  }, [radarProfileId, radarProfiles, resources.profile]);
+  const selectedInsightsProfileName = getHealthProfileDisplayName(selectedInsightsProfile, user);
 
   const setClinicalActionMessage = (tone, message) => {
     setClinicalActionState({ tone, message });
@@ -420,9 +435,9 @@ export default function AiKlinip() {
     insightsRequestRef.current = (async () => {
       const [radar, adherence, docIntel, reports] = await Promise.all([
         getAiHealthRadar(resolvedProfileId || undefined).catch(() => []),
-        getAiAdherence().catch(() => ({})),
+        getAiAdherence(resolvedProfileId || undefined).catch(() => ({})),
         getAiDocumentIntelligence().catch(() => []),
-        getAiClinicalReports().catch(() => []),
+        getAiClinicalReports(resolvedProfileId || undefined).catch(() => []),
       ]);
 
       if (!mountedRef()) return;
@@ -1157,7 +1172,11 @@ export default function AiKlinip() {
     if (reportBusy) return;
     setReportBusy(true);
     try {
-      const report = await generateAiClinicalReport({ report_type: reportType, period_days: periodDays });
+      const resolvedProfileId = radarProfileId === "active" ? resources.profile?.id : Number(radarProfileId);
+      const report = await generateAiClinicalReport(
+        { report_type: reportType, period_days: periodDays },
+        resolvedProfileId || undefined
+      );
       setClinicalReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)].slice(0, 10));
     } catch (error) {
       console.error("No se pudo generar el reporte clínico", error);
@@ -1886,7 +1905,7 @@ export default function AiKlinip() {
                     <option value="active">Perfil activo</option>
                     {radarProfiles.map((item) => (
                       <option key={item.id} value={item.id}>
-                        {item.full_name || `Perfil ${item.id}`}
+                        {getHealthProfileMenuLabel(item, user)}
                       </option>
                     ))}
                   </select>
@@ -1971,6 +1990,9 @@ export default function AiKlinip() {
                     {reportBusy ? "Generando" : "Nuevo"}
                   </button>
                 </div>
+                <p className="muted">
+                  Perfil analizado: {selectedInsightsProfileName || "Perfil activo"}
+                </p>
                 <div className="ai-report-list">
                   {clinicalReports.slice(0, 4).map((report) => (
                     <div key={report.id} className="ai-report-item">

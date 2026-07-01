@@ -8,8 +8,13 @@ import {
   getAiHealthRadar,
   getHealthProfiles,
 } from "../api";
-import { parseDate } from "../utils/dates";
 import { ensureArray } from "../utils/arrays";
+import { parseDate } from "../utils/dates";
+import {
+  getHealthProfileAccessLabel,
+  getHealthProfileDisplayName,
+  getHealthProfileMenuLabel,
+} from "../utils/healthProfiles";
 
 function formatStamp(value) {
   const parsed = parseDate(value);
@@ -71,7 +76,7 @@ const PERIOD_OPTIONS = [
   { value: "all", label: "Todo el historial" },
 ];
 
-export default function ClinicalReports() {
+export default function ClinicalReports({ user }) {
   const [loading, setLoading] = useState(true);
   const [creatingType, setCreatingType] = useState("");
   const [reports, setReports] = useState([]);
@@ -149,6 +154,8 @@ export default function ClinicalReports() {
     adherence?.overall_adherence_rate === null || adherence?.overall_adherence_rate === undefined
       ? null
       : Math.round(Number(adherence.overall_adherence_rate) || 0);
+  const profileDisplayName = getHealthProfileDisplayName(profile, user);
+  const profileAccessLabel = getHealthProfileAccessLabel(profile, user);
 
   const handleGenerate = async (reportType, fallbackPeriodDays) => {
     if (creatingType) return;
@@ -165,7 +172,7 @@ export default function ClinicalReports() {
       );
       setReports((prev) => [report, ...prev.filter((item) => item.id !== report.id)]);
     } catch (error) {
-      console.error("No se pudo generar el reporte clinico", error);
+      console.error("No se pudo generar el reporte clínico", error);
     } finally {
       setCreatingType("");
     }
@@ -191,7 +198,7 @@ export default function ClinicalReports() {
     <section className="clinical-reports-page">
       <div className="clinical-reports-hero">
         <div>
-          <h2 className="card-title">Reportes clinicos</h2>
+          <h2 className="card-title">Reportes clínicos</h2>
           <p className="muted">
             Genera PDFs estructurados con contexto real por perfil, periodo y tipo de seguimiento.
           </p>
@@ -199,7 +206,8 @@ export default function ClinicalReports() {
         <div className="clinical-reports-hero-summary">
           <div className="clinical-summary-chip">
             <span>Perfil</span>
-            <strong>{profile?.full_name || "Sin perfil"}</strong>
+            <strong>{profileDisplayName || "Sin perfil"}</strong>
+            <span>{profileAccessLabel || "Perfil activo actual"}</span>
           </div>
           <div className="clinical-summary-chip">
             <span>Adherencia</span>
@@ -224,10 +232,13 @@ export default function ClinicalReports() {
               <option value="active">Perfil activo actual</option>
               {profiles.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.full_name || `Perfil ${item.id}`}
+                  {getHealthProfileMenuLabel(item, user)}
                 </option>
               ))}
             </select>
+            <p className="muted">
+              Aquí puedes cambiar entre tu perfil y perfiles compartidos, como el de tu mamá.
+            </p>
           </div>
           <div className="input-group">
             <label className="input-label">Tipo de reporte</label>
@@ -268,8 +279,8 @@ export default function ClinicalReports() {
               <strong>{item.title}</strong>
               <p>{item.description}</p>
               <span>
-                Generacion actual:{" "}
-                {selectedPeriod === "all" ? `Base ${item.periodDays} dias` : `${selectedPeriod} dias`}
+                Generación actual:{" "}
+                {selectedPeriod === "all" ? `Base ${item.periodDays} días` : `${selectedPeriod} días`}
               </span>
             </div>
             <button
@@ -294,13 +305,13 @@ export default function ClinicalReports() {
           </div>
           {latestReport ? (
             <button type="button" className="secondary-btn" onClick={() => handleDownload(latestReport)}>
-              Descargar ultimo PDF
+              Descargar último PDF
             </button>
           ) : null}
         </div>
 
         {loading ? (
-          <div className="home-empty-state">Cargando reportes clinicos...</div>
+          <div className="home-empty-state">Cargando reportes clínicos...</div>
         ) : filteredReports.length ? (
           <div className="clinical-report-list">
             {filteredReports.map((report) => (

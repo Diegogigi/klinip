@@ -82,6 +82,28 @@ function profileInitials(profileName) {
     .join("");
 }
 
+function sharedProfileContextLabel(profile, ownOwnerUserId) {
+  if (!profile) return "";
+  const profileName = cleanUiText(profile.display_name || profile.full_name || "Perfil compartido");
+  const ownerName = cleanUiText(profile.owner_name || "", "");
+  const isExternalShared =
+    ownOwnerUserId &&
+    profile?.owner_user_id &&
+    String(profile.owner_user_id) !== String(ownOwnerUserId);
+
+  if (isExternalShared) {
+    if (ownerName && ownerName !== profileName) {
+      return `Compartido por ${ownerName}: ${profileName}`;
+    }
+    if (ownerName) {
+      return `Compartido por ${ownerName}`;
+    }
+    return `Perfil compartido: ${profileName}`;
+  }
+
+  return `Perfil gestionado: ${profileName}`;
+}
+
 function eventTypeLabel(type) {
   const normalized = String(type || "").toLowerCase();
   if (normalized === "medication") return "Med";
@@ -198,14 +220,21 @@ export default function Calendar() {
 
         const bundles = await Promise.all(
           normalizedProfiles.map(async (profile) => {
-            const [appointments, medications] = await Promise.all([
-              getAppointments({ profileId: profile.id }).catch(() => []),
-              getMedications({ profileId: profile.id }).catch(() => []),
+            const [appointmentsResult, medicationsResult] = await Promise.allSettled([
+              getAppointments({ profileId: profile.id }),
+              getMedications({ profileId: profile.id }),
             ]);
+            const appointments =
+              appointmentsResult.status === "fulfilled" ? ensureArray(appointmentsResult.value) : [];
+            const medications =
+              medicationsResult.status === "fulfilled" ? ensureArray(medicationsResult.value) : [];
             return {
               profileId: profile.id,
-              appointments: ensureArray(appointments),
-              medications: ensureArray(medications),
+              appointments,
+              medications,
+              hasCalendarAccess:
+                appointmentsResult.status === "fulfilled" ||
+                medicationsResult.status === "fulfilled",
             };
           })
         );
@@ -219,7 +248,14 @@ export default function Calendar() {
           nextMedications[bundle.profileId] = bundle.medications;
         });
 
-        setProfiles(normalizedProfiles);
+        const accessibleProfileIds = new Set(
+          bundles
+            .filter((bundle) => bundle.hasCalendarAccess)
+            .map((bundle) => String(bundle.profileId))
+        );
+        setProfiles(
+          normalizedProfiles.filter((profile) => accessibleProfileIds.has(String(profile.id)))
+        );
         setAppointmentsByProfile(nextAppointments);
         setMedicationsByProfile(nextMedications);
       } catch (error) {
@@ -242,6 +278,7 @@ export default function Calendar() {
 
   const ownProfiles = useMemo(() => profiles.filter((profile) => profile.isSelf), [profiles]);
   const primaryOwnProfile = ownProfiles[0] || profiles[0] || null;
+  const ownOwnerUserId = primaryOwnProfile?.owner_user_id || null;
   const sharedProfiles = useMemo(
     () => profiles.filter((profile) => !primaryOwnProfile || profile.id !== primaryOwnProfile.id),
     [profiles, primaryOwnProfile]
@@ -502,9 +539,10 @@ export default function Calendar() {
                     ))}
                   </select>
                 </label>
-              ) : selectedSharedProfile ? (
+              ) : null}
+              {selectedSharedProfile ? (
                 <p className="muted calendar-shared-caption">
-                  Compartido con <strong>{selectedSharedProfile.display_name}</strong>
+                  {sharedProfileContextLabel(selectedSharedProfile, ownOwnerUserId)}
                 </p>
               ) : null}
             </div>

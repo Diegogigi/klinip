@@ -14,6 +14,10 @@ import {
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import ImmersiveVoice from "../components/ImmersiveVoice";
 import { ensureArray } from "../utils/arrays";
+import {
+  getHealthProfileDisplayName,
+  getHealthProfileMenuLabel,
+} from "../utils/healthProfiles";
 
 const DEFAULT_AUTOMATION = {
   voice_auto_share_enabled: false,
@@ -109,8 +113,8 @@ function getSessionStatus(session) {
   return "sin_compartir";
 }
 
-function profileLabel(profile) {
-  return profile?.full_name || profile?.nombre || "Perfil";
+function profileLabel(profile, user) {
+  return getHealthProfileDisplayName(profile, user);
 }
 
 function sessionTitle(session, isSharedView = false) {
@@ -284,6 +288,7 @@ function VoiceSessionCard({
 
 function AutomationPanel({
   activeProfile,
+  user,
   canEdit,
   loading,
   saving,
@@ -296,7 +301,7 @@ function AutomationPanel({
   onToggleRecipient,
   onSave,
 }) {
-  const profileName = profileLabel(activeProfile);
+  const profileName = profileLabel(activeProfile, user);
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -438,7 +443,7 @@ function AutomationPanel({
   );
 }
 
-export default function KlinipVoicePage() {
+export default function KlinipVoicePage({ user }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfileState] = useState(null);
@@ -464,7 +469,7 @@ export default function KlinipVoicePage() {
 
   const canEdit = canWriteProfile(activeProfile);
   const readOnlyProfile = isViewerProfile(activeProfile);
-  const profileName = profileLabel(activeProfile);
+  const profileName = profileLabel(activeProfile, user);
   const requestedProfileId = Number(searchParams.get("profile_id") || 0) || null;
   const requestedShareId = Number(searchParams.get("share_id") || 0) || null;
 
@@ -781,7 +786,7 @@ export default function KlinipVoicePage() {
             >
               {(profiles || []).map((profile) => (
                 <option key={profile.id} value={profile.id}>
-                  {profileLabel(profile)}
+                  {getHealthProfileMenuLabel(profile, user)}
                 </option>
               ))}
             </select>
@@ -857,6 +862,7 @@ export default function KlinipVoicePage() {
           {libraryTab === "mine" && (
             <AutomationPanel
               activeProfile={activeProfile}
+              user={user}
               canEdit={canEdit}
               loading={automationLoading}
               saving={automationSaving}

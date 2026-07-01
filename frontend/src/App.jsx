@@ -3004,7 +3004,7 @@ export default function App() {
                 path="/timeline"
                 element={
                   <ProtectedRoute user={user}>
-                    <Timeline key={`timeline-${activeHealthProfileId || "none"}`} />
+                    <Timeline key={`timeline-${activeHealthProfileId || "none"}`} user={user} />
                   </ProtectedRoute>
                 }
               />
@@ -3044,7 +3044,7 @@ export default function App() {
                 path="/ai"
                 element={
                   <ProtectedRoute user={user}>
-                    <AiKlinip key={`ai-${activeHealthProfileId || "none"}`} />
+                    <AiKlinip key={`ai-${activeHealthProfileId || "none"}`} user={user} />
                   </ProtectedRoute>
                 }
               />
@@ -3052,7 +3052,7 @@ export default function App() {
                 path="/clinical-reports"
                 element={
                   <ProtectedRoute user={user}>
-                    <ClinicalReports key={`clinical-reports-${activeHealthProfileId || "none"}`} />
+                    <ClinicalReports key={`clinical-reports-${activeHealthProfileId || "none"}`} user={user} />
                   </ProtectedRoute>
                 }
               />
@@ -3108,7 +3108,7 @@ export default function App() {
                 path="/voice"
                 element={
                   <ProtectedRoute user={user}>
-                    <KlinipVoicePage key={`voice-${activeHealthProfileId || "none"}`} />
+                    <KlinipVoicePage key={`voice-${activeHealthProfileId || "none"}`} user={user} />
                   </ProtectedRoute>
                 }
               />

@@ -13,6 +13,11 @@ import {
 } from "../api";
 import { ensureArray } from "../utils/arrays";
 import { toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
+import {
+  getHealthProfileAccessLabel,
+  getHealthProfileDisplayName,
+  getHealthProfileMenuLabel,
+} from "../utils/healthProfiles";
 import { cleanUiText } from "../utils/textEncoding";
 
 const EPISODE_STATUS_LABELS = {
@@ -74,12 +79,14 @@ function getEpisodeSearchValue(episode) {
     .toLowerCase();
 }
 
-function getProfileLabel(selectedProfileId, profiles, activeProfile) {
+function getProfileLabel(selectedProfileId, profiles, activeProfile, user) {
   if (selectedProfileId === "active") {
-    return cleanUiText(activeProfile?.full_name || activeProfile?.name, "perfil activo");
+    const accessLabel = getHealthProfileAccessLabel(activeProfile, user);
+    const displayName = getHealthProfileDisplayName(activeProfile, user);
+    return accessLabel ? `${displayName} (${accessLabel})` : displayName;
   }
   const found = ensureArray(profiles).find((item) => String(item.id) === String(selectedProfileId));
-  return cleanUiText(found?.full_name || found?.name, "perfil");
+  return getHealthProfileMenuLabel(found, user);
 }
 
 function getEpisodeLead(episode, detail) {
@@ -415,7 +422,7 @@ function buildManualCandidates({ appointments, documents, medications, currentEp
     .sort((a, b) => a.label.localeCompare(b.label, "es"));
 }
 
-export default function Timeline() {
+export default function Timeline({ user }) {
   const navigate = useNavigate();
   const [profiles, setProfiles] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
@@ -561,8 +568,8 @@ export default function Timeline() {
   }, [episodes]);
 
   const profileLabel = useMemo(
-    () => getProfileLabel(selectedProfileId, profiles, activeProfile),
-    [activeProfile, profiles, selectedProfileId]
+    () => getProfileLabel(selectedProfileId, profiles, activeProfile, user),
+    [activeProfile, profiles, selectedProfileId, user]
   );
 
   const legacyEvents = useMemo(() => ensureArray(legacyTimeline.events).slice(0, 4), [legacyTimeline.events]);
@@ -1007,7 +1014,7 @@ export default function Timeline() {
               <option value="active">Perfil activo</option>
               {profiles.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {cleanUiText(item.full_name, `Perfil ${item.id}`)}
+                  {getHealthProfileMenuLabel(item, user)}
                 </option>
               ))}
             </select>
