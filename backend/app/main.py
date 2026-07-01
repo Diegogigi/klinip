@@ -24923,6 +24923,23 @@ def _get_family_user_ids(db: Session, current_user) -> set:
     return set(owner_ids + relation_user_ids + [current_user.id])
 
 
+def _get_shared_family_owner_ids_for_user(db: Session, current_user) -> set[int]:
+    return {
+        int(row[0])
+        for row in db.query(models.HealthProfile.owner_user_id).join(
+            models.ProfileRelationship,
+            models.ProfileRelationship.profile_id == models.HealthProfile.id,
+        ).filter(
+            models.ProfileRelationship.user_id == current_user.id,
+            models.ProfileRelationship.status == "accepted",
+            models.HealthProfile.is_primary_profile.is_(True),
+            models.HealthProfile.is_archived.is_(False),
+            models.HealthProfile.owner_user_id != current_user.id,
+        ).distinct().all()
+        if row and row[0] is not None
+    }
+
+
 def _get_feed_profile_ids_for_user(db: Session, current_user) -> set[int]:
     owned_profile_ids = {
         int(row[0])
@@ -24944,7 +24961,17 @@ def _get_feed_profile_ids_for_user(db: Session, current_user) -> set[int]:
         ).all()
         if row and row[0] is not None
     }
-    return owned_profile_ids | linked_profile_ids
+    shared_owner_ids = _get_shared_family_owner_ids_for_user(db, current_user)
+    shared_secondary_profile_ids = {
+        int(row[0])
+        for row in db.query(models.HealthProfile.id).filter(
+            models.HealthProfile.owner_user_id.in_(shared_owner_ids),
+            models.HealthProfile.is_primary_profile.is_(False),
+            models.HealthProfile.is_archived.is_(False),
+        ).all()
+        if row and row[0] is not None
+    } if shared_owner_ids else set()
+    return owned_profile_ids | linked_profile_ids | shared_secondary_profile_ids
 
 
 def _get_feed_profile_user_ids(db: Session, profile_id: int | None) -> set[int]:
@@ -24966,6 +24993,20 @@ def _get_feed_profile_user_ids(db: Session, profile_id: int | None) -> set[int]:
         ).distinct().all()
         if row and row[0] is not None
     }
+    owner_primary_profile = db.query(models.HealthProfile.id).filter(
+        models.HealthProfile.owner_user_id == int(profile.owner_user_id),
+        models.HealthProfile.is_primary_profile.is_(True),
+        models.HealthProfile.is_archived.is_(False),
+    ).first()
+    if owner_primary_profile and int(owner_primary_profile[0]) != int(profile.id):
+        accepted_user_ids.update(
+            int(row[0])
+            for row in db.query(models.ProfileRelationship.user_id).filter(
+                models.ProfileRelationship.profile_id == int(owner_primary_profile[0]),
+                models.ProfileRelationship.status == "accepted",
+            ).distinct().all()
+            if row and row[0] is not None
+        )
     accepted_user_ids.add(int(profile.owner_user_id))
     return accepted_user_ids
 
@@ -25025,7 +25066,7 @@ def _serialize_comment(comment: models.PostComment, current_user_id: int | None 
 def _can_access_feed_post(db: Session, current_user, post: models.FeedPost) -> bool:
     if not post:
         return False
-    return int(current_user.id) in _get_feed_profile_user_ids(db, getattr(post, "profile_id", None))
+    return int(getattr(post, "profile_id", 0) or 0) in _get_feed_profile_ids_for_user(db, current_user)
 
 
 def _ensure_feed_post_access(db: Session, current_user, post: models.FeedPost) -> None:
@@ -25362,13 +25403,7 @@ def _get_feed_profile_with_access(db: Session, current_user, profile_id: int):
     if not profile:
         raise HTTPException(status_code=404, detail="Perfil no encontrado")
 
-    has_access = profile.owner_user_id == current_user.id or db.query(
-        models.ProfileRelationship
-    ).filter(
-        models.ProfileRelationship.profile_id == profile_id,
-        models.ProfileRelationship.user_id == current_user.id,
-        models.ProfileRelationship.status == "accepted",
-    ).first() is not None
+    has_access = int(profile.id) in _get_feed_profile_ids_for_user(db, current_user)
 
     if not has_access:
         raise HTTPException(status_code=403, detail="Sin acceso a este perfil")

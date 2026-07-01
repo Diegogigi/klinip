@@ -47,6 +47,75 @@ def test_feed_profile_user_ids_include_owner_and_accepted_collaborators(db_sessi
     assert main._get_feed_profile_user_ids(db_session, profile.id) == {owner.id, accepted.id}
 
 
+def test_feed_profile_ids_include_secondary_profiles_from_shared_primary_group(db_session):
+    owner = _make_user("owner-shared@example.com", "Owner Shared")
+    invited = _make_user("invited-shared@example.com", "Invited Shared")
+    db_session.add_all([owner, invited])
+    db_session.commit()
+
+    primary = models.HealthProfile(
+        owner_user_id=owner.id,
+        full_name="Titular",
+        created_by_user_id=owner.id,
+        is_primary_profile=True,
+        is_archived=False,
+    )
+    secondary = _make_profile(owner.id, "Hermana", owner.id)
+    db_session.add_all([primary, secondary])
+    db_session.commit()
+
+    db_session.add(
+        models.ProfileRelationship(
+            profile_id=primary.id,
+            user_id=invited.id,
+            role="viewer",
+            status="accepted",
+        )
+    )
+    db_session.commit()
+
+    assert main._get_feed_profile_ids_for_user(db_session, invited) == {primary.id, secondary.id}
+
+
+def test_feed_profile_user_ids_include_primary_group_on_secondary_profiles(db_session):
+    owner = _make_user("owner-secondary@example.com", "Owner Secondary")
+    invited = _make_user("invited-secondary@example.com", "Invited Secondary")
+    teammate = _make_user("teammate-secondary@example.com", "Teammate Secondary")
+    db_session.add_all([owner, invited, teammate])
+    db_session.commit()
+
+    primary = models.HealthProfile(
+        owner_user_id=owner.id,
+        full_name="Titular",
+        created_by_user_id=owner.id,
+        is_primary_profile=True,
+        is_archived=False,
+    )
+    secondary = _make_profile(owner.id, "Hija", owner.id)
+    db_session.add_all([primary, secondary])
+    db_session.commit()
+
+    db_session.add_all(
+        [
+            models.ProfileRelationship(
+                profile_id=primary.id,
+                user_id=invited.id,
+                role="viewer",
+                status="accepted",
+            ),
+            models.ProfileRelationship(
+                profile_id=primary.id,
+                user_id=teammate.id,
+                role="editor",
+                status="accepted",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    assert main._get_feed_profile_user_ids(db_session, secondary.id) == {owner.id, invited.id, teammate.id}
+
+
 def test_feed_post_notification_targets_current_profile_members_only(db_session, monkeypatch):
     owner = _make_user("owner2@example.com", "Owner")
     actor = _make_user("actor2@example.com", "Actor")
@@ -95,6 +164,47 @@ def test_feed_post_notification_targets_current_profile_members_only(db_session,
         ]
     )
     assert outsider.id not in [user_id for user_id, _ in sent_to]
+
+
+def test_feed_post_access_allows_secondary_profiles_shared_from_primary_group(db_session):
+    owner = _make_user("owner-access@example.com", "Owner Access")
+    invited = _make_user("invited-access@example.com", "Invited Access")
+    db_session.add_all([owner, invited])
+    db_session.commit()
+
+    primary = models.HealthProfile(
+        owner_user_id=owner.id,
+        full_name="Titular",
+        created_by_user_id=owner.id,
+        is_primary_profile=True,
+        is_archived=False,
+    )
+    secondary = _make_profile(owner.id, "Padre", owner.id)
+    db_session.add_all([primary, secondary])
+    db_session.commit()
+
+    db_session.add(
+        models.ProfileRelationship(
+            profile_id=primary.id,
+            user_id=invited.id,
+            role="viewer",
+            status="accepted",
+        )
+    )
+    db_session.commit()
+
+    post = models.FeedPost(
+        user_id=owner.id,
+        profile_id=secondary.id,
+        content="Actualizacion del grupo",
+        post_type="general",
+        privacy="family",
+    )
+    db_session.add(post)
+    db_session.commit()
+    db_session.refresh(post)
+
+    assert main._can_access_feed_post(db_session, invited, post) is True
 
 
 def test_feed_comment_notifications_reach_all_profile_members(db_session, monkeypatch):
