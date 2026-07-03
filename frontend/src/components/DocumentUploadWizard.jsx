@@ -80,6 +80,103 @@ const CAPTURE_TIPS = [
   "Si son varias hojas, súbelas en PDF cuando puedas.",
 ];
 
+// Guía en vivo de captura: se analiza un cuadro reducido del video cada pocos
+// milisegundos para orientar al usuario (luz, nitidez, encuadre, pulso) y
+// disparar la captura automática cuando la escena se mantiene estable.
+const LIVE_ANALYSIS_INTERVAL_MS = 400;
+const LIVE_ANALYSIS_WIDTH = 96;
+const AUTO_CAPTURE_READY_TICKS = 3;
+
+function analyzeVideoFrame(video, canvas, prevGray) {
+  const aspect = video.videoHeight / video.videoWidth || 1.33;
+  const width = LIVE_ANALYSIS_WIDTH;
+  const height = Math.max(32, Math.round(width * aspect));
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(video, 0, 0, width, height);
+  let pixels;
+  try {
+    pixels = context.getImageData(0, 0, width, height).data;
+  } catch (_) {
+    return null;
+  }
+
+  const total = width * height;
+  const gray = new Float32Array(total);
+  let lumaSum = 0;
+  for (let i = 0; i < total; i += 1) {
+    const offset = i * 4;
+    const luma = pixels[offset] * 0.299 + pixels[offset + 1] * 0.587 + pixels[offset + 2] * 0.114;
+    gray[i] = luma;
+    lumaSum += luma;
+  }
+
+  // Nitidez (varianza del laplaciano) y densidad de bordes en la zona central,
+  // donde el marco guía sugiere apoyar el documento. Un documento con texto
+  // genera muchos bordes; una pared o escena vacía casi ninguno.
+  let lapSum = 0;
+  let lapCount = 0;
+  let innerEdges = 0;
+  let innerCount = 0;
+  const innerX0 = Math.round(width * 0.14);
+  const innerX1 = Math.round(width * 0.86);
+  const innerY0 = Math.round(height * 0.12);
+  const innerY1 = Math.round(height * 0.88);
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const i = y * width + x;
+      const lap = gray[i] * 4 - gray[i - 1] - gray[i + 1] - gray[i - width] - gray[i + width];
+      lapSum += lap * lap;
+      lapCount += 1;
+      if (x >= innerX0 && x < innerX1 && y >= innerY0 && y < innerY1) {
+        innerCount += 1;
+        if (Math.abs(lap) > 24) innerEdges += 1;
+      }
+    }
+  }
+
+  let motion = 0;
+  if (prevGray && prevGray.length === gray.length) {
+    let diff = 0;
+    let samples = 0;
+    for (let i = 0; i < total; i += 4) {
+      diff += Math.abs(gray[i] - prevGray[i]);
+      samples += 1;
+    }
+    motion = diff / Math.max(1, samples);
+  }
+
+  return {
+    gray,
+    meanLuma: lumaSum / total,
+    sharpness: lapSum / Math.max(1, lapCount),
+    innerEdgeRatio: innerEdges / Math.max(1, innerCount),
+    motion,
+    hasPrevFrame: Boolean(prevGray),
+  };
+}
+
+function buildLiveCaptureHint(metrics) {
+  if (metrics.meanLuma < 60) {
+    return { tone: "warn", ready: false, message: "Hay poca luz. Busca más iluminación o acércate a una lámpara." };
+  }
+  if (metrics.meanLuma > 218) {
+    return { tone: "warn", ready: false, message: "Hay demasiada luz o reflejos. Inclina un poco el documento." };
+  }
+  if (metrics.innerEdgeRatio < 0.012) {
+    return { tone: "info", ready: false, message: "Apunta al documento y acércate hasta que llene el marco." };
+  }
+  if (metrics.hasPrevFrame && metrics.motion > 8) {
+    return { tone: "info", ready: false, message: "Mantén el teléfono firme…" };
+  }
+  if (metrics.sharpness < 100) {
+    return { tone: "info", ready: false, message: "Enfocando… acerca o aleja un poco el teléfono." };
+  }
+  return { tone: "ok", ready: true, message: "¡Se ve bien! Mantén la posición." };
+}
+
 function isOcrActive(status) {
   return ACTIVE_OCR.has(String(status || "").trim().toLowerCase());
 }
@@ -237,6 +334,8 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
+  const [autoCapture, setAutoCapture] = useState(true);
+  const [liveHint, setLiveHint] = useState(null);
 
   const cameraInputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -244,6 +343,10 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const cancelledRef = useRef(false);
+  const analysisCanvasRef = useRef(null);
+  const prevFrameRef = useRef(null);
+  const readyTicksRef = useRef(0);
+  const autoCapturedRef = useRef(false);
 
   const cameraSupported = useMemo(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -471,6 +574,58 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
     }
   }, [cameraBusy, handleFile]);
 
+  useEffect(() => {
+    if (!open || step !== "camera" || !cameraReady || cameraBusy || cameraError) {
+      prevFrameRef.current = null;
+      readyTicksRef.current = 0;
+      setLiveHint(null);
+      return undefined;
+    }
+
+    autoCapturedRef.current = false;
+    if (!analysisCanvasRef.current && typeof document !== "undefined") {
+      analysisCanvasRef.current = document.createElement("canvas");
+    }
+
+    const applyHint = (next) =>
+      setLiveHint((prev) =>
+        prev && prev.message === next.message && prev.ready === next.ready ? prev : next,
+      );
+
+    const intervalId = window.setInterval(() => {
+      const video = videoRef.current;
+      const canvas = analysisCanvasRef.current;
+      if (!video || !canvas || !video.videoWidth || video.readyState < 2) return;
+      if (autoCapturedRef.current) return;
+
+      const metrics = analyzeVideoFrame(video, canvas, prevFrameRef.current);
+      if (!metrics) return;
+      prevFrameRef.current = metrics.gray;
+
+      const hint = buildLiveCaptureHint(metrics);
+      if (!hint.ready) {
+        readyTicksRef.current = 0;
+        applyHint(hint);
+        return;
+      }
+
+      readyTicksRef.current += 1;
+      if (!autoCapture) {
+        applyHint({ ...hint, message: "¡Se ve bien! Presiona Capturar foto." });
+        return;
+      }
+      if (readyTicksRef.current >= AUTO_CAPTURE_READY_TICKS) {
+        autoCapturedRef.current = true;
+        applyHint({ ...hint, message: "¡Se ve bien! Capturando…" });
+        handleCaptureFrame();
+      } else {
+        applyHint({ ...hint, message: "¡Se ve bien! Mantén la posición…" });
+      }
+    }, LIVE_ANALYSIS_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [open, step, cameraReady, cameraBusy, cameraError, autoCapture, handleCaptureFrame]);
+
   const handleChangeType = useCallback(
     async (newType) => {
       if (!docId) return;
@@ -645,24 +800,46 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                       playsInline
                     />
                     <div className="documents-wizard-camera-mask" aria-hidden="true">
-                      <div className="documents-wizard-camera-frame" />
+                      <div
+                        className={`documents-wizard-camera-frame${liveHint?.ready ? " is-ready" : ""}`}
+                      />
                     </div>
                     <div
                       className={`documents-wizard-camera-status${
-                        cameraError ? " is-error" : cameraReady ? " is-ready" : ""
+                        cameraError
+                          ? " is-error"
+                          : liveHint?.ready
+                          ? " is-ready"
+                          : liveHint?.tone === "warn"
+                          ? " is-warn"
+                          : ""
                       }`}
                       aria-live="polite"
                     >
                       {cameraError
                         ? cameraError
+                        : liveHint?.message
+                        ? liveHint.message
                         : cameraReady
-                        ? "Encuadra el documento y captura"
+                        ? "Encuadra el documento dentro del marco"
                         : "Abriendo cámara..."}
                     </div>
                   </div>
 
                   <canvas ref={canvasRef} className="documents-wizard-hidden-canvas" aria-hidden="true" />
                 </div>
+
+                <button
+                  type="button"
+                  className={`documents-wizard-autocapture-toggle${autoCapture ? " is-on" : ""}`}
+                  onClick={() => setAutoCapture((value) => !value)}
+                  aria-pressed={autoCapture}
+                >
+                  <span className="documents-wizard-autocapture-dot" aria-hidden />
+                  {autoCapture
+                    ? "Captura automática activada: la foto se toma sola cuando se vea bien"
+                    : "Captura automática desactivada"}
+                </button>
 
                 <div className="documents-wizard-button-stack">
                   <button

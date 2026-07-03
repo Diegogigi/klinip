@@ -46884,6 +46884,18 @@ body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:
   border: 1px dashed rgba(191, 219, 254, 0.75);
 }
 
+.documents-wizard-camera-frame.is-ready {
+  border-color: rgba(74, 222, 128, 0.96);
+  box-shadow:
+    0 0 0 999px rgba(8, 15, 25, 0.34),
+    0 0 24px rgba(74, 222, 128, 0.45);
+}
+
+.documents-wizard-camera-frame.is-ready::before,
+.documents-wizard-camera-frame.is-ready::after {
+  border-color: rgba(134, 239, 172, 0.85);
+}
+
 .documents-wizard-camera-frame-label {
   position: absolute;
   left: 50%;
@@ -46926,6 +46938,59 @@ body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:
 .documents-wizard-camera-status.is-error {
   border-color: rgba(253, 186, 116, 0.96);
   color: #9a3412;
+}
+
+.documents-wizard-camera-status.is-warn {
+  border-color: rgba(252, 211, 77, 0.96);
+  color: #92400e;
+}
+
+.documents-wizard-autocapture-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  background: rgba(255, 255, 255, 0.92);
+  color: #475569;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+}
+
+.documents-wizard-autocapture-toggle.is-on {
+  border-color: rgba(74, 222, 128, 0.6);
+  background: rgba(236, 253, 245, 0.92);
+  color: #047857;
+}
+
+.documents-wizard-autocapture-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+
+.documents-wizard-autocapture-toggle.is-on .documents-wizard-autocapture-dot {
+  background: #10b981;
+}
+
+body.theme-dark .documents-wizard-autocapture-toggle {
+  background: rgba(15, 23, 42, 0.88);
+  border-color: rgba(100, 116, 139, 0.5);
+  color: #cbd5e1;
+}
+
+body.theme-dark .documents-wizard-autocapture-toggle.is-on {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(6, 78, 59, 0.35);
+  color: #6ee7b7;
 }
 
 .documents-wizard-progress-list {
@@ -47379,6 +47444,18 @@ body.theme-dark .documents-wizard-camera-status.is-ready {
 body.theme-dark .documents-wizard-camera-status.is-error {
   border-color: rgba(251, 146, 60, 0.38);
   color: #fdba74;
+}
+
+body.theme-dark .documents-wizard-camera-status.is-warn {
+  border-color: rgba(251, 191, 36, 0.34);
+  color: #fcd34d;
+}
+
+body.theme-dark .documents-wizard-camera-frame.is-ready {
+  border-color: rgba(74, 222, 128, 0.8);
+  box-shadow:
+    0 0 0 999px rgba(2, 6, 23, 0.48),
+    0 0 24px rgba(74, 222, 128, 0.35);
 }
 
 body.theme-dark .documents-wizard-pill,
