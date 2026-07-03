@@ -1086,6 +1086,16 @@ function CreatePostModal({
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const fileInputRef = useRef(null);
 
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+    document.body.classList.add("kfeed-composer-open");
+    document.documentElement.classList.add("kfeed-composer-open");
+    return () => {
+      document.body.classList.remove("kfeed-composer-open");
+      document.documentElement.classList.remove("kfeed-composer-open");
+    };
+  }, []);
+
   const isSensitive =
     SENSITIVE_POST_TYPES.includes(postType) ||
     files.length > 0 ||
