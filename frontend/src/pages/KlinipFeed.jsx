@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import {
@@ -1144,7 +1145,7 @@ function CreatePostModal({
   const selectedProfile = profiles.find((p) => p.id === Number(profileId));
   const otherProfiles = profiles.filter((p) => p.id !== Number(profileId));
 
-  return (
+  const modal = (
     <div className="kfeed-modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="kfeed-modal">
         <div className="kfeed-modal-header">
@@ -1320,6 +1321,9 @@ function CreatePostModal({
       />
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.getElementById("overlay-root") || document.body);
 }
 
 // ─── Sidebar de familia (desktop) ────────────────────────────────────────────
@@ -1601,7 +1605,7 @@ export default function KlinipFeed({ user }) {
   const skipRef = useRef(0);
   const LIMIT = 20;
 
-  useMobileOverlayLock(familySidebarOpen);
+  useMobileOverlayLock(familySidebarOpen || showCreate || Boolean(editingPost));
 
   async function handleAvatarUpload(profileId, file) {
     const result = await uploadHealthProfileAvatar(profileId, file);

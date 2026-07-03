@@ -36916,25 +36916,32 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
 
 /* ── Modal ── */
 .kfeed-modal-backdrop {
-  position: fixed;
+  position: fixed !important;
   inset: 0;
-  background: rgba(0,0,0,0.5);
-  z-index: 1000;
+  width: 100vw;
+  min-height: 100dvh;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(10px) saturate(1.12);
+  -webkit-backdrop-filter: blur(10px) saturate(1.12);
+  z-index: 100000;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .kfeed-modal {
   background: var(--card-bg, #fff);
   border-radius: 16px;
   width: 100%;
   max-width: 540px;
-  max-height: 92vh;
-  overflow-y: auto;
+  max-height: calc(100dvh - max(2rem, env(safe-area-inset-top)) - max(2rem, env(safe-area-inset-bottom)));
+  overflow: hidden;
   box-shadow: 0 24px 64px rgba(0,0,0,0.22);
   display: flex;
   flex-direction: column;
+  margin: auto;
 }
 .kfeed-modal-header {
   display: flex;
@@ -36967,6 +36974,10 @@ body.theme-dark .kfeed-attachment-loading { background: linear-gradient(90deg, #
   display: flex;
   flex-direction: column;
   gap: 0.9rem;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .kfeed-modal-profile-row {
@@ -37131,6 +37142,9 @@ body.theme-dark .kfeed-modal-header,
 body.theme-dark .kfeed-reaction-picker {
   background: #1e293b;
   border-color: #334155;
+}
+body.theme-dark .kfeed-modal-backdrop {
+  background: rgba(2, 6, 23, 0.68);
 }
 body.theme-dark .kfeed-page-title,
 body.theme-dark .kfeed-post-author,
@@ -37874,9 +37888,35 @@ body.theme-dark .kfeed-sidebar-close-btn:hover { background: #334155; }
 @media (max-width: 768px), (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
   .kfeed-page { padding: 0.75rem 0.5rem 5rem; gap: 0.6rem; }
   .kfeed-layout-wrapper { padding: 0; }
-  .kfeed-modal-backdrop { align-items: flex-end; padding: 0; }
-  .kfeed-modal { border-radius: 20px 20px 0 0; max-height: 92vh; }
+  .kfeed-modal-backdrop {
+    align-items: flex-end;
+    padding: max(0.65rem, env(safe-area-inset-top)) 0 0;
+  }
+  .kfeed-modal {
+    border-radius: 20px 20px 0 0;
+    max-width: none;
+    max-height: calc(100dvh - max(0.65rem, env(safe-area-inset-top)));
+    margin: 0;
+  }
   .kfeed-modal-header { border-radius: 20px 20px 0 0; }
+  .kfeed-modal-body {
+    gap: 0.68rem;
+    padding: 0.75rem 0.9rem calc(0.9rem + env(safe-area-inset-bottom));
+  }
+  .kfeed-modal-textarea {
+    min-height: 92px;
+  }
+  .kfeed-modal-types,
+  .kfeed-modal-toolbar {
+    padding: 0.38rem 0;
+  }
+  .kfeed-modal-footer {
+    padding-top: 0;
+  }
+  .kfeed-publish-btn {
+    width: 100%;
+    min-height: 44px;
+  }
   .kfeed-post-header { gap: 0.6rem; padding: 0.85rem 0.85rem 0.55rem; }
   .kfeed-post-tools { gap: 0.15rem; }
   .kfeed-post-menu-btn { padding: 0.24rem; }
