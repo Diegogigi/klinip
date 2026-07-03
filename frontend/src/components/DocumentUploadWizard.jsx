@@ -595,61 +595,41 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                 <div className="documents-wizard-hero">
                   <span className="documents-wizard-kicker">Klinip IA</span>
                   <h2>Saca una foto y deja que Klinip haga el resto</h2>
-                  <p>
-                    Klinip detecta si es receta, orden, resultado o informe, lo guarda en tu perfil y te muestra una
-                    lectura simple antes de cerrar.
-                  </p>
+                  <p>Klinip la lee, la clasifica y la guarda en tu perfil con una lectura simple.</p>
                 </div>
 
-                <div className="documents-wizard-source-grid">
+                <div className="documents-wizard-button-stack">
                   <button
                     type="button"
-                    className="documents-wizard-source-card is-primary"
+                    className="primary-btn documents-wizard-main-btn"
                     onClick={handleOpenLiveCamera}
                   >
-                    <strong>Tomar foto en vivo</strong>
-                    <span>Abre una vista previa, alinea el documento en el marco y captúralo sin salir del flujo.</span>
+                    <span aria-hidden>📷</span> Tomar una foto
                   </button>
                   <button
                     type="button"
-                    className="documents-wizard-source-card"
+                    className="secondary-btn documents-wizard-main-btn"
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <strong>Subir PDF o imagen</strong>
-                    <span>Úsalo si ya tienes el archivo en tu teléfono o computador.</span>
+                    <span aria-hidden>📄</span> Subir PDF o imagen
                   </button>
                 </div>
 
-                <div className="documents-wizard-source-note">
-                  {cameraSupported
-                    ? "Si prefieres, también puedes usar la cámara nativa de tu dispositivo como respaldo."
-                    : "En este navegador abriré la cámara del dispositivo como respaldo, porque la vista previa en vivo no está disponible."}
-                </div>
-
-                <div className="documents-wizard-section">
-                  <div className="documents-wizard-section-head">
-                    <strong>Antes de capturarlo</strong>
-                    <span>Así la lectura sale más clara.</span>
+                {!cameraSupported ? (
+                  <div className="documents-wizard-source-note">
+                    En este navegador se abrirá la cámara del dispositivo, porque la vista previa en vivo no está
+                    disponible.
                   </div>
+                ) : null}
+
+                <details className="documents-wizard-tips">
+                  <summary>Consejos para una foto clara</summary>
                   <ul className="documents-wizard-checklist">
                     {CAPTURE_TIPS.map((tip) => (
                       <li key={tip}>{tip}</li>
                     ))}
                   </ul>
-                </div>
-
-                <div className="documents-wizard-section">
-                  <div className="documents-wizard-section-head">
-                    <strong>Qué hará Klinip por ti</strong>
-                    <span>Sin pedir pasos técnicos extra.</span>
-                  </div>
-                  <div className="documents-wizard-pill-row">
-                    <span className="documents-wizard-pill">Receta → tratamiento y recordatorios</span>
-                    <span className="documents-wizard-pill">Orden → cita o examen</span>
-                    <span className="documents-wizard-pill">Resultado → lectura simple</span>
-                    <span className="documents-wizard-pill">Informe → resumen con contexto</span>
-                  </div>
-                </div>
+                </details>
               </div>
             ) : null}
 
