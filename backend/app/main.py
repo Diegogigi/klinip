@@ -23542,14 +23542,17 @@ async def list_medication_intakes(
     )
     if not med:
         raise HTTPException(status_code=404, detail="Medicamento no encontrado")
-    items = (
+    # Se consultan TODAS las filas del medicamento y se deduplican por horario
+    # programado antes de aplicar el límite. Si se limita primero, el conteo de
+    # eventos queda descuadrado con los contadores de adherencia (taken_doses),
+    # que sí se calculan sobre el historial completo.
+    rows = (
         db.query(models.MedicationIntake)
         .filter(
             models.MedicationIntake.medication_id == medication_id,
             models.MedicationIntake.user_id == target_user_id,
         )
         .order_by(models.MedicationIntake.created_at.desc(), models.MedicationIntake.id.desc())
-        .limit(max(1, min(int(limit or 40), 120)))
         .all()
     )
     setattr(
@@ -23557,9 +23560,21 @@ async def list_medication_intakes(
         "schedule_anchor_at",
         _medication_schedule_anchor_at(db, med, target_user_id),
     )
+    payloads = _normalize_medication_intake_payloads(med, rows)
+    counts = {"taken": 0, "late": 0, "missed": 0, "skipped": 0}
+    for payload in payloads:
+        key = _normalize_adherence_status(payload.get("status"))
+        if key not in counts:
+            key = "taken"
+        counts[key] += 1
+    normalized_limit = max(1, min(int(limit or 40), 120))
     return {
         "medication_id": medication_id,
-        "items": _normalize_medication_intake_payloads(med, items),
+        "items": payloads[:normalized_limit],
+        "total_events": len(payloads),
+        "taken_events": counts["taken"] + counts["late"],
+        "missed_events": counts["missed"],
+        "skipped_events": counts["skipped"],
     }
 
 

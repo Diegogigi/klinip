@@ -1512,7 +1512,26 @@ export default function App() {
     const consentKey = getUserKey(NOTIF_CONSENT_KEY_BASE, user.id);
     const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
     const promptCountKey = getUserKey(NOTIF_PROMPT_COUNT_KEY_BASE, user.id);
-    const storedConsent = localStorage.getItem(consentKey) || "";
+    let storedConsent = localStorage.getItem(consentKey) || "";
+
+    // Si el usuario guardó su decisión en el servidor pero este dispositivo
+    // perdió el localStorage, se restaura antes de decidir si preguntar.
+    const serverConsent = String(user?.notifications_consent || "").toLowerCase();
+    if (!storedConsent && (serverConsent === "accepted" || serverConsent === "rejected" || serverConsent === "later")) {
+      localStorage.setItem(consentKey, serverConsent);
+      storedConsent = serverConsent;
+    }
+
+    // Si el navegador ya tiene el permiso concedido, las notificaciones están
+    // activas: no hay nada que preguntar. Se persiste para no volver a mostrar.
+    if ("Notification" in window && Notification.permission === "granted") {
+      if (storedConsent !== "accepted") {
+        localStorage.setItem(consentKey, "accepted");
+        updateMe({ notifications_consent: "accepted" }).catch(() => null);
+      }
+      setNotifConsentOpen(false);
+      return;
+    }
 
     if ("Notification" in window && Notification.permission === "denied") {
       localStorage.setItem(consentKey, "rejected");
@@ -1543,9 +1562,12 @@ export default function App() {
       nextCount % NOTIF_PROMPT_SESSIONS === 0;
 
     if (shouldPrompt) {
+      // Se marca el momento en que se mostró para que un re-render (por
+      // ejemplo tras desbloquear con PIN) no la vuelva a abrir de inmediato.
+      localStorage.setItem(lastPromptKey, new Date(now).toISOString());
       setNotifConsentOpen(true);
     }
-  }, [user, consentOpen, onboardingOpen]);
+  }, [user?.id, user?.notifications_consent, consentOpen, onboardingOpen]);
 
   useEffect(() => {
     if (!user || booting || consentOpen || notifConsentOpen) return;

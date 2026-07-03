@@ -671,6 +671,10 @@ class MedicationIntakeCreate(BaseModel):
 class MedicationIntakeListOut(BaseModel):
     medication_id: int
     items: list[MedicationIntakeOut] = []
+    total_events: int = 0
+    taken_events: int = 0
+    missed_events: int = 0
+    skipped_events: int = 0
 
 
 class BiometricReadingBase(BaseModel):

@@ -286,10 +286,11 @@ function getMedicationDoseContext(med, now = new Date()) {
       }
       return {
         kind: "upcoming",
-        actionableAt: null,
-        headline: `Siguiente dosis: ${formatMedicationDateTime(persistedNextDose)}`,
-        helper: "Todavía no corresponde esa toma. Si necesitas dejar constancia de una dosis extra, usa el registro manual.",
-        actionLabel: "Registrar una toma manual",
+        actionableAt: persistedNextDose,
+        headline: `Estás al día. Siguiente dosis: ${formatMedicationDateTime(persistedNextDose)}`,
+        helper: "No tienes tomas pendientes por ahora. Si ya tomaste la siguiente dosis, puedes registrarla anticipada.",
+        actionLabel: "Registrar la siguiente dosis",
+        confirmMessage: `La siguiente dosis está programada para ${formatMedicationDateTime(persistedNextDose)}. ¿Quieres registrarla ahora como tomada anticipada?`,
       };
     }
   }
@@ -339,10 +340,11 @@ function getMedicationDoseContext(med, now = new Date()) {
     }
     return {
       kind: "upcoming",
-      actionableAt: null,
-      headline: `Siguiente dosis: ${formatMedicationDateTime(nextDose)}`,
-      helper: "Todavía no corresponde esa toma. Si necesitas dejar constancia de una dosis extra, usa el registro manual.",
-      actionLabel: "Registrar una toma manual",
+      actionableAt: nextDose,
+      headline: `Estás al día. Siguiente dosis: ${formatMedicationDateTime(nextDose)}`,
+      helper: "No tienes tomas pendientes por ahora. Si ya tomaste la siguiente dosis, puedes registrarla anticipada.",
+      actionLabel: "Registrar la siguiente dosis",
+      confirmMessage: `La siguiente dosis está programada para ${formatMedicationDateTime(nextDose)}. ¿Quieres registrarla ahora como tomada anticipada?`,
     };
   }
 
@@ -368,6 +370,7 @@ export default function Medications() {
   const [detailTarget, setDetailTarget] = useState(null);
   const [medSuccess, setMedSuccess] = useState(null);
   const [detailIntakes, setDetailIntakes] = useState([]);
+  const [detailIntakeStats, setDetailIntakeStats] = useState(null);
   const [detailIntakesLoading, setDetailIntakesLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -492,16 +495,25 @@ export default function Medications() {
   const loadDetailIntakeItems = async (medicationId) => {
     if (!medicationId) {
       setDetailIntakes([]);
+      setDetailIntakeStats(null);
       setDetailIntakesLoading(false);
       return;
     }
     setDetailIntakesLoading(true);
     try {
       const response = await getMedicationIntakes(medicationId, 60);
-      setDetailIntakes(ensureArray(response?.items));
+      const items = ensureArray(response?.items);
+      setDetailIntakes(items);
+      setDetailIntakeStats({
+        total: Number(response?.total_events ?? items.length) || items.length,
+        taken: Number(response?.taken_events || 0),
+        missed: Number(response?.missed_events || 0),
+        skipped: Number(response?.skipped_events || 0),
+      });
     } catch (error) {
       console.error("No se pudo cargar la línea de tiempo de adherencia", error);
       setDetailIntakes([]);
+      setDetailIntakeStats(null);
     } finally {
       setDetailIntakesLoading(false);
     }
@@ -580,6 +592,7 @@ export default function Medications() {
   useEffect(() => {
     if (!detailOpen || !detailTarget?.id) {
       setDetailIntakes([]);
+      setDetailIntakeStats(null);
       setDetailIntakesLoading(false);
       return;
     }
@@ -991,6 +1004,9 @@ export default function Medications() {
       alert("Este perfil está en modo solo lectura. No puedes registrar tomas.");
       return;
     }
+    if (options.confirmMessage && !window.confirm(options.confirmMessage)) {
+      return;
+    }
     try {
       const payload = {
         status: "taken",
@@ -1105,6 +1121,7 @@ export default function Medications() {
     setDetailOpen(false);
     setDetailTarget(null);
     setDetailIntakes([]);
+    setDetailIntakeStats(null);
     setDetailIntakesLoading(false);
   };
 
@@ -2934,7 +2951,7 @@ export default function Medications() {
                 </div>
               </div>
               <div className="medication-intake-timeline">
-                <div className="med-detail-dose-summary">
+                <div className={`med-detail-dose-summary ${detailDoseContext?.kind === "upcoming" ? "is-up-to-date" : ""}`}>
                   <div>
                     <span className="med-detail-dose-summary-label">Qué corresponde ahora</span>
                     <h4>
@@ -2947,11 +2964,12 @@ export default function Medications() {
                     {canEditActiveProfile && !isMedicationFinished(detailTarget) ? (
                       <button
                         type="button"
-                        className="primary-btn med-detail-dose-summary-btn"
+                        className={`${detailDoseContext?.kind === "upcoming" ? "secondary-btn" : "primary-btn"} med-detail-dose-summary-btn`}
                         onClick={() =>
                           handleRecordIntake(detailTarget, {
                             source: "manual_detail",
                             scheduledAt: detailDoseContext?.actionableAt || null,
+                            confirmMessage: detailDoseContext?.confirmMessage || "",
                           })
                         }
                       >
@@ -2966,9 +2984,31 @@ export default function Medications() {
                     <p>Cada tarjeta separa la hora programada de la hora en que la toma quedó confirmada.</p>
                   </div>
                   <span className="medication-intake-timeline-count">
-                    {detailIntakes.length} eventos
+                    {(detailIntakeStats?.total ?? detailIntakes.length)} eventos
                   </span>
                 </div>
+                {detailIntakeStats && detailIntakeStats.total > 0 ? (
+                  <div className="medication-intake-stats-row">
+                    <span className="medication-intake-stat status-taken">
+                      {detailIntakeStats.taken} {detailIntakeStats.taken === 1 ? "tomada" : "tomadas"}
+                    </span>
+                    {detailIntakeStats.missed > 0 ? (
+                      <span className="medication-intake-stat status-missed">
+                        {detailIntakeStats.missed} no {detailIntakeStats.missed === 1 ? "tomada" : "tomadas"}
+                      </span>
+                    ) : null}
+                    {detailIntakeStats.skipped > 0 ? (
+                      <span className="medication-intake-stat status-skipped">
+                        {detailIntakeStats.skipped} {detailIntakeStats.skipped === 1 ? "omitida" : "omitidas"}
+                      </span>
+                    ) : null}
+                    {detailIntakeStats.total > detailIntakes.length ? (
+                      <span className="medication-intake-stat is-muted">
+                        Mostrando los últimos {detailIntakes.length}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
                 {detailIntakesLoading ? (
                   <div className="medication-intake-empty">Cargando eventos...</div>
                 ) : detailIntakes.length ? (
@@ -3485,7 +3525,7 @@ export default function Medications() {
                       </div>
                     </div>
 
-                    <div className="medications-mobile-next-dose">
+                    <div className={`medications-mobile-next-dose ${!finished && doseContext.kind === "upcoming" ? "is-up-to-date" : ""}`}>
                       <span className="medications-mobile-next-label">Qué corresponde ahora</span>
                       <strong>
                         {finished
@@ -3562,12 +3602,13 @@ export default function Medications() {
                       {!finished && canEditActiveProfile ? (
                         <button
                           type="button"
-                          className="primary-btn medications-mobile-primary-action"
+                          className={`${doseContext.kind === "upcoming" ? "secondary-btn" : "primary-btn"} medications-mobile-primary-action`}
                           onClick={(event) => {
                             event.stopPropagation();
                             handleRecordIntake(m, {
                               source: "manual_card",
                               scheduledAt: doseContext.actionableAt || null,
+                              confirmMessage: doseContext.confirmMessage || "",
                             });
                           }}
                         >
