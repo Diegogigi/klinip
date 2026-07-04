@@ -229,6 +229,26 @@ if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_document_schema()
 
 
+def ensure_coverage_schema(force: bool = False):
+    """Garantiza tablas de Klinip Cobertura cuando runtime mutations estan permitidas."""
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
+    try:
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                models.CoveragePreference.__table__,
+                models.DocumentCoverageInfo.__table__,
+            ],
+        )
+    except Exception as exc:
+        print(f"WARNING ensure_coverage_schema: no se pudo ajustar cobertura: {exc}")
+
+
+if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
+    ensure_coverage_schema()
+
+
 def ensure_user_schema(force: bool = False):
     """Garantiza que la tabla users tenga columnas nuevas usadas por la app."""
     if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
@@ -5871,6 +5891,20 @@ COVERAGE_CATEGORY_KEYWORDS = {
     "ges_caec": ["ges", "caec", "auge", "garantia explicita"],
     "plan_seguro": ["isapre", "fonasa", "seguro complementario", "plan de salud", "poliza", "cobertura"],
 }
+VALID_COVERAGE_CATEGORIES = {"bono", "reembolso", "licencia", "copago", "ges_caec", "plan_seguro", "otro"}
+VALID_COVERAGE_PAYER_TYPES = {"fonasa", "isapre", "seguro_complementario", "prestador", "none", "unknown"}
+KNOWN_COVERAGE_ENTITIES = {
+    "banmedica": "Banmédica",
+    "colmena": "Colmena",
+    "consalud": "Consalud",
+    "cruz blanca": "Cruz Blanca",
+    "esencial": "Esencial",
+    "fonasa": "Fonasa",
+    "isapre": "Isapre",
+    "masvida": "Nueva Masvida",
+    "nueva masvida": "Nueva Masvida",
+    "vida tres": "Vida Tres",
+}
 
 
 def _coverage_category_from_text(*values: str) -> str:
@@ -5880,6 +5914,108 @@ def _coverage_category_from_text(*values: str) -> str:
     for category, keywords in COVERAGE_CATEGORY_KEYWORDS.items():
         if any(keyword in norm for keyword in keywords):
             return category
+    return ""
+
+
+def _normalize_coverage_category(value: str) -> str:
+    normalized = _normalize_text(value).replace(" ", "_")
+    aliases = {
+        "ges": "ges_caec",
+        "caec": "ges_caec",
+        "auge": "ges_caec",
+        "plan": "plan_seguro",
+        "seguro": "plan_seguro",
+        "seguro_complementario": "plan_seguro",
+        "cobertura": "plan_seguro",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in VALID_COVERAGE_CATEGORIES else "otro"
+
+
+def _coverage_entity_from_text(*values: str) -> str:
+    norm = _normalize_text(" ".join(str(value or "") for value in values))
+    if not norm:
+        return ""
+    for key, label in KNOWN_COVERAGE_ENTITIES.items():
+        if key in norm:
+            return label
+    return ""
+
+
+def _coverage_payer_type_from_text(*values: str) -> str:
+    norm = _normalize_text(" ".join(str(value or "") for value in values))
+    if not norm:
+        return "unknown"
+    if "fonasa" in norm:
+        return "fonasa"
+    if "isapre" in norm or any(key in norm for key in ("banmedica", "colmena", "consalud", "cruz blanca", "masvida", "vida tres")):
+        return "isapre"
+    if "seguro complementario" in norm or "poliza" in norm:
+        return "seguro_complementario"
+    if any(key in norm for key in ("clinica", "hospital", "centro medico", "laboratorio", "prestador")):
+        return "prestador"
+    return "unknown"
+
+
+def _parse_chilean_money(value: str) -> float | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    cleaned = re.sub(r"[^\d,\.]", "", raw)
+    if not cleaned:
+        return None
+    if "," in cleaned and "." in cleaned:
+        cleaned = cleaned.replace(".", "").split(",", 1)[0]
+    elif "." in cleaned:
+        parts = cleaned.split(".")
+        cleaned = "".join(parts) if all(len(part) == 3 for part in parts[1:]) else parts[0]
+    elif "," in cleaned:
+        cleaned = cleaned.split(",", 1)[0]
+    try:
+        amount = float(cleaned)
+    except Exception:
+        return None
+    return amount if amount >= 0 else None
+
+
+def _extract_coverage_amounts(*values: str) -> dict:
+    text_value = " ".join(str(value or "") for value in values)
+    search_text = "".join(
+        ch
+        for ch in unicodedata.normalize("NFD", text_value.lower())
+        if unicodedata.category(ch) != "Mn"
+    )
+    amounts: dict[str, float] = {}
+    patterns = [
+        ("amount_total", r"(?:total|valor total|monto total|total a pagar)\D{0,28}(\$?\s?[\d\.\,]{3,})"),
+        ("amount_covered", r"(?:bonificacion|bonificado|cobertura|aporte|cubierto)\D{0,28}(\$?\s?[\d\.\,]{3,})"),
+        ("amount_patient", r"(?:copago|costo paciente|pago paciente|a pagar|monto paciente)\D{0,28}(\$?\s?[\d\.\,]{3,})"),
+        ("amount_reimbursed", r"(?:reembolso|reembolsado|devolucion|monto reembolsado)\D{0,28}(\$?\s?[\d\.\,]{3,})"),
+    ]
+    for key, pattern in patterns:
+        match = re.search(pattern, search_text)
+        if not match:
+            continue
+        parsed = _parse_chilean_money(match.group(1))
+        if parsed is not None:
+            amounts[key] = parsed
+    if not amounts:
+        money_values = re.findall(r"\$\s?[\d\.\,]{3,}", text_value)
+        if money_values:
+            parsed = _parse_chilean_money(money_values[0])
+            if parsed is not None:
+                amounts["amount_total"] = parsed
+    return amounts
+
+
+def _coverage_status_from_text(*values: str) -> str:
+    norm = _normalize_text(" ".join(str(value or "") for value in values))
+    if any(term in norm for term in ("rechazado", "rechazada", "denegado", "denegada", "no aprobado")):
+        return "rechazado"
+    if any(term in norm for term in ("aprobado", "aprobada", "pagado", "pagada", "liquidado")):
+        return "aprobado"
+    if any(term in norm for term in ("pendiente", "en revision", "en evaluacion", "por pagar")):
+        return "pendiente"
     return ""
 
 
@@ -5903,6 +6039,78 @@ def _append_coverage_note(notes: str | None, category: str = "", entity: str = "
         parts.append(f"entidad={_safe_text(entity)[:80]}")
     marker_line = " ".join(parts)
     return "\n".join([item for item in [current, marker_line] if item]).strip()
+
+
+def _coverage_note_display_text(notes: str | None) -> str:
+    lines = []
+    for line in str(notes or "").splitlines():
+        cleaned = line.strip()
+        if not cleaned or COVERAGE_NOTE_MARKER in cleaned:
+            continue
+        lines.append(cleaned)
+    return "\n".join(lines).strip()
+
+
+def _build_document_coverage_payload(doc: models.Document) -> dict | None:
+    raw = " ".join(
+        [
+            getattr(doc, "filename", "") or "",
+            getattr(doc, "center", "") or "",
+            getattr(doc, "notes", "") or "",
+            getattr(doc, "ocr_text", "") or "",
+        ]
+    )
+    if not _is_coverage_document_text(raw):
+        return None
+    category = _normalize_coverage_category(_coverage_category_from_text(raw))
+    entity = _coverage_entity_from_text(raw)
+    payer_type = _coverage_payer_type_from_text(raw)
+    amounts = _extract_coverage_amounts(raw)
+    metadata = {
+        "signals": {
+            "marker": COVERAGE_NOTE_MARKER in str(getattr(doc, "notes", "") or ""),
+            "category": category,
+            "entity": entity,
+            "payer_type": payer_type,
+        }
+    }
+    return {
+        "category": category,
+        "payer_type": payer_type,
+        "provider_name": entity if payer_type in {"fonasa", "isapre", "seguro_complementario"} else "",
+        "entity_name": entity,
+        "amount_total": amounts.get("amount_total"),
+        "amount_covered": amounts.get("amount_covered"),
+        "amount_patient": amounts.get("amount_patient"),
+        "amount_reimbursed": amounts.get("amount_reimbursed"),
+        "currency": "CLP",
+        "status": _coverage_status_from_text(raw),
+        "metadata_json": metadata,
+    }
+
+
+def _upsert_document_coverage_info(db: Session, doc: models.Document) -> models.DocumentCoverageInfo | None:
+    payload = _build_document_coverage_payload(doc)
+    if not payload:
+        return None
+    info = (
+        db.query(models.DocumentCoverageInfo)
+        .filter(models.DocumentCoverageInfo.document_id == doc.id)
+        .first()
+    )
+    if not info:
+        info = models.DocumentCoverageInfo(
+            document_id=doc.id,
+            profile_id=getattr(doc, "profile_id", None),
+            owner_user_id=int(getattr(doc, "user_id", 0) or 0),
+        )
+    info.profile_id = getattr(doc, "profile_id", None)
+    info.owner_user_id = int(getattr(doc, "user_id", 0) or 0)
+    for key, value in payload.items():
+        setattr(info, key, value)
+    info.updated_at = datetime.now()
+    db.add(info)
+    return info
 
 
 def _guess_doc_type(text: str) -> str | None:
@@ -13132,6 +13340,34 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
                 "Medicamentos detectados: "
                 + ", ".join(medication_labels)
             )
+    elif doc_type == "cobertura":
+        coverage_payload = _build_document_coverage_payload(doc) or {}
+        category_label = {
+            "bono": "bono",
+            "reembolso": "reembolso",
+            "licencia": "licencia médica",
+            "copago": "copago",
+            "ges_caec": "GES/CAEC",
+            "plan_seguro": "plan o seguro",
+            "otro": "documento de cobertura",
+        }.get(coverage_payload.get("category") or "otro", "documento de cobertura")
+        provider = coverage_payload.get("provider_name") or coverage_payload.get("entity_name") or ""
+        amounts = [
+            ("Total", coverage_payload.get("amount_total")),
+            ("Bonificado", coverage_payload.get("amount_covered")),
+            ("Copago", coverage_payload.get("amount_patient")),
+            ("Reembolso", coverage_payload.get("amount_reimbursed")),
+        ]
+        for label, amount in amounts:
+            if amount is not None:
+                key_points.append(f"{label}: ${int(amount):,}".replace(",", "."))
+        if provider:
+            key_points.append(f"Entidad detectada: {provider}")
+        summary_plain = f"Documento de cobertura en formato {file_format}. Parece corresponder a {category_label}."
+        patient_friendly = (
+            f"Este documento parece ser un {category_label}. "
+            "Klinip puede ayudarte a ordenarlo junto a bonos, reembolsos, licencias, copagos o seguros."
+        )
     elif doc_type == "orden":
         summary_plain = f"Orden médica en formato {file_format}. Puede contener exámenes o procedimientos solicitados."
         patient_friendly = "Este documento parece una orden médica. Puedo ayudarte a revisar qué examen o trámite fue indicado y si falta el resultado."
@@ -13160,7 +13396,7 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
 
     # Si la lectura (visión) dejó una nota específica del contenido, úsala como
     # explicación principal: describe el documento real en vez de una plantilla.
-    doc_note = _safe_text(doc.notes or "")
+    doc_note = _safe_text(_coverage_note_display_text(doc.notes) or doc.notes or "")
     if len(doc_note) > 15:
         patient_friendly = doc_note
         summary_plain = doc_note
@@ -13195,6 +13431,7 @@ def _upsert_document_intelligence(db: Session, doc: models.Document):
     summary.requires_review = bool(summary_payload["requires_review"])
     summary.updated_at = datetime.now()
     db.add(summary)
+    _upsert_document_coverage_info(db, doc)
     return summary
 
 
@@ -21594,6 +21831,50 @@ def _requested_or_active_profile_only(
     return _get_active_profile_context(db, current_user)
 
 
+def _requested_or_active_profile_for_write(
+    db: Session,
+    current_user: models.User,
+    profile_id: int | None = None,
+) -> tuple[models.HealthProfile, models.ProfileRelationship, int]:
+    if profile_id:
+        profile, link = _get_profile_access_or_404(db, current_user, int(profile_id))
+        _require_role(link, "caregiver")
+        return profile, link, int(profile.owner_user_id)
+    return _get_active_profile_context(db, current_user, require_write=True)
+
+
+def _coverage_preference_default(profile: models.HealthProfile) -> schemas.CoveragePreferenceOut:
+    return schemas.CoveragePreferenceOut(
+        id=None,
+        profile_id=int(profile.id),
+        owner_user_id=int(profile.owner_user_id),
+        enabled=False,
+        payer_type="unknown",
+        provider_name="",
+        plan_name="",
+        notes="",
+        configured_by_user_id=None,
+        updated_at=None,
+    )
+
+
+def _normalize_coverage_payer_type(value: str | None) -> str:
+    normalized = _normalize_text(value or "").replace(" ", "_")
+    aliases = {
+        "isapre": "isapre",
+        "fonasa": "fonasa",
+        "seguro": "seguro_complementario",
+        "complementario": "seguro_complementario",
+        "seguro_complementario": "seguro_complementario",
+        "prestador": "prestador",
+        "ninguno": "none",
+        "no": "none",
+        "none": "none",
+    }
+    normalized = aliases.get(normalized, normalized)
+    return normalized if normalized in VALID_COVERAGE_PAYER_TYPES else "unknown"
+
+
 def _normalize_biometric_metric(metric_type: str) -> str:
     normalized = str(metric_type or "").strip().lower().replace(" ", "_").replace("-", "_")
     aliases = {
@@ -22904,6 +23185,103 @@ async def get_ai_document_intelligence(
         .limit(20)
         .all()
     )
+
+
+@app.get("/coverage/preferences", response_model=schemas.CoveragePreferenceOut)
+async def get_coverage_preferences(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_coverage_schema(force=True)
+    profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
+    pref = (
+        db.query(models.CoveragePreference)
+        .filter(models.CoveragePreference.profile_id == int(profile.id))
+        .first()
+    )
+    if not pref:
+        return _coverage_preference_default(profile)
+    return pref
+
+
+@app.put("/coverage/preferences", response_model=schemas.CoveragePreferenceOut)
+async def update_coverage_preferences(
+    payload: schemas.CoveragePreferenceUpdate,
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_coverage_schema(force=True)
+    profile, _, owner_user_id = _requested_or_active_profile_for_write(db, current_user, profile_id)
+    pref = (
+        db.query(models.CoveragePreference)
+        .filter(models.CoveragePreference.profile_id == int(profile.id))
+        .first()
+    )
+    if not pref:
+        pref = models.CoveragePreference(
+            profile_id=int(profile.id),
+            owner_user_id=int(owner_user_id),
+            configured_by_user_id=int(current_user.id),
+        )
+    pref.owner_user_id = int(owner_user_id)
+    pref.configured_by_user_id = int(current_user.id)
+    if payload.enabled is not None:
+        pref.enabled = bool(payload.enabled)
+    if payload.payer_type is not None:
+        pref.payer_type = _normalize_coverage_payer_type(payload.payer_type)
+    if payload.provider_name is not None:
+        pref.provider_name = _safe_text(payload.provider_name)[:120]
+    if payload.plan_name is not None:
+        pref.plan_name = _safe_text(payload.plan_name)[:120]
+    if payload.notes is not None:
+        pref.notes = _safe_text(payload.notes)[:600]
+    pref.updated_at = datetime.now()
+    db.add(pref)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(pref)
+    return pref
+
+
+@app.get("/coverage/documents", response_model=List[schemas.CoverageDocumentOut])
+async def get_coverage_documents(
+    profile_id: int | None = None,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_coverage_schema(force=True)
+    profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    docs = (
+        db.query(models.Document)
+        .filter(*_document_scope_filter(profile, target_user_id))
+        .order_by(models.Document.created_at.desc())
+        .limit(80)
+        .all()
+    )
+    output: list[schemas.CoverageDocumentOut] = []
+    changed = False
+    for doc in docs:
+        info = (
+            db.query(models.DocumentCoverageInfo)
+            .filter(models.DocumentCoverageInfo.document_id == doc.id)
+            .first()
+        )
+        if not info and _infer_document_type(doc) == "cobertura":
+            info = _upsert_document_coverage_info(db, doc)
+            changed = changed or bool(info)
+        if not info:
+            continue
+        output.append(
+            schemas.CoverageDocumentOut(
+                document=schemas.DocumentOut.model_validate(doc),
+                coverage=schemas.CoverageDocumentInfoOut.model_validate(info),
+            )
+        )
+    if changed:
+        db.commit()
+    return output
 
 
 @app.post("/ai/reports/generate", response_model=schemas.ClinicalReportOut)

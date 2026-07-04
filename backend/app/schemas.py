@@ -986,6 +986,65 @@ class DocumentAnalysisOut(BaseModel):
         from_attributes = True
 
 
+class CoveragePreferenceUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    payer_type: Optional[str] = None
+    provider_name: Optional[str] = None
+    plan_name: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class CoveragePreferenceOut(BaseModel):
+    id: Optional[int] = None
+    profile_id: int
+    owner_user_id: int
+    enabled: bool = False
+    payer_type: str = "unknown"
+    provider_name: str = ""
+    plan_name: str = ""
+    notes: str = ""
+    configured_by_user_id: Optional[int] = None
+    updated_at: Optional[datetime] = None
+
+    @field_serializer('updated_at')
+    def serialize_coverage_preference_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class CoverageDocumentInfoOut(BaseModel):
+    category: str = "otro"
+    payer_type: str = "unknown"
+    provider_name: str = ""
+    entity_name: str = ""
+    amount_total: Optional[float] = None
+    amount_covered: Optional[float] = None
+    amount_patient: Optional[float] = None
+    amount_reimbursed: Optional[float] = None
+    currency: str = "CLP"
+    status: str = ""
+    metadata_json: dict | None = None
+    updated_at: Optional[datetime] = None
+
+    @field_serializer('updated_at')
+    def serialize_coverage_info_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+    class Config:
+        from_attributes = True
+
+
+class CoverageDocumentOut(BaseModel):
+    document: DocumentOut
+    coverage: CoverageDocumentInfoOut
+
+
 class ProfileHealthFeatureOut(BaseModel):
     profile_id: int
     next_appointment_at: datetime | None = None

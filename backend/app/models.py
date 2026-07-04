@@ -382,6 +382,27 @@ class HealthProfile(Base):
     )
 
 
+class CoveragePreference(Base):
+    __tablename__ = "coverage_preferences"
+    __table_args__ = (UniqueConstraint("profile_id", name="uq_coverage_preferences_profile"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    enabled = Column(Boolean, default=False)
+    payer_type = Column(String, default="unknown")
+    provider_name = Column(String, default="")
+    plan_name = Column(String, default="")
+    notes = Column(Text, default="")
+    configured_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User", foreign_keys=[owner_user_id])
+    configured_by_user = relationship("User", foreign_keys=[configured_by_user_id])
+
+
 class ProfileRelationship(Base):
     __tablename__ = "profile_relationships"
     __table_args__ = (UniqueConstraint("profile_id", "user_id", name="uq_profile_user"),)
@@ -564,6 +585,32 @@ class DocumentClinicalEntity(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     document = relationship("Document")
+
+
+class DocumentCoverageInfo(Base):
+    __tablename__ = "document_coverage_info"
+    __table_args__ = (UniqueConstraint("document_id", name="uq_document_coverage_info_document"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=True, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    category = Column(String, default="otro", index=True)
+    payer_type = Column(String, default="unknown")
+    provider_name = Column(String, default="")
+    entity_name = Column(String, default="")
+    amount_total = Column(Float, nullable=True)
+    amount_covered = Column(Float, nullable=True)
+    amount_patient = Column(Float, nullable=True)
+    amount_reimbursed = Column(Float, nullable=True)
+    currency = Column(String, default="CLP")
+    status = Column(String, default="")
+    metadata_json = Column(JSON, default=dict)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    document = relationship("Document")
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User")
 
 
 class ClinicalReport(Base):

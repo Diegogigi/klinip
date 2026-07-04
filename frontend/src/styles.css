@@ -49488,6 +49488,259 @@ body.theme-dark .coverage-alert {
   color: #fecdd3;
 }
 
+/* Klinip Cobertura: previsión, filtros, grupos por mes y guía */
+.coverage-stats-grid.is-compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.coverage-plan-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 18px;
+  border: 1px solid rgba(153, 246, 228, 0.9);
+  background: rgba(240, 253, 250, 0.92);
+}
+
+.coverage-plan-icon {
+  font-size: 1.35rem;
+}
+
+.coverage-plan-copy {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.coverage-plan-copy strong {
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.coverage-plan-copy span {
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.coverage-filter-row {
+  display: flex;
+  gap: 0.45rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.coverage-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+.coverage-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  background: rgba(255, 255, 255, 0.92);
+  color: #334155;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.coverage-filter-chip.is-active {
+  border-color: rgba(13, 148, 136, 0.55);
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+.coverage-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.12);
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.coverage-filter-chip.is-active .coverage-filter-count {
+  background: rgba(13, 148, 136, 0.18);
+  color: #0f766e;
+}
+
+.coverage-document-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.coverage-document-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.coverage-month-label {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.coverage-document-icon-emoji {
+  font-size: 1.3rem;
+}
+
+.coverage-category-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.coverage-category-chip {
+  padding: 0.14rem 0.5rem;
+  border-radius: 999px;
+  background: #f0fdfa;
+  border: 1px solid rgba(153, 246, 228, 0.9);
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.coverage-document-status.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.coverage-document-status.is-warn {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.coverage-document-status.is-muted {
+  background: rgba(100, 116, 139, 0.1);
+  color: #475569;
+}
+
+.coverage-guide-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.coverage-guide-item {
+  padding: 0.7rem 0.95rem;
+  border-radius: 16px;
+  border: 1px solid rgba(203, 213, 225, 0.72);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.coverage-guide-item summary {
+  cursor: pointer;
+  color: #0f172a;
+  font-size: 0.93rem;
+  font-weight: 700;
+}
+
+.coverage-guide-item[open] summary {
+  margin-bottom: 0.45rem;
+}
+
+.coverage-guide-item p {
+  margin: 0 0 0.3rem;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.coverage-guide-item .coverage-guide-why {
+  color: #0f766e;
+}
+
+body.theme-dark .coverage-plan-card {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(19, 78, 74, 0.35);
+}
+
+body.theme-dark .coverage-plan-copy strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-plan-copy span {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-filter-chip {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.76);
+  color: #cbd5e1;
+}
+
+body.theme-dark .coverage-filter-chip.is-active {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(19, 78, 74, 0.55);
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-filter-count {
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+}
+
+body.theme-dark .coverage-filter-chip.is-active .coverage-filter-count {
+  background: rgba(45, 212, 191, 0.2);
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-month-label {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-category-chip {
+  background: rgba(19, 78, 74, 0.45);
+  border-color: rgba(45, 212, 191, 0.3);
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-document-status.is-ok {
+  background: rgba(6, 78, 59, 0.4);
+  color: #6ee7b7;
+}
+
+body.theme-dark .coverage-document-status.is-warn {
+  background: rgba(69, 26, 3, 0.5);
+  color: #fcd34d;
+}
+
+body.theme-dark .coverage-document-status.is-muted {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+}
+
+body.theme-dark .coverage-guide-item {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.76);
+}
+
+body.theme-dark .coverage-guide-item summary {
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-guide-item p {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-guide-item .coverage-guide-why {
+  color: #5eead4;
+}
+
 @media (max-width: 768px) {
   .health-hub-page {
     gap: 0.9rem;
@@ -49543,6 +49796,25 @@ body.theme-dark .coverage-alert {
 
   .coverage-empty .health-hub-hero-secondary {
     width: 100%;
+  }
+
+  .coverage-stats-grid.is-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .coverage-plan-card {
+    padding: 0.72rem 0.85rem;
+    border-radius: 15px;
+  }
+
+  .coverage-filter-chip {
+    min-height: 36px;
+    font-size: 0.8rem;
+  }
+
+  .coverage-guide-item {
+    padding: 0.62rem 0.8rem;
+    border-radius: 14px;
   }
 
   .health-hub-native-header h1 {
