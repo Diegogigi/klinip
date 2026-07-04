@@ -5862,8 +5862,53 @@ def _normalize_text(value: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+COVERAGE_NOTE_MARKER = "[KLINIP_COVERAGE_INTENT]"
+COVERAGE_CATEGORY_KEYWORDS = {
+    "bono": ["bono", "bonificacion", "orden de pago"],
+    "reembolso": ["reembolso", "devolucion", "solicitud de reembolso"],
+    "licencia": ["licencia medica", "licencia", "compin"],
+    "copago": ["copago", "costo paciente", "monto paciente"],
+    "ges_caec": ["ges", "caec", "auge", "garantia explicita"],
+    "plan_seguro": ["isapre", "fonasa", "seguro complementario", "plan de salud", "poliza", "cobertura"],
+}
+
+
+def _coverage_category_from_text(*values: str) -> str:
+    norm = _normalize_text(" ".join(str(value or "") for value in values))
+    if not norm:
+        return ""
+    for category, keywords in COVERAGE_CATEGORY_KEYWORDS.items():
+        if any(keyword in norm for keyword in keywords):
+            return category
+    return ""
+
+
+def _is_coverage_document_text(*values: str) -> bool:
+    norm = _normalize_text(" ".join(str(value or "") for value in values))
+    if not norm:
+        return False
+    if "klinip coverage intent" in norm:
+        return True
+    return bool(_coverage_category_from_text(norm))
+
+
+def _append_coverage_note(notes: str | None, category: str = "", entity: str = "") -> str:
+    current = str(notes or "").strip()
+    if COVERAGE_NOTE_MARKER in current:
+        return current
+    parts = [COVERAGE_NOTE_MARKER, "Cobertura / seguro"]
+    if category:
+        parts.append(f"categoria={category}")
+    if entity:
+        parts.append(f"entidad={_safe_text(entity)[:80]}")
+    marker_line = " ".join(parts)
+    return "\n".join([item for item in [current, marker_line] if item]).strip()
+
+
 def _guess_doc_type(text: str) -> str | None:
     lowered = _normalize_text(text)
+    if _is_coverage_document_text(lowered):
+        return "otro"
     if "rp" in lowered and (
         "favor realizar" in lowered
         or "ecografia" in lowered
@@ -8157,11 +8202,13 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
 
 _VISION_DOC_SYSTEM = (
     "Eres un asistente clínico que lee documentos de salud chilenos (recetas, "
-    "órdenes médicas, resultados de laboratorio, informes), incluso fotos, "
+    "órdenes médicas, resultados de laboratorio, informes y documentos de cobertura/seguro), incluso fotos, "
     "manuscritos, formularios y documentos con logos. Lee TODO el documento de "
     "la(s) imagen(es) y responde EXCLUSIVAMENTE con un JSON válido con estos campos:\n"
     '- "transcripcion": todo el texto legible del documento.\n'
-    '- "tipo": uno de "receta","orden","resultado","informe","otro".\n'
+    '- "tipo": uno de "receta","orden","resultado","informe","otro". Si es bono, reembolso, licencia, copago, GES/CAEC o seguro, usa "otro" aquí.\n'
+    '- "categoria_cobertura": uno de "bono","reembolso","licencia","copago","ges_caec","plan_seguro","otro","". Usa "" si no es cobertura/seguro.\n'
+    '- "entidad_cobertura": Isapre, Fonasa, seguro, prestador o "" si no aparece.\n'
     '- "centro": nombre del centro médico o laboratorio (incluye el de logos); "" si no aparece.\n'
     '- "fecha": fecha de EMISIÓN del documento (cuándo se creó/imprimió) en formato AAAA-MM-DD. '
     'OJO: si es un recordatorio u orden de cita, NO uses la fecha futura de la atención; '
@@ -8206,6 +8253,8 @@ def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
     tipo = _normalize_text(str(meta.get("tipo") or ""))
     centro = _safe_text(str(meta.get("centro") or ""))
     fecha = str(meta.get("fecha") or "").strip()
+    categoria_cobertura = _normalize_text(str(meta.get("categoria_cobertura") or ""))
+    entidad_cobertura = _safe_text(str(meta.get("entidad_cobertura") or ""))
     _klog(
         f"KLINIP_DOCREAD: vision_fields tipo={tipo!r} centro={centro[:40]!r} "
         f"fecha={fecha!r} titulo={str(meta.get('titulo') or '')[:40]!r} "
@@ -8213,6 +8262,8 @@ def _apply_vision_metadata(doc: models.Document, meta: dict) -> None:
     )
     if doc.doc_type == models.DocumentType.otro and tipo in type_map:
         doc.doc_type = type_map[tipo]
+    if categoria_cobertura in {"bono", "reembolso", "licencia", "copago", "ges_caec", "plan_seguro", "otro"}:
+        doc.notes = _append_coverage_note(doc.notes, categoria_cobertura, entidad_cobertura)
     if centro and not doc.center and _normalize_text(centro) not in _GENERIC_CENTER_WORDS:
         doc.center = centro[:120]
     # La fecha se fija en _apply_core_document_metadata (override del default de hoy).
@@ -8315,6 +8366,16 @@ def _apply_core_document_metadata(doc, vision_meta, text, original_user_note):
                 _klog(f"KLINIP_DOCREAD: notes set len={len(doc.notes)}")
     except Exception as exc:
         _klog(f"KLINIP_DOCREAD: notes EXC: {type(exc).__name__}: {exc}")
+
+    try:
+        coverage_category = _normalize_text(str(meta.get("categoria_cobertura") or ""))
+        if not coverage_category:
+            coverage_category = _coverage_category_from_text(text, doc.filename or "", doc.notes or "")
+        coverage_entity = _safe_text(str(meta.get("entidad_cobertura") or ""))
+        if coverage_category or _is_coverage_document_text(text, doc.filename or "", doc.notes or ""):
+            doc.notes = _append_coverage_note(doc.notes, coverage_category, coverage_entity)
+    except Exception as exc:
+        _klog(f"KLINIP_DOCREAD: coverage_note EXC: {type(exc).__name__}: {exc}")
 
 
 def _run_document_ocr(document_id: int):
@@ -10403,6 +10464,8 @@ def _infer_document_type(doc: models.Document | None) -> str:
     norm = _normalize_text(raw)
     if not norm:
         return declared or "otro"
+    if _is_coverage_document_text(raw):
+        return "cobertura"
 
     keyword_map = {
         "receta": ["receta", "prescripcion", "farmaco", "medicamento", "dosis", "administrar"],
@@ -10453,7 +10516,7 @@ def _ordered_unique_document_ids_from_chunks(chunks: list[dict] | None) -> list[
 
 
 def _document_insights(documents: list[models.Document], tz_name: str) -> dict:
-    type_keys = ["receta", "orden", "resultado", "informe", "otro"]
+    type_keys = ["receta", "orden", "resultado", "informe", "cobertura", "otro"]
     format_keys = ["pdf", "imagen", "otro", "desconocido"]
     if not documents:
         return {
@@ -13140,7 +13203,7 @@ def _collect_missing_document_flags(
     appointments: list[models.Appointment],
     medications: list[models.Medication],
 ) -> dict:
-    counts_by_type = {"receta": 0, "orden": 0, "resultado": 0, "informe": 0, "otro": 0}
+    counts_by_type = {"receta": 0, "orden": 0, "resultado": 0, "informe": 0, "cobertura": 0, "otro": 0}
     for doc in documents:
         counts_by_type[_infer_document_type(doc)] = counts_by_type.get(_infer_document_type(doc), 0) + 1
     has_orders = counts_by_type.get("orden", 0) > 0

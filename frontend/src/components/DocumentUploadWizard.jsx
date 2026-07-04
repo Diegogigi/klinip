@@ -9,6 +9,7 @@ import {
 import SuccessSheet from "./SuccessSheet";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 import { cleanUiText } from "../utils/textEncoding";
+import { buildCoverageNotes, COVERAGE_UPLOAD_INTENT } from "../utils/coverageDocuments";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
@@ -71,6 +72,19 @@ const TYPE_OPTIONS = [
   { value: "resultado", label: "Resultado de examen" },
   { value: "informe", label: "Informe médico" },
   { value: "otro", label: "Otro documento" },
+];
+
+const UPLOAD_INTENTS = [
+  {
+    value: "auto",
+    label: "Salud general",
+    helper: "Recetas, órdenes, resultados, informes u otros documentos clínicos.",
+  },
+  {
+    value: COVERAGE_UPLOAD_INTENT,
+    label: "Cobertura / seguro",
+    helper: "Bonos, reembolsos, licencias, GES/CAEC, copagos o plan de salud.",
+  },
 ];
 
 const CAPTURE_TIPS = [
@@ -260,6 +274,13 @@ function buildSuggestedActions({ type, isHistorical, entities, requiresReview })
     ];
   }
 
+  if (type === "cobertura") {
+    return [
+      "Klinip lo guardará como documento de cobertura para bonos, reembolsos, licencias o copagos.",
+      "Después aparecerá en Klinip Cobertura para revisar señales de Isapre, Fonasa, seguro o prestador.",
+    ];
+  }
+
   return [
     "Klinip guardará el documento y mantendrá esta lectura disponible como contexto clínico.",
     "Si el tipo no coincide, puedes corregirlo antes de cerrar.",
@@ -302,6 +323,9 @@ function buildSuccessCopy(type, histChoice) {
   if (type === "informe") {
     return "El informe quedó guardado y listo para consultarlo con más contexto.";
   }
+  if (type === "cobertura") {
+    return "El documento de cobertura quedó guardado para revisar bonos, reembolsos, licencias o copagos.";
+  }
   return "El documento quedó guardado y ya forma parte de tu seguimiento clínico.";
 }
 
@@ -331,6 +355,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const [doneOpen, setDoneOpen] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedSource, setSelectedSource] = useState("");
+  const [uploadIntent, setUploadIntent] = useState("auto");
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
@@ -383,6 +408,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setDoneOpen(false);
       setSelectedFileName("");
       setSelectedSource("");
+      setUploadIntent("auto");
       setCameraError("");
       setCameraReady(false);
       setCameraBusy(false);
@@ -429,7 +455,11 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setStep("processing");
       setErrorMsg("");
       try {
-        const created = await uploadDocument({ doc_type: "otro", file });
+        const created = await uploadDocument({
+          doc_type: "otro",
+          notes: uploadIntent === COVERAGE_UPLOAD_INTENT ? buildCoverageNotes("") : "",
+          file,
+        });
         const id = created?.id;
         if (!id) throw new Error("upload_no_id");
         setDocId(id);
@@ -459,7 +489,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
         setStep("error");
       }
     },
-    [onUploaded, pollAnalysis, stopCameraStream],
+    [onUploaded, pollAnalysis, stopCameraStream, uploadIntent],
   );
 
   const startCameraPreview = useCallback(async () => {
@@ -673,6 +703,8 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
 
   const analysisType = analysis?.doc_type || "otro";
   const typeCopy = getTypeCopy(analysisType);
+  const isCoverageUpload = uploadIntent === COVERAGE_UPLOAD_INTENT;
+  const displayType = isCoverageUpload ? "cobertura" : analysisType;
   const entities = useMemo(() => buildEntityGroups(analysis?.entities || []), [analysis?.entities]);
   const totalEntities = (analysis?.entities || []).length;
   const isCameraSource = selectedSource === "camera" || selectedSource === "live-camera";
@@ -687,13 +719,13 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const showHistoricalAsk = isHistorical && histChoice === null && ["receta", "orden"].includes(analysisType);
   const suggestedActions = useMemo(
     () =>
-      buildSuggestedActions({
-        type: analysisType,
-        isHistorical,
-        entities,
-        requiresReview,
-      }),
-    [analysisType, entities, isHistorical, requiresReview],
+        buildSuggestedActions({
+          type: isCoverageUpload ? "cobertura" : analysisType,
+          isHistorical,
+          entities,
+          requiresReview,
+        }),
+    [analysisType, entities, isCoverageUpload, isHistorical, requiresReview],
   );
 
   const keyPoints = Array.isArray(analysis?.summary?.key_points_json)
@@ -751,6 +783,21 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                   <span className="documents-wizard-kicker">Klinip IA</span>
                   <h2>Saca una foto y deja que Klinip haga el resto</h2>
                   <p>Klinip la lee, la clasifica y la guarda en tu perfil con una lectura simple.</p>
+                </div>
+
+                <div className="documents-wizard-intent-grid" aria-label="Intención de subida">
+                  {UPLOAD_INTENTS.map((intent) => (
+                    <button
+                      key={intent.value}
+                      type="button"
+                      className={`documents-wizard-intent-btn${uploadIntent === intent.value ? " is-active" : ""}`}
+                      onClick={() => setUploadIntent(intent.value)}
+                      aria-pressed={uploadIntent === intent.value}
+                    >
+                      <strong>{intent.label}</strong>
+                      <span>{intent.helper}</span>
+                    </button>
+                  ))}
                 </div>
 
                 <div className="documents-wizard-button-stack">
@@ -911,7 +958,9 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                 </div>
 
                 <div className="documents-wizard-summary-bar">
-                  <span className="documents-wizard-summary-chip">{getFriendlyTypeLabel(analysisType)}</span>
+                  <span className="documents-wizard-summary-chip">
+                    {isCoverageUpload ? "Cobertura / seguro" : getFriendlyTypeLabel(analysisType)}
+                  </span>
                   <span className="documents-wizard-summary-chip is-muted">
                     {totalEntities > 0
                       ? `${totalEntities} dato${totalEntities === 1 ? "" : "s"} detectado${totalEntities === 1 ? "" : "s"}`
@@ -1049,7 +1098,9 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
                   {!editingType ? (
                     <>
                       <p className="documents-wizard-helper">
-                        {requiresReview
+                        {isCoverageUpload
+                          ? "Klinip lo guardó como Cobertura / seguro. Si además corresponde a receta, orden, resultado o informe, puedes cambiar el tipo clínico."
+                          : requiresReview
                           ? `Klinip cree que es ${typeCopy.article}, pero encontró partes que conviene revisar antes de darlo por cerrado.`
                           : `Klinip lo clasificó como ${typeCopy.article}. Si te hace sentido, puedes guardarlo así.`}
                       </p>
@@ -1121,10 +1172,14 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
         }}
         kicker="Documento guardado"
         title="Todo listo"
-        copy={buildSuccessCopy(analysisType, histChoice)}
+        copy={buildSuccessCopy(displayType, histChoice)}
         referenceId={docId}
         rows={[
-          { icon: "doc", label: "Tipo de documento", value: getFriendlyTypeLabel(analysisType) },
+          {
+            icon: "doc",
+            label: "Tipo de documento",
+            value: isCoverageUpload ? "Cobertura / seguro" : getFriendlyTypeLabel(analysisType),
+          },
           { icon: "building", label: "Centro", value: centerVal || "Sin centro registrado" },
           { icon: "clock", label: "Fecha", value: dateVal || "Sin fecha" },
         ]}

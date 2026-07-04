@@ -33,9 +33,9 @@ const fallbackStats = {
 };
 
 const peopleHeroHighlights = [
-  "Documentos, citas, medicamentos y contexto en un mismo lugar",
-  "Klinip Voice con versión clara para el usuario y versión compartible para el profesional",
-  "Propiedad de datos y permisos explícitos para familia y cuidadores",
+  "Información clínica, cobertura y documentos en un mismo lugar",
+  "IA que explica tu información en lenguaje simple, sin reemplazar al profesional",
+  "Permisos explícitos para compartir con familia y cuidadores autorizados",
 ];
 
 const businessHeroHighlights = [
@@ -60,9 +60,27 @@ const businessHeroSteps = [
 ];
 
 const peopleBenefits = [
-  "Organiza tu salud sin depender de papeles, chats o memoria.",
+  "Organiza tu salud sin depender de portales, papeles, chats o memoria.",
   "Activa recordatorios útiles para tratamientos, controles y próximos pasos.",
   "Comparte contexto con tu red de apoyo sin perder control sobre tus datos.",
+];
+
+const neutralLayerCards = [
+  {
+    title: "Independiente del prestador",
+    description:
+      "Klinip no reemplaza la ficha clínica ni el sistema de una clínica. Te ayuda a reunir lo que recibes y usarlo mejor.",
+  },
+  {
+    title: "Independiente de la Isapre o Fonasa",
+    description:
+      "Puedes ordenar bonos, reembolsos, licencias, coberturas y documentos del seguro sin depender de un solo portal.",
+  },
+  {
+    title: "Centrada en la persona",
+    description:
+      "La información se explica en simple y se comparte solo con familiares o cuidadores autorizados por el usuario.",
+  },
 ];
 
 const companyBenefits = [
@@ -244,6 +262,24 @@ const moduleCards = [
       style: { objectPosition: "center 26%" },
     },
   },
+  {
+    title: "Cobertura y trámites de salud",
+    eyebrow: "Isapre, Fonasa y seguro",
+    description:
+      "Ordena documentos de cobertura, bonos, reembolsos, licencias y copagos para entender mejor el costo real de tu salud.",
+    spotlight: "La parte clínica y la parte financiera dejan de vivir separadas.",
+    bullets: [
+      "Documentos de cobertura junto al historial",
+      "Base para explicar copagos y reembolsos",
+      "Preparado para futuras integraciones",
+    ],
+    image: {
+      src: "/landing/documentos-en-casa.jpg",
+      fallback: "/landing/fallback-mi-salud.jpeg",
+      alt: "Documentos de salud y cobertura ordenados dentro de Klinip.",
+      style: { objectPosition: "center 42%" },
+    },
+  },
 ];
 
 const trustCards = [
@@ -272,7 +308,7 @@ const faqItems = [
   },
   {
     q: "¿Qué puedo centralizar en Klinip?",
-    a: "Documentos, medicamentos, citas, recordatorios, contexto familiar y, cuando aplica, registros de Klinip Voice para continuidad posterior.",
+    a: "Documentos clínicos, medicamentos, citas, recordatorios, contexto familiar y documentos de cobertura como bonos, reembolsos o licencias.",
   },
   {
     q: "¿Quién controla la información compartida?",
@@ -614,14 +650,14 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                     </Link>
                   ))}
                 </div>
-                <span className="landing-brand-eyebrow">Plataforma clínica personal y familiar</span>
+                <span className="landing-brand-eyebrow">Plataforma neutral de salud personal</span>
                 <h1>
-                  Klinip organiza la salud
-                  <span> con continuidad real.</span>
+                  Tu salud no debería vivir repartida
+                  <span> entre portales y PDFs.</span>
                 </h1>
                 <p className="landing-brand-lead">
-                  Centraliza documentos, medicamentos, citas, recordatorios, Klinip Voice y red familiar en una
-                  experiencia clara para personas, familias y cuidadores.
+                  Klinip reúne información clínica, cobertura, citas, documentos y red familiar autorizada en una
+                  experiencia independiente del prestador, Isapre o Fonasa.
                 </p>
                 <div className="landing-brand-cta-row">
                   <Link className="landing-brand-btn is-primary is-large" to="/register">
@@ -642,11 +678,11 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                 <span>Tu información de salud sigue siendo tuya</span>
               </div>
               <div className="landing-brand-stage-photo-note landing-brand-stage-photo-note-hero">
-                <small>Klinip en una sola vista</small>
-                <strong>Documentos, recordatorios, Radar, voz clínica y red familiar conectados.</strong>
+                <small>Klinip como capa central</small>
+                <strong>Clínica, cobertura, IA y familia autorizada conectadas alrededor del usuario.</strong>
                 <p>
-                  Una experiencia diseñada para entender qué sigue, qué compartir y qué necesita atención antes
-                  de que se pierda.
+                  Una experiencia diseñada para entender qué sigue, qué documento importa y qué compartir sin
+                  perder control.
                 </p>
               </div>
             </div>
@@ -666,6 +702,30 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
 
       {!isBusinessAudience ? (
         <>
+          <section className="landing-brand-section landing-brand-neutral-layer">
+            <div className="landing-brand-shell">
+              <div className="landing-brand-neutral-panel landing-reveal">
+                <div className="landing-brand-section-head">
+                  <span className="landing-brand-eyebrow">Capa neutral</span>
+                  <h2>Una plataforma centrada en el usuario, no en el portal donde quedó la información.</h2>
+                  <p>
+                    Klinip ayuda a unir datos dispersos, explicarlos con IA y compartirlos con familia autorizada,
+                    aunque cada clínica, Isapre, Fonasa o laboratorio siga usando su propio sistema.
+                  </p>
+                </div>
+                <div className="landing-brand-simple-grid landing-brand-neutral-grid">
+                  {neutralLayerCards.map((item) => (
+                    <article key={item.title} className="landing-brand-simple-card landing-brand-neutral-card">
+                      <span className="landing-brand-simple-card-kicker">Neutral</span>
+                      <h3>{item.title}</h3>
+                      <p>{item.description}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+
           <section className="landing-brand-section landing-brand-showcase">
             <div className="landing-brand-shell landing-brand-showcase-grid">
               <div className="landing-brand-showcase-copy landing-reveal">
@@ -721,7 +781,8 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                   <h2>Para personas, familias y cuidadores que necesitan más claridad en su salud.</h2>
                   <p>
                     Klinip está pensado para el momento real del cuidado: cuando hay que entender un documento,
-                    seguir un tratamiento, recordar una cita o compartir contexto con alguien de confianza.
+                    seguir un tratamiento, revisar cobertura, recordar una cita o compartir contexto con alguien
+                    de confianza.
                   </p>
                 </div>
                 <div className="landing-brand-split-list">
@@ -810,7 +871,7 @@ export default function Landing({ theme = "light", onToggleTheme, audience = "pe
                 <h2>Una experiencia personal clara, con pilares concretos y visibles.</h2>
                 <p>
                   Cada bloque responde a un uso real: sacar una foto, activar seguimiento, sostener tratamientos,
-                  entender consultas y compartir con criterio.
+                  entender consultas, ordenar cobertura y compartir con criterio.
                 </p>
               </>
             )}

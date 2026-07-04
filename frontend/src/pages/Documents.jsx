@@ -22,6 +22,12 @@ import DocumentUploadWizard from "../components/DocumentUploadWizard";
 import SuccessSheet from "../components/SuccessSheet";
 import { cleanUiText } from "../utils/textEncoding";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import {
+  buildCoverageNotes,
+  COVERAGE_FORM_VALUE,
+  getCoverageDisplayNotes,
+  isCoverageDocument,
+} from "../utils/coverageDocuments";
 
 const docLabels = {
   receta: "Receta",
@@ -30,6 +36,7 @@ const docLabels = {
   resultado: "Resultado",
   informe: "Informe",
   otro: "Otro",
+  cobertura: "Cobertura / seguro",
 };
 
 function getNewestDocumentRank(item) {
@@ -56,6 +63,7 @@ const uploadTypeOptions = [
   { value: "orden", label: "Orden" },
   { value: "resultado", label: "Resultado" },
   { value: "informe", label: "Informe" },
+  { value: COVERAGE_FORM_VALUE, label: "Cobertura / seguro" },
   { value: "otro", label: "Otro" },
 ];
 
@@ -440,7 +448,9 @@ export default function Documents() {
         cleanUiText(item.center).toLowerCase().includes(normalizedSearch) ||
         cleanUiText(item.notes).toLowerCase().includes(normalizedSearch) ||
         cleanUiText(item.filename).toLowerCase().includes(normalizedSearch);
-      const matchesType = typeFilter === "all" || item.doc_type === typeFilter;
+      const matchesType =
+        typeFilter === "all" ||
+        (typeFilter === COVERAGE_FORM_VALUE ? isCoverageDocument(item) : item.doc_type === typeFilter);
       return matchesSearch && matchesType;
     });
   }, [docs, search, typeFilter]);
@@ -473,11 +483,12 @@ export default function Documents() {
       timeoutId = window.setTimeout(() => {
         window.alert("La subida está tardando más de lo esperado. Mantente en esta pantalla.");
       }, 8000);
+      const isCoverageUpload = form.doc_type === COVERAGE_FORM_VALUE;
       const created = await uploadDocument({
-        doc_type: form.doc_type,
+        doc_type: isCoverageUpload ? "otro" : form.doc_type,
         date: toIsoOrNull(form.date),
         center: form.center,
-        notes: form.notes,
+        notes: isCoverageUpload ? buildCoverageNotes(form.notes) : form.notes,
         send_email_backup: form.send_email_backup,
         file,
       });
@@ -962,6 +973,11 @@ export default function Documents() {
                   <span className="tiny-note">
                     Usa autodetección cuando no quieras clasificarlo manualmente. Klinip puede corregir el tipo después de leer el documento.
                   </span>
+                  {form.doc_type === COVERAGE_FORM_VALUE ? (
+                    <span className="tiny-note">
+                      Úsalo para bonos, reembolsos, licencias médicas, GES/CAEC, copagos o seguros complementarios.
+                    </span>
+                  ) : null}
                 </div>
                 <div className="input-group">
                   <label className="input-label">Fecha del documento</label>
@@ -992,7 +1008,11 @@ export default function Documents() {
                   className="textarea-field"
                   value={form.notes}
                   onChange={(event) => setForm({ ...form, notes: event.target.value })}
-                  placeholder="Ej: receta vence en 3 meses, control con médico tratante, etc."
+                  placeholder={
+                    form.doc_type === COVERAGE_FORM_VALUE
+                      ? "Ej: reembolso pendiente, copago de urgencia, licencia médica..."
+                      : "Ej: receta vence en 3 meses, control con médico tratante, etc."
+                  }
                 />
               </div>
 
@@ -1133,7 +1153,7 @@ export default function Documents() {
                 <div className="detail-field">
                   <div>
                     <span className="detail-label">Notas</span>
-                    <p>{cleanUiText(detailTarget.notes, "Sin notas")}</p>
+                    <p>{getCoverageDisplayNotes(detailTarget.notes, "Sin notas")}</p>
                   </div>
                 </div>
               </div>
@@ -1381,6 +1401,7 @@ export default function Documents() {
               <option value="orden">Orden</option>
               <option value="resultado">Resultado</option>
               <option value="informe">Informe</option>
+              <option value={COVERAGE_FORM_VALUE}>Cobertura / seguro</option>
               <option value="otro">Otro</option>
             </select>
           </div>
@@ -1431,7 +1452,7 @@ export default function Documents() {
                     </td>
                     <td>{cleanUiText(doc.center)}</td>
                     <td style={{ maxWidth: "240px" }}>
-                      <span style={{ fontSize: "0.85rem" }}>{cleanUiText(doc.notes)}</span>
+                      <span style={{ fontSize: "0.85rem" }}>{getCoverageDisplayNotes(doc.notes)}</span>
                     </td>
                     <td onClick={(event) => event.stopPropagation()}>
                       <RowActionsMenu
@@ -1529,8 +1550,8 @@ export default function Documents() {
                   </div>
                 </div>
 
-                {cleanUiText(doc.notes) ? (
-                  <div className="records-mobile-note">{cleanUiText(doc.notes)}</div>
+                {getCoverageDisplayNotes(doc.notes) ? (
+                  <div className="records-mobile-note">{getCoverageDisplayNotes(doc.notes)}</div>
                 ) : null}
 
                 <div className="records-mobile-footer">

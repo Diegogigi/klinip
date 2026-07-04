@@ -862,10 +862,12 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
       "klinip_onboarding_seen",
       "klinip_onboarding_completed_v1",
       "klinip_onboarding_completed_v2",
+      "klinip_onboarding_coverage_pref_v1",
     ];
     const prefixKeys = [
       "klinip_onboarding_completed_v1_",
       "klinip_onboarding_completed_v2_",
+      "klinip_onboarding_coverage_pref_v1_",
       "klinip_notifications_consent_",
       "klinip_notifications_last_prompt_",
       "klinip_notifications_prompt_count_",

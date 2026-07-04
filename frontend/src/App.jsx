@@ -82,6 +82,7 @@ const Appointments = lazyWithRecovery(() => import("./pages/Appointments"), "app
 const Calendar = lazyWithRecovery(() => import("./pages/Calendar"), "calendar");
 const Medications = lazyWithRecovery(() => import("./pages/Medications"), "medications");
 const Documents = lazyWithRecovery(() => import("./pages/Documents"), "documents");
+const Coverage = lazyWithRecovery(() => import("./pages/Coverage"), "coverage");
 const Settings = lazyWithRecovery(() => import("./pages/Settings"), "settings");
 const Timeline = lazyWithRecovery(() => import("./pages/Timeline"), "timeline");
 const Stats = lazyWithRecovery(() => import("./pages/Stats"), "stats");
@@ -111,6 +112,14 @@ const icons = {
       <path d="M7 3.5h7l3 3.5V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z" />
       <path d="M14 3.5v4h3" />
       <path d="M9 12h6M9 15h6M9 9h2" />
+    </svg>
+  ),
+  coverage: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z" />
+      <path d="M4 9h16" />
+      <path d="M7.5 14h4" />
+      <path d="M16 13.2h.01" />
     </svg>
   ),
   heart: (
@@ -212,6 +221,7 @@ const ROUTE_TRANSITION_ORDER = [
   "/calendar",
   "/timeline",
   "/documents",
+  "/coverage",
   "/medications",
   "/stats",
   "/clinical-reports",
@@ -353,6 +363,7 @@ function Sidebar({
       activePaths: HEALTH_SECTION_PATHS,
       section: "care",
     },
+    { to: "/coverage", label: "Cobertura", icon: icons.coverage, section: "care" },
   ];
   const desktopNavGroups = [
     { id: "main", label: "Principal" },
@@ -636,6 +647,7 @@ function Topbar({
     "/": "Inicio",
     "/appointments": "Citas",
     "/documents": "Documentos",
+    "/coverage": "Cobertura",
     "/medications": "Medicamentos",
     "/calendar": "Calendario",
     "/stats": "Estadísticas",
@@ -945,9 +957,11 @@ const NOTIF_CONSENT_KEY_BASE = "klinip_notifications_consent";
 const NOTIF_LAST_PROMPT_KEY_BASE = "klinip_notifications_last_prompt";
 const NOTIF_PROMPT_COUNT_KEY_BASE = "klinip_notifications_prompt_count";
 const ONBOARDING_COMPLETED_KEY_BASE = "klinip_onboarding_completed_v2";
-const ONBOARDING_TOTAL_STEPS = 6;
-const ONBOARDING_PIN_STEP = 4;
+const ONBOARDING_TOTAL_STEPS = 7;
+const ONBOARDING_COVERAGE_STEP = 4;
+const ONBOARDING_PIN_STEP = 5;
 const ONBOARDING_FINAL_STEP = ONBOARDING_TOTAL_STEPS - 1;
+const ONBOARDING_COVERAGE_PREF_KEY_BASE = "klinip_onboarding_coverage_pref_v1";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
@@ -1127,6 +1141,8 @@ export default function App() {
     hasChronicCondition: "",
     chronicCondition: "",
     primaryCareCenter: "",
+    coverageEnabled: "",
+    coverageProvider: "",
   });
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const medAlertPollingRef = useRef(false);
@@ -2287,6 +2303,15 @@ export default function App() {
       const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
       localStorage.setItem(consentKey, notifConsent);
       localStorage.setItem(lastPromptKey, nowIso);
+      const coveragePrefKey = getUserKey(ONBOARDING_COVERAGE_PREF_KEY_BASE, user.id);
+      localStorage.setItem(
+        coveragePrefKey,
+        JSON.stringify({
+          enabled: onboardingData.coverageEnabled === "yes",
+          provider: (onboardingData.coverageProvider || "").trim(),
+          configured_at: nowIso,
+        }),
+      );
       const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
       localStorage.setItem(onboardingKey, "true");
       setOnboardingOpen(false);
@@ -2570,6 +2595,24 @@ export default function App() {
                   <path d="M162 96l4 5 8-9" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
+              {onboardingStep === ONBOARDING_COVERAGE_STEP && (
+                <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="130" cy="115" r="80" fill="rgba(255,255,255,0.12)" />
+                  <rect x="62" y="72" width="136" height="88" rx="18" fill="rgba(255,255,255,0.94)" />
+                  <rect x="62" y="94" width="136" height="18" fill="#bfdbfe" />
+                  <rect x="82" y="128" width="50" height="7" rx="3.5" fill="#dbeafe" />
+                  <rect x="82" y="141" width="76" height="7" rx="3.5" fill="#e2e8f0" />
+                  <circle cx="172" cy="136" r="16" fill="#2563eb" />
+                  <path d="M164 136l5 5 11-13" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  <rect x="78" y="174" width="104" height="28" rx="9" fill="rgba(255,255,255,0.18)" />
+                  <rect x="88" y="182" width="42" height="4" rx="2" fill="#fff" />
+                  <rect x="88" y="191" width="64" height="4" rx="2" fill="rgba(255,255,255,0.7)" />
+                  <circle cx="55" cy="120" r="18" fill="rgba(255,255,255,0.18)" />
+                  <path d="M48 120h14M55 113v14" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+                  <circle cx="205" cy="84" r="18" fill="rgba(255,255,255,0.18)" />
+                  <path d="M198 84h14M205 77v14" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+                </svg>
+              )}
               {onboardingStep === ONBOARDING_PIN_STEP && (
                 <svg className="ob-illus" viewBox="0 0 260 230" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <circle cx="130" cy="115" r="80" fill="rgba(255,255,255,0.12)" />
@@ -2708,6 +2751,39 @@ export default function App() {
                     </div>
                   </>
                 )}
+                {onboardingStep === ONBOARDING_COVERAGE_STEP && (
+                  <>
+                    <h2 className="ob-title">Configura Klinip Cobertura</h2>
+                    <p className="ob-text">
+                      Puedes ordenar bonos, reembolsos, licencias, copagos y seguros junto a tus documentos de salud.
+                    </p>
+                    <div className="ob-toggle-row">
+                      <button
+                        className={`ob-toggle-btn${onboardingData.coverageEnabled === "yes" ? " ob-toggle-active" : ""}`}
+                        type="button"
+                        onClick={() => setOnboardingData((prev) => ({ ...prev, coverageEnabled: "yes" }))}
+                      >Sí, quiero usarlo</button>
+                      <button
+                        className={`ob-toggle-btn${onboardingData.coverageEnabled === "no" ? " ob-toggle-active" : ""}`}
+                        type="button"
+                        onClick={() => setOnboardingData((prev) => ({ ...prev, coverageEnabled: "no", coverageProvider: "" }))}
+                      >Después</button>
+                    </div>
+                    <div className="ob-form">
+                      <input
+                        className="ob-input"
+                        type="text"
+                        value={onboardingData.coverageProvider}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, coverageProvider: e.target.value }))}
+                        placeholder="Fonasa, Isapre o seguro complementario (opcional)"
+                        disabled={onboardingData.coverageEnabled === "no"}
+                      />
+                      <p className="ob-msg">
+                        Al subir documentos podrás elegir “Cobertura / seguro” para que Klinip los ordene aparte.
+                      </p>
+                    </div>
+                  </>
+                )}
                 {onboardingStep === ONBOARDING_PIN_STEP && (
                   <>
                     <h2 className="ob-title">Protege tu cuenta con un PIN</h2>
@@ -2777,6 +2853,10 @@ export default function App() {
                       <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/appointments"); }}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8" /><path d="M12 8v4l2.5 2.5" /></svg>
                         Agendar cita
+                      </button>
+                      <button className="ob-quick-btn" type="button" onClick={() => { handleSkipOnboarding(); navigate("/coverage"); }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="4" y="6" width="16" height="12" rx="2" /><path d="M4 10h16" /><path d="M8 14h4" /></svg>
+                        Cobertura
                       </button>
                     </div>
                   </>
@@ -3003,6 +3083,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <Documents key={`documents-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/coverage"
+                element={
+                  <ProtectedRoute user={user}>
+                    <Coverage key={`coverage-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

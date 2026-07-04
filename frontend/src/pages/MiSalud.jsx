@@ -138,6 +138,7 @@ function IcoHeart() { return <svg {...sp}><path d="M19 14c1.49-1.46 3-3.21 3-5.5
 function IcoCal() { return <svg {...sp}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>; }
 function IcoPill() { return <svg {...sp}><path d="m10.5 20.5-7-7a5 5 0 1 1 7-7l7 7a5 5 0 0 1-7 7Z"/><path d="m8.5 8.5 7 7"/></svg>; }
 function IcoDoc() { return <svg {...sp}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>; }
+function IcoCoverage() { return <svg {...sp}><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h11A2.5 2.5 0 0 1 20 7.5v9A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5v-9Z"/><path d="M4 9h16M7.5 14h4M16 13.2h.01"/></svg>; }
 function IcoActivity() { return <svg {...sp}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>; }
 function IcoTimeline() { return <svg {...sp}><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>; }
 function IcoReport() { return <svg {...sp}><path d="M9 11l3 3 4-4"/><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M8 6V4a2 2 0 0 1 4 0v2"/></svg>; }
@@ -562,6 +563,10 @@ export default function MiSalud() {
           <Link to="/stats" className="clp-quick-item tone-indigo">
             <span className="clp-quick-icon"><IcoChart /></span>
             <span>Indicadores</span>
+          </Link>
+          <Link to="/coverage" className="clp-quick-item tone-green">
+            <span className="clp-quick-icon"><IcoCoverage /></span>
+            <span>Cobertura</span>
           </Link>
           <Link to="/mi-salud/biometricos" className="clp-quick-item tone-blue">
             <span className="clp-quick-icon"><IcoBiometric /></span>
