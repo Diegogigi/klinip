@@ -2,6 +2,7 @@
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  backfillMedicationIntakes,
   createMedicationPurchase,
   deleteMedication,
   getActiveHealthProfile,
@@ -1048,6 +1049,34 @@ export default function Medications() {
     }
   };
 
+  const handleBackfillIntakes = async (med) => {
+    if (!canEditActiveProfile || !med?.id) return;
+    const pending = Math.max(0, Number(med?.expected_doses || 0) - Number(med?.taken_doses || 0));
+    const confirmMessage =
+      pending > 0
+        ? `Se registrarán como tomadas las ${pending} dosis pasadas que quedaron sin registro. Tu adherencia se actualizará. ¿Continuar?`
+        : "Se registrarán como tomadas las dosis pasadas que quedaron sin registro. ¿Continuar?";
+    if (!window.confirm(confirmMessage)) return;
+    try {
+      const result = await backfillMedicationIntakes(med.id);
+      const createdCount = Number(result?.created || 0);
+      notifyMedicationDataChanged();
+      await load();
+      await loadDetailIntakeItems(med.id);
+      showTimedIntakeFeedback(
+        createdCount > 0
+          ? `${createdCount} dosis pasadas quedaron registradas como tomadas.`
+          : "No había dosis pasadas sin registro."
+      );
+    } catch (err) {
+      console.error(err);
+      alert(
+        "No se pudieron registrar las dosis pasadas: " +
+          (err?.response?.data?.detail || err?.message || "Error desconocido")
+      );
+    }
+  };
+
   const recordTakenFromReminder = async (medication, source, triggeredAt) => {
     const scheduledAt = triggeredAt || new Date().toISOString();
     try {
@@ -1711,6 +1740,10 @@ export default function Medications() {
   const detailTakenDoses = Number(detailTarget?.taken_doses || 0);
   const detailExpectedDoses = detailTarget ? getMedicationPlannedDoses(detailTarget) : 0;
   const detailDoseProgress = getDoseProgressLabel(detailTakenDoses, detailExpectedDoses);
+  const detailPendingBackfill = Math.max(
+    0,
+    Number(detailTarget?.expected_doses || 0) - detailTakenDoses
+  );
 
   useEffect(() => {
     if (medicationsPage > totalMedicationPages) {
@@ -2969,6 +3002,16 @@ export default function Medications() {
                   </div>
                   <div className="med-detail-dose-summary-side">
                     <span>{detailDoseProgress}</span>
+                    {canEditActiveProfile && detailPendingBackfill > 0 ? (
+                      <button
+                        type="button"
+                        className="med-backfill-btn"
+                        onClick={() => handleBackfillIntakes(detailTarget)}
+                      >
+                        ¿Las tomaste? Registrar {detailPendingBackfill}{" "}
+                        {detailPendingBackfill === 1 ? "dosis pasada" : "dosis pasadas"} sin registro
+                      </button>
+                    ) : null}
                     {canEditActiveProfile && !isMedicationFinished(detailTarget) ? (
                       <button
                         type="button"

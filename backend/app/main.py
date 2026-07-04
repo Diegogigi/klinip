@@ -23589,6 +23589,85 @@ async def list_medication_intakes(
     }
 
 
+@app.post(
+    "/medications/{medication_id}/intakes/backfill",
+    response_model=schemas.MedicationIntakeBackfillOut,
+)
+async def backfill_medication_intakes(
+    medication_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    """Registra como tomadas las dosis pasadas que quedaron sin registro.
+
+    Se respetan los registros hechos por la persona (tomadas, omitidas, etc.);
+    solo se rellenan los horarios sin registro y los "missed" generados
+    automáticamente por el scheduler.
+    """
+    ensure_medication_schema(force=True)
+    ensure_medication_intake_schema()
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    med = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.id == medication_id,
+            models.Medication.user_id == target_user_id,
+        )
+        .first()
+    )
+    if not med:
+        raise HTTPException(status_code=404, detail="Medicamento no encontrado")
+
+    now = datetime.now()
+    slots = _medication_schedule_events_between(med, _medication_start_at(med, now), now)
+    rows = (
+        db.query(models.MedicationIntake)
+        .filter(
+            models.MedicationIntake.medication_id == medication_id,
+            models.MedicationIntake.user_id == target_user_id,
+        )
+        .all()
+    )
+    resolved_slots: set[datetime] = set()
+    for row in rows:
+        slot = _normalize_medication_dt(getattr(row, "scheduled_at", None))
+        if slot is None:
+            slot = _normalize_medication_dt(getattr(row, "taken_at", None))
+        if slot is None:
+            continue
+        status = _normalize_adherence_status(getattr(row, "status", "taken"))
+        source = str(getattr(row, "source", "") or "").lower()
+        if status in {"taken", "late"} or source != "scheduler":
+            resolved_slots.add(slot)
+
+    created = 0
+    for slot in slots:
+        slot_naive = slot.replace(tzinfo=None) if getattr(slot, "tzinfo", None) else slot
+        if slot_naive in resolved_slots:
+            continue
+        db.add(
+            models.MedicationIntake(
+                user_id=target_user_id,
+                medication_id=medication_id,
+                scheduled_at=slot_naive,
+                taken_at=slot_naive,
+                status="taken",
+                source="backfill",
+                notes="Registrada retroactivamente: la persona confirmó que tomó esta dosis.",
+            )
+        )
+        created += 1
+
+    if created:
+        try:
+            _mark_profile_ai_dirty(db, profile, include_family=True)
+        except Exception as ai_exc:
+            print(f"WARNING medication backfill: no se pudo marcar refresh de IA: {ai_exc}")
+        db.commit()
+
+    return {"medication_id": medication_id, "created": created}
+
+
 @app.get("/medications/purchases", response_model=List[schemas.MedicationPurchaseOut])
 async def list_medication_purchases(
     medication_id: int | None = None,

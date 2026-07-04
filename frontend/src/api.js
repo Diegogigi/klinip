@@ -84,6 +84,7 @@ export const saveMedication = api.saveMedication;
 export const deleteMedication = api.deleteMedication;
 export const recordMedicationIntake = api.recordMedicationIntake;
 export const getMedicationIntakes = api.getMedicationIntakes;
+export const backfillMedicationIntakes = api.backfillMedicationIntakes;
 export const getMedicationPurchases = api.getMedicationPurchases;
 export const createMedicationPurchase = api.createMedicationPurchase;
 export const getMedicationPurchaseReceipt = api.getMedicationPurchaseReceipt;

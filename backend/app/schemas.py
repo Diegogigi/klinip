@@ -678,6 +678,11 @@ class MedicationIntakeListOut(BaseModel):
     skipped_events: int = 0
 
 
+class MedicationIntakeBackfillOut(BaseModel):
+    medication_id: int
+    created: int = 0
+
+
 class BiometricReadingBase(BaseModel):
     profile_id: Optional[int] = None
     metric_type: str

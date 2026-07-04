@@ -834,6 +834,11 @@ export async function getMedicationIntakes(id, limit = 40) {
   return res.data;
 }
 
+export async function backfillMedicationIntakes(id) {
+  const res = await api.post(`/medications/${id}/intakes/backfill`);
+  return res.data;
+}
+
 export async function getMedicationPurchases(options = {}) {
   const params = {};
   if (options.medicationId) params.medication_id = options.medicationId;

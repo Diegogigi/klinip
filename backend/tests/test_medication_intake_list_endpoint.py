@@ -38,6 +38,7 @@ def _endpoint_env(monkeypatch, db_session):
     db_session.flush()
 
     monkeypatch.setattr(main, "ensure_medication_schema", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main, "ensure_medication_intake_schema", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         main,
         "_get_active_profile_context",
@@ -103,6 +104,64 @@ def test_intake_counts_deduplicate_same_slot(_endpoint_env):
     assert result["total_events"] == 1
     assert result["taken_events"] == 1
     assert result["missed_events"] == 0
+
+
+def test_backfill_registers_unlogged_past_doses(_endpoint_env):
+    user, med, db = _endpoint_env
+    # Tratamiento diario que empezó hace 9 días: 10 tomas ya transcurridas.
+    now = datetime.now().replace(second=0, microsecond=0)
+    start = now - timedelta(days=9, minutes=1)
+    med.start_at = start
+    med.schedule_time = start.strftime("%H:%M")
+    db.flush()
+
+    # 3 tomas registradas, 1 omitida explícitamente por la persona.
+    for index in range(3):
+        slot = start + timedelta(days=index)
+        db.add(
+            models.MedicationIntake(
+                user_id=user.id,
+                medication_id=med.id,
+                scheduled_at=slot,
+                taken_at=slot,
+                status="taken",
+                source="manual",
+                created_at=slot,
+            )
+        )
+    skipped_slot = start + timedelta(days=3)
+    db.add(
+        models.MedicationIntake(
+            user_id=user.id,
+            medication_id=med.id,
+            scheduled_at=skipped_slot,
+            taken_at=None,
+            status="skipped",
+            source="manual",
+            created_at=skipped_slot,
+        )
+    )
+    db.flush()
+
+    result = asyncio.run(
+        main.backfill_medication_intakes(med.id, db=db, current_user=user)
+    )
+
+    # Se rellenan solo los 6 huecos: no se tocan las 3 tomadas ni la omitida.
+    assert result["created"] == 6
+
+    listing = asyncio.run(
+        main.list_medication_intakes(med.id, limit=60, db=db, current_user=user)
+    )
+    assert listing["taken_events"] == 9
+    assert listing["skipped_events"] == 1
+    assert listing["total_events"] == 10
+
+    # Repetir el backfill no duplica nada.
+    repeat = asyncio.run(
+        main.backfill_medication_intakes(med.id, db=db, current_user=user)
+    )
+    assert repeat["created"] == 0
 
 
 def test_total_planned_doses_covers_full_treatment(_endpoint_env):
