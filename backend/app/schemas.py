@@ -582,6 +582,7 @@ class MedicationOut(MedicationBase):
     created_at: datetime
     schedule_anchor_at: Optional[datetime] = None
     expected_doses: int = 0
+    total_planned_doses: Optional[int] = None
     taken_doses: int = 0
     missed_doses: int = 0
     adherence_rate: Optional[float] = None

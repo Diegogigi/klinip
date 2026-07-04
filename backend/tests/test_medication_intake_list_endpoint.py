@@ -103,3 +103,27 @@ def test_intake_counts_deduplicate_same_slot(_endpoint_env):
     assert result["total_events"] == 1
     assert result["taken_events"] == 1
     assert result["missed_events"] == 0
+
+
+def test_total_planned_doses_covers_full_treatment(_endpoint_env):
+    user, med, db = _endpoint_env
+    med.start_at = datetime(2026, 4, 13, 23, 47, 0)
+    med.schedule_time = "23:47"
+    med.duration = "85 días"
+    db.flush()
+
+    main._attach_medication_adherence(db, [med], user)
+
+    # 85 días cada 24 horas = 85 dosis en todo el tratamiento, sin importar
+    # cuántas correspondan hasta hoy.
+    assert med.total_planned_doses == 85
+
+
+def test_total_planned_doses_none_without_end(_endpoint_env):
+    user, med, db = _endpoint_env
+
+    main._attach_medication_adherence(db, [med], user)
+
+    # Sin duración ni fecha de término (tratamiento crónico) no hay total: la
+    # UI usa las dosis esperadas hasta hoy.
+    assert med.total_planned_doses is None

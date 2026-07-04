@@ -4819,6 +4819,17 @@ def _attach_medication_adherence(
         adherence = None
         if expected > 0:
             adherence = round(min((taken / expected) * 100, 100), 1)
+        # Total de dosis del tratamiento completo (inicio → término). Es el
+        # denominador que se muestra como progreso; `expected` solo cubre hasta
+        # ahora y se usa para adherencia. Sin fecha de término (crónicos) queda
+        # en None y la UI cae de vuelta a `expected`.
+        treatment_end = _medication_end_at(med)
+        total_planned = None
+        if treatment_end:
+            total_planned = _calculate_expected_doses_between(
+                med, _medication_start_at(med, now), treatment_end
+            )
+        setattr(med, "total_planned_doses", total_planned)
         setattr(med, "expected_doses", expected)
         setattr(med, "taken_doses", taken)
         setattr(med, "missed_doses", missed)

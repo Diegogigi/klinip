@@ -160,6 +160,14 @@ function getIntakeNoteLabel(item) {
   return note;
 }
 
+// Denominador que ve el usuario: total de dosis del tratamiento completo si
+// tiene término definido; si es crónico (sin término), las esperadas hasta hoy.
+function getMedicationPlannedDoses(med) {
+  const planned = Number(med?.total_planned_doses);
+  if (Number.isFinite(planned) && planned > 0) return planned;
+  return Number(med?.expected_doses || 0);
+}
+
 function getDoseProgressLabel(taken, expected) {
   const normalizedTaken = Math.max(0, Number(taken || 0));
   const normalizedExpected = Math.max(0, Number(expected || 0));
@@ -1701,7 +1709,7 @@ export default function Medications() {
   );
   const detailDoseContext = detailTarget ? getMedicationDoseContext(detailTarget) : null;
   const detailTakenDoses = Number(detailTarget?.taken_doses || 0);
-  const detailExpectedDoses = Number(detailTarget?.expected_doses || 0);
+  const detailExpectedDoses = detailTarget ? getMedicationPlannedDoses(detailTarget) : 0;
   const detailDoseProgress = getDoseProgressLabel(detailTakenDoses, detailExpectedDoses);
 
   useEffect(() => {
@@ -3242,7 +3250,7 @@ export default function Medications() {
               <strong>
                 {getDoseProgressLabel(
                   routeReminderMedication.taken_doses,
-                  routeReminderMedication.expected_doses
+                  getMedicationPlannedDoses(routeReminderMedication)
                 )}
               </strong>
             </div>
@@ -3365,7 +3373,7 @@ export default function Medications() {
                           })()}
                         </td>
                         <td>
-                          {(m.taken_doses || 0)}/{(m.expected_doses || 0)}
+                          {(m.taken_doses || 0)}/{getMedicationPlannedDoses(m)}
                         </td>
                         <td>{adherenceText}</td>
                         <td>
@@ -3542,7 +3550,7 @@ export default function Medications() {
                     <div className="records-mobile-meta-grid">
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Registro</span>
-                        <span>{getDoseProgressLabel(taken, expected)}</span>
+                        <span>{getDoseProgressLabel(taken, getMedicationPlannedDoses(m))}</span>
                       </div>
                       <div className="records-mobile-meta-item">
                         <span className="records-mobile-meta-label">Adherencia</span>
