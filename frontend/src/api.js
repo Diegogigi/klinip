@@ -71,6 +71,10 @@ export const updateAppointment = api.updateAppointment;
 export const deleteAppointment = api.deleteAppointment;
 
 export const getDocuments = api.getDocuments;
+export const getCoveragePreferences = api.getCoveragePreferences;
+export const updateCoveragePreferences = api.updateCoveragePreferences;
+export const getCoverageDocuments = api.getCoverageDocuments;
+export const updateCoverageDocumentInfo = api.updateCoverageDocumentInfo;
 export const uploadDocument = api.uploadDocument;
 export const deleteDocument = api.deleteDocument;
 export const updateDocument = api.updateDocument;

@@ -11,6 +11,7 @@ import {
   getHealthProfiles,
   getActiveHealthProfile,
   setActiveHealthProfile,
+  updateCoveragePreferences,
   isAuthSessionError,
 } from "./api";
 import { registerServiceWorker, ensurePushSubscription, removePushSubscription } from "./services/pwa";
@@ -982,6 +983,28 @@ const ONBOARDING_TIMEZONE_OPTIONS = [
   "UTC",
 ];
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
+
+function inferCoveragePayerType(provider, enabled) {
+  if (!enabled) return "none";
+  const normalized = String(provider || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (!normalized) return "unknown";
+  if (normalized.includes("fonasa")) return "fonasa";
+  if (
+    normalized.includes("isapre") ||
+    ["banmedica", "colmena", "consalud", "cruz blanca", "masvida", "vida tres"].some((term) =>
+      normalized.includes(term)
+    )
+  ) {
+    return "isapre";
+  }
+  if (normalized.includes("seguro") || normalized.includes("complementario") || normalized.includes("poliza")) {
+    return "seguro_complementario";
+  }
+  return "unknown";
+}
 
 const buildMedicationPromptKey = (med, date, slotKey = "") => {
   const day = date.toISOString().slice(0, 10);
@@ -2304,14 +2327,25 @@ export default function App() {
       localStorage.setItem(consentKey, notifConsent);
       localStorage.setItem(lastPromptKey, nowIso);
       const coveragePrefKey = getUserKey(ONBOARDING_COVERAGE_PREF_KEY_BASE, user.id);
+      const coverageEnabled = onboardingData.coverageEnabled === "yes";
+      const coverageProvider = (onboardingData.coverageProvider || "").trim();
       localStorage.setItem(
         coveragePrefKey,
         JSON.stringify({
-          enabled: onboardingData.coverageEnabled === "yes",
-          provider: (onboardingData.coverageProvider || "").trim(),
+          enabled: coverageEnabled,
+          provider: coverageProvider,
           configured_at: nowIso,
         }),
       );
+      try {
+        await updateCoveragePreferences({
+          enabled: coverageEnabled,
+          payer_type: inferCoveragePayerType(coverageProvider, coverageEnabled),
+          provider_name: coverageProvider,
+        });
+      } catch (coverageErr) {
+        console.error("No se pudo guardar preferencias de cobertura:", coverageErr);
+      }
       const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
       localStorage.setItem(onboardingKey, "true");
       setOnboardingOpen(false);

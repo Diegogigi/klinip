@@ -1,7 +1,7 @@
 import React from "react";
 
 // Resumen compacto de cobertura: tres números que responden "¿cuánto tengo
-// guardado, qué falta revisar y qué tan variado es?" sin tecnicismos.
+// guardado, qué está en trámite y qué tan variado es?" sin tecnicismos.
 export default function CoverageSummary({ total, pending, categoriesCount, loading }) {
   const value = (number) => (loading ? "…" : number);
   return (
@@ -12,9 +12,9 @@ export default function CoverageSummary({ total, pending, categoriesCount, loadi
         <small>Documentos de cobertura</small>
       </article>
       <article className="coverage-stat">
-        <span>En lectura</span>
+        <span>En trámite</span>
         <strong>{value(pending)}</strong>
-        <small>Klinip los está leyendo</small>
+        <small>Esperando respuesta o pago</small>
       </article>
       <article className="coverage-stat">
         <span>Categorías</span>

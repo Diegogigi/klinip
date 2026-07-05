@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getDocuments } from "../services/httpApi";
-import { isCoverageDocument } from "../utils/coverageDocuments";
 import {
-  decorateCoverageDocument,
+  getCoverageDocuments,
+  getCoveragePreferences,
+  updateCoveragePreferences,
+} from "../services/httpApi";
+import {
+  flattenCoverageDocument,
   getCoverageCategoryCounts,
 } from "../components/coverage/coverageTaxonomy";
 import CoveragePlanCard from "../components/coverage/CoveragePlanCard";
@@ -20,10 +23,13 @@ function getDocumentTime(doc) {
 }
 
 export default function Coverage() {
-  const [documents, setDocuments] = useState([]);
+  const [coverageDocuments, setCoverageDocuments] = useState([]);
+  const [preference, setPreference] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeFilter, setActiveFilter] = useState("todos");
+  const [savingPreference, setSavingPreference] = useState(false);
+  const [preferenceError, setPreferenceError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -31,13 +37,20 @@ export default function Coverage() {
       setLoading(true);
       setError("");
       try {
-        const data = await getDocuments();
-        if (!cancelled) setDocuments(Array.isArray(data) ? data : []);
-      } catch (err) {
-        if (!cancelled) {
+        const [docs, pref] = await Promise.all([
+          getCoverageDocuments().catch(() => null),
+          getCoveragePreferences().catch(() => null),
+        ]);
+        if (cancelled) return;
+        if (docs === null && pref === null) {
           setError("No se pudo cargar tu información de cobertura. Revisa tu conexión e inténtalo de nuevo.");
-          setDocuments([]);
         }
+        setCoverageDocuments(
+          (Array.isArray(docs) ? docs : [])
+            .map((item) => flattenCoverageDocument(item))
+            .sort((a, b) => getDocumentTime(b) - getDocumentTime(a))
+        );
+        setPreference(pref || null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -48,32 +61,37 @@ export default function Coverage() {
     };
   }, []);
 
-  const coverageDocuments = useMemo(
-    () =>
-      documents
-        .filter((doc) => isCoverageDocument(doc))
-        .map((doc) => decorateCoverageDocument(doc))
-        .sort((a, b) => getDocumentTime(b) - getDocumentTime(a)),
-    [documents]
-  );
+  const handleSavePreference = async (payload) => {
+    setSavingPreference(true);
+    setPreferenceError("");
+    try {
+      const saved = await updateCoveragePreferences(payload);
+      setPreference(saved || payload);
+      return true;
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setPreferenceError(
+        typeof detail === "string" && detail
+          ? detail
+          : "No se pudo guardar tu previsión. Inténtalo de nuevo."
+      );
+      return false;
+    } finally {
+      setSavingPreference(false);
+    }
+  };
 
   const categoryCounts = useMemo(
     () => getCoverageCategoryCounts(coverageDocuments),
     [coverageDocuments]
   );
   const categoriesWithDocs = Object.values(categoryCounts).filter((count) => count > 0).length;
-  const pendingCount = coverageDocuments.filter((doc) =>
-    ["pending", "processing"].includes(String(doc.ocr_status || "").toLowerCase())
-  ).length;
-  const detectedInsurers = useMemo(
-    () => Array.from(new Set(coverageDocuments.map((doc) => doc.coverageInsurer).filter(Boolean))),
-    [coverageDocuments]
-  );
+  const pendingCount = coverageDocuments.filter((doc) => doc.coverageStatus === "pendiente").length;
 
   const filteredDocuments =
     activeFilter === "todos"
       ? coverageDocuments
-      : coverageDocuments.filter((doc) => (doc.coverageCategories || []).includes(activeFilter));
+      : coverageDocuments.filter((doc) => doc.coverageCategory === activeFilter);
 
   return (
     <div className="page-container health-hub-page coverage-page">
@@ -96,7 +114,12 @@ export default function Coverage() {
         </div>
       </section>
 
-      <CoveragePlanCard detectedInsurers={detectedInsurers} />
+      <CoveragePlanCard
+        preference={preference}
+        saving={savingPreference}
+        error={preferenceError}
+        onSave={handleSavePreference}
+      />
 
       <CoverageSummary
         total={coverageDocuments.length}
@@ -111,7 +134,7 @@ export default function Coverage() {
         <div className="health-hub-section-head">
           <div>
             <h2>Tus documentos de cobertura</h2>
-            <p>Toca una categoría para filtrar. Un documento puede estar en más de una.</p>
+            <p>Toca una categoría para ver solo esos documentos.</p>
           </div>
         </div>
 

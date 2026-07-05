@@ -49503,6 +49503,136 @@ body.theme-dark .coverage-alert {
   background: rgba(240, 253, 250, 0.92);
 }
 
+.coverage-plan-edit-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(13, 148, 136, 0.45);
+  background: rgba(255, 255, 255, 0.85);
+  color: #0f766e;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coverage-plan-card.is-editing {
+  display: block;
+}
+
+.coverage-plan-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.coverage-plan-form-title {
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.coverage-payer-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.coverage-payer-option {
+  display: grid;
+  gap: 0.14rem;
+  padding: 0.62rem 0.75rem;
+  border-radius: 14px;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  background: rgba(255, 255, 255, 0.92);
+  text-align: left;
+  cursor: pointer;
+}
+
+.coverage-payer-option strong {
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.coverage-payer-option span {
+  color: #64748b;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.coverage-payer-option.is-active {
+  border-color: rgba(13, 148, 136, 0.6);
+  background: #ccfbf1;
+}
+
+.coverage-payer-option.is-active strong,
+.coverage-payer-option.is-active span {
+  color: #0f766e;
+}
+
+.coverage-plan-field {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.coverage-plan-field span {
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.coverage-plan-field input {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.95rem;
+}
+
+.coverage-plan-field input:focus {
+  outline: 2px solid rgba(13, 148, 136, 0.4);
+  outline-offset: 1px;
+}
+
+.coverage-plan-error {
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.84rem;
+}
+
+.coverage-plan-actions {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.coverage-plan-actions .primary-btn,
+.coverage-plan-actions .secondary-btn {
+  min-height: 44px;
+}
+
+.coverage-entity-text {
+  color: #64748b;
+  font-size: 0.8rem;
+  align-self: center;
+}
+
+.coverage-document-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.85rem;
+  color: #475569;
+  font-size: 0.82rem;
+}
+
+.coverage-document-amounts strong {
+  color: #0f172a;
+}
+
+.coverage-document-status.is-danger {
+  background: rgba(254, 226, 226, 0.95);
+  color: #b91c1c;
+}
+
 .coverage-plan-icon {
   font-size: 1.35rem;
 }
@@ -49741,6 +49871,67 @@ body.theme-dark .coverage-guide-item .coverage-guide-why {
   color: #5eead4;
 }
 
+body.theme-dark .coverage-plan-edit-btn {
+  border-color: rgba(45, 212, 191, 0.4);
+  background: rgba(15, 23, 42, 0.6);
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-plan-form-title {
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-payer-option {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.76);
+}
+
+body.theme-dark .coverage-payer-option strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-payer-option span {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-payer-option.is-active {
+  border-color: rgba(45, 212, 191, 0.45);
+  background: rgba(19, 78, 74, 0.55);
+}
+
+body.theme-dark .coverage-payer-option.is-active strong,
+body.theme-dark .coverage-payer-option.is-active span {
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-plan-field span {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-plan-field input {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-plan-error {
+  color: #fca5a5;
+}
+
+body.theme-dark .coverage-entity-text,
+body.theme-dark .coverage-document-amounts {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-document-amounts strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-document-status.is-danger {
+  background: rgba(127, 29, 29, 0.45);
+  color: #fca5a5;
+}
+
 @media (max-width: 768px) {
   .health-hub-page {
     gap: 0.9rem;
@@ -49805,6 +49996,19 @@ body.theme-dark .coverage-guide-item .coverage-guide-why {
   .coverage-plan-card {
     padding: 0.72rem 0.85rem;
     border-radius: 15px;
+  }
+
+  .coverage-payer-options {
+    grid-template-columns: 1fr;
+  }
+
+  .coverage-plan-actions {
+    flex-direction: column;
+  }
+
+  .coverage-plan-actions .primary-btn,
+  .coverage-plan-actions .secondary-btn {
+    width: 100%;
   }
 
   .coverage-filter-chip {

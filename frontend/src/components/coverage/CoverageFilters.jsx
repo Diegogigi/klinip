@@ -3,7 +3,11 @@ import { COVERAGE_CATEGORIES } from "./coverageTaxonomy";
 
 // Fila de filtros por categoría. En móvil se desplaza horizontal para no
 // ocupar media pantalla; cada chip muestra cuántos documentos tiene.
+// "Otros" solo aparece cuando tiene algo, para no agregar ruido.
 export default function CoverageFilters({ counts, total, active, onSelect }) {
+  const visibleCategories = COVERAGE_CATEGORIES.filter(
+    (category) => category.key !== "otro" || (counts?.otro || 0) > 0
+  );
   return (
     <div className="coverage-filter-row" role="tablist" aria-label="Filtrar por categoría">
       <button
@@ -16,7 +20,7 @@ export default function CoverageFilters({ counts, total, active, onSelect }) {
         Todos
         <span className="coverage-filter-count">{total}</span>
       </button>
-      {COVERAGE_CATEGORIES.map((category) => (
+      {visibleCategories.map((category) => (
         <button
           key={category.key}
           type="button"

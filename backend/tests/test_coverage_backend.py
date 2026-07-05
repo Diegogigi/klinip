@@ -86,3 +86,40 @@ def test_coverage_document_endpoint_classifies_existing_document(db_session):
     assert payload[0].coverage.amount_total == 12000
     assert payload[0].coverage.amount_patient == 3000
     assert payload[0].coverage.status == "aprobado"
+
+
+def test_coverage_document_info_can_be_corrected_manually(db_session):
+    user, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="cuenta-clinica.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text="Cuenta clinica copago $45.000 pendiente",
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    payload = asyncio.run(
+        main.update_coverage_document_info(
+            doc.id,
+            schemas.CoverageDocumentInfoUpdate(
+                category="reembolso",
+                payer_type="seguro complementario",
+                provider_name="Seguro empresa",
+                amount_reimbursed=25000,
+                status="pendiente",
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+
+    assert payload.coverage.category == "reembolso"
+    assert payload.coverage.payer_type == "seguro_complementario"
+    assert payload.coverage.provider_name == "Seguro empresa"
+    assert payload.coverage.amount_reimbursed == 25000
+    assert payload.coverage.metadata_json["manual_override"] is True

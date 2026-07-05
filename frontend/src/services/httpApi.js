@@ -736,6 +736,32 @@ export async function getDocuments(options = {}) {
   return res.data;
 }
 
+export async function getCoveragePreferences(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/coverage/preferences", { params });
+  return res.data;
+}
+
+export async function updateCoveragePreferences(payload, options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.put("/coverage/preferences", payload, { params });
+  return res.data;
+}
+
+export async function getCoverageDocuments(options = {}) {
+  const params = {};
+  if (options.profileId) params.profile_id = options.profileId;
+  const res = await api.get("/coverage/documents", { params });
+  return res.data;
+}
+
+export async function updateCoverageDocumentInfo(documentId, payload) {
+  const res = await api.put(`/coverage/documents/${documentId}`, payload);
+  return res.data;
+}
+
 export async function uploadDocument(payload) {
   const formData = payload instanceof FormData ? payload : new FormData();
   if (!(payload instanceof FormData)) {

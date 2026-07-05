@@ -21875,6 +21875,18 @@ def _normalize_coverage_payer_type(value: str | None) -> str:
     return normalized if normalized in VALID_COVERAGE_PAYER_TYPES else "unknown"
 
 
+def _validate_coverage_amount(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        amount = float(value)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Monto de cobertura no valido")
+    if amount < 0:
+        raise HTTPException(status_code=400, detail="Monto de cobertura no valido")
+    return amount
+
+
 def _normalize_biometric_metric(metric_type: str) -> str:
     normalized = str(metric_type or "").strip().lower().replace(" ", "_").replace("-", "_")
     aliases = {
@@ -23282,6 +23294,83 @@ async def get_coverage_documents(
     if changed:
         db.commit()
     return output
+
+
+@app.put("/coverage/documents/{document_id}", response_model=schemas.CoverageDocumentOut)
+async def update_coverage_document_info(
+    document_id: int,
+    payload: schemas.CoverageDocumentInfoUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_coverage_schema(force=True)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    doc = (
+        db.query(models.Document)
+        .filter(
+            models.Document.id == document_id,
+            *_document_scope_filter(profile, target_user_id),
+        )
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Documento no encontrado")
+
+    info = (
+        db.query(models.DocumentCoverageInfo)
+        .filter(models.DocumentCoverageInfo.document_id == doc.id)
+        .first()
+    )
+    if not info:
+        info = _upsert_document_coverage_info(db, doc)
+    if not info:
+        info = models.DocumentCoverageInfo(
+            document_id=doc.id,
+            profile_id=getattr(doc, "profile_id", None),
+            owner_user_id=int(getattr(doc, "user_id", 0) or 0),
+            category="otro",
+            payer_type="unknown",
+            currency="CLP",
+            metadata_json={},
+        )
+
+    updates = payload.dict(exclude_unset=True)
+    if "category" in updates:
+        info.category = _normalize_coverage_category(updates["category"])
+    if "payer_type" in updates:
+        info.payer_type = _normalize_coverage_payer_type(updates["payer_type"])
+    if "provider_name" in updates:
+        info.provider_name = _safe_text(updates["provider_name"])[:120]
+    if "entity_name" in updates:
+        info.entity_name = _safe_text(updates["entity_name"])[:120]
+    for amount_key in ("amount_total", "amount_covered", "amount_patient", "amount_reimbursed"):
+        if amount_key in updates:
+            setattr(info, amount_key, _validate_coverage_amount(updates[amount_key]))
+    if "currency" in updates:
+        currency = _safe_text(updates["currency"] or "CLP").upper()[:12]
+        info.currency = currency or "CLP"
+    if "status" in updates:
+        info.status = _safe_text(updates["status"])[:40]
+
+    metadata = dict(info.metadata_json or {})
+    if isinstance(updates.get("metadata_json"), dict):
+        metadata.update(updates["metadata_json"])
+    metadata["manual_override"] = True
+    metadata["manual_updated_at"] = datetime.now().isoformat(timespec="seconds")
+    metadata["manual_updated_by_user_id"] = int(current_user.id)
+    info.metadata_json = metadata
+    info.profile_id = getattr(doc, "profile_id", None)
+    info.owner_user_id = int(getattr(doc, "user_id", 0) or 0)
+    info.updated_at = datetime.now()
+    db.add(info)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(doc)
+    db.refresh(info)
+    return schemas.CoverageDocumentOut(
+        document=schemas.DocumentOut.model_validate(doc),
+        coverage=schemas.CoverageDocumentInfoOut.model_validate(info),
+    )
 
 
 @app.post("/ai/reports/generate", response_model=schemas.ClinicalReportOut)

@@ -1,8 +1,8 @@
 import { cleanUiText } from "../../utils/textEncoding";
-import { getDetectedInsurer } from "../../utils/coverageDocuments";
 
-// Taxonomía de Klinip Cobertura (Chile). Cada categoría tiene copy pensado
-// para personas no técnicas: qué es y para qué sirve guardarlo.
+// Taxonomía de Klinip Cobertura (Chile), alineada con las categorías que
+// clasifica el backend en document_coverage_info. Copy pensado para personas
+// no técnicas: qué es cada documento y para qué sirve guardarlo.
 export const COVERAGE_CATEGORIES = [
   {
     key: "bono",
@@ -11,7 +11,6 @@ export const COVERAGE_CATEGORIES = [
     guideTitle: "Bonos de atención",
     guideWhat: "El comprobante que recibes al pagar una consulta, examen o procedimiento con tu previsión.",
     guideWhy: "Sirve para saber cuánto pagaste tú y cuánto cubrió tu plan en cada atención.",
-    terms: ["bono", "bonos", "bono de atencion", "bono electronico"],
   },
   {
     key: "reembolso",
@@ -20,7 +19,6 @@ export const COVERAGE_CATEGORIES = [
     guideTitle: "Reembolsos",
     guideWhat: "Cuando pagas de tu bolsillo y después pides la devolución a tu Isapre o seguro.",
     guideWhy: "Guarda la boleta y la respuesta del reembolso: así sabes qué te devolvieron y qué falta.",
-    terms: ["reembolso", "reembolsos", "solicitud de reembolso", "excedente", "excedentes"],
   },
   {
     key: "licencia",
@@ -29,7 +27,6 @@ export const COVERAGE_CATEGORIES = [
     guideTitle: "Licencias médicas",
     guideWhat: "Licencias médicas y trámites asociados, como los del COMPIN.",
     guideWhy: "Tenerlas juntas ayuda si necesitas revisar pagos, plazos o presentar un reclamo.",
-    terms: ["licencia", "licencias", "licencia medica", "compin", "subsidio de incapacidad"],
   },
   {
     key: "copago",
@@ -38,113 +35,96 @@ export const COVERAGE_CATEGORIES = [
     guideTitle: "Copagos y cuentas",
     guideWhat: "Lo que te toca pagar a ti después de la cobertura, como cuentas de clínica u hospital.",
     guideWhy: "Permite revisar los cobros con calma y detectar diferencias a tiempo.",
-    terms: ["copago", "copagos", "cuenta clinica", "cuenta hospitalaria", "presupuesto"],
   },
   {
-    key: "ges",
+    key: "ges_caec",
     label: "GES / CAEC",
     icon: "🛡️",
     guideTitle: "GES y CAEC",
     guideWhat: "Cartas y formularios de las garantías GES (ex AUGE) o de la cobertura catastrófica CAEC.",
     guideWhy: "Son claves para plazos y beneficios: conviene tenerlas siempre a mano.",
-    terms: ["ges", "caec", "auge", "garantias explicitas", "garantia explicita"],
   },
   {
-    key: "fonasa",
-    label: "Fonasa",
-    icon: "🏥",
-    guideTitle: "Fonasa",
-    guideWhat: "Documentos de Fonasa: tu tramo, compra de bonos, programas o certificados.",
-    guideWhy: "Ayudan a saber qué te cubre Fonasa y en qué red te conviene atenderte.",
-    terms: ["fonasa", "tramo fonasa", "modalidad libre eleccion"],
-  },
-  {
-    key: "isapre",
-    label: "Isapre",
+    key: "plan_seguro",
+    label: "Plan y seguro",
     icon: "💳",
-    guideTitle: "Isapre",
-    guideWhat: "Tu plan de salud, cartolas, cartas y respuestas de tu Isapre.",
-    guideWhy: "Es tu respaldo ante cambios de plan, alzas o trámites con la Superintendencia.",
-    terms: [
-      "isapre",
-      "cartola",
-      "plan de salud",
-      "banmedica",
-      "colmena",
-      "consalud",
-      "cruz blanca",
-      "vida tres",
-      "nueva masvida",
-      "masvida",
-    ],
+    guideTitle: "Plan de salud y seguros",
+    guideWhat: "Tu plan de Isapre o Fonasa, cartolas, pólizas y cartas de tu seguro complementario.",
+    guideWhy: "Es tu respaldo ante cambios de plan, alzas, topes o trámites con la Superintendencia.",
   },
   {
-    key: "seguro",
-    label: "Seguro complementario",
-    icon: "➕",
-    guideTitle: "Seguros complementarios",
-    guideWhat: "Pólizas y reembolsos del seguro adicional, del trabajo o contratado por tu cuenta.",
-    guideWhy: "Muchas devoluciones se pierden por no tener la póliza y los topes a la vista.",
-    terms: [
-      "seguro complementario",
-      "seguro de salud",
-      "poliza",
-      "aseguradora",
-      "metlife",
-      "sura",
-      "bice vida",
-      "consorcio",
-      "chilena consolidada",
-      "zurich",
-    ],
+    key: "otro",
+    label: "Otros",
+    icon: "🗂️",
+    guideTitle: "Otros documentos",
+    guideWhat: "Documentos de cobertura que aún no calzan en una categoría específica.",
+    guideWhy: "Igual quedan guardados y puedes revisarlos cuando los necesites.",
   },
 ];
 
-const COVERAGE_PREF_KEY_PREFIX = "klinip_onboarding_coverage_pref_v1";
+// Tipos de previsión que acepta el backend (payer_type).
+export const COVERAGE_PAYER_TYPES = [
+  {
+    value: "fonasa",
+    label: "Fonasa",
+    helper: "El seguro público de salud.",
+  },
+  {
+    value: "isapre",
+    label: "Isapre",
+    helper: "Banmédica, Colmena, Consalud, Cruz Blanca y otras.",
+  },
+  {
+    value: "seguro_complementario",
+    label: "Seguro complementario",
+    helper: "Un seguro adicional, del trabajo o contratado aparte.",
+  },
+  {
+    value: "none",
+    label: "Ninguna por ahora",
+    helper: "Puedes configurarla más adelante.",
+  },
+];
 
-function normalizeCoverageText(value) {
-  return cleanUiText(value, "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-// Coincidencia con límites de palabra sobre texto sin acentos, para que
-// términos cortos como "ges" no calcen dentro de "gestión".
-function matchesTerm(text, term) {
-  const normalizedTerm = normalizeCoverageText(term).trim();
-  if (!normalizedTerm) return false;
-  const pattern = new RegExp(`(^|[^a-z0-9])${escapeRegExp(normalizedTerm)}([^a-z0-9]|$)`);
-  return pattern.test(text);
-}
-
-function getDocumentSearchText(doc) {
-  return normalizeCoverageText(
-    [doc?.filename, doc?.center, doc?.notes, doc?.doc_type].filter(Boolean).join(" ")
-  );
-}
-
-export function getCoverageCategoryKeys(doc) {
-  const text = getDocumentSearchText(doc);
-  if (!text) return [];
-  return COVERAGE_CATEGORIES.filter((category) =>
-    category.terms.some((term) => matchesTerm(text, term))
-  ).map((category) => category.key);
-}
+export const KNOWN_ISAPRES = [
+  "Banmédica",
+  "Colmena",
+  "Consalud",
+  "Cruz Blanca",
+  "Esencial",
+  "Nueva Masvida",
+  "Vida Tres",
+];
 
 export function getCoverageCategory(key) {
-  return COVERAGE_CATEGORIES.find((category) => category.key === key) || null;
+  const normalized = String(key || "").trim().toLowerCase();
+  return COVERAGE_CATEGORIES.find((category) => category.key === normalized) || null;
 }
 
-export function decorateCoverageDocument(doc) {
+export function getPayerTypeLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  const payer = COVERAGE_PAYER_TYPES.find((item) => item.value === normalized);
+  if (payer) return payer.label;
+  return "";
+}
+
+// Aplana la respuesta de GET /coverage/documents ({document, coverage}) en un
+// solo objeto fácil de pasar a las filas de la lista.
+export function flattenCoverageDocument(item) {
+  const doc = item?.document || {};
+  const coverage = item?.coverage || {};
   return {
     ...doc,
-    coverageCategories: getCoverageCategoryKeys(doc),
-    coverageInsurer: getDetectedInsurer(doc),
+    coverageCategory: getCoverageCategory(coverage.category)?.key || "otro",
+    coveragePayerType: String(coverage.payer_type || "").toLowerCase(),
+    coverageEntity: cleanUiText(coverage.entity_name || coverage.provider_name || "", ""),
+    coverageStatus: String(coverage.status || "").toLowerCase(),
+    coverageAmounts: {
+      total: coverage.amount_total,
+      covered: coverage.amount_covered,
+      patient: coverage.amount_patient,
+      reimbursed: coverage.amount_reimbursed,
+    },
   };
 }
 
@@ -154,26 +134,37 @@ export function getCoverageCategoryCounts(documents) {
     counts[category.key] = 0;
   });
   (documents || []).forEach((doc) => {
-    (doc?.coverageCategories || []).forEach((key) => {
-      if (key in counts) counts[key] += 1;
-    });
+    const key = doc?.coverageCategory || "otro";
+    if (key in counts) counts[key] += 1;
   });
   return counts;
 }
 
-// Preferencia guardada durante el onboarding ({enabled, provider}). La clave
-// incluye el id de usuario, por eso se busca por prefijo.
-export function readCoveragePreference() {
-  if (typeof window === "undefined" || !window.localStorage) return null;
+const CLP_FORMATTER = (() => {
   try {
-    for (let index = 0; index < window.localStorage.length; index += 1) {
-      const key = window.localStorage.key(index);
-      if (!key || !key.startsWith(COVERAGE_PREF_KEY_PREFIX)) continue;
-      const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
-      if (parsed && typeof parsed === "object") return parsed;
-    }
+    return new Intl.NumberFormat("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    });
   } catch (_) {
     return null;
   }
-  return null;
+})();
+
+export function formatCoverageAmount(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "";
+  if (CLP_FORMATTER) return CLP_FORMATTER.format(numeric);
+  return `$${Math.round(numeric)}`;
+}
+
+// Estado del documento en palabras simples. El backend detecta aprobado,
+// pendiente o rechazado a partir del texto; sin señal queda "Guardado".
+export function getCoverageStatusInfo(status) {
+  const key = String(status || "").trim().toLowerCase();
+  if (key === "aprobado") return { label: "Aprobado", tone: "ok" };
+  if (key === "pendiente") return { label: "En trámite", tone: "warn" };
+  if (key === "rechazado") return { label: "Rechazado", tone: "danger" };
+  return { label: "Guardado", tone: "muted" };
 }

@@ -1045,6 +1045,20 @@ class CoverageDocumentOut(BaseModel):
     coverage: CoverageDocumentInfoOut
 
 
+class CoverageDocumentInfoUpdate(BaseModel):
+    category: Optional[str] = None
+    payer_type: Optional[str] = None
+    provider_name: Optional[str] = None
+    entity_name: Optional[str] = None
+    amount_total: Optional[float] = None
+    amount_covered: Optional[float] = None
+    amount_patient: Optional[float] = None
+    amount_reimbursed: Optional[float] = None
+    currency: Optional[str] = None
+    status: Optional[str] = None
+    metadata_json: Optional[dict] = None
+
+
 class ProfileHealthFeatureOut(BaseModel):
     profile_id: int
     next_appointment_at: datetime | None = None
