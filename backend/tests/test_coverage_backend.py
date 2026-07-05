@@ -123,3 +123,64 @@ def test_coverage_document_info_can_be_corrected_manually(db_session):
     assert payload.coverage.provider_name == "Seguro empresa"
     assert payload.coverage.amount_reimbursed == 25000
     assert payload.coverage.metadata_json["manual_override"] is True
+
+
+def test_ai_context_includes_coverage_sources_and_amounts(db_session):
+    user, profile = _seed_profile(db_session)
+    link = (
+        db_session.query(models.ProfileRelationship)
+        .filter_by(profile_id=profile.id, user_id=user.id)
+        .one()
+    )
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="bono-fonasa-urgencia.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text="Bono Fonasa total $18.000 copago $4.500 bonificacion $13.500 aprobado",
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    assert main.detect_chat_intent("cuanto fue mi copago de fonasa") == "cobertura"
+    modules = main.select_context_modules("cobertura")
+    assert modules["coverage"] is True
+
+    context, _timing = main._build_chat_context_base(
+        db_session,
+        user,
+        profile,
+        link,
+        user.id,
+        message="cuanto fue mi copago de fonasa",
+        intent="cobertura",
+        modules=modules,
+    )
+
+    coverage_context = context["coverage_context"]
+    assert coverage_context["documents_total"] == 1
+    assert coverage_context["documents"][0]["document_id"] == doc.id
+    assert coverage_context["documents"][0]["amount_patient"] == 4500
+    assert coverage_context["documents"][0]["category"] == "bono"
+    assert coverage_context["totals"]["amount_patient"] == 4500
+
+    serialized = main._serialize_ai_context(
+        context,
+        {"coverage_documents_limit": 5, "documents_limit": 2, "document_chunks_limit": 3},
+    )
+    assert serialized["coverage_context"]["documents"][0]["source_label"] == "bono-fonasa-urgencia.pdf"
+
+    refs = main._build_ai_references("cuanto fue mi copago de fonasa", context)
+    assert any(ref["kind"] == "coverage-document" for ref in refs)
+    assert any("Copago $4.500" in ref["detail"] for ref in refs)
+
+    structured = main._maybe_resolve_structured_ai_query("cuanto fue mi copago de fonasa", context)
+    assert structured is not None
+    reply, model_name, mode = structured
+    assert model_name == "structured-memory"
+    assert mode == "structured-coverage"
+    assert "bono-fonasa-urgencia.pdf" in reply
+    assert "$4.500" in reply

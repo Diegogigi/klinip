@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getCoverageDocuments,
   getCoveragePreferences,
+  updateCoverageDocumentInfo,
   updateCoveragePreferences,
 } from "../services/httpApi";
 import {
@@ -30,6 +31,8 @@ export default function Coverage() {
   const [activeFilter, setActiveFilter] = useState("todos");
   const [savingPreference, setSavingPreference] = useState(false);
   const [preferenceError, setPreferenceError] = useState("");
+  const [savingDocumentId, setSavingDocumentId] = useState(null);
+  const [documentEditError, setDocumentEditError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +81,31 @@ export default function Coverage() {
       return false;
     } finally {
       setSavingPreference(false);
+    }
+  };
+
+  const handleSaveDocumentInfo = async (documentId, payload) => {
+    setSavingDocumentId(documentId);
+    setDocumentEditError("");
+    try {
+      const saved = await updateCoverageDocumentInfo(documentId, payload);
+      const flattened = flattenCoverageDocument(saved);
+      setCoverageDocuments((current) =>
+        current
+          .map((doc) => (doc.id === documentId ? flattened : doc))
+          .sort((a, b) => getDocumentTime(b) - getDocumentTime(a))
+      );
+      return true;
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setDocumentEditError(
+        typeof detail === "string" && detail
+          ? detail
+          : "No se pudo guardar la corrección. Inténtalo de nuevo."
+      );
+      return false;
+    } finally {
+      setSavingDocumentId(null);
     }
   };
 
@@ -148,7 +176,12 @@ export default function Coverage() {
         {loading ? (
           <div className="coverage-empty">Cargando tu cobertura…</div>
         ) : filteredDocuments.length > 0 ? (
-          <CoverageDocumentList documents={filteredDocuments} />
+          <CoverageDocumentList
+            documents={filteredDocuments}
+            savingId={savingDocumentId}
+            editError={documentEditError}
+            onSave={handleSaveDocumentInfo}
+          />
         ) : (
           <CoverageEmptyState
             activeFilter={activeFilter}

@@ -42,7 +42,24 @@ const ENTRY_ACTIONS = [
   { id: "exam", label: "Entender examen", prompt: "Ayúdame a entender mi examen o resultado más reciente en palabras simples." },
   { id: "today-meds", label: "Medicamentos de hoy", prompt: "¿Qué medicamentos debo tomar hoy y qué debería revisar?" },
   { id: "symptom", label: "Consultar síntoma", prompt: "Quiero consultar un síntoma de forma segura. Guíame con preguntas claras." },
+  { id: "coverage-copago", label: "Explícame mi copago", prompt: "Explícame mi copago más reciente: cuánto pagué yo y cuánto cubrió mi previsión.", tone: "coverage" },
+  { id: "coverage-reembolsos", label: "Qué reembolsos tengo", prompt: "¿Qué reembolsos tengo registrados y en qué estado está cada uno?", tone: "coverage" },
+  { id: "coverage-seguros", label: "Qué documentos de seguro tengo", prompt: "¿Qué documentos de seguro tengo guardados en Klinip Cobertura?", tone: "coverage" },
+  { id: "coverage-bonos", label: "Qué bonos tengo registrados", prompt: "¿Qué bonos tengo registrados y cuánto pagué en cada uno?", tone: "coverage" },
 ];
+
+// Presentación por tipo de referencia. Las de Klinip Cobertura se destacan
+// como "fuente" para que quede claro de qué documento salió la respuesta.
+function getReferencePresentation(kind) {
+  const normalized = String(kind || "").toLowerCase();
+  if (normalized === "coverage-document") {
+    return { icon: "🧾", prefix: "Fuente: ", className: "is-coverage" };
+  }
+  if (normalized === "coverage-summary") {
+    return { icon: "🛡️", prefix: "", className: "is-coverage is-summary" };
+  }
+  return { icon: "", prefix: "", className: "" };
+}
 
 const DOC_LABELS = { receta: "Receta", orden: "Orden", resultado: "Resultado", informe: "Informe", otro: "Documento" };
 const APPOINTMENT_TYPE_LABELS = { cita: "Cita", examen: "Examen", tramite: "Trámite" };
@@ -812,15 +829,24 @@ export default function AiKlinip({ user }) {
       ];
   }, [meta.sources, resources.documents.length, resources.medications.length, resources.appointments.length, upcomingAppointments.length, activeMedications.length, activeRadarAlerts.length]);
 
-  const contextTags = useMemo(
-    () => [
+  const contextTags = useMemo(() => {
+    const tags = [
       { key: "documents", label: `${sourceCount(inferredSources, "documents")} ${sourceLabel(inferredSources, "documents", "Documentos").toLowerCase()}`, tone: "blue" },
       { key: "medications", label: `${sourceCount(inferredSources, "medications")} ${sourceLabel(inferredSources, "medications", "Medicamentos").toLowerCase()}`, tone: "teal" },
       { key: "appointments", label: `${sourceCount(inferredSources, "appointments")} citas próximas`, tone: "violet" },
       { key: "timeline", label: `${sourceCount(inferredSources, "timeline")} registros clínicos`, tone: "amber" },
-    ],
-    [inferredSources]
-  );
+    ];
+    const coverageCount = sourceCount(inferredSources, "coverage");
+    if (coverageCount > 0) {
+      tags.push({
+        key: "coverage",
+        label: `${coverageCount} en ${sourceLabel(inferredSources, "coverage", "Klinip Cobertura")}`,
+        tone: "mint",
+        prompt: "Resume mis documentos de cobertura: bonos, reembolsos y copagos.",
+      });
+    }
+    return tags;
+  }, [inferredSources]);
   const latestAppointment = useMemo(() => getLatestAppointment(resources.appointments), [resources.appointments]);
   const nextMedicationDoseItem = useMemo(() => getMedicationNextDoseItem(activeMedications), [activeMedications]);
   const latestAssistantMessageId = useMemo(
@@ -1667,7 +1693,12 @@ export default function AiKlinip({ user }) {
 
                 <div className="ai-context-strip">
                   {contextTags.map((tag) => (
-                    <button key={tag.key} type="button" className={`ai-context-tag tone-${tag.tone}`} onClick={() => submitPrompt(`Resume mi ${tag.label}`)}>
+                    <button
+                      key={tag.key}
+                      type="button"
+                      className={`ai-context-tag tone-${tag.tone}`}
+                      onClick={() => submitPrompt(tag.prompt || `Resume mi ${tag.label}`)}
+                    >
                       <span className="ai-context-dot" />
                       <span>{tag.label}</span>
                     </button>
@@ -1676,7 +1707,12 @@ export default function AiKlinip({ user }) {
 
                 <section className="ai-entry-actions">
                   {ENTRY_ACTIONS.map((item) => (
-                    <button key={item.id} type="button" className="ai-entry-pill" onClick={() => submitPrompt(item.prompt)}>
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`ai-entry-pill${item.tone === "coverage" ? " is-coverage" : ""}`}
+                      onClick={() => submitPrompt(item.prompt)}
+                    >
                       {item.label}
                     </button>
                   ))}
@@ -1701,12 +1737,22 @@ export default function AiKlinip({ user }) {
                           {renderAssistantVisualResponse(message)}
                           {message.role === "assistant" && Array.isArray(message.references) && message.references.length > 0 ? (
                             <div className="ai-reference-list">
-                              {message.references.map((reference, index) => (
-                                <div key={`${message.id}-${reference.kind}-${index}`} className="ai-reference-chip">
-                                  <strong>{reference.label}</strong>
-                                  {reference.detail ? <span>{reference.detail}</span> : null}
-                                </div>
-                              ))}
+                              {message.references.map((reference, index) => {
+                                const presentation = getReferencePresentation(reference.kind);
+                                return (
+                                  <div
+                                    key={`${message.id}-${reference.kind}-${index}`}
+                                    className={`ai-reference-chip${presentation.className ? ` ${presentation.className}` : ""}`}
+                                  >
+                                    <strong>
+                                      {presentation.icon ? <span aria-hidden>{presentation.icon} </span> : null}
+                                      {presentation.prefix}
+                                      {cleanUiText(reference.label)}
+                                    </strong>
+                                    {reference.detail ? <span>{cleanUiText(reference.detail)}</span> : null}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : null}
                         </div>

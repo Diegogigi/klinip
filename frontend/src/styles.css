@@ -28991,6 +28991,16 @@ body.theme-dark .records-mobile-card.is-focused-reminder {
   background: #c47d12;
 }
 
+.ai-context-tag.tone-mint .ai-context-dot {
+  background: #0d9488;
+}
+
+.ai-entry-pill.is-coverage {
+  border-color: rgba(153, 246, 228, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 253, 250, 0.94) 100%);
+  color: #0f766e;
+}
+
 .ai-quick-section {
   padding: 1.7rem 2rem 0;
 }
@@ -29611,6 +29621,20 @@ body.theme-dark .ai-response-chip.tone-teal   { background: rgba(13, 150, 120, 0
 .ai-reference-chip strong {
   font-size: 0.72rem;
   color: #14161a;
+}
+
+.ai-reference-chip.is-coverage {
+  border-color: rgba(153, 246, 228, 0.95);
+  background: #f0fdfa;
+}
+
+.ai-reference-chip.is-coverage strong {
+  color: #0f766e;
+}
+
+.ai-reference-chip.is-coverage.is-summary {
+  width: 100%;
+  border-style: dashed;
 }
 
 .ai-message-time {
@@ -30578,6 +30602,15 @@ body.theme-dark .ai-reference-chip strong {
   color: #e2e8f0;
 }
 
+body.theme-dark .ai-reference-chip.is-coverage {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(19, 78, 74, 0.4);
+}
+
+body.theme-dark .ai-reference-chip.is-coverage strong {
+  color: #5eead4;
+}
+
 body.theme-dark .ai-landing-subtitle,
 body.theme-dark .ai-clinical-summary-copy small,
 body.theme-dark .ai-landing-safe,
@@ -30631,6 +30664,17 @@ body.theme-dark .ai-entry-pill {
 body.theme-dark .ai-entry-pill:hover {
   background: rgba(30, 41, 59, 0.94);
   border-color: rgba(96, 165, 250, 0.32);
+}
+
+body.theme-dark .ai-entry-pill.is-coverage {
+  border-color: rgba(45, 212, 191, 0.3);
+  background: rgba(15, 23, 42, 0.88);
+  color: #5eead4;
+}
+
+body.theme-dark .ai-entry-pill.is-coverage:hover {
+  background: rgba(19, 78, 74, 0.45);
+  border-color: rgba(45, 212, 191, 0.45);
 }
 
 body.theme-dark .ai-entry-panel-head strong,
@@ -49633,6 +49677,86 @@ body.theme-dark .coverage-alert {
   color: #b91c1c;
 }
 
+.coverage-document-actions {
+  display: grid;
+  justify-items: end;
+  gap: 0.38rem;
+}
+
+.coverage-document-actions .coverage-document-status {
+  justify-self: end;
+}
+
+.coverage-document-edit-btn {
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  border: 1px solid rgba(13, 148, 136, 0.38);
+  background: rgba(240, 253, 250, 0.88);
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.coverage-document-edit-form {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.62rem;
+  padding-top: 0.72rem;
+  border-top: 1px solid rgba(203, 213, 225, 0.7);
+}
+
+.coverage-document-edit-form label {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.coverage-document-edit-form label span {
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.coverage-document-edit-form input,
+.coverage-document-edit-form select {
+  min-height: 38px;
+  width: 100%;
+  border-radius: 11px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.86rem;
+  padding: 0.42rem 0.58rem;
+}
+
+.coverage-document-edit-form input:focus,
+.coverage-document-edit-form select:focus {
+  outline: 2px solid rgba(13, 148, 136, 0.35);
+  outline-offset: 1px;
+}
+
+.coverage-document-edit-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.coverage-document-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.coverage-document-edit-actions .primary-btn,
+.coverage-document-edit-actions .secondary-btn {
+  min-height: 38px;
+  padding: 0.4rem 0.85rem;
+}
+
 .coverage-plan-icon {
   font-size: 1.35rem;
 }
@@ -49932,6 +50056,31 @@ body.theme-dark .coverage-document-status.is-danger {
   color: #fca5a5;
 }
 
+body.theme-dark .coverage-document-edit-btn {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: rgba(19, 78, 74, 0.38);
+  color: #5eead4;
+}
+
+body.theme-dark .coverage-document-edit-form {
+  border-top-color: rgba(51, 65, 85, 0.92);
+}
+
+body.theme-dark .coverage-document-edit-form label span {
+  color: #94a3b8;
+}
+
+body.theme-dark .coverage-document-edit-form input,
+body.theme-dark .coverage-document-edit-form select {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+}
+
+body.theme-dark .coverage-document-edit-error {
+  color: #fca5a5;
+}
+
 @media (max-width: 768px) {
   .health-hub-page {
     gap: 0.9rem;
@@ -49977,6 +50126,40 @@ body.theme-dark .coverage-document-status.is-danger {
     justify-self: start;
     padding: 0.26rem 0.55rem;
     font-size: 0.68rem;
+  }
+
+  .coverage-document-actions {
+    grid-column: 2;
+    justify-items: start;
+    grid-auto-flow: column;
+    justify-content: start;
+    align-items: center;
+  }
+
+  .coverage-document-actions .coverage-document-status {
+    grid-column: auto;
+    justify-self: start;
+  }
+
+  .coverage-document-edit-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    padding-top: 0.62rem;
+  }
+
+  .coverage-document-edit-form input,
+  .coverage-document-edit-form select {
+    min-height: 36px;
+    font-size: 0.82rem;
+  }
+
+  .coverage-document-edit-actions {
+    flex-direction: column;
+  }
+
+  .coverage-document-edit-actions .primary-btn,
+  .coverage-document-edit-actions .secondary-btn {
+    width: 100%;
   }
 
   .coverage-empty,

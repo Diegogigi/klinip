@@ -86,6 +86,13 @@ export const COVERAGE_PAYER_TYPES = [
   },
 ];
 
+export const COVERAGE_STATUS_OPTIONS = [
+  { value: "", label: "Guardado" },
+  { value: "pendiente", label: "En trámite" },
+  { value: "aprobado", label: "Aprobado" },
+  { value: "rechazado", label: "Rechazado" },
+];
+
 export const KNOWN_ISAPRES = [
   "Banmédica",
   "Colmena",
@@ -117,8 +124,11 @@ export function flattenCoverageDocument(item) {
     ...doc,
     coverageCategory: getCoverageCategory(coverage.category)?.key || "otro",
     coveragePayerType: String(coverage.payer_type || "").toLowerCase(),
+    coverageProviderName: cleanUiText(coverage.provider_name || "", ""),
+    coverageEntityName: cleanUiText(coverage.entity_name || "", ""),
     coverageEntity: cleanUiText(coverage.entity_name || coverage.provider_name || "", ""),
     coverageStatus: String(coverage.status || "").toLowerCase(),
+    coverageCurrency: coverage.currency || "CLP",
     coverageAmounts: {
       total: coverage.amount_total,
       covered: coverage.amount_covered,

@@ -5893,6 +5893,23 @@ COVERAGE_CATEGORY_KEYWORDS = {
 }
 VALID_COVERAGE_CATEGORIES = {"bono", "reembolso", "licencia", "copago", "ges_caec", "plan_seguro", "otro"}
 VALID_COVERAGE_PAYER_TYPES = {"fonasa", "isapre", "seguro_complementario", "prestador", "none", "unknown"}
+COVERAGE_CATEGORY_LABELS = {
+    "bono": "Bono",
+    "reembolso": "Reembolso",
+    "licencia": "Licencia médica",
+    "copago": "Copago",
+    "ges_caec": "GES/CAEC",
+    "plan_seguro": "Plan o seguro",
+    "otro": "Documento de cobertura",
+}
+COVERAGE_PAYER_LABELS = {
+    "fonasa": "Fonasa",
+    "isapre": "Isapre",
+    "seguro_complementario": "Seguro complementario",
+    "prestador": "Prestador",
+    "none": "Sin seguro",
+    "unknown": "Sin identificar",
+}
 KNOWN_COVERAGE_ENTITIES = {
     "banmedica": "Banmédica",
     "colmena": "Colmena",
@@ -6019,6 +6036,56 @@ def _coverage_status_from_text(*values: str) -> str:
     return ""
 
 
+def _message_asks_coverage(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    if not normalized:
+        return False
+    coverage_tokens = [
+        "cobertura",
+        "seguro",
+        "isapre",
+        "fonasa",
+        "bono",
+        "bonos",
+        "bonificacion",
+        "bonificado",
+        "reembolso",
+        "reembolsos",
+        "reembolsado",
+        "copago",
+        "copagos",
+        "licencia",
+        "licencias",
+        "licencia medica",
+        "ges",
+        "caec",
+        "auge",
+        "plan de salud",
+        "poliza",
+    ]
+    return any(token in normalized for token in coverage_tokens)
+
+
+def _coverage_category_label(category: str | None) -> str:
+    return COVERAGE_CATEGORY_LABELS.get(_normalize_coverage_category(category or ""), "Documento de cobertura")
+
+
+def _coverage_payer_label(payer_type: str | None) -> str:
+    return COVERAGE_PAYER_LABELS.get(_normalize_coverage_payer_type(payer_type), "Sin identificar")
+
+
+def _format_coverage_amount(value, currency: str | None = "CLP") -> str:
+    if value is None:
+        return ""
+    try:
+        amount = float(value)
+    except Exception:
+        return ""
+    if currency == "CLP":
+        return "$" + f"{amount:,.0f}".replace(",", ".")
+    return f"{amount:,.0f} {currency or ''}".strip()
+
+
 def _is_coverage_document_text(*values: str) -> bool:
     norm = _normalize_text(" ".join(str(value or "") for value in values))
     if not norm:
@@ -6111,6 +6178,133 @@ def _upsert_document_coverage_info(db: Session, doc: models.Document) -> models.
     info.updated_at = datetime.now()
     db.add(info)
     return info
+
+
+def _coverage_info_to_ai_dict(
+    info: models.DocumentCoverageInfo,
+    doc: models.Document | None,
+    timezone_name: str,
+) -> dict:
+    currency = getattr(info, "currency", None) or "CLP"
+    return {
+        "coverage_info_id": int(getattr(info, "id", 0) or 0),
+        "document_id": int(getattr(info, "document_id", 0) or 0),
+        "filename": (getattr(doc, "filename", "") or "") if doc else "",
+        "document_type": _document_type_key(getattr(doc, "doc_type", None)) if doc else "otro",
+        "file_format": _document_file_format(doc) if doc else "desconocido",
+        "date": _safe_iso_local(getattr(doc, "date", None), timezone_name) if doc else "",
+        "created_at": _safe_iso_local(getattr(doc, "created_at", None), timezone_name) if doc else "",
+        "updated_at": _safe_iso_local(getattr(info, "updated_at", None), timezone_name),
+        "center": (getattr(doc, "center", "") or "") if doc else "",
+        "category": _normalize_coverage_category(getattr(info, "category", "") or ""),
+        "category_label": _coverage_category_label(getattr(info, "category", "") or ""),
+        "payer_type": _normalize_coverage_payer_type(getattr(info, "payer_type", "") or ""),
+        "payer_label": _coverage_payer_label(getattr(info, "payer_type", "") or ""),
+        "provider_name": getattr(info, "provider_name", "") or "",
+        "entity_name": getattr(info, "entity_name", "") or "",
+        "amount_total": getattr(info, "amount_total", None),
+        "amount_covered": getattr(info, "amount_covered", None),
+        "amount_patient": getattr(info, "amount_patient", None),
+        "amount_reimbursed": getattr(info, "amount_reimbursed", None),
+        "currency": currency,
+        "amount_total_label": _format_coverage_amount(getattr(info, "amount_total", None), currency),
+        "amount_covered_label": _format_coverage_amount(getattr(info, "amount_covered", None), currency),
+        "amount_patient_label": _format_coverage_amount(getattr(info, "amount_patient", None), currency),
+        "amount_reimbursed_label": _format_coverage_amount(getattr(info, "amount_reimbursed", None), currency),
+        "status": getattr(info, "status", "") or "",
+        "source_label": (getattr(doc, "filename", "") or f"Documento #{getattr(info, 'document_id', '')}") if doc else f"Documento #{getattr(info, 'document_id', '')}",
+    }
+
+
+def _build_coverage_ai_context(
+    db: Session,
+    profile: models.HealthProfile,
+    target_user_id: int,
+    timezone_name: str,
+    limit: int = 12,
+) -> dict:
+    preference = (
+        db.query(models.CoveragePreference)
+        .filter(models.CoveragePreference.profile_id == int(profile.id))
+        .first()
+    )
+    docs = (
+        db.query(models.Document)
+        .filter(*_document_scope_filter(profile, target_user_id))
+        .order_by(models.Document.created_at.desc(), models.Document.id.desc())
+        .limit(48)
+        .all()
+    )
+    changed = False
+    doc_by_id: dict[int, models.Document] = {}
+    for doc in docs:
+        doc_id = int(getattr(doc, "id", 0) or 0)
+        if doc_id <= 0:
+            continue
+        doc_by_id[doc_id] = doc
+        if _is_coverage_document_text(doc.filename or "", doc.center or "", doc.notes or "", doc.ocr_text or ""):
+            existing = (
+                db.query(models.DocumentCoverageInfo)
+                .filter(models.DocumentCoverageInfo.document_id == doc_id)
+                .first()
+            )
+            if not existing:
+                changed = bool(_upsert_document_coverage_info(db, doc)) or changed
+    if changed:
+        db.flush()
+
+    document_ids = list(doc_by_id.keys())
+    rows = []
+    if document_ids:
+        rows = (
+            db.query(models.DocumentCoverageInfo)
+            .filter(models.DocumentCoverageInfo.document_id.in_(document_ids))
+            .order_by(models.DocumentCoverageInfo.updated_at.desc(), models.DocumentCoverageInfo.id.desc())
+            .limit(max(1, int(limit)))
+            .all()
+        )
+    documents = [
+        _coverage_info_to_ai_dict(info, doc_by_id.get(int(getattr(info, "document_id", 0) or 0)), timezone_name)
+        for info in rows
+    ]
+    counts_by_category = {key: 0 for key in sorted(VALID_COVERAGE_CATEGORIES)}
+    counts_by_status: dict[str, int] = {}
+    totals = {
+        "amount_total": 0.0,
+        "amount_covered": 0.0,
+        "amount_patient": 0.0,
+        "amount_reimbursed": 0.0,
+    }
+    for item in documents:
+        category = item.get("category") or "otro"
+        counts_by_category[category] = counts_by_category.get(category, 0) + 1
+        status = item.get("status") or "sin_estado"
+        counts_by_status[status] = counts_by_status.get(status, 0) + 1
+        for key in totals:
+            if item.get(key) is not None:
+                totals[key] += float(item.get(key) or 0)
+
+    return {
+        "enabled": bool(getattr(preference, "enabled", False)) if preference else False,
+        "preference": {
+            "payer_type": _normalize_coverage_payer_type(getattr(preference, "payer_type", "") if preference else ""),
+            "payer_label": _coverage_payer_label(getattr(preference, "payer_type", "") if preference else ""),
+            "provider_name": getattr(preference, "provider_name", "") if preference else "",
+            "plan_name": getattr(preference, "plan_name", "") if preference else "",
+            "notes": _clip_text(getattr(preference, "notes", "") if preference else "", 180),
+        },
+        "documents": documents,
+        "documents_total": len(documents),
+        "counts_by_category": counts_by_category,
+        "counts_by_status": counts_by_status,
+        "totals": {
+            **totals,
+            "amount_total_label": _format_coverage_amount(totals["amount_total"]),
+            "amount_covered_label": _format_coverage_amount(totals["amount_covered"]),
+            "amount_patient_label": _format_coverage_amount(totals["amount_patient"]),
+            "amount_reimbursed_label": _format_coverage_amount(totals["amount_reimbursed"]),
+        },
+    }
 
 
 def _guess_doc_type(text: str) -> str | None:
@@ -10455,10 +10649,87 @@ def _structured_latest_document_reply(context: dict) -> str:
     return _structured_document_reply_rich(latest, context)
 
 
+def _coverage_document_matches_question(item: dict, normalized: str) -> bool:
+    category = item.get("category") or ""
+    if any(token in normalized for token in ["reembolso", "reembolsos", "reembolsado"]):
+        return category == "reembolso" or item.get("amount_reimbursed") is not None
+    if any(token in normalized for token in ["copago", "copagos"]):
+        return category == "copago" or item.get("amount_patient") is not None
+    if any(token in normalized for token in ["bono", "bonos", "bonificacion", "bonificado"]):
+        return category == "bono" or item.get("amount_covered") is not None
+    if any(token in normalized for token in ["licencia", "licencias"]):
+        return category == "licencia"
+    if any(token in normalized for token in ["ges", "caec", "auge"]):
+        return category == "ges_caec"
+    if any(token in normalized for token in ["plan", "seguro", "isapre", "fonasa"]):
+        return category == "plan_seguro" or item.get("payer_type") in {"fonasa", "isapre", "seguro_complementario"}
+    return True
+
+
+def _structured_coverage_reply(message: str, context: dict) -> str:
+    normalized = _normalize_text(message or "")
+    coverage_context = context.get("coverage_context") or {}
+    coverage_docs = coverage_context.get("documents") or []
+    if not coverage_docs:
+        return (
+            "No encuentro documentos de cobertura registrados para el perfil activo. "
+            "Si subes bonos, reembolsos, copagos, licencias o documentos de seguro con intención Cobertura / seguro, podré responder con fuentes reales."
+        )
+
+    counts = coverage_context.get("counts_by_category") or {}
+    totals = coverage_context.get("totals") or {}
+    matching_docs = [item for item in coverage_docs if _coverage_document_matches_question(item, normalized)]
+    focus_doc = matching_docs[0] if matching_docs else coverage_docs[0]
+    amount_parts = [
+        value
+        for value in [
+            f"total {focus_doc.get('amount_total_label')}" if focus_doc.get("amount_total") else "",
+            f"bonificado/cubierto {focus_doc.get('amount_covered_label')}" if focus_doc.get("amount_covered") else "",
+            f"copago {focus_doc.get('amount_patient_label')}" if focus_doc.get("amount_patient") else "",
+            f"reembolso {focus_doc.get('amount_reimbursed_label')}" if focus_doc.get("amount_reimbursed") else "",
+        ]
+        if value
+    ]
+    parts = [
+        f"Según Klinip Cobertura, hay {coverage_context.get('documents_total') or len(coverage_docs)} documento(s) de cobertura para el perfil activo.",
+        (
+            f"Registrados por tipo: bonos {counts.get('bono', 0)}, reembolsos {counts.get('reembolso', 0)}, "
+            f"copagos {counts.get('copago', 0)}, licencias {counts.get('licencia', 0)}, GES/CAEC {counts.get('ges_caec', 0)}."
+        ),
+    ]
+    if amount_parts:
+        parts.append(
+            f"Documento más relevante: {focus_doc.get('source_label') or 'documento de cobertura'} "
+            f"({focus_doc.get('category_label') or 'Cobertura'}, {focus_doc.get('payer_label') or 'sin pagador identificado'}): "
+            + ", ".join(amount_parts)
+            + "."
+        )
+    else:
+        parts.append(
+            f"Documento más relevante: {focus_doc.get('source_label') or 'documento de cobertura'} "
+            f"({focus_doc.get('category_label') or 'Cobertura'}, {focus_doc.get('payer_label') or 'sin pagador identificado'}), sin montos detectados."
+        )
+    total_parts = [
+        value
+        for value in [
+            f"total acumulado {totals.get('amount_total_label')}" if totals.get("amount_total") else "",
+            f"copago acumulado {totals.get('amount_patient_label')}" if totals.get("amount_patient") else "",
+            f"reembolso acumulado {totals.get('amount_reimbursed_label')}" if totals.get("amount_reimbursed") else "",
+        ]
+        if value
+    ]
+    if total_parts:
+        parts.append("Resumen de montos detectados: " + ", ".join(total_parts) + ".")
+    parts.append("Estos datos vienen de documentos cargados/OCR; valida el monto final con el prestador, Fonasa, Isapre o seguro antes de tomar decisiones.")
+    return " ".join(parts)
+
+
 def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str, str, str] | None:
     normalized = _normalize_text(message or "")
     if not normalized:
         return None
+    if _message_asks_coverage(message):
+        return _structured_coverage_reply(message, context), "structured-memory", "structured-coverage"
     if any(token in normalized for token in ["que medicamentos", "cuales son mis medicamentos", "medicamentos activos", "que tomo"]):
         return _structured_medications_reply(context), "structured-memory", "structured-medications"
     appointment_question = any(
@@ -15168,6 +15439,7 @@ def _build_chat_context_base(
     context_totals = {
         "appointments": 0,
         "documents": 0,
+        "coverage_documents": 0,
         "medications": 0,
         "active_medications": 0,
     }
@@ -15177,6 +15449,7 @@ def _build_chat_context_base(
     voice_sessions: list[models.VoiceSession] = []
     profile_notes: list[models.ProfileNote] = []
     feed_posts: list[models.FeedPost] = []
+    coverage_context: dict = {}
     family_access = (
         _build_family_access_context(
             db,
@@ -15289,6 +15562,24 @@ def _build_chat_context_base(
             context_deadline_ts=context_deadline_ts,
             observability=query_observability,
         )
+    if modules.get("coverage") and permissions_validated.get("view_documents"):
+        coverage_context = _safe_ai_context_query(
+            db,
+            module_name="coverage",
+            loader=lambda: _build_coverage_ai_context(
+                db,
+                profile,
+                target_user_id,
+                timezone_name,
+                limit=12,
+            ),
+            default_value={},
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        context_totals["coverage_documents"] = int((coverage_context or {}).get("documents_total") or 0)
     if modules.get("medications") and permissions_validated.get("view_medications"):
         context_totals["medications"] = _safe_ai_context_query(
             db,
@@ -15747,6 +16038,12 @@ def _build_chat_context_base(
             "count": int(context_totals.get("documents") or 0),
             "enabled": bool(modules.get("documents")) and bool(permissions_validated.get("view_documents")),
         },
+        {
+            "key": "coverage",
+            "label": "Klinip Cobertura",
+            "count": int(context_totals.get("coverage_documents") or 0),
+            "enabled": bool(modules.get("coverage")) and bool(permissions_validated.get("view_documents")),
+        },
         {"key": "document-memory", "label": "Memoria documental", "count": len(relevant_document_chunks), "enabled": bool(relevant_document_chunks)},
         {
             "key": "medications",
@@ -15798,6 +16095,7 @@ def _build_chat_context_base(
         "degraded_reasons": degraded_reasons,
         "appointments": appointments,
         "documents": documents,
+        "coverage_context": coverage_context,
         "medications": medications,
         "voice_sessions": voice_sessions,
         "external_records": [],
@@ -15858,6 +16156,7 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         "document_summaries_limit": 4,
         "document_diagnoses_limit": 4,
         "document_chunks_limit": 4,
+        "coverage_documents_limit": 5,
         "chunk_chars": 420,
         "medications_limit": 6,
         "family_profiles_limit": 4,
@@ -15885,6 +16184,7 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "document_summaries_limit": 1,
                 "document_diagnoses_limit": 1,
                 "document_chunks_limit": 2,
+                "coverage_documents_limit": 3,
                 "chunk_chars": 220,
                 "medications_limit": 3,
                 "family_profiles_limit": 1,
@@ -15912,6 +16212,7 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "document_summaries_limit": 2,
                 "document_diagnoses_limit": 2,
                 "document_chunks_limit": 3,
+                "coverage_documents_limit": 4,
                 "chunk_chars": 320,
                 "medications_limit": 4,
                 "family_profiles_limit": 2,
@@ -15934,6 +16235,10 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         profile["medications_limit"] = max(profile["medications_limit"], 4)
     elif intent == "citas":
         profile["appointments_limit"] = max(profile["appointments_limit"], 3)
+    elif intent == "cobertura":
+        profile["coverage_documents_limit"] = max(profile["coverage_documents_limit"], 5)
+        profile["documents_limit"] = max(profile["documents_limit"], 2)
+        profile["document_chunks_limit"] = max(profile["document_chunks_limit"], 3)
     elif intent == "familiar":
         profile["family_profiles_limit"] = max(profile["family_profiles_limit"], 2)
     elif intent == "general":
@@ -15955,6 +16260,7 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     document_diagnoses_limit = max(1, int(prompt_profile.get("document_diagnoses_limit", 4) or 4))
     conversation_summaries_limit = max(1, int(prompt_profile.get("conversation_summaries_limit", 3) or 3))
     document_chunks_limit = max(1, int(prompt_profile.get("document_chunks_limit", 4) or 4))
+    coverage_documents_limit = max(1, int(prompt_profile.get("coverage_documents_limit", 5) or 5))
     chunk_chars = max(180, int(prompt_profile.get("chunk_chars", 420) or 420))
     medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
     voice_sessions_limit = max(1, int(prompt_profile.get("voice_sessions_limit", 3) or 3))
@@ -16126,6 +16432,17 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             }
             for item in (context.get("document_chunks") or [])[:document_chunks_limit]
         ]
+    if enabled_modules.get("coverage") and context.get("coverage_context"):
+        coverage_context = context.get("coverage_context") or {}
+        payload["coverage_context"] = {
+            "enabled": bool(coverage_context.get("enabled")),
+            "preference": coverage_context.get("preference") or {},
+            "documents_total": int(coverage_context.get("documents_total") or 0),
+            "counts_by_category": coverage_context.get("counts_by_category") or {},
+            "counts_by_status": coverage_context.get("counts_by_status") or {},
+            "totals": coverage_context.get("totals") or {},
+            "documents": (coverage_context.get("documents") or [])[:coverage_documents_limit],
+        }
     if enabled_modules.get("medications"):
         payload["medication_insights"] = context.get("medication_insights") or {}
         payload["medications"] = [
@@ -16278,6 +16595,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "32. Si existe 'profile_notes', úsalas como contexto declarado por el usuario para pendientes, recordatorios, objetivos o temas a resolver. No las presentes como hechos clínicos confirmados si la nota solo expresa una intención o tarea.\n"
         "33. No afirmes que guardaste, creaste, registraste o modificaste datos dentro de Klinip a menos que esa acción haya sido confirmada por el sistema. Si el usuario pide guardar algo y no hay confirmación del sistema, limita tu respuesta a redactar o preparar el contenido.\n"
         "34. Si existe 'feed_posts' en el contexto, usalo para responder preguntas sobre publicaciones recientes de la familia en KlinipFeed: quién publicó, qué compartió, cuándo, tipo de publicación (general, examen, consulta, medicamento) y nivel de interacción (reacciones y comentarios). No inventes publicaciones si no existen en el contexto.\n"
+        "35. Si existe 'coverage_context' y el usuario pregunta por Isapre, Fonasa, seguro, bonos, reembolsos, copagos, licencias, GES/CAEC o documentos de cobertura, usa esos datos estructurados como fuente principal. Cita el nombre del documento o su id, explica montos como total, bonificado/cubierto, copago y reembolsado, y aclara cuando falte un monto o deba validarse con el prestador/asegurador.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -16639,6 +16957,9 @@ def _fallback_ai_reply(message: str, context: dict) -> str:
     medications_total = _context_total_count(context, "medications", len(medications))
     active_medications_total = _context_total_count(context, "active_medications", len(active_medications))
 
+    if _message_asks_coverage(message):
+        return _structured_coverage_reply(message, context)
+
     if _message_asks_family_access(message):
         return _build_family_access_reply(context)
 
@@ -16928,6 +17249,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     health_alerts = context.get("health_alerts") or []
     family_access = context.get("family_access") or {}
     family_context = context.get("family_context") or {}
+    coverage_context = context.get("coverage_context") or {}
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
 
     referenced_document = (
@@ -16964,6 +17286,47 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                 ),
             }
         )
+
+    if coverage_context and _message_asks_coverage(message):
+        coverage_docs = coverage_context.get("documents") or []
+        totals = coverage_context.get("totals") or {}
+        if coverage_docs:
+            for item in coverage_docs[:2]:
+                detail_parts = [
+                    item.get("category_label") or "Cobertura",
+                    item.get("payer_label") or "",
+                    item.get("provider_name") or item.get("entity_name") or "",
+                    f"Total {item.get('amount_total_label')}" if item.get("amount_total") else "",
+                    f"Copago {item.get('amount_patient_label')}" if item.get("amount_patient") else "",
+                    f"Reembolso {item.get('amount_reimbursed_label')}" if item.get("amount_reimbursed") else "",
+                    item.get("status") or "",
+                ]
+                refs.append(
+                    {
+                        "kind": "coverage-document",
+                        "label": item.get("source_label") or f"Documento #{item.get('document_id')}",
+                        "detail": " | ".join([part for part in detail_parts if part]),
+                    }
+                )
+        if totals:
+            refs.append(
+                {
+                    "kind": "coverage-summary",
+                    "label": "Resumen Klinip Cobertura",
+                    "detail": " | ".join(
+                        [
+                            part
+                            for part in [
+                                f"Documentos {coverage_context.get('documents_total', 0)}",
+                                f"Total {totals.get('amount_total_label')}" if totals.get("amount_total") else "",
+                                f"Copago {totals.get('amount_patient_label')}" if totals.get("amount_patient") else "",
+                                f"Reembolso {totals.get('amount_reimbursed_label')}" if totals.get("amount_reimbursed") else "",
+                            ]
+                            if part
+                        ]
+                    ),
+                }
+            )
 
     if active_medications and any(
         token in normalized for token in ["medicamento", "medicamentos", "tomando", "dosis", "frecuencia"]
@@ -22274,6 +22637,8 @@ def detect_chat_intent(message: str | None) -> str:
     normalized = _normalize_text(message or "")
     if _message_needs_family_context(message):
         return "familiar"
+    if _message_asks_coverage(message):
+        return "cobertura"
     voice_tokens = [
         "klinip voice",
         "audio",
@@ -22362,6 +22727,7 @@ def select_context_modules(intent: str) -> dict:
         "appointments": False,
         "documents": False,
         "document_summaries": False,
+        "coverage": False,
         "medications": False,
         "adherence": False,
         "family": False,
@@ -22374,6 +22740,10 @@ def select_context_modules(intent: str) -> dict:
     elif intent == "documentos":
         base_modules["documents"] = True
         base_modules["document_summaries"] = True
+    elif intent == "cobertura":
+        base_modules["documents"] = True
+        base_modules["document_summaries"] = True
+        base_modules["coverage"] = True
     elif intent == "citas":
         base_modules["appointments"] = True
     elif intent == "familiar":
