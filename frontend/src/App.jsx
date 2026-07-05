@@ -962,7 +962,6 @@ const ONBOARDING_TOTAL_STEPS = 7;
 const ONBOARDING_COVERAGE_STEP = 4;
 const ONBOARDING_PIN_STEP = 5;
 const ONBOARDING_FINAL_STEP = ONBOARDING_TOTAL_STEPS - 1;
-const ONBOARDING_COVERAGE_PREF_KEY_BASE = "klinip_onboarding_coverage_pref_v1";
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
@@ -2326,17 +2325,8 @@ export default function App() {
       const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
       localStorage.setItem(consentKey, notifConsent);
       localStorage.setItem(lastPromptKey, nowIso);
-      const coveragePrefKey = getUserKey(ONBOARDING_COVERAGE_PREF_KEY_BASE, user.id);
       const coverageEnabled = onboardingData.coverageEnabled === "yes";
       const coverageProvider = (onboardingData.coverageProvider || "").trim();
-      localStorage.setItem(
-        coveragePrefKey,
-        JSON.stringify({
-          enabled: coverageEnabled,
-          provider: coverageProvider,
-          configured_at: nowIso,
-        }),
-      );
       try {
         await updateCoveragePreferences({
           enabled: coverageEnabled,

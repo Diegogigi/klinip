@@ -868,6 +868,134 @@ class ClinicalEpisodeDetailOut(BaseModel):
     ai_context: dict = {}
 
 
+class ContinuityActionOut(BaseModel):
+    id: str
+    title: str
+    description: str = ""
+    status: str = "pending"
+    priority: str = "normal"
+    due_at: datetime | None = None
+    episode_id: int | None = None
+    source_type: str = ""
+    source_id: int | None = None
+    action_label: str = ""
+
+    @field_serializer("due_at")
+    def serialize_continuity_action_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class ContinuityPreparationOut(BaseModel):
+    appointment_id: int | None = None
+    appointment_type: str = ""
+    specialty: str = ""
+    center: str = ""
+    date_time: datetime | None = None
+    documents_to_bring: list[str] = []
+    active_medications_count: int = 0
+    suggested_questions: list[str] = []
+
+    @field_serializer("date_time")
+    def serialize_continuity_preparation_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class ContinuityPanelOut(BaseModel):
+    profile_id: int
+    generated_at: datetime
+    summary: str = ""
+    next_step: ContinuityActionOut | None = None
+    overdue: list[ContinuityActionOut] = []
+    requires_action: list[ContinuityActionOut] = []
+    upcoming_preparation: ContinuityPreparationOut | None = None
+    counts: dict = {}
+
+    @field_serializer("generated_at")
+    def serialize_continuity_panel_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class HealthSheetSourceOut(BaseModel):
+    source_type: str = ""
+    source_id: int | None = None
+    label: str = ""
+    date: datetime | None = None
+
+    @field_serializer("date")
+    def serialize_health_sheet_source_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class HealthSheetDiagnosisOut(BaseModel):
+    name: str
+    detail: str = ""
+    status: str = "documented"
+    confidence: int = 0
+    source: HealthSheetSourceOut | None = None
+
+
+class HealthSheetVaccineOut(BaseModel):
+    name: str
+    status: str = "documented"
+    date: datetime | None = None
+    source: HealthSheetSourceOut | None = None
+
+    @field_serializer("date")
+    def serialize_health_sheet_vaccine_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class HealthSheetExamOut(BaseModel):
+    name: str
+    summary: str = ""
+    date: datetime | None = None
+    abnormal_values: list[dict] = []
+    source: HealthSheetSourceOut | None = None
+
+    @field_serializer("date")
+    def serialize_health_sheet_exam_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+class HealthSheetIndicationOut(BaseModel):
+    title: str
+    detail: str = ""
+    indication_type: str = "otro"
+    status: str = "active"
+    source: HealthSheetSourceOut | None = None
+
+
+class HealthSheetOut(BaseModel):
+    profile_id: int
+    profile_name: str = ""
+    generated_at: datetime
+    summary: str = ""
+    diagnoses: list[HealthSheetDiagnosisOut] = []
+    vaccines: list[HealthSheetVaccineOut] = []
+    exams: list[HealthSheetExamOut] = []
+    indications: list[HealthSheetIndicationOut] = []
+    counts: dict = {}
+    sources: list[HealthSheetSourceOut] = []
+
+    @field_serializer("generated_at")
+    def serialize_health_sheet_generated_at(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+
 class EpisodeLinkRequest(BaseModel):
     item_type: str
     item_id: int

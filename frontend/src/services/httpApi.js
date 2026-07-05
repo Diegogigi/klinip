@@ -656,6 +656,16 @@ export async function getClinicalEpisodeDetail(profileId, episodeId) {
   return res.data || {};
 }
 
+export async function getContinuityPanel(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/continuity`);
+  return res.data || {};
+}
+
+export async function getHealthSheet(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/health-sheet`);
+  return res.data || {};
+}
+
 export async function relinkClinicalEpisodeItem(profileId, payload) {
   const res = await api.put(`/health-profiles/${profileId}/episodes/relink-item`, payload);
   return res.data;

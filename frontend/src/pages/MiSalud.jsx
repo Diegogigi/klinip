@@ -7,6 +7,7 @@ import {
   getDocuments,
   getActiveHealthProfile,
   getAiLifeTimeline,
+  getContinuityPanel,
   recordMedicationIntake,
 } from "../services/httpApi";
 import { ensureArray } from "../utils/arrays";
@@ -83,6 +84,30 @@ function describeMedicationStatus(medication, nextDose, now = new Date()) {
     return `Horario habitual: ${fmtTime12(medication.schedule_time)}`;
   }
   return "Sin horario definido";
+}
+
+// Panel de Continuidad: a qué ruta lleva cada pendiente según su origen.
+function continuityRoute(item) {
+  const source = String(item?.source_type || "").toLowerCase();
+  if (source.includes("appointment") || source.includes("cita") || source.includes("exam")) {
+    return "/appointments";
+  }
+  if (source.includes("document") || source.includes("informe") || source.includes("resultado")) {
+    return "/documents";
+  }
+  if (source.includes("prescription") || source.includes("medication") || source.includes("receta")) {
+    return "/medications";
+  }
+  return "/timeline";
+}
+
+function continuityDueLabel(item) {
+  const due = parseDate(item?.due_at);
+  if (!due) return "";
+  if (item?.priority === "overdue") {
+    return `Venció el ${due.toLocaleDateString("es-CL", { day: "numeric", month: "short" })}`;
+  }
+  return `Vence: ${relativeDay(due)}`;
 }
 
 const MEDICATION_CTA_LEAD_MS = 45 * 60 * 1000;
@@ -170,6 +195,23 @@ export default function MiSalud() {
   const [intakeBusy, setIntakeBusy] = useState(null);
   const [recentMedicationConfirmations, setRecentMedicationConfirmations] = useState({});
   const [intakeSuccess, setIntakeSuccess] = useState(null);
+  const [continuity, setContinuity] = useState(null);
+  const [continuityState, setContinuityState] = useState("loading");
+
+  const loadContinuity = useCallback(async (profileId) => {
+    if (!profileId) {
+      setContinuity(null);
+      setContinuityState("ready");
+      return;
+    }
+    try {
+      const data = await getContinuityPanel(profileId);
+      setContinuity(data || null);
+      setContinuityState("ready");
+    } catch {
+      setContinuityState("error");
+    }
+  }, []);
 
   const loadPanelData = useCallback(async () => {
     const [profRes, apptRes, medRes, docRes, tlRes, bioRes] = await Promise.allSettled([
@@ -204,6 +246,16 @@ export default function MiSalud() {
       unsubscribe();
     };
   }, [loadPanelData]);
+
+  useEffect(() => {
+    if (loading) return undefined;
+    setContinuityState("loading");
+    loadContinuity(profile?.id);
+    const unsubscribe = subscribeClinicalDataChanged(() => {
+      loadContinuity(profile?.id);
+    });
+    return () => unsubscribe();
+  }, [loading, profile?.id, loadContinuity]);
 
   const markIntake = useCallback(async (medication, scheduledAt = null) => {
     if (intakeBusy) return;
@@ -275,6 +327,21 @@ export default function MiSalud() {
     if (activeMeds.length === 0 && medications.length > 0)
       warnings.push("Todos los tratamientos finalizados");
   }
+
+  /* ── continuidad ── */
+  const continuityNextStep = continuity?.next_step || null;
+  const continuityOverdue = ensureArray(continuity?.overdue).filter(
+    (item) => item?.id && item.id !== continuityNextStep?.id
+  );
+  const continuityActionsAll = ensureArray(continuity?.requires_action).filter(
+    (item) => item?.id && item.id !== continuityNextStep?.id && item.priority !== "overdue"
+  );
+  const continuityActions = continuityActionsAll.slice(0, 4);
+  const continuityActionsExtra = Math.max(0, continuityActionsAll.length - continuityActions.length);
+  const continuityPrep = continuity?.upcoming_preparation || null;
+  const continuityPendingCount = Number(continuity?.counts?.pending_tasks || 0);
+  const continuityIsClear =
+    !continuityNextStep && continuityOverdue.length === 0 && continuityActionsAll.length === 0 && !continuityPrep;
   /* ── render ── */
   if (loading) {
     return (
@@ -316,6 +383,168 @@ export default function MiSalud() {
           <span>{warnings.join(" · ")}</span>
         </div>
       )}
+
+      {/* ═══ CONTINUIDAD ═══ */}
+      {profile?.id ? (
+        <section className="clp-card tone-amber clp-continuity" aria-labelledby="clp-cont-h">
+          <div className="clp-card-head">
+            <span className="clp-card-icon tone-amber"><IcoActivity /></span>
+            <div className="clp-card-head-main">
+              <div className="clp-card-titles">
+                <h2 className="clp-card-title" id="clp-cont-h">Continuidad</h2>
+                <p className="clp-card-sub">Tu próximo paso y lo que no puede quedar atrás</p>
+              </div>
+              <div className="clp-card-head-meta">
+                {continuityPendingCount > 0 ? (
+                  <span className="clp-card-metric">
+                    {continuityPendingCount} pendiente{continuityPendingCount !== 1 ? "s" : ""}
+                  </span>
+                ) : null}
+                <Link to="/timeline" className="clp-card-link clp-card-link-primary">
+                  Ver historial <IcoChevron />
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {continuityState === "loading" ? (
+            <div className="clp-empty">Revisando tus pendientes…</div>
+          ) : continuityState === "error" ? (
+            <div className="clp-empty clp-continuity-error">
+              <span>No pudimos revisar tu continuidad ahora.</span>
+              <button type="button" onClick={() => { setContinuityState("loading"); loadContinuity(profile?.id); }}>
+                Reintentar
+              </button>
+            </div>
+          ) : continuityIsClear ? (
+            <div className="clp-continuity-clear">
+              <IcoCheck />
+              <span>Sin pendientes activos. Mantén tus documentos y próximas citas al día.</span>
+            </div>
+          ) : (
+            <div className="clp-continuity-body">
+              {continuityNextStep ? (
+                <div className={`clp-next-step is-${continuityNextStep.priority || "normal"}`}>
+                  <div className="clp-next-step-copy">
+                    <span className="clp-next-step-kicker">
+                      {continuityNextStep.priority === "overdue" ? "Próximo paso · Atrasado" : "Próximo paso"}
+                    </span>
+                    <strong>{continuityNextStep.title}</strong>
+                    {continuityNextStep.description ? <p>{continuityNextStep.description}</p> : null}
+                    {continuityDueLabel(continuityNextStep) ? (
+                      <small>{continuityDueLabel(continuityNextStep)}</small>
+                    ) : null}
+                  </div>
+                  <Link className="clp-next-step-cta" to={continuityRoute(continuityNextStep)}>
+                    {continuityNextStep.action_label || "Revisar"}
+                  </Link>
+                </div>
+              ) : null}
+
+              {continuityOverdue.length > 0 ? (
+                <div className="clp-continuity-block">
+                  <span className="clp-continuity-block-title is-overdue">
+                    Atrasados ({continuityOverdue.length})
+                  </span>
+                  {continuityOverdue.map((item) => (
+                    <div className="clp-continuity-row is-overdue" key={item.id}>
+                      <div className="clp-continuity-row-copy">
+                        <strong>{item.title}</strong>
+                        {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+                      </div>
+                      <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                        {item.action_label || "Resolver"}
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              {continuityActions.length > 0 ? (
+                <div className="clp-continuity-block">
+                  <span className="clp-continuity-block-title">Requiere tu acción</span>
+                  {continuityActions.map((item) => (
+                    <div className="clp-continuity-row" key={item.id}>
+                      <div className="clp-continuity-row-copy">
+                        <strong>{item.title}</strong>
+                        {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+                      </div>
+                      <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                        {item.action_label || "Revisar"}
+                      </Link>
+                    </div>
+                  ))}
+                  {continuityActionsExtra > 0 ? (
+                    <Link to="/timeline" className="clp-more-link">
+                      +{continuityActionsExtra} más
+                    </Link>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {continuityPrep ? (
+                <details className="clp-continuity-prep">
+                  <summary>
+                    Prepara tu {continuityPrep.appointment_type === "examen" ? "examen" : "cita"}
+                    {continuityPrep.date_time
+                      ? ` · ${relativeDay(parseDate(continuityPrep.date_time))}`
+                      : ""}
+                  </summary>
+                  <div className="clp-continuity-prep-body">
+                    <p className="clp-continuity-prep-when">
+                      {[
+                        continuityPrep.specialty,
+                        continuityPrep.center,
+                        continuityPrep.date_time ? fmtDateTime(continuityPrep.date_time) : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    {ensureArray(continuityPrep.documents_to_bring).length > 0 ? (
+                      <div className="clp-continuity-prep-group">
+                        <span>Documentos que te conviene llevar</span>
+                        <div className="clp-continuity-prep-chips">
+                          {ensureArray(continuityPrep.documents_to_bring).map((docName) => (
+                            <Link to="/documents" className="clp-continuity-prep-chip" key={docName}>
+                              {docName}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                    {Number(continuityPrep.active_medications_count || 0) > 0 ? (
+                      <div className="clp-continuity-prep-group">
+                        <span>Medicamentos activos</span>
+                        <p>
+                          Tienes {continuityPrep.active_medications_count} tratamiento
+                          {Number(continuityPrep.active_medications_count) !== 1 ? "s" : ""} activo
+                          {Number(continuityPrep.active_medications_count) !== 1 ? "s" : ""}: menciónalos en la atención.{" "}
+                          <Link to="/medications">Ver medicamentos</Link>
+                        </p>
+                      </div>
+                    ) : null}
+                    {ensureArray(continuityPrep.suggested_questions).length > 0 ? (
+                      <div className="clp-continuity-prep-group">
+                        <span>Preguntas que puedes hacer</span>
+                        <ul>
+                          {ensureArray(continuityPrep.suggested_questions).map((question) => (
+                            <li key={question}>{question}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                    <div className="clp-continuity-prep-actions">
+                      <Link to="/appointments">Ver agenda</Link>
+                      <Link to="/documents">Documentos</Link>
+                      <Link to="/medications">Medicamentos</Link>
+                    </div>
+                  </div>
+                </details>
+              ) : null}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {/* ═══ NEXT APPOINTMENT ═══ */}
       <section className="clp-card tone-blue" aria-labelledby="clp-appt-h">

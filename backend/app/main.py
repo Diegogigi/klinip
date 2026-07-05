@@ -22480,6 +22480,441 @@ def _episode_linkable_record(
     raise HTTPException(status_code=400, detail="Tipo de elemento no soportado para episodios")
 
 
+_CONTINUITY_DONE_STATUSES = {"done", "completed", "cancelled"}
+
+
+def _continuity_task_priority(task: models.ClinicalTask, now: datetime) -> str:
+    due_at = getattr(task, "due_at", None)
+    if due_at and due_at < now:
+        return "overdue"
+    if due_at and due_at <= now + timedelta(days=2):
+        return "soon"
+    return "normal"
+
+
+def _continuity_action_label(task_type: str | None, source_record_type: str | None = "") -> str:
+    text = _normalize_text(f"{task_type or ''} {source_record_type or ''}")
+    if "appointment" in text or "cita" in text:
+        return "Revisar cita"
+    if "lab" in text or "exam" in text or "examen" in text:
+        return "Preparar examen"
+    if "prescription" in text or "receta" in text or "medication" in text:
+        return "Revisar indicación"
+    if "document" in text or "documento" in text:
+        return "Revisar documento"
+    return "Resolver pendiente"
+
+
+def _continuity_task_to_action(task: models.ClinicalTask, now: datetime) -> dict:
+    return {
+        "id": f"task-{int(getattr(task, 'id', 0) or 0)}",
+        "title": _clip_text(getattr(task, "title", "") or "Pendiente clínico", 120),
+        "description": _clip_text(getattr(task, "description", "") or "", 220),
+        "status": getattr(task, "status", "") or "pending",
+        "priority": _continuity_task_priority(task, now),
+        "due_at": getattr(task, "due_at", None),
+        "episode_id": int(getattr(task, "episode_id", 0) or 0) or None,
+        "source_type": getattr(task, "source_record_type", "") or "",
+        "source_id": getattr(task, "source_record_id", None),
+        "action_label": _continuity_action_label(
+            getattr(task, "task_type", "") or "",
+            getattr(task, "source_record_type", "") or "",
+        ),
+    }
+
+
+def _continuity_appointment_action(appt: models.Appointment, now: datetime) -> dict:
+    appt_type = str(getattr(getattr(appt, "type", ""), "value", getattr(appt, "type", "")) or "cita")
+    title = "Próximo examen" if appt_type == "examen" else "Próxima cita"
+    detail_parts = [getattr(appt, "specialty", "") or "", getattr(appt, "center", "") or ""]
+    return {
+        "id": f"appointment-{int(getattr(appt, 'id', 0) or 0)}",
+        "title": title,
+        "description": " | ".join([part for part in detail_parts if part]),
+        "status": str(getattr(getattr(appt, "status", ""), "value", getattr(appt, "status", "")) or "pendiente"),
+        "priority": "soon" if getattr(appt, "date_time", None) and appt.date_time <= now + timedelta(days=2) else "normal",
+        "due_at": getattr(appt, "date_time", None),
+        "episode_id": int(getattr(appt, "episode_id", 0) or 0) or None,
+        "source_type": "appointment",
+        "source_id": int(getattr(appt, "id", 0) or 0) or None,
+        "action_label": "Preparar examen" if appt_type == "examen" else "Preparar consulta",
+    }
+
+
+def _build_continuity_preparation(
+    next_appointment: models.Appointment | None,
+    documents: list[models.Document],
+    active_medications: list[models.Medication],
+    pending_tasks: list[models.ClinicalTask],
+) -> dict | None:
+    if not next_appointment:
+        return None
+    appt_type = str(getattr(getattr(next_appointment, "type", ""), "value", getattr(next_appointment, "type", "")) or "")
+    documents_to_bring = []
+    for doc in documents[:4]:
+        label = getattr(doc, "filename", "") or str(getattr(getattr(doc, "doc_type", ""), "value", getattr(doc, "doc_type", "")) or "Documento")
+        if label:
+            documents_to_bring.append(label)
+    suggested_questions = [
+        "¿Qué objetivo tiene esta consulta o examen?",
+        "¿Qué debo hacer después según el resultado?",
+    ]
+    if active_medications:
+        suggested_questions.append("¿Debo mantener mis medicamentos actuales antes o después de esta atención?")
+    if pending_tasks:
+        suggested_questions.append("¿Cuál de mis pendientes debo resolver primero?")
+    if appt_type == "examen":
+        suggested_questions.append("¿Necesito ayuno, preparación o suspender algún medicamento?")
+    return {
+        "appointment_id": int(getattr(next_appointment, "id", 0) or 0) or None,
+        "appointment_type": appt_type,
+        "specialty": getattr(next_appointment, "specialty", "") or "",
+        "center": getattr(next_appointment, "center", "") or "",
+        "date_time": getattr(next_appointment, "date_time", None),
+        "documents_to_bring": documents_to_bring,
+        "active_medications_count": len(active_medications),
+        "suggested_questions": suggested_questions[:5],
+    }
+
+
+def _build_continuity_panel(db: Session, profile: models.HealthProfile, owner_user_id: int) -> dict:
+    now = datetime.now()
+    pending_tasks = (
+        db.query(models.ClinicalTask)
+        .filter(
+            models.ClinicalTask.profile_id == int(profile.id),
+            models.ClinicalTask.owner_user_id == int(owner_user_id),
+            models.ClinicalTask.status.notin_(_CONTINUITY_DONE_STATUSES),
+        )
+        .order_by(models.ClinicalTask.due_at.asc(), models.ClinicalTask.created_at.asc())
+        .limit(20)
+        .all()
+    )
+    overdue_tasks = [task for task in pending_tasks if getattr(task, "due_at", None) and task.due_at < now]
+    upcoming_appointments = (
+        db.query(models.Appointment)
+        .filter(
+            *_appointment_scope_filter(profile, owner_user_id),
+            models.Appointment.date_time.isnot(None),
+            models.Appointment.status != models.AppointmentStatus.realizada,
+            models.Appointment.date_time >= now - timedelta(hours=6),
+        )
+        .order_by(models.Appointment.date_time.asc(), models.Appointment.created_at.desc())
+        .limit(5)
+        .all()
+    )
+    active_medications = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.user_id == int(owner_user_id),
+            or_(models.Medication.completed.is_(False), models.Medication.completed.is_(None)),
+            or_(models.Medication.end_date.is_(None), models.Medication.end_date >= now),
+        )
+        .order_by(models.Medication.created_at.desc(), models.Medication.id.desc())
+        .limit(12)
+        .all()
+    )
+    documents = (
+        db.query(models.Document)
+        .filter(*_document_scope_filter(profile, owner_user_id))
+        .order_by(models.Document.date.desc(), models.Document.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    next_appointment = upcoming_appointments[0] if upcoming_appointments else None
+    task_actions = [_continuity_task_to_action(task, now) for task in pending_tasks]
+    appointment_action = _continuity_appointment_action(next_appointment, now) if next_appointment else None
+    next_step = None
+    if overdue_tasks:
+        next_step = _continuity_task_to_action(overdue_tasks[0], now)
+    elif task_actions:
+        next_step = task_actions[0]
+    elif appointment_action:
+        next_step = appointment_action
+    summary = "Sin pendientes activos. Mantén tus documentos y próximas citas al día."
+    if next_step:
+        summary = f"Próximo paso: {next_step['title']}."
+        if overdue_tasks:
+            summary += f" Hay {len(overdue_tasks)} pendiente(s) atrasado(s)."
+    return {
+        "profile_id": int(profile.id),
+        "generated_at": now,
+        "summary": summary,
+        "next_step": next_step,
+        "overdue": [_continuity_task_to_action(task, now) for task in overdue_tasks[:5]],
+        "requires_action": task_actions[:8],
+        "upcoming_preparation": _build_continuity_preparation(
+            next_appointment,
+            documents,
+            active_medications,
+            pending_tasks,
+        ),
+        "counts": {
+            "pending_tasks": len(pending_tasks),
+            "overdue_tasks": len(overdue_tasks),
+            "upcoming_appointments": len(upcoming_appointments),
+            "active_medications": len(active_medications),
+            "recent_documents": len(documents),
+        },
+    }
+
+
+def _health_sheet_source(source_type: str, source_id: int | None, label: str, date_value: datetime | None = None) -> dict:
+    return {
+        "source_type": source_type,
+        "source_id": source_id,
+        "label": _clip_text(label or "", 140),
+        "date": date_value,
+    }
+
+
+def _health_sheet_document_source(doc: models.Document | None) -> dict | None:
+    if not doc:
+        return None
+    label = getattr(doc, "filename", "") or str(getattr(getattr(doc, "doc_type", ""), "value", getattr(doc, "doc_type", "")) or "Documento")
+    return _health_sheet_source(
+        "document",
+        int(getattr(doc, "id", 0) or 0) or None,
+        label,
+        getattr(doc, "date", None) or getattr(doc, "created_at", None),
+    )
+
+
+def _health_sheet_is_vaccine_document(doc: models.Document) -> bool:
+    raw = " ".join(
+        [
+            getattr(doc, "filename", "") or "",
+            getattr(doc, "center", "") or "",
+            getattr(doc, "notes", "") or "",
+            getattr(doc, "ocr_text", "") or "",
+        ]
+    )
+    normalized = _normalize_text(raw)
+    return any(token in normalized for token in ["vacuna", "vacunacion", "inmunizacion", "inmunización", "carnet de vacunas", "carnet de vacunacion"])
+
+
+def _health_sheet_vaccine_name(doc: models.Document) -> str:
+    text = " ".join([getattr(doc, "filename", "") or "", getattr(doc, "ocr_text", "") or "", getattr(doc, "notes", "") or ""])
+    normalized = _normalize_text(text)
+    known = [
+        ("influenza", "Influenza"),
+        ("covid", "COVID-19"),
+        ("hepatitis", "Hepatitis"),
+        ("tetanos", "Tétanos"),
+        ("neumococo", "Neumococo"),
+        ("sarampion", "Sarampión"),
+    ]
+    for token, label in known:
+        if token in normalized:
+            return label
+    return "Vacuna registrada"
+
+
+def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_id: int) -> dict:
+    generated_at = datetime.now()
+    documents = (
+        db.query(models.Document)
+        .filter(*_document_scope_filter(profile, owner_user_id))
+        .order_by(models.Document.date.desc(), models.Document.created_at.desc())
+        .limit(80)
+        .all()
+    )
+    documents_by_id = {int(getattr(doc, "id", 0) or 0): doc for doc in documents if getattr(doc, "id", None)}
+    document_ids = list(documents_by_id.keys())
+
+    diagnoses = []
+    if document_ids:
+        diagnosis_rows = (
+            db.query(models.DocumentClinicalEntity)
+            .filter(
+                models.DocumentClinicalEntity.document_id.in_(document_ids),
+                models.DocumentClinicalEntity.entity_type == "diagnosis",
+            )
+            .order_by(models.DocumentClinicalEntity.created_at.desc(), models.DocumentClinicalEntity.id.desc())
+            .limit(12)
+            .all()
+        )
+        seen_diagnoses: set[str] = set()
+        for entity in diagnosis_rows:
+            name = _clip_text(getattr(entity, "entity_name", "") or "", 120)
+            if not name:
+                continue
+            key = _normalize_text(name)
+            if key in seen_diagnoses:
+                continue
+            seen_diagnoses.add(key)
+            doc = documents_by_id.get(int(getattr(entity, "document_id", 0) or 0))
+            diagnoses.append(
+                {
+                    "name": name,
+                    "detail": _clip_text(getattr(entity, "entity_value", "") or getattr(entity, "source_text", "") or "", 260),
+                    "status": "documented",
+                    "confidence": int(getattr(entity, "confidence", 0) or 0),
+                    "source": _health_sheet_document_source(doc),
+                }
+            )
+
+    vaccines = []
+    for doc in documents:
+        if not _health_sheet_is_vaccine_document(doc):
+            continue
+        vaccines.append(
+            {
+                "name": _health_sheet_vaccine_name(doc),
+                "status": "documented",
+                "date": getattr(doc, "date", None) or getattr(doc, "created_at", None),
+                "source": _health_sheet_document_source(doc),
+            }
+        )
+        if len(vaccines) >= 8:
+            break
+
+    exams = []
+    if document_ids:
+        summary_rows = (
+            db.query(models.DocumentSummary)
+            .filter(models.DocumentSummary.document_id.in_(document_ids))
+            .order_by(models.DocumentSummary.updated_at.desc(), models.DocumentSummary.id.desc())
+            .limit(20)
+            .all()
+        )
+        for summary in summary_rows:
+            doc = documents_by_id.get(int(getattr(summary, "document_id", 0) or 0))
+            if not doc:
+                continue
+            inferred = _normalize_text(getattr(summary, "document_type_inferred", "") or "")
+            doc_type = str(getattr(getattr(doc, "doc_type", ""), "value", getattr(doc, "doc_type", "")) or "")
+            abnormal_values = list(getattr(summary, "abnormal_values_json", None) or [])
+            if doc_type != "resultado" and "resultado" not in inferred and "examen" not in inferred and not abnormal_values:
+                continue
+            exams.append(
+                {
+                    "name": getattr(doc, "filename", "") or "Resultado de examen",
+                    "summary": _clip_text(
+                        getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", "") or "",
+                        360,
+                    ),
+                    "date": getattr(doc, "date", None) or getattr(doc, "created_at", None),
+                    "abnormal_values": abnormal_values[:6],
+                    "source": _health_sheet_document_source(doc),
+                }
+            )
+            if len(exams) >= 8:
+                break
+
+    voice_sessions = (
+        db.query(models.VoiceSession)
+        .filter(models.VoiceSession.profile_id == int(profile.id))
+        .order_by(models.VoiceSession.created_at.desc(), models.VoiceSession.id.desc())
+        .limit(8)
+        .all()
+    )
+    active_medications = (
+        db.query(models.Medication)
+        .filter(
+            models.Medication.user_id == int(owner_user_id),
+            or_(models.Medication.completed.is_(False), models.Medication.completed.is_(None)),
+            or_(models.Medication.end_date.is_(None), models.Medication.end_date >= generated_at),
+        )
+        .order_by(models.Medication.created_at.desc(), models.Medication.id.desc())
+        .limit(12)
+        .all()
+    )
+    pending_tasks = (
+        db.query(models.ClinicalTask)
+        .filter(
+            models.ClinicalTask.profile_id == int(profile.id),
+            models.ClinicalTask.owner_user_id == int(owner_user_id),
+            models.ClinicalTask.status.notin_(_CONTINUITY_DONE_STATUSES),
+        )
+        .order_by(models.ClinicalTask.due_at.asc(), models.ClinicalTask.created_at.asc())
+        .limit(8)
+        .all()
+    )
+
+    indications = []
+    for session in voice_sessions:
+        for item in list(getattr(session, "indicaciones", None) or [])[:6]:
+            if not isinstance(item, dict):
+                continue
+            text = _clip_text(item.get("texto") or item.get("text") or item.get("detalle") or "", 260)
+            if not text:
+                continue
+            indications.append(
+                {
+                    "title": _clip_text(text, 90),
+                    "detail": text,
+                    "indication_type": item.get("tipo") or item.get("type") or "otro",
+                    "status": "active",
+                    "source": _health_sheet_source(
+                        "voice",
+                        int(getattr(session, "id", 0) or 0) or None,
+                        _voice_session_title(session),
+                        getattr(session, "created_at", None),
+                    ),
+                }
+            )
+            if len(indications) >= 12:
+                break
+        if len(indications) >= 12:
+            break
+    for med in active_medications[:6]:
+        detail = " | ".join([part for part in [getattr(med, "dose", "") or "", getattr(med, "frequency", "") or "", getattr(med, "duration", "") or ""] if part])
+        indications.append(
+            {
+                "title": getattr(med, "name", "") or "Medicamento activo",
+                "detail": detail,
+                "indication_type": "medicamento",
+                "status": "active",
+                "source": _health_sheet_source("medication", int(getattr(med, "id", 0) or 0) or None, getattr(med, "name", "") or "Medicamento"),
+            }
+        )
+    for task in pending_tasks[:4]:
+        indications.append(
+            {
+                "title": getattr(task, "title", "") or "Pendiente clínico",
+                "detail": _clip_text(getattr(task, "description", "") or "", 220),
+                "indication_type": getattr(task, "task_type", "") or "follow_up",
+                "status": getattr(task, "status", "") or "pending",
+                "source": _health_sheet_source("task", int(getattr(task, "id", 0) or 0) or None, getattr(task, "title", "") or "Pendiente clínico", getattr(task, "due_at", None)),
+            }
+        )
+
+    sources_by_key: dict[tuple[str, int | None, str], dict] = {}
+    for section in [diagnoses, vaccines, exams, indications]:
+        for item in section:
+            source = item.get("source") if isinstance(item, dict) else None
+            if not source:
+                continue
+            key = (source.get("source_type") or "", source.get("source_id"), source.get("label") or "")
+            sources_by_key.setdefault(key, source)
+
+    summary_parts = [
+        f"{len(diagnoses)} diagnóstico(s) o hallazgo(s)",
+        f"{len(vaccines)} vacuna(s)",
+        f"{len(exams)} examen(es)",
+        f"{len(indications)} indicación(es) o pendiente(s)",
+    ]
+    return {
+        "profile_id": int(profile.id),
+        "profile_name": getattr(profile, "full_name", "") or "",
+        "generated_at": generated_at,
+        "summary": "Ficha viva construida desde fuentes de Klinip: " + ", ".join(summary_parts) + ".",
+        "diagnoses": diagnoses,
+        "vaccines": vaccines,
+        "exams": exams,
+        "indications": indications[:20],
+        "counts": {
+            "diagnoses": len(diagnoses),
+            "vaccines": len(vaccines),
+            "exams": len(exams),
+            "indications": len(indications[:20]),
+            "sources": len(sources_by_key),
+        },
+        "sources": list(sources_by_key.values())[:20],
+    }
+
+
 def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> list[models.ProfileRelationship]:
     return (
         db.query(models.ProfileRelationship)
@@ -23386,6 +23821,36 @@ async def get_clinical_episode_detail(
     }
     db.commit()
     return response
+
+
+@app.get(
+    "/health-profiles/{profile_id}/continuity",
+    response_model=schemas.ContinuityPanelOut,
+)
+async def get_continuity_panel(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    return _build_continuity_panel(db, profile, int(profile.owner_user_id))
+
+
+@app.get(
+    "/health-profiles/{profile_id}/health-sheet",
+    response_model=schemas.HealthSheetOut,
+)
+async def get_health_sheet(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_document_schema()
+    ensure_episode_schema(force=True)
+    ensure_voice_session_schema()
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    return _build_health_sheet(db, profile, int(profile.owner_user_id))
 
 
 @app.put(
