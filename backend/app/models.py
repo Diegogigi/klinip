@@ -613,6 +613,86 @@ class DocumentCoverageInfo(Base):
     owner_user = relationship("User")
 
 
+class HealthProblem(Base):
+    __tablename__ = "health_problems"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    detail = Column(Text, default="")
+    status = Column(String, default="active", index=True)
+    severity = Column(String, default="")
+    source_type = Column(String, default="manual", index=True)
+    source_id = Column(Integer, nullable=True, index=True)
+    onset_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User", foreign_keys=[owner_user_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user = relationship("User", foreign_keys=[updated_by_user_id])
+
+
+class HealthVaccineRecord(Base):
+    __tablename__ = "health_vaccine_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    vaccine_name = Column(String, nullable=False, index=True)
+    dose_label = Column(String, default="")
+    status = Column(String, default="documented", index=True)
+    administered_at = Column(DateTime, nullable=True, index=True)
+    next_due_at = Column(DateTime, nullable=True, index=True)
+    provider_name = Column(String, default="")
+    lot_number = Column(String, default="")
+    source_type = Column(String, default="manual", index=True)
+    source_id = Column(Integer, nullable=True, index=True)
+    notes = Column(Text, default="")
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User", foreign_keys=[owner_user_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user = relationship("User", foreign_keys=[updated_by_user_id])
+
+
+class HealthExamResult(Base):
+    __tablename__ = "health_exam_results"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profile_id = Column(Integer, ForeignKey("health_profiles.id"), nullable=False, index=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    exam_name = Column(String, nullable=False, index=True)
+    category = Column(String, default="")
+    status = Column(String, default="documented", index=True)
+    summary = Column(Text, default="")
+    values_json = Column(JSON, default=list)
+    performed_at = Column(DateTime, nullable=True, index=True)
+    source_type = Column(String, default="manual", index=True)
+    source_id = Column(Integer, nullable=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    profile = relationship("HealthProfile")
+    owner_user = relationship("User", foreign_keys=[owner_user_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    updated_by_user = relationship("User", foreign_keys=[updated_by_user_id])
+
+
 class ClinicalReport(Base):
     __tablename__ = "clinical_reports"
 

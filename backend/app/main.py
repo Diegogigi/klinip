@@ -611,9 +611,46 @@ def ensure_episode_schema(force: bool = False):
         print(f"WARNING ensure_episode_schema: no se pudo ajustar la tabla: {exc}")
 
 
+def ensure_health_sheet_schema(force: bool = False):
+    """Garantiza tablas estructuradas de Ficha de Salud."""
+    if not RUNTIME_SCHEMA_MUTATIONS_ENABLED and not force:
+        return
+    try:
+        Base.metadata.create_all(
+            bind=engine,
+            tables=[
+                models.HealthProblem.__table__,
+                models.HealthVaccineRecord.__table__,
+                models.HealthExamResult.__table__,
+            ],
+        )
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_health_problems_profile_status "
+                    "ON health_problems (profile_id, status)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_health_vaccine_records_profile_date "
+                    "ON health_vaccine_records (profile_id, administered_at)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_health_exam_results_profile_date "
+                    "ON health_exam_results (profile_id, performed_at)"
+                )
+            )
+    except Exception as exc:
+        print(f"WARNING ensure_health_sheet_schema: no se pudo ajustar la ficha de salud: {exc}")
+
+
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
     ensure_medication_schema()
     ensure_episode_schema()
+    ensure_health_sheet_schema()
 
 
 def ensure_medication_purchase_schema(force: bool = False):
@@ -22483,6 +22520,24 @@ def _episode_linkable_record(
 _CONTINUITY_DONE_STATUSES = {"done", "completed", "cancelled"}
 
 
+def _cancel_clinical_tasks_for_record(db: Session, record_type: str, record_id: int | None) -> None:
+    """Cancela pendientes clínicos cuyo registro de origen fue eliminado.
+
+    Sin esto, borrar una cita o documento deja tareas "fantasma" en el panel
+    de Continuidad apuntando a algo que ya no existe.
+    """
+    if not record_id:
+        return
+    try:
+        db.query(models.ClinicalTask).filter(
+            models.ClinicalTask.source_record_type == str(record_type),
+            models.ClinicalTask.source_record_id == int(record_id),
+            models.ClinicalTask.status.notin_(_CONTINUITY_DONE_STATUSES),
+        ).update({"status": "cancelled"}, synchronize_session=False)
+    except Exception as exc:
+        print(f"WARNING continuidad: no se pudieron cancelar tareas de {record_type} {record_id}: {exc}")
+
+
 def _continuity_task_priority(task: models.ClinicalTask, now: datetime) -> str:
     due_at = getattr(task, "due_at", None)
     if due_at and due_at < now:
@@ -22590,6 +22645,50 @@ def _build_continuity_panel(db: Session, profile: models.HealthProfile, owner_us
         .limit(20)
         .all()
     )
+    # Autolimpieza: pendientes cuyo registro de origen ya no existe (cita o
+    # documento borrados antes de que existiera la cancelación en cascada)
+    # quedan cancelados aquí para no mostrar "fantasmas" al usuario.
+    appointment_ids = {
+        int(task.source_record_id)
+        for task in pending_tasks
+        if (task.source_record_type or "") == "appointment" and task.source_record_id
+    }
+    document_ids = {
+        int(task.source_record_id)
+        for task in pending_tasks
+        if (task.source_record_type or "") == "document" and task.source_record_id
+    }
+    existing_appointment_ids = (
+        {row[0] for row in db.query(models.Appointment.id).filter(models.Appointment.id.in_(appointment_ids)).all()}
+        if appointment_ids
+        else set()
+    )
+    existing_document_ids = (
+        {row[0] for row in db.query(models.Document.id).filter(models.Document.id.in_(document_ids)).all()}
+        if document_ids
+        else set()
+    )
+    alive_tasks: list[models.ClinicalTask] = []
+    orphan_tasks: list[models.ClinicalTask] = []
+    for task in pending_tasks:
+        source_type = task.source_record_type or ""
+        source_id = int(task.source_record_id or 0)
+        if source_type == "appointment" and source_id and source_id not in existing_appointment_ids:
+            orphan_tasks.append(task)
+        elif source_type == "document" and source_id and source_id not in existing_document_ids:
+            orphan_tasks.append(task)
+        else:
+            alive_tasks.append(task)
+    if orphan_tasks:
+        for task in orphan_tasks:
+            task.status = "cancelled"
+            db.add(task)
+        try:
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING continuidad: no se pudieron cancelar pendientes huérfanos: {exc}")
+    pending_tasks = alive_tasks
     overdue_tasks = [task for task in pending_tasks if getattr(task, "due_at", None) and task.due_at < now]
     upcoming_appointments = (
         db.query(models.Appointment)
@@ -22680,6 +22779,50 @@ def _health_sheet_document_source(doc: models.Document | None) -> dict | None:
     )
 
 
+def _normalize_health_problem_status(value: str | None) -> str:
+    raw = _normalize_text(value or "active")
+    aliases = {
+        "activo": "active",
+        "activa": "active",
+        "active": "active",
+        "documented": "active",
+        "resuelto": "resolved",
+        "resuelta": "resolved",
+        "resolved": "resolved",
+        "archivado": "archived",
+        "archivada": "archived",
+        "archived": "archived",
+    }
+    return aliases.get(raw, "active")
+
+
+def _normalize_structured_health_status(value: str | None, default: str = "documented") -> str:
+    raw = _normalize_text(value or default)
+    aliases = {
+        "documented": "documented",
+        "documentado": "documented",
+        "documentada": "documented",
+        "pending": "pending",
+        "pendiente": "pending",
+        "planned": "pending",
+        "programado": "pending",
+        "programada": "pending",
+        "active": "active",
+        "activo": "active",
+        "activa": "active",
+        "review": "review",
+        "revisar": "review",
+        "archived": "archived",
+        "archivado": "archived",
+        "archivada": "archived",
+    }
+    return aliases.get(raw, default)
+
+
+def _health_sheet_manual_source(source_type: str, source_id: int | None, label: str, date_value: datetime | None = None) -> dict:
+    return _health_sheet_source(source_type, source_id, label, date_value)
+
+
 def _health_sheet_is_vaccine_document(doc: models.Document) -> bool:
     raw = " ".join(
         [
@@ -22712,6 +22855,7 @@ def _health_sheet_vaccine_name(doc: models.Document) -> str:
 
 def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_id: int) -> dict:
     generated_at = datetime.now()
+    ensure_health_sheet_schema(force=True)
     documents = (
         db.query(models.Document)
         .filter(*_document_scope_filter(profile, owner_user_id))
@@ -22723,6 +22867,37 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
     document_ids = list(documents_by_id.keys())
 
     diagnoses = []
+    seen_diagnoses: set[str] = set()
+    health_problems = (
+        db.query(models.HealthProblem)
+        .filter(
+            models.HealthProblem.profile_id == int(profile.id),
+            models.HealthProblem.owner_user_id == int(owner_user_id),
+            models.HealthProblem.status != "archived",
+        )
+        .order_by(models.HealthProblem.status.asc(), models.HealthProblem.updated_at.desc(), models.HealthProblem.id.desc())
+        .limit(20)
+        .all()
+    )
+    for problem in health_problems:
+        name = _clip_text(getattr(problem, "name", "") or "", 120)
+        if not name:
+            continue
+        seen_diagnoses.add(_normalize_text(name))
+        diagnoses.append(
+            {
+                "name": name,
+                "detail": _clip_text(getattr(problem, "detail", "") or "", 260),
+                "status": getattr(problem, "status", "") or "active",
+                "confidence": 100,
+                "source": _health_sheet_manual_source(
+                    "health_problem",
+                    int(getattr(problem, "id", 0) or 0) or None,
+                    name,
+                    getattr(problem, "updated_at", None) or getattr(problem, "created_at", None),
+                ),
+            }
+        )
     if document_ids:
         diagnosis_rows = (
             db.query(models.DocumentClinicalEntity)
@@ -22734,7 +22909,6 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
             .limit(12)
             .all()
         )
-        seen_diagnoses: set[str] = set()
         for entity in diagnosis_rows:
             name = _clip_text(getattr(entity, "entity_name", "") or "", 120)
             if not name:
@@ -22755,12 +22929,48 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
             )
 
     vaccines = []
+    seen_vaccines: set[str] = set()
+    vaccine_records = (
+        db.query(models.HealthVaccineRecord)
+        .filter(
+            models.HealthVaccineRecord.profile_id == int(profile.id),
+            models.HealthVaccineRecord.owner_user_id == int(owner_user_id),
+            models.HealthVaccineRecord.status != "archived",
+        )
+        .order_by(models.HealthVaccineRecord.administered_at.desc(), models.HealthVaccineRecord.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+    for record in vaccine_records:
+        name = _clip_text(getattr(record, "vaccine_name", "") or "", 120)
+        if not name:
+            continue
+        key = _normalize_text(f"{name} {getattr(record, 'dose_label', '') or ''}")
+        seen_vaccines.add(key)
+        vaccines.append(
+            {
+                "name": name,
+                "status": getattr(record, "status", "") or "documented",
+                "date": getattr(record, "administered_at", None) or getattr(record, "created_at", None),
+                "source": _health_sheet_manual_source(
+                    "vaccine_record",
+                    int(getattr(record, "id", 0) or 0) or None,
+                    " | ".join([part for part in [name, getattr(record, "dose_label", "") or ""] if part]),
+                    getattr(record, "administered_at", None) or getattr(record, "created_at", None),
+                ),
+            }
+        )
     for doc in documents:
         if not _health_sheet_is_vaccine_document(doc):
             continue
+        vaccine_name = _health_sheet_vaccine_name(doc)
+        key = _normalize_text(vaccine_name)
+        if key in seen_vaccines:
+            continue
+        seen_vaccines.add(key)
         vaccines.append(
             {
-                "name": _health_sheet_vaccine_name(doc),
+                "name": vaccine_name,
                 "status": "documented",
                 "date": getattr(doc, "date", None) or getattr(doc, "created_at", None),
                 "source": _health_sheet_document_source(doc),
@@ -22770,6 +22980,37 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
             break
 
     exams = []
+    seen_exams: set[str] = set()
+    exam_records = (
+        db.query(models.HealthExamResult)
+        .filter(
+            models.HealthExamResult.profile_id == int(profile.id),
+            models.HealthExamResult.owner_user_id == int(owner_user_id),
+            models.HealthExamResult.status != "archived",
+        )
+        .order_by(models.HealthExamResult.performed_at.desc(), models.HealthExamResult.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+    for record in exam_records:
+        name = _clip_text(getattr(record, "exam_name", "") or "", 140)
+        if not name:
+            continue
+        seen_exams.add(_normalize_text(name))
+        exams.append(
+            {
+                "name": name,
+                "summary": _clip_text(getattr(record, "summary", "") or "", 360),
+                "date": getattr(record, "performed_at", None) or getattr(record, "created_at", None),
+                "abnormal_values": list(getattr(record, "values_json", None) or [])[:8],
+                "source": _health_sheet_manual_source(
+                    "exam_result",
+                    int(getattr(record, "id", 0) or 0) or None,
+                    name,
+                    getattr(record, "performed_at", None) or getattr(record, "created_at", None),
+                ),
+            }
+        )
     if document_ids:
         summary_rows = (
             db.query(models.DocumentSummary)
@@ -22787,9 +23028,14 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
             abnormal_values = list(getattr(summary, "abnormal_values_json", None) or [])
             if doc_type != "resultado" and "resultado" not in inferred and "examen" not in inferred and not abnormal_values:
                 continue
+            name = getattr(doc, "filename", "") or "Resultado de examen"
+            key = _normalize_text(name)
+            if key in seen_exams:
+                continue
+            seen_exams.add(key)
             exams.append(
                 {
-                    "name": getattr(doc, "filename", "") or "Resultado de examen",
+                    "name": name,
                     "summary": _clip_text(
                         getattr(summary, "patient_friendly_explanation", "") or getattr(summary, "summary_plain", "") or "",
                         360,
@@ -22913,6 +23159,179 @@ def _build_health_sheet(db: Session, profile: models.HealthProfile, owner_user_i
         },
         "sources": list(sources_by_key.values())[:20],
     }
+
+
+def _get_health_problem_or_404(
+    db: Session,
+    profile: models.HealthProfile,
+    owner_user_id: int,
+    problem_id: int,
+) -> models.HealthProblem:
+    row = (
+        db.query(models.HealthProblem)
+        .filter(
+            models.HealthProblem.id == int(problem_id),
+            models.HealthProblem.profile_id == int(profile.id),
+            models.HealthProblem.owner_user_id == int(owner_user_id),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Problema de salud no encontrado")
+    return row
+
+
+def _get_health_vaccine_or_404(
+    db: Session,
+    profile: models.HealthProfile,
+    owner_user_id: int,
+    vaccine_id: int,
+) -> models.HealthVaccineRecord:
+    row = (
+        db.query(models.HealthVaccineRecord)
+        .filter(
+            models.HealthVaccineRecord.id == int(vaccine_id),
+            models.HealthVaccineRecord.profile_id == int(profile.id),
+            models.HealthVaccineRecord.owner_user_id == int(owner_user_id),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Vacuna no encontrada")
+    return row
+
+
+def _get_health_exam_or_404(
+    db: Session,
+    profile: models.HealthProfile,
+    owner_user_id: int,
+    exam_id: int,
+) -> models.HealthExamResult:
+    row = (
+        db.query(models.HealthExamResult)
+        .filter(
+            models.HealthExamResult.id == int(exam_id),
+            models.HealthExamResult.profile_id == int(profile.id),
+            models.HealthExamResult.owner_user_id == int(owner_user_id),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Examen estructurado no encontrado")
+    return row
+
+
+def _health_sheet_episode(db: Session, profile: models.HealthProfile, owner_user_id: int) -> models.ClinicalEpisode:
+    episode = (
+        db.query(models.ClinicalEpisode)
+        .filter(
+            models.ClinicalEpisode.profile_id == int(profile.id),
+            models.ClinicalEpisode.owner_user_id == int(owner_user_id),
+            models.ClinicalEpisode.source == "health_sheet",
+            models.ClinicalEpisode.episode_type == "health_sheet",
+            models.ClinicalEpisode.status != models.ClinicalEpisodeStatus.archived,
+        )
+        .order_by(models.ClinicalEpisode.created_at.asc())
+        .first()
+    )
+    if episode:
+        return episode
+    now = datetime.now()
+    episode = models.ClinicalEpisode(
+        profile_id=int(profile.id),
+        owner_user_id=int(owner_user_id),
+        title="Ficha de salud",
+        episode_type="health_sheet",
+        status=models.ClinicalEpisodeStatus.active,
+        source="health_sheet",
+        started_at=now,
+        last_activity_at=now,
+        summary="Pendientes creados desde la ficha viva de salud.",
+        tags_json=["ficha_salud", "continuidad"],
+    )
+    db.add(episode)
+    db.flush()
+    return episode
+
+
+def _apply_health_problem_payload(row: models.HealthProblem, payload) -> None:
+    if getattr(payload, "name", None) is not None:
+        name = _clip_text(payload.name, 140)
+        if not name:
+            raise HTTPException(status_code=400, detail="El nombre del problema es obligatorio")
+        row.name = name
+    if getattr(payload, "detail", None) is not None:
+        row.detail = _clip_text(payload.detail or "", 800)
+    if getattr(payload, "status", None) is not None:
+        row.status = _normalize_health_problem_status(payload.status)
+    if getattr(payload, "severity", None) is not None:
+        row.severity = _safe_text(payload.severity or "")[:40]
+    if getattr(payload, "source_type", None) is not None:
+        row.source_type = _safe_text(payload.source_type or "manual")[:40] or "manual"
+    if hasattr(payload, "source_id") and payload.source_id is not None:
+        row.source_id = int(payload.source_id)
+    if hasattr(payload, "onset_at") and payload.onset_at is not None:
+        row.onset_at = payload.onset_at
+    if hasattr(payload, "resolved_at") and payload.resolved_at is not None:
+        row.resolved_at = payload.resolved_at
+    if getattr(payload, "metadata_json", None) is not None:
+        row.metadata_json = payload.metadata_json or {}
+    if row.status == "resolved" and row.resolved_at is None:
+        row.resolved_at = datetime.now()
+    if row.status == "active":
+        row.resolved_at = None
+
+
+def _apply_health_vaccine_payload(row: models.HealthVaccineRecord, payload) -> None:
+    if getattr(payload, "vaccine_name", None) is not None:
+        name = _clip_text(payload.vaccine_name, 140)
+        if not name:
+            raise HTTPException(status_code=400, detail="El nombre de la vacuna es obligatorio")
+        row.vaccine_name = name
+    if getattr(payload, "dose_label", None) is not None:
+        row.dose_label = _safe_text(payload.dose_label or "")[:80]
+    if getattr(payload, "status", None) is not None:
+        row.status = _normalize_structured_health_status(payload.status)
+    if hasattr(payload, "administered_at") and payload.administered_at is not None:
+        row.administered_at = payload.administered_at
+    if hasattr(payload, "next_due_at") and payload.next_due_at is not None:
+        row.next_due_at = payload.next_due_at
+    if getattr(payload, "provider_name", None) is not None:
+        row.provider_name = _safe_text(payload.provider_name or "")[:140]
+    if getattr(payload, "lot_number", None) is not None:
+        row.lot_number = _safe_text(payload.lot_number or "")[:80]
+    if getattr(payload, "source_type", None) is not None:
+        row.source_type = _safe_text(payload.source_type or "manual")[:40] or "manual"
+    if hasattr(payload, "source_id") and payload.source_id is not None:
+        row.source_id = int(payload.source_id)
+    if getattr(payload, "notes", None) is not None:
+        row.notes = _clip_text(payload.notes or "", 800)
+    if getattr(payload, "metadata_json", None) is not None:
+        row.metadata_json = payload.metadata_json or {}
+
+
+def _apply_health_exam_payload(row: models.HealthExamResult, payload) -> None:
+    if getattr(payload, "exam_name", None) is not None:
+        name = _clip_text(payload.exam_name, 160)
+        if not name:
+            raise HTTPException(status_code=400, detail="El nombre del examen es obligatorio")
+        row.exam_name = name
+    if getattr(payload, "category", None) is not None:
+        row.category = _safe_text(payload.category or "")[:80]
+    if getattr(payload, "status", None) is not None:
+        row.status = _normalize_structured_health_status(payload.status)
+    if getattr(payload, "summary", None) is not None:
+        row.summary = _clip_text(payload.summary or "", 1000)
+    if getattr(payload, "values_json", None) is not None:
+        row.values_json = list(payload.values_json or [])[:40]
+    if hasattr(payload, "performed_at") and payload.performed_at is not None:
+        row.performed_at = payload.performed_at
+    if getattr(payload, "source_type", None) is not None:
+        row.source_type = _safe_text(payload.source_type or "manual")[:40] or "manual"
+    if hasattr(payload, "source_id") and payload.source_id is not None:
+        row.source_id = int(payload.source_id)
+    if getattr(payload, "metadata_json", None) is not None:
+        row.metadata_json = payload.metadata_json or {}
 
 
 def _accepted_profile_links_for_user(db: Session, current_user: models.User) -> list[models.ProfileRelationship]:
@@ -23853,6 +24272,340 @@ async def get_health_sheet(
     return _build_health_sheet(db, profile, int(profile.owner_user_id))
 
 
+@app.get(
+    "/health-profiles/{profile_id}/health-problems",
+    response_model=List[schemas.HealthProblemOut],
+)
+async def list_health_problems(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    return (
+        db.query(models.HealthProblem)
+        .filter(
+            models.HealthProblem.profile_id == int(profile.id),
+            models.HealthProblem.owner_user_id == int(profile.owner_user_id),
+            models.HealthProblem.status != "archived",
+        )
+        .order_by(models.HealthProblem.status.asc(), models.HealthProblem.updated_at.desc())
+        .all()
+    )
+
+
+@app.post(
+    "/health-profiles/{profile_id}/health-problems",
+    response_model=schemas.HealthProblemOut,
+)
+async def create_health_problem(
+    profile_id: int,
+    payload: schemas.HealthProblemCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = models.HealthProblem(
+        profile_id=int(profile.id),
+        owner_user_id=int(profile.owner_user_id),
+        created_by_user_id=int(current_user.id),
+        updated_by_user_id=int(current_user.id),
+    )
+    _apply_health_problem_payload(row, payload)
+    row.updated_at = datetime.now()
+    db.add(row)
+    db.flush()
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_problem_created",
+        f"Se agregó problema activo: {row.name}",
+        {"health_problem_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.put(
+    "/health-profiles/{profile_id}/health-problems/{problem_id}",
+    response_model=schemas.HealthProblemOut,
+)
+async def update_health_problem(
+    profile_id: int,
+    problem_id: int,
+    payload: schemas.HealthProblemUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = _get_health_problem_or_404(db, profile, int(profile.owner_user_id), problem_id)
+    _apply_health_problem_payload(row, payload)
+    row.updated_by_user_id = int(current_user.id)
+    row.updated_at = datetime.now()
+    db.add(row)
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_problem_updated",
+        f"Se actualizó problema de salud: {row.name}",
+        {"health_problem_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.get(
+    "/health-profiles/{profile_id}/vaccines",
+    response_model=List[schemas.HealthVaccineRecordOut],
+)
+async def list_health_vaccines(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    return (
+        db.query(models.HealthVaccineRecord)
+        .filter(
+            models.HealthVaccineRecord.profile_id == int(profile.id),
+            models.HealthVaccineRecord.owner_user_id == int(profile.owner_user_id),
+            models.HealthVaccineRecord.status != "archived",
+        )
+        .order_by(models.HealthVaccineRecord.administered_at.desc(), models.HealthVaccineRecord.updated_at.desc())
+        .all()
+    )
+
+
+@app.post(
+    "/health-profiles/{profile_id}/vaccines",
+    response_model=schemas.HealthVaccineRecordOut,
+)
+async def create_health_vaccine(
+    profile_id: int,
+    payload: schemas.HealthVaccineRecordCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = models.HealthVaccineRecord(
+        profile_id=int(profile.id),
+        owner_user_id=int(profile.owner_user_id),
+        created_by_user_id=int(current_user.id),
+        updated_by_user_id=int(current_user.id),
+    )
+    _apply_health_vaccine_payload(row, payload)
+    row.updated_at = datetime.now()
+    db.add(row)
+    db.flush()
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_vaccine_created",
+        f"Se agregó vacuna: {row.vaccine_name}",
+        {"vaccine_record_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.put(
+    "/health-profiles/{profile_id}/vaccines/{vaccine_id}",
+    response_model=schemas.HealthVaccineRecordOut,
+)
+async def update_health_vaccine(
+    profile_id: int,
+    vaccine_id: int,
+    payload: schemas.HealthVaccineRecordUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = _get_health_vaccine_or_404(db, profile, int(profile.owner_user_id), vaccine_id)
+    _apply_health_vaccine_payload(row, payload)
+    row.updated_by_user_id = int(current_user.id)
+    row.updated_at = datetime.now()
+    db.add(row)
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_vaccine_updated",
+        f"Se actualizó vacuna: {row.vaccine_name}",
+        {"vaccine_record_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.get(
+    "/health-profiles/{profile_id}/exam-results",
+    response_model=List[schemas.HealthExamResultOut],
+)
+async def list_health_exam_results(
+    profile_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, _ = _get_profile_access_or_404(db, current_user, profile_id)
+    return (
+        db.query(models.HealthExamResult)
+        .filter(
+            models.HealthExamResult.profile_id == int(profile.id),
+            models.HealthExamResult.owner_user_id == int(profile.owner_user_id),
+            models.HealthExamResult.status != "archived",
+        )
+        .order_by(models.HealthExamResult.performed_at.desc(), models.HealthExamResult.updated_at.desc())
+        .all()
+    )
+
+
+@app.post(
+    "/health-profiles/{profile_id}/exam-results",
+    response_model=schemas.HealthExamResultOut,
+)
+async def create_health_exam_result(
+    profile_id: int,
+    payload: schemas.HealthExamResultCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = models.HealthExamResult(
+        profile_id=int(profile.id),
+        owner_user_id=int(profile.owner_user_id),
+        created_by_user_id=int(current_user.id),
+        updated_by_user_id=int(current_user.id),
+    )
+    _apply_health_exam_payload(row, payload)
+    row.updated_at = datetime.now()
+    db.add(row)
+    db.flush()
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_exam_created",
+        f"Se agregó examen estructurado: {row.exam_name}",
+        {"exam_result_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.put(
+    "/health-profiles/{profile_id}/exam-results/{exam_id}",
+    response_model=schemas.HealthExamResultOut,
+)
+async def update_health_exam_result(
+    profile_id: int,
+    exam_id: int,
+    payload: schemas.HealthExamResultUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = _get_health_exam_or_404(db, profile, int(profile.owner_user_id), exam_id)
+    _apply_health_exam_payload(row, payload)
+    row.updated_by_user_id = int(current_user.id)
+    row.updated_at = datetime.now()
+    db.add(row)
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_exam_updated",
+        f"Se actualizó examen estructurado: {row.exam_name}",
+        {"exam_result_id": int(row.id), "status": row.status},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.post(
+    "/health-profiles/{profile_id}/health-sheet/actions",
+    response_model=schemas.ClinicalTaskOut,
+)
+async def create_health_sheet_action(
+    profile_id: int,
+    payload: schemas.HealthSheetActionCreate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    episode = None
+    if payload.episode_id:
+        _, _, episode = _get_clinical_episode_or_404(db, current_user, profile_id, int(payload.episode_id))
+    if not episode:
+        episode = _health_sheet_episode(db, profile, int(profile.owner_user_id))
+    title = _clip_text(payload.title, 160)
+    if not title:
+        raise HTTPException(status_code=400, detail="El título de la tarea es obligatorio")
+    task = models.ClinicalTask(
+        episode_id=int(episode.id),
+        profile_id=int(profile.id),
+        owner_user_id=int(profile.owner_user_id),
+        task_type=_safe_text(payload.task_type or "follow_up")[:60] or "follow_up",
+        title=title,
+        description=_clip_text(payload.description or "", 600),
+        status="pending",
+        due_at=payload.due_at,
+        source_module="health_sheet",
+        source_record_type=_safe_text(payload.source_type or "health_sheet")[:60] or "health_sheet",
+        source_record_id=payload.source_id,
+        metadata_json=payload.metadata_json or {},
+    )
+    db.add(task)
+    episode.last_activity_at = datetime.now()
+    db.add(episode)
+    db.flush()
+    refresh_episode_snapshot(db, episode)
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_sheet_action_created",
+        f"Se creó pendiente desde Ficha de Salud: {task.title}",
+        {"task_id": int(task.id), "episode_id": int(episode.id)},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 @app.put(
     "/health-profiles/{profile_id}/episodes/relink-item",
     response_model=schemas.EpisodeLinkResultOut,
@@ -24474,6 +25227,7 @@ async def delete_appointment(
     )
     if not appt:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+    _cancel_clinical_tasks_for_record(db, "appointment", appt.id)
     db.delete(appt)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
@@ -26172,6 +26926,7 @@ async def delete_document(
     db.query(models.AiDocumentChunk).filter(models.AiDocumentChunk.document_id == doc.id).delete()
     db.query(models.DocumentClinicalEntity).filter(models.DocumentClinicalEntity.document_id == doc.id).delete()
     db.query(models.DocumentSummary).filter(models.DocumentSummary.document_id == doc.id).delete()
+    _cancel_clinical_tasks_for_record(db, "document", doc.id)
     db.delete(doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()

@@ -666,6 +666,56 @@ export async function getHealthSheet(profileId) {
   return res.data || {};
 }
 
+export async function getHealthProblems(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/health-problems`);
+  return res.data || [];
+}
+
+export async function createHealthProblem(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/health-problems`, payload);
+  return res.data || {};
+}
+
+export async function updateHealthProblem(profileId, problemId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/health-problems/${problemId}`, payload);
+  return res.data || {};
+}
+
+export async function getHealthVaccines(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/vaccines`);
+  return res.data || [];
+}
+
+export async function createHealthVaccine(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/vaccines`, payload);
+  return res.data || {};
+}
+
+export async function updateHealthVaccine(profileId, vaccineId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/vaccines/${vaccineId}`, payload);
+  return res.data || {};
+}
+
+export async function getHealthExamResults(profileId) {
+  const res = await api.get(`/health-profiles/${profileId}/exam-results`);
+  return res.data || [];
+}
+
+export async function createHealthExamResult(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/exam-results`, payload);
+  return res.data || {};
+}
+
+export async function updateHealthExamResult(profileId, examId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/exam-results/${examId}`, payload);
+  return res.data || {};
+}
+
+export async function createHealthSheetAction(profileId, payload) {
+  const res = await api.post(`/health-profiles/${profileId}/health-sheet/actions`, payload);
+  return res.data || {};
+}
+
 export async function relinkClinicalEpisodeItem(profileId, payload) {
   const res = await api.put(`/health-profiles/${profileId}/episodes/relink-item`, payload);
   return res.data;

@@ -868,6 +868,173 @@ class ClinicalEpisodeDetailOut(BaseModel):
     ai_context: dict = {}
 
 
+class HealthProblemCreate(BaseModel):
+    name: str
+    detail: str = ""
+    status: str = "active"
+    severity: str = ""
+    source_type: str = "manual"
+    source_id: int | None = None
+    onset_at: datetime | None = None
+    resolved_at: datetime | None = None
+    metadata_json: dict | None = None
+
+
+class HealthProblemUpdate(BaseModel):
+    name: str | None = None
+    detail: str | None = None
+    status: str | None = None
+    severity: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    onset_at: datetime | None = None
+    resolved_at: datetime | None = None
+    metadata_json: dict | None = None
+
+
+class HealthProblemOut(BaseModel):
+    id: int
+    profile_id: int
+    owner_user_id: int
+    name: str
+    detail: str = ""
+    status: str = "active"
+    severity: str = ""
+    source_type: str = "manual"
+    source_id: int | None = None
+    onset_at: datetime | None = None
+    resolved_at: datetime | None = None
+    metadata_json: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer("onset_at", "resolved_at", "created_at", "updated_at")
+    def serialize_health_problem_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class HealthVaccineRecordCreate(BaseModel):
+    vaccine_name: str
+    dose_label: str = ""
+    status: str = "documented"
+    administered_at: datetime | None = None
+    next_due_at: datetime | None = None
+    provider_name: str = ""
+    lot_number: str = ""
+    source_type: str = "manual"
+    source_id: int | None = None
+    notes: str = ""
+    metadata_json: dict | None = None
+
+
+class HealthVaccineRecordUpdate(BaseModel):
+    vaccine_name: str | None = None
+    dose_label: str | None = None
+    status: str | None = None
+    administered_at: datetime | None = None
+    next_due_at: datetime | None = None
+    provider_name: str | None = None
+    lot_number: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    notes: str | None = None
+    metadata_json: dict | None = None
+
+
+class HealthVaccineRecordOut(BaseModel):
+    id: int
+    profile_id: int
+    owner_user_id: int
+    vaccine_name: str
+    dose_label: str = ""
+    status: str = "documented"
+    administered_at: datetime | None = None
+    next_due_at: datetime | None = None
+    provider_name: str = ""
+    lot_number: str = ""
+    source_type: str = "manual"
+    source_id: int | None = None
+    notes: str = ""
+    metadata_json: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer("administered_at", "next_due_at", "created_at", "updated_at")
+    def serialize_health_vaccine_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class HealthExamResultCreate(BaseModel):
+    exam_name: str
+    category: str = ""
+    status: str = "documented"
+    summary: str = ""
+    values_json: list[dict] = []
+    performed_at: datetime | None = None
+    source_type: str = "manual"
+    source_id: int | None = None
+    metadata_json: dict | None = None
+
+
+class HealthExamResultUpdate(BaseModel):
+    exam_name: str | None = None
+    category: str | None = None
+    status: str | None = None
+    summary: str | None = None
+    values_json: list[dict] | None = None
+    performed_at: datetime | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    metadata_json: dict | None = None
+
+
+class HealthExamResultOut(BaseModel):
+    id: int
+    profile_id: int
+    owner_user_id: int
+    exam_name: str
+    category: str = ""
+    status: str = "documented"
+    summary: str = ""
+    values_json: list[dict] = []
+    performed_at: datetime | None = None
+    source_type: str = "manual"
+    source_id: int | None = None
+    metadata_json: dict | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @field_serializer("performed_at", "created_at", "updated_at")
+    def serialize_health_exam_datetime(self, dt: Optional[datetime], _info):
+        if dt is None:
+            return None
+        return dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    class Config:
+        from_attributes = True
+
+
+class HealthSheetActionCreate(BaseModel):
+    title: str
+    description: str = ""
+    task_type: str = "follow_up"
+    due_at: datetime | None = None
+    episode_id: int | None = None
+    source_type: str = "health_sheet"
+    source_id: int | None = None
+    metadata_json: dict | None = None
+
+
 class ContinuityActionOut(BaseModel):
     id: str
     title: str

@@ -25,6 +25,7 @@ import {
   subscribeClinicalDataChanged,
 } from "../utils/clinicalRefresh";
 import SuccessSheet from "../components/SuccessSheet";
+import HealthSheetCard from "../components/health/HealthSheetCard";
 import { buildMedicationIntakeSuccess } from "../utils/medicationIntakeSuccess";
 
 /* ── helpers ───────────────────────────────────────────────── */
@@ -108,6 +109,18 @@ function continuityDueLabel(item) {
     return `Venció el ${due.toLocaleDateString("es-CL", { day: "numeric", month: "short" })}`;
   }
   return `Vence: ${relativeDay(due)}`;
+}
+
+// El motor de episodios puede generar tareas gemelas (mismo texto y misma
+// fecha); mostrarlas repetidas solo confunde.
+function dedupeContinuityItems(items) {
+  const seen = new Set();
+  return (items || []).filter((item) => {
+    const key = `${item?.title || ""}|${item?.due_at || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 const MEDICATION_CTA_LEAD_MS = 45 * 60 * 1000;
@@ -330,18 +343,20 @@ export default function MiSalud() {
 
   /* ── continuidad ── */
   const continuityNextStep = continuity?.next_step || null;
-  const continuityOverdue = ensureArray(continuity?.overdue).filter(
-    (item) => item?.id && item.id !== continuityNextStep?.id
+  const continuityOverdue = dedupeContinuityItems(
+    ensureArray(continuity?.overdue).filter(
+      (item) => item?.id && item.id !== continuityNextStep?.id
+    )
   );
-  const continuityActionsAll = ensureArray(continuity?.requires_action).filter(
-    (item) => item?.id && item.id !== continuityNextStep?.id && item.priority !== "overdue"
+  const continuityActionsAll = dedupeContinuityItems(
+    ensureArray(continuity?.requires_action).filter(
+      (item) => item?.id && item.id !== continuityNextStep?.id && item.priority !== "overdue"
+    )
   );
-  const continuityActions = continuityActionsAll.slice(0, 4);
-  const continuityActionsExtra = Math.max(0, continuityActionsAll.length - continuityActions.length);
+  const continuityPendingTotal = continuityOverdue.length + continuityActionsAll.length;
   const continuityPrep = continuity?.upcoming_preparation || null;
-  const continuityPendingCount = Number(continuity?.counts?.pending_tasks || 0);
   const continuityIsClear =
-    !continuityNextStep && continuityOverdue.length === 0 && continuityActionsAll.length === 0 && !continuityPrep;
+    !continuityNextStep && continuityPendingTotal === 0 && !continuityPrep;
   /* ── render ── */
   if (loading) {
     return (
@@ -391,18 +406,15 @@ export default function MiSalud() {
             <span className="clp-card-icon tone-amber"><IcoActivity /></span>
             <div className="clp-card-head-main">
               <div className="clp-card-titles">
-                <h2 className="clp-card-title" id="clp-cont-h">Continuidad</h2>
-                <p className="clp-card-sub">Tu próximo paso y lo que no puede quedar atrás</p>
+                <h2 className="clp-card-title" id="clp-cont-h">Lo que falta hacer</h2>
+                <p className="clp-card-sub">Te recordamos, paso a paso, lo que quedó pendiente de tu atención</p>
               </div>
               <div className="clp-card-head-meta">
-                {continuityPendingCount > 0 ? (
+                {continuityPendingTotal > 0 ? (
                   <span className="clp-card-metric">
-                    {continuityPendingCount} pendiente{continuityPendingCount !== 1 ? "s" : ""}
+                    {continuityPendingTotal} pendiente{continuityPendingTotal !== 1 ? "s" : ""}
                   </span>
                 ) : null}
-                <Link to="/timeline" className="clp-card-link clp-card-link-primary">
-                  Ver historial <IcoChevron />
-                </Link>
               </div>
             </div>
           </div>
@@ -419,7 +431,7 @@ export default function MiSalud() {
           ) : continuityIsClear ? (
             <div className="clp-continuity-clear">
               <IcoCheck />
-              <span>Sin pendientes activos. Mantén tus documentos y próximas citas al día.</span>
+              <span>¡Todo al día! Por ahora no tienes nada pendiente.</span>
             </div>
           ) : (
             <div className="clp-continuity-body">
@@ -441,45 +453,41 @@ export default function MiSalud() {
                 </div>
               ) : null}
 
-              {continuityOverdue.length > 0 ? (
-                <div className="clp-continuity-block">
-                  <span className="clp-continuity-block-title is-overdue">
-                    Atrasados ({continuityOverdue.length})
-                  </span>
-                  {continuityOverdue.map((item) => (
-                    <div className="clp-continuity-row is-overdue" key={item.id}>
-                      <div className="clp-continuity-row-copy">
-                        <strong>{item.title}</strong>
-                        {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+              {continuityPendingTotal > 0 ? (
+                <details className="clp-continuity-pending">
+                  <summary>
+                    <span>Ver todos los pendientes ({continuityPendingTotal})</span>
+                    {continuityOverdue.length > 0 ? (
+                      <span className="clp-continuity-overdue-chip">
+                        {continuityOverdue.length} atrasado{continuityOverdue.length !== 1 ? "s" : ""}
+                      </span>
+                    ) : null}
+                  </summary>
+                  <div className="clp-continuity-pending-body">
+                    {continuityOverdue.map((item) => (
+                      <div className="clp-continuity-row is-overdue" key={item.id}>
+                        <div className="clp-continuity-row-copy">
+                          <strong>{item.title}</strong>
+                          {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+                        </div>
+                        <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                          {item.action_label || "Resolver"}
+                        </Link>
                       </div>
-                      <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
-                        {item.action_label || "Resolver"}
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {continuityActions.length > 0 ? (
-                <div className="clp-continuity-block">
-                  <span className="clp-continuity-block-title">Requiere tu acción</span>
-                  {continuityActions.map((item) => (
-                    <div className="clp-continuity-row" key={item.id}>
-                      <div className="clp-continuity-row-copy">
-                        <strong>{item.title}</strong>
-                        {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+                    ))}
+                    {continuityActionsAll.map((item) => (
+                      <div className="clp-continuity-row" key={item.id}>
+                        <div className="clp-continuity-row-copy">
+                          <strong>{item.title}</strong>
+                          {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
+                        </div>
+                        <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                          {item.action_label || "Revisar"}
+                        </Link>
                       </div>
-                      <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
-                        {item.action_label || "Revisar"}
-                      </Link>
-                    </div>
-                  ))}
-                  {continuityActionsExtra > 0 ? (
-                    <Link to="/timeline" className="clp-more-link">
-                      +{continuityActionsExtra} más
-                    </Link>
-                  ) : null}
-                </div>
+                    ))}
+                  </div>
+                </details>
               ) : null}
 
               {continuityPrep ? (
@@ -700,6 +708,9 @@ export default function MiSalud() {
           <div className="clp-empty">Sin documentos en tu archivo</div>
         )}
       </section>
+
+      {/* ═══ FICHA DE SALUD ═══ */}
+      <HealthSheetCard profileId={profile?.id} />
 
       <section className="clp-card tone-indigo" aria-labelledby="clp-bio-h">
         <div className="clp-card-head">
