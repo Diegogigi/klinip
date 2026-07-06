@@ -1593,7 +1593,9 @@ export default function Dashboard({
         : "Guarda tu primer tratamiento",
       hint: nextMedicationEvent?.urgent ? "Ahora" : activeMedications.length ? "Pendiente" : "Nuevo",
       tone: "amber",
-      onClick: openMedicationFocus,
+      // Con tratamientos activos la acción inmediata es marcar la dosis en la
+      // lista; sin tratamientos, se abre de una vez el formulario de crear.
+      onClick: () => navigate(activeMedications.length ? "/medications" : "/medications?new=1"),
     },
     {
       id: "appointment",
@@ -1604,7 +1606,7 @@ export default function Dashboard({
         : "Crea tu próximo control médico",
       hint: nextAppointmentEvent ? toRelativeDayLabelSafe(nextAppointmentEvent.date) : "Sin cita",
       tone: "blue",
-      onClick: openAppointmentFocus,
+      onClick: () => navigate("/appointments?new=1"),
     },
     {
       id: "document",
@@ -1616,7 +1618,7 @@ export default function Dashboard({
           : "Sube recetas, exámenes e informes",
       hint: pendingDocuments > 0 ? "Revisar" : "Nuevo",
       tone: "teal",
-      onClick: openDocumentsFocus,
+      onClick: () => navigate("/documents?scan=1"),
     },
     {
       id: "biometric",
@@ -1632,7 +1634,7 @@ export default function Dashboard({
         ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
         : "Nuevo",
       tone: latestBiometricConfig.tone || "violet",
-      onClick: openBiometricsFocus,
+      onClick: () => navigate("/mi-salud/biometricos?new=1"),
     },
   ];
 

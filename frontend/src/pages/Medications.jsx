@@ -880,6 +880,20 @@ export default function Medications() {
     resetForm();
   };
 
+  // Deep link (?new=1): abre de inmediato el formulario de nuevo medicamento,
+  // por ejemplo desde la acción rápida del inicio.
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("new") !== "1") return;
+    if (!activeProfile) return;
+    if (canEditActiveProfile) {
+      handleOpenCreateForm();
+    }
+    navigate("/medications", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, activeProfile, canEditActiveProfile]);
+
   const handleEdit = (med) => {
     if (!canEditActiveProfile) return;
     const startInputValue = toLocalInputValue(med.start_at || med.created_at || "");

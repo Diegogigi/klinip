@@ -141,6 +141,21 @@ export default function Appointments() {
     setNotifyOpen(true);
   }, [location.search, appointments]);
 
+  // Deep link (?new=1): abre de inmediato el formulario de nueva cita, por
+  // ejemplo desde la acción rápida "Agenda una cita aquí" del inicio.
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("new") !== "1") return;
+    if (!activeProfile) return;
+    if (canEditActiveProfile) {
+      resetForm();
+      setShowForm(true);
+    }
+    navigate("/appointments", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, activeProfile, canEditActiveProfile]);
+
   const resetForm = () => {
     setForm({
       id: null,

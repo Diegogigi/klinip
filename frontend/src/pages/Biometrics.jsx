@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   createBiometricReading,
   deleteBiometricReading,
@@ -406,6 +406,7 @@ function DetailSummaryCards({ metric }) {
 
 export default function Biometrics() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { metricType: routeMetricType } = useParams();
   const normalizedRouteMetricType = METRIC_OPTIONS.includes(routeMetricType) ? routeMetricType : null;
   const isMetricDetail = Boolean(normalizedRouteMetricType);
@@ -520,6 +521,20 @@ export default function Biometrics() {
   const closeEntryModal = useCallback(() => {
     setIsEntryModalOpen(false);
   }, []);
+
+  // Deep link (?new=1): abre de inmediato el formulario de nueva medición,
+  // por ejemplo desde la acción rápida "Registra tus mediciones aquí".
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("new") !== "1") return;
+    if (!activeProfile) return;
+    if (canEdit) {
+      openEntryModal(form.metric_type || "glucose");
+    }
+    navigate("/mi-salud/biometricos", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, activeProfile, canEdit]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
