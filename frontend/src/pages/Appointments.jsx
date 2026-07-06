@@ -16,6 +16,7 @@ import {
   toLocalInputValue,
 } from "../utils/dates";
 import RowActionsMenu from "../components/RowActionsMenu";
+import ContinuityTaskResolution from "../components/ContinuityTaskResolution";
 import { notifyClinicalDataChanged } from "../utils/clinicalRefresh";
 import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import { cleanUiText } from "../utils/textEncoding";
@@ -58,6 +59,7 @@ export default function Appointments() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [continuityTaskContext, setContinuityTaskContext] = useState(null);
   const [successOpen, setSuccessOpen] = useState(false);
   const [successTarget, setSuccessTarget] = useState(null);
   const [successMode, setSuccessMode] = useState("created");
@@ -261,14 +263,16 @@ export default function Appointments() {
     }
   };
 
-  const handleOpenDetail = (appt) => {
+  const handleOpenDetail = (appt, continuityContext = null) => {
     setDetailTarget(appt);
+    setContinuityTaskContext(continuityContext);
     setDetailOpen(true);
   };
 
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setDetailTarget(null);
+    setContinuityTaskContext(null);
   };
 
   // Deep link (?appointmentId=X&source=continuity): abre directamente el
@@ -282,7 +286,8 @@ export default function Appointments() {
     if (!focusId) return;
     const target = appointments.find((a) => String(a.id) === String(focusId));
     if (!target) return;
-    handleOpenDetail(target);
+    const taskId = params.get("taskId");
+    handleOpenDetail(target, taskId ? { taskId } : null);
     navigate("/appointments", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, appointments]);
@@ -559,6 +564,13 @@ export default function Appointments() {
 
             {/* Cuerpo con campos */}
             <div className="native-sheet-body">
+              <ContinuityTaskResolution
+                profileId={activeProfile?.id}
+                taskId={continuityTaskContext?.taskId}
+                recordLabel={detailTarget.type === "examen" ? "este examen" : "esta cita"}
+                canUpdate={canEditActiveProfile}
+              />
+
               <div className="native-detail-section">
                 <h5 className="native-section-title">Información de la cita</h5>
 

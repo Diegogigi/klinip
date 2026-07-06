@@ -38,6 +38,7 @@ import {
 } from "../utils/medicationSchedule";
 import RowActionsMenu from "../components/RowActionsMenu";
 import SuccessSheet from "../components/SuccessSheet";
+import ContinuityTaskResolution from "../components/ContinuityTaskResolution";
 import { cleanUiText } from "../utils/textEncoding";
 import {
   buildMedicationCreateSuccess,
@@ -377,6 +378,7 @@ export default function Medications() {
   const [notifyTarget, setNotifyTarget] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [continuityTaskContext, setContinuityTaskContext] = useState(null);
   const [medSuccess, setMedSuccess] = useState(null);
   const [detailIntakes, setDetailIntakes] = useState([]);
   const [detailIntakeStats, setDetailIntakeStats] = useState(null);
@@ -440,6 +442,7 @@ export default function Medications() {
   const searchParams = new URLSearchParams(location.search);
   const routeMedicationId = searchParams.get("medicationId");
   const routeTriggerParam = searchParams.get("trigger");
+  const routeContinuityTaskId = searchParams.get("taskId");
   const routeFocusSource = searchParams.get("source") || (searchParams.get("notify") === "1" ? "reminder" : "");
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
@@ -1149,14 +1152,16 @@ export default function Medications() {
     setNotifyTriggeredAt(null);
   };
 
-  const handleOpenDetail = (med) => {
+  const handleOpenDetail = (med, continuityContext = null) => {
     setDetailTarget(med);
+    setContinuityTaskContext(continuityContext);
     setDetailOpen(true);
   };
 
   const handleCloseDetail = () => {
     setDetailOpen(false);
     setDetailTarget(null);
+    setContinuityTaskContext(null);
     setDetailIntakes([]);
     setDetailIntakeStats(null);
     setDetailIntakesLoading(false);
@@ -1169,10 +1174,10 @@ export default function Medications() {
     if (routeFocusSource !== "continuity" || !routeMedicationId || !meds.length) return;
     const target = meds.find((med) => String(med.id) === String(routeMedicationId));
     if (!target) return;
-    handleOpenDetail(target);
+    handleOpenDetail(target, routeContinuityTaskId ? { taskId: routeContinuityTaskId } : null);
     navigate("/medications", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeFocusSource, routeMedicationId, meds]);
+  }, [routeFocusSource, routeMedicationId, routeContinuityTaskId, meds]);
 
   const closeNotifyModal = () => {
     if (notifyActionLoading) return;
@@ -2858,6 +2863,12 @@ export default function Medications() {
                   );
                 })()}
               </div>
+              <ContinuityTaskResolution
+                profileId={activeProfile?.id}
+                taskId={continuityTaskContext?.taskId}
+                recordLabel="este tratamiento"
+                canUpdate={canEditActiveProfile}
+              />
               <div className="detail-grid">
                 <div className="detail-field">
                   <span className="detail-item-icon" aria-hidden>💊</span>

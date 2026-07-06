@@ -243,6 +243,18 @@ def ensure_coverage_schema(force: bool = False):
         )
     except Exception as exc:
         print(f"WARNING ensure_coverage_schema: no se pudo ajustar cobertura: {exc}")
+    ensure_columns(
+        engine,
+        "document_coverage_info",
+        [
+            ("issued_at", "TIMESTAMP NULL", "DATETIME"),
+            ("service_at", "TIMESTAMP NULL", "DATETIME"),
+            ("period_start_at", "TIMESTAMP NULL", "DATETIME"),
+            ("period_end_at", "TIMESTAMP NULL", "DATETIME"),
+            ("due_at", "TIMESTAMP NULL", "DATETIME"),
+        ],
+        label="ensure_coverage_schema",
+    )
 
 
 if RUNTIME_SCHEMA_MUTATIONS_ENABLED:
@@ -6073,6 +6085,127 @@ def _coverage_status_from_text(*values: str) -> str:
     return ""
 
 
+def _parse_coverage_date_token(token: str | None) -> datetime | None:
+    normalized = _extract_date_token(str(token or ""))
+    if not normalized:
+        return None
+    try:
+        day, month, year = normalized.split("/")
+        return datetime(int(year), int(month), int(day))
+    except Exception:
+        return None
+
+
+def _extract_coverage_dates_from_snippet(value: str) -> list[datetime]:
+    text_value = str(value or "")
+    dates: list[datetime] = []
+    numeric_pattern = re.compile(r"\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b")
+    month_pattern = re.compile(
+        r"\b\d{1,2}\s*(?:ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s*\d{2,4}\b",
+        re.IGNORECASE,
+    )
+    for match in list(numeric_pattern.finditer(text_value)) + list(month_pattern.finditer(text_value)):
+        parsed = _parse_coverage_date_token(match.group(0))
+        if parsed and parsed not in dates:
+            dates.append(parsed)
+    if not dates:
+        parsed = _parse_coverage_date_token(text_value)
+        if parsed:
+            dates.append(parsed)
+    return dates
+
+
+def _coverage_dates_near_labels(lines: list[str], labels: tuple[str, ...]) -> list[datetime]:
+    matches: list[datetime] = []
+    for idx, line in enumerate(lines):
+        normalized = _normalize_text(line)
+        if "nac" in normalized:
+            continue
+        if not any(label in normalized for label in labels):
+            continue
+        snippets = [line]
+        if idx + 1 < len(lines):
+            snippets.append(lines[idx + 1])
+        for snippet in snippets:
+            for parsed in _extract_coverage_dates_from_snippet(snippet):
+                if parsed not in matches:
+                    matches.append(parsed)
+    return matches
+
+
+def _coverage_first_date_after_word(line: str, word: str) -> datetime | None:
+    text_value = str(line or "")
+    index = _normalize_text(text_value).find(_normalize_text(word))
+    if index < 0:
+        return None
+    # Los labels usados aquí son ASCII ("desde", "hasta"), por lo que el índice
+    # normalizado mantiene la misma posición práctica en la línea original.
+    dates = _extract_coverage_dates_from_snippet(text_value[index:])
+    return dates[0] if dates else None
+
+
+def _extract_coverage_dates(*values: str, category: str = "") -> dict:
+    text_value = "\n".join(str(value or "") for value in values if value)
+    lines = [line.strip() for line in text_value.splitlines() if line.strip()]
+    if not lines:
+        return {}
+
+    issued = _coverage_dates_near_labels(
+        lines,
+        ("fecha de emision", "fecha emision", "emision", "emitido", "fecha documento"),
+    )
+    service = _coverage_dates_near_labels(
+        lines,
+        (
+            "fecha de atencion",
+            "fecha atencion",
+            "fecha prestacion",
+            "prestacion",
+            "atencion",
+            "fecha pago",
+            "fecha de pago",
+            "pagado",
+        ),
+    )
+    period_start = _coverage_dates_near_labels(
+        lines,
+        ("inicio reposo", "inicio licencia", "fecha inicio", "desde", "reposo desde", "periodo desde"),
+    )
+    period_end = _coverage_dates_near_labels(
+        lines,
+        ("termino reposo", "termino licencia", "fecha termino", "fecha fin", "hasta", "reposo hasta", "periodo hasta"),
+    )
+    due = _coverage_dates_near_labels(
+        lines,
+        ("vencimiento", "vence", "fecha limite", "fecha límite", "plazo", "presentar hasta"),
+    )
+
+    # Licencias médicas suelen traer "Desde ... Hasta ..." en una misma línea.
+    if category == "licencia":
+        for line in lines:
+            normalized = _normalize_text(line)
+            if "nac" in normalized:
+                continue
+            if "desde" in normalized and "hasta" in normalized:
+                start = _coverage_first_date_after_word(line, "desde")
+                end = _coverage_first_date_after_word(line, "hasta")
+                if start:
+                    period_start = [start]
+                if end:
+                    period_end = [end]
+                if start or end:
+                    break
+
+    result = {
+        "issued_at": issued[0] if issued else None,
+        "service_at": service[0] if service else None,
+        "period_start_at": period_start[0] if period_start else None,
+        "period_end_at": period_end[-1] if period_end else None,
+        "due_at": due[0] if due else None,
+    }
+    return {key: value for key, value in result.items() if value is not None}
+
+
 def _message_asks_coverage(message: str | None) -> bool:
     normalized = _normalize_text(message or "")
     if not normalized:
@@ -6170,12 +6303,14 @@ def _build_document_coverage_payload(doc: models.Document) -> dict | None:
     entity = _coverage_entity_from_text(raw)
     payer_type = _coverage_payer_type_from_text(raw)
     amounts = _extract_coverage_amounts(raw)
+    dates = _extract_coverage_dates(raw, category=category)
     metadata = {
         "signals": {
             "marker": COVERAGE_NOTE_MARKER in str(getattr(doc, "notes", "") or ""),
             "category": category,
             "entity": entity,
             "payer_type": payer_type,
+            "dates": {key: value.date().isoformat() for key, value in dates.items()},
         }
     }
     return {
@@ -6189,6 +6324,7 @@ def _build_document_coverage_payload(doc: models.Document) -> dict | None:
         "amount_reimbursed": amounts.get("amount_reimbursed"),
         "currency": "CLP",
         "status": _coverage_status_from_text(raw),
+        **dates,
         "metadata_json": metadata,
     }
 
@@ -6208,6 +6344,15 @@ def _upsert_document_coverage_info(db: Session, doc: models.Document) -> models.
             profile_id=getattr(doc, "profile_id", None),
             owner_user_id=int(getattr(doc, "user_id", 0) or 0),
         )
+    else:
+        existing_metadata = dict(info.metadata_json or {})
+        if existing_metadata.get("manual_override"):
+            existing_metadata["latest_auto_detection"] = payload
+            existing_metadata["latest_auto_detected_at"] = datetime.now().isoformat(timespec="seconds")
+            info.metadata_json = existing_metadata
+            info.updated_at = datetime.now()
+            db.add(info)
+            return info
     info.profile_id = getattr(doc, "profile_id", None)
     info.owner_user_id = int(getattr(doc, "user_id", 0) or 0)
     for key, value in payload.items():
@@ -6232,6 +6377,11 @@ def _coverage_info_to_ai_dict(
         "date": _safe_iso_local(getattr(doc, "date", None), timezone_name) if doc else "",
         "created_at": _safe_iso_local(getattr(doc, "created_at", None), timezone_name) if doc else "",
         "updated_at": _safe_iso_local(getattr(info, "updated_at", None), timezone_name),
+        "issued_at": _safe_iso_local(getattr(info, "issued_at", None), timezone_name),
+        "service_at": _safe_iso_local(getattr(info, "service_at", None), timezone_name),
+        "period_start_at": _safe_iso_local(getattr(info, "period_start_at", None), timezone_name),
+        "period_end_at": _safe_iso_local(getattr(info, "period_end_at", None), timezone_name),
+        "due_at": _safe_iso_local(getattr(info, "due_at", None), timezone_name),
         "center": (getattr(doc, "center", "") or "") if doc else "",
         "category": _normalize_coverage_category(getattr(info, "category", "") or ""),
         "category_label": _coverage_category_label(getattr(info, "category", "") or ""),
@@ -8940,6 +9090,13 @@ def _run_document_ocr(document_id: int):
         except Exception as exc:
             db.rollback()
             _klog(f"KLINIP_DOCREAD: enrich EXC: {type(exc).__name__}: {exc}")
+
+        try:
+            _upsert_document_coverage_info(db, doc)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            _klog(f"KLINIP_DOCREAD: coverage_info EXC: {type(exc).__name__}: {exc}")
 
         try:
             user = db.query(models.User).filter(models.User.id == doc.user_id).first()
@@ -24784,6 +24941,81 @@ async def get_continuity_panel(
     return _build_continuity_panel(db, profile, int(profile.owner_user_id))
 
 
+@app.put(
+    "/health-profiles/{profile_id}/continuity/tasks/{task_id}",
+    response_model=schemas.ClinicalTaskOut,
+)
+async def update_continuity_task(
+    profile_id: int,
+    task_id: int,
+    payload: schemas.ContinuityTaskUpdate,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_episode_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    task = (
+        db.query(models.ClinicalTask)
+        .filter(
+            models.ClinicalTask.id == int(task_id),
+            models.ClinicalTask.profile_id == int(profile.id),
+            models.ClinicalTask.owner_user_id == int(profile.owner_user_id),
+        )
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Pendiente no encontrado")
+
+    requested_status = _safe_text(payload.status or "done").strip().lower()
+    aliases = {
+        "done": "done",
+        "completed": "done",
+        "resuelto": "done",
+        "resuelta": "done",
+        "pending": "pending",
+        "pendiente": "pending",
+        "snoozed": "pending",
+        "pospuesto": "pending",
+        "postergado": "pending",
+        "cancelled": "cancelled",
+        "canceled": "cancelled",
+        "cancelado": "cancelled",
+    }
+    next_status = aliases.get(requested_status)
+    if not next_status:
+        raise HTTPException(status_code=400, detail="Estado de pendiente no válido")
+
+    task.status = next_status
+    if payload.due_at is not None:
+        task.due_at = payload.due_at
+    if next_status == "done":
+        task.completed_at = datetime.now()
+    elif next_status == "pending":
+        task.completed_at = None
+    task.updated_at = datetime.now()
+    metadata = dict(task.metadata_json or {})
+    note = _clip_text(payload.note or "", 300)
+    if note:
+        metadata["last_update_note"] = note
+    metadata["last_updated_from"] = "continuity_panel"
+    metadata["last_updated_by_user_id"] = int(current_user.id)
+    task.metadata_json = metadata
+    db.add(task)
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "continuity_task_updated",
+        f"{current_user.name or current_user.email} actualizó pendiente: {task.title}",
+        {"task_id": int(task.id), "status": task.status, "due_at": _safe_iso(getattr(task, "due_at", None))},
+    )
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    db.refresh(task)
+    return task
+
+
 @app.get(
     "/health-profiles/{profile_id}/health-sheet",
     response_model=schemas.HealthSheetOut,
@@ -25471,6 +25703,9 @@ async def update_coverage_document_info(
         info.currency = currency or "CLP"
     if "status" in updates:
         info.status = _safe_text(updates["status"])[:40]
+    for date_key in ("issued_at", "service_at", "period_start_at", "period_end_at", "due_at"):
+        if date_key in updates:
+            setattr(info, date_key, updates[date_key])
 
     metadata = dict(info.metadata_json or {})
     if isinstance(updates.get("metadata_json"), dict):

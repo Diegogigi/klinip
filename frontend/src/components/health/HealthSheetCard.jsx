@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   createHealthExamResult,
   createHealthProblem,
   createHealthSheetAction,
   createHealthVaccine,
+  getDocumentAnalysis,
+  getHealthExamResults,
   getHealthSheet,
   updateHealthProblem,
 } from "../../services/httpApi";
@@ -37,6 +40,10 @@ const PROBLEM_STATUS_LABELS = {
   documented: { label: "Documentado", tone: "muted" },
 };
 
+const ABNORMAL_FLAGS = new Set(["high", "low", "abnormal", "alto", "bajo", "anormal"]);
+
+const EMPTY_VALUE_ROW = { name: "", value: "", unit: "" };
+
 function parseDate(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -60,31 +67,93 @@ function sourceLabel(source) {
   return `Fuente: ${label}`;
 }
 
-// Ficha de Salud: el resumen vivo del perfil (diagnósticos, vacunas, exámenes
-// e indicaciones) con registro manual simple. Pensada para leerse de un
-// vistazo y con acciones grandes, aptas para adultos mayores.
+function latestByDate(items, field = "date") {
+  return [...ensureArray(items)].sort((left, right) => {
+    const leftTime = parseDate(left?.[field])?.getTime() || 0;
+    const rightTime = parseDate(right?.[field])?.getTime() || 0;
+    return rightTime - leftTime;
+  })[0] || null;
+}
+
+function isAbnormalFlag(flag) {
+  return ABNORMAL_FLAGS.has(String(flag || "").toLowerCase());
+}
+
+// Agrupa todos los valores estructurados de exámenes por parámetro (Glucosa,
+// Colesterol, etc.), ordenados del más reciente al más antiguo, para armar el
+// historial que se ve como tabla.
+function buildLabHistory(examRecords) {
+  const paramsByKey = new Map();
+  ensureArray(examRecords).forEach((record) => {
+    const recordDate = record?.performed_at || record?.created_at || null;
+    ensureArray(record?.values_json).forEach((value) => {
+      const name = cleanUiText(value?.name || value?.label || "", "").trim();
+      const measured = cleanUiText(String(value?.value ?? ""), "").trim();
+      if (!name || !measured) return;
+      const key = name.toLowerCase();
+      if (!paramsByKey.has(key)) {
+        paramsByKey.set(key, { key, name, entries: [] });
+      }
+      paramsByKey.get(key).entries.push({
+        date: recordDate,
+        value: measured,
+        unit: cleanUiText(value?.unit || "", "").trim(),
+        range: cleanUiText(value?.reference_range || value?.range || "", "").trim(),
+        flag: String(value?.flag || "").toLowerCase(),
+        examName: cleanUiText(record?.exam_name || "", "").trim(),
+      });
+    });
+  });
+  const params = [...paramsByKey.values()].map((param) => ({
+    ...param,
+    entries: param.entries.sort(
+      (a, b) => (parseDate(b.date)?.getTime() || 0) - (parseDate(a.date)?.getTime() || 0)
+    ),
+  }));
+  return params.sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+// Ficha de Salud: pestañas con el resumen vivo del perfil. El foco del flujo
+// de exámenes es fotografiar el resultado, traspasar sus valores y construir
+// un historial estructurado por parámetro. Copy y controles pensados para
+// adultos mayores: una acción clara a la vez.
 export default function HealthSheetCard({ profileId }) {
+  const navigate = useNavigate();
   const [sheet, setSheet] = useState(null);
+  const [examRecords, setExamRecords] = useState([]);
   const [state, setState] = useState("loading");
+  const [activeTab, setActiveTab] = useState("examenes");
   const [openForm, setOpenForm] = useState("");
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [problemDraft, setProblemDraft] = useState({ name: "", detail: "" });
   const [vaccineDraft, setVaccineDraft] = useState({ vaccine_name: "", administered_at: "", dose_label: "" });
-  const [examDraft, setExamDraft] = useState({ exam_name: "", performed_at: "", summary: "" });
+  const [examDraft, setExamDraft] = useState({
+    exam_name: "",
+    performed_at: "",
+    summary: "",
+    values: [{ ...EMPTY_VALUE_ROW }],
+  });
   const [problemBusyId, setProblemBusyId] = useState(null);
   const [actionBusyKey, setActionBusyKey] = useState("");
   const [actionsCreated, setActionsCreated] = useState(() => new Set());
+  const [importBusyId, setImportBusyId] = useState(null);
+  const [importMessage, setImportMessage] = useState("");
 
   const loadSheet = useCallback(async () => {
     if (!profileId) {
       setSheet(null);
+      setExamRecords([]);
       setState("ready");
       return;
     }
     try {
-      const data = await getHealthSheet(profileId);
-      setSheet(data || null);
+      const [sheetData, recordsData] = await Promise.all([
+        getHealthSheet(profileId),
+        getHealthExamResults(profileId).catch(() => []),
+      ]);
+      setSheet(sheetData || null);
+      setExamRecords(ensureArray(recordsData));
       setState("ready");
     } catch {
       setState("error");
@@ -100,6 +169,19 @@ export default function HealthSheetCard({ profileId }) {
   const closeForm = () => {
     setOpenForm("");
     setFormError("");
+  };
+
+  const updateExamValueRow = (index, field, value) => {
+    setExamDraft((draft) => {
+      const values = draft.values.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      );
+      return { ...draft, values };
+    });
+  };
+
+  const addExamValueRow = () => {
+    setExamDraft((draft) => ({ ...draft, values: [...draft.values, { ...EMPTY_VALUE_ROW }] }));
   };
 
   const submitForm = async (kind) => {
@@ -134,12 +216,20 @@ export default function HealthSheetCard({ profileId }) {
           setFormError("Escribe el nombre del examen.");
           return;
         }
+        const values = examDraft.values
+          .map((row) => ({
+            name: row.name.trim(),
+            value: row.value.trim(),
+            unit: row.unit.trim(),
+          }))
+          .filter((row) => row.name && row.value);
         await createHealthExamResult(profileId, {
           exam_name: examDraft.exam_name.trim(),
           summary: examDraft.summary.trim(),
           performed_at: examDraft.performed_at || null,
+          values_json: values,
         });
-        setExamDraft({ exam_name: "", performed_at: "", summary: "" });
+        setExamDraft({ exam_name: "", performed_at: "", summary: "", values: [{ ...EMPTY_VALUE_ROW }] });
       }
       closeForm();
       await loadSheet();
@@ -193,6 +283,57 @@ export default function HealthSheetCard({ profileId }) {
     }
   };
 
+  // Traspasa los valores leídos por IA en un examen fotografiado hacia el
+  // historial estructurado (HealthExamResult con values_json).
+  const importExamValues = async (item) => {
+    const documentId = item?.source?.source_id;
+    if (!documentId || importBusyId) return;
+    setImportBusyId(documentId);
+    setImportMessage("");
+    try {
+      const analysis = await getDocumentAnalysis(documentId, profileId);
+      const labValues = ensureArray(analysis?.entities)
+        .filter((entity) => entity?.entity_type === "lab_value")
+        .map((entity) => ({
+          name: cleanUiText(entity.entity_name || "", "").trim(),
+          value: cleanUiText(entity.entity_value || "", "").trim(),
+          unit: cleanUiText(entity.unit || "", "").trim(),
+          reference_range: cleanUiText(entity.reference_range || "", "").trim(),
+          flag: entity.flag || "",
+        }))
+        .filter((value) => value.name && value.value);
+      const fallbackValues = ensureArray(item.abnormal_values)
+        .map((value) => ({
+          name: cleanUiText(value?.name || value?.label || "", "").trim(),
+          value: cleanUiText(String(value?.value ?? ""), "").trim(),
+          unit: cleanUiText(value?.unit || "", "").trim(),
+          reference_range: cleanUiText(value?.reference_range || value?.range || "", "").trim(),
+          flag: value?.flag || "abnormal",
+        }))
+        .filter((value) => value.name && value.value);
+      const values = labValues.length ? labValues : fallbackValues;
+      if (!values.length) {
+        setImportMessage("No encontramos valores legibles en este examen. Puedes anotarlos a mano.");
+        return;
+      }
+      await createHealthExamResult(profileId, {
+        exam_name: cleanUiText(item.name, "Examen"),
+        summary: cleanUiText(item.summary || "", ""),
+        performed_at: item.date || null,
+        values_json: values,
+        source_type: "document",
+        source_id: documentId,
+      });
+      await loadSheet();
+      notifyClinicalDataChanged({ profileId, sources: ["health-sheet"] });
+      setImportMessage(`Listo: ${values.length} valor${values.length !== 1 ? "es" : ""} guardado${values.length !== 1 ? "s" : ""} en tu historial.`);
+    } catch {
+      setImportMessage("No se pudieron traspasar los valores. Inténtalo de nuevo.");
+    } finally {
+      setImportBusyId(null);
+    }
+  };
+
   if (!profileId) return null;
 
   const diagnoses = ensureArray(sheet?.diagnoses);
@@ -200,6 +341,59 @@ export default function HealthSheetCard({ profileId }) {
   const exams = ensureArray(sheet?.exams);
   const indications = ensureArray(sheet?.indications);
   const totalItems = diagnoses.length + vaccines.length + exams.length;
+  const activeDiagnoses = diagnoses.filter((item) =>
+    ["active", "monitoring"].includes(String(item?.status || "").toLowerCase())
+  );
+  const latestVaccine = latestByDate(vaccines);
+  const labHistory = buildLabHistory(examRecords);
+  const importedDocumentIds = new Set(
+    examRecords
+      .filter((record) => String(record?.source_type || "") === "document" && record?.source_id)
+      .map((record) => Number(record.source_id))
+  );
+  const latestExam = latestByDate(exams);
+
+  const healthSnapshotItems = [
+    {
+      label: "Problemas activos",
+      value: activeDiagnoses.length,
+      helper: activeDiagnoses.length
+        ? "Revisa controles y seguimiento"
+        : diagnoses.length
+        ? "Sin activos marcados"
+        : "Sin diagnósticos registrados",
+      tone: activeDiagnoses.length ? "warn" : "ok",
+    },
+    {
+      label: "Valores en historial",
+      value: labHistory.length,
+      helper: labHistory.length
+        ? "Parámetros con seguimiento"
+        : "Fotografía un examen para empezar",
+      tone: labHistory.length ? "teal" : "muted",
+    },
+    {
+      label: "Última vacuna",
+      value: latestVaccine ? cleanUiText(latestVaccine.name, "Registrada") : "Sin datos",
+      helper: latestVaccine?.date ? fmtSheetDate(latestVaccine.date) : "Agrega tu carnet o registro",
+      tone: latestVaccine ? "teal" : "muted",
+    },
+    {
+      label: "Último examen",
+      value: latestExam ? cleanUiText(latestExam.name, "Registrado") : "Sin datos",
+      helper: latestExam?.date ? fmtSheetDate(latestExam.date) : "Guarda resultados estructurados",
+      tone: latestExam ? "info" : "muted",
+    },
+  ];
+
+  const tabs = [
+    { key: "examenes", icon: "🧪", label: "Exámenes", count: exams.length },
+    { key: "diagnosticos", icon: "🩺", label: "Diagnósticos", count: diagnoses.length },
+    { key: "vacunas", icon: "💉", label: "Vacunas", count: vaccines.length },
+    ...(indications.length
+      ? [{ key: "indicaciones", icon: "📋", label: "Indicaciones", count: indications.length }]
+      : []),
+  ];
 
   return (
     <section className="clp-card tone-teal hsheet-card" aria-labelledby="clp-hsheet-h">
@@ -208,7 +402,7 @@ export default function HealthSheetCard({ profileId }) {
         <div className="clp-card-head-main">
           <div className="clp-card-titles">
             <h2 className="clp-card-title" id="clp-hsheet-h">Ficha de Salud</h2>
-            <p className="clp-card-sub">Tus diagnósticos, vacunas y exámenes, resumidos en una sola hoja</p>
+            <p className="clp-card-sub">Tus diagnósticos, vacunas y exámenes, ordenados en una sola hoja</p>
           </div>
           <div className="clp-card-head-meta">
             {totalItems > 0 ? (
@@ -231,15 +425,218 @@ export default function HealthSheetCard({ profileId }) {
         </div>
       ) : (
         <div className="hsheet-body">
-          {sheet?.summary ? <p className="hsheet-summary">{cleanUiText(sheet.summary)}</p> : null}
+          <div className="hsheet-live-grid" aria-label="Resumen vivo de salud">
+            {healthSnapshotItems.map((item) => (
+              <article className={`hsheet-live-card is-${item.tone}`} key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
+                <small>{item.helper}</small>
+              </article>
+            ))}
+          </div>
 
-          {/* ── Problemas y diagnósticos ── */}
-          <details className="hsheet-section">
-            <summary>
-              <span aria-hidden>🩺</span> Problemas y diagnósticos
-              <span className="hsheet-count">{diagnoses.length}</span>
-            </summary>
-            <div className="hsheet-section-body">
+          <div className="hsheet-tabs" role="tablist" aria-label="Secciones de la ficha">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.key}
+                className={`hsheet-tab${activeTab === tab.key ? " is-active" : ""}`}
+                onClick={() => { setActiveTab(tab.key); closeForm(); }}
+              >
+                <span aria-hidden>{tab.icon}</span> {tab.label}
+                <span className="hsheet-count">{tab.count}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* ── Exámenes ── */}
+          {activeTab === "examenes" ? (
+            <div className="hsheet-tab-panel">
+              <div className="hsheet-scan-row">
+                <button
+                  type="button"
+                  className="primary-btn hsheet-scan-btn"
+                  onClick={() => navigate("/documents?scan=1")}
+                >
+                  <span aria-hidden>📷</span> Fotografía tu examen aquí
+                </button>
+                <p className="hsheet-hint">
+                  Klinip lee la foto y deja los valores listos para guardarlos en tu historial.
+                </p>
+              </div>
+
+              {labHistory.length > 0 ? (
+                <div className="hsheet-history">
+                  <h3 className="hsheet-block-title">Historial de valores</h3>
+                  <p className="hsheet-hint">Toca un parámetro para ver cómo ha cambiado en el tiempo.</p>
+                  <div className="hsheet-param-list">
+                    {labHistory.map((param) => {
+                      const latest = param.entries[0];
+                      const abnormal = isAbnormalFlag(latest?.flag);
+                      return (
+                        <details className="hsheet-param" key={param.key}>
+                          <summary>
+                            <span className="hsheet-param-name">{param.name}</span>
+                            <span className={`hsheet-param-value${abnormal ? " is-abnormal" : ""}`}>
+                              {latest.value}{latest.unit ? ` ${latest.unit}` : ""}
+                            </span>
+                            <span className="hsheet-param-date">{fmtSheetDate(latest.date) || "Sin fecha"}</span>
+                          </summary>
+                          <div className="hsheet-param-history">
+                            {param.entries.map((entry, entryIndex) => (
+                              <div className="hsheet-param-entry" key={`${param.key}-${entryIndex}`}>
+                                <span className="hsheet-param-entry-date">
+                                  {fmtSheetDate(entry.date) || "Sin fecha"}
+                                </span>
+                                <strong className={isAbnormalFlag(entry.flag) ? "is-abnormal" : ""}>
+                                  {entry.value}{entry.unit ? ` ${entry.unit}` : ""}
+                                </strong>
+                                <small>
+                                  {[entry.range ? `Rango: ${entry.range}` : "", entry.examName]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </small>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <p className="hsheet-empty">
+                  Todavía no hay valores en tu historial. Fotografía un examen de sangre o anota los
+                  valores a mano, y quedarán ordenados aquí para comparar en el tiempo.
+                </p>
+              )}
+
+              {importMessage ? <p className="hsheet-import-message">{importMessage}</p> : null}
+
+              {exams.length > 0 ? (
+                <div className="hsheet-exam-list">
+                  <h3 className="hsheet-block-title">Tus exámenes</h3>
+                  {exams.map((item, index) => {
+                    const documentId = item?.source?.source_type === "document" ? item?.source?.source_id : null;
+                    const alreadyImported = documentId ? importedDocumentIds.has(Number(documentId)) : false;
+                    const busy = importBusyId === documentId;
+                    return (
+                      <div className="hsheet-row" key={`exam-${index}`}>
+                        <div className="hsheet-row-copy">
+                          <strong>{cleanUiText(item.name)}</strong>
+                          {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
+                          {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
+                          {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                        </div>
+                        {documentId ? (
+                          <div className="hsheet-row-side">
+                            <button
+                              type="button"
+                              className={`hsheet-row-btn${alreadyImported ? " is-done" : ""}`}
+                              disabled={busy || alreadyImported}
+                              onClick={() => importExamValues(item)}
+                            >
+                              {alreadyImported
+                                ? "En tu historial ✓"
+                                : busy
+                                ? "Traspasando…"
+                                : "Pasar valores al historial"}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {openForm === "exam" ? (
+                <div className="hsheet-form">
+                  <label>
+                    <span>¿Qué examen te hiciste?</span>
+                    <input
+                      type="text"
+                      value={examDraft.exam_name}
+                      maxLength={140}
+                      placeholder="Ej: Perfil lipídico"
+                      onChange={(event) => setExamDraft((d) => ({ ...d, exam_name: event.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>¿Cuándo? (opcional)</span>
+                    <input
+                      type="date"
+                      value={examDraft.performed_at}
+                      onChange={(event) => setExamDraft((d) => ({ ...d, performed_at: event.target.value }))}
+                    />
+                  </label>
+                  <div className="hsheet-form-values">
+                    <span className="hsheet-form-values-title">Valores del examen (opcional)</span>
+                    {examDraft.values.map((row, index) => (
+                      <div className="hsheet-form-value-row" key={`value-row-${index}`}>
+                        <input
+                          type="text"
+                          value={row.name}
+                          maxLength={80}
+                          placeholder="Ej: Glucosa"
+                          aria-label="Nombre del valor"
+                          onChange={(event) => updateExamValueRow(index, "name", event.target.value)}
+                        />
+                        <input
+                          type="text"
+                          value={row.value}
+                          maxLength={40}
+                          placeholder="Ej: 98"
+                          aria-label="Resultado"
+                          onChange={(event) => updateExamValueRow(index, "value", event.target.value)}
+                        />
+                        <input
+                          type="text"
+                          value={row.unit}
+                          maxLength={20}
+                          placeholder="mg/dL"
+                          aria-label="Unidad"
+                          onChange={(event) => updateExamValueRow(index, "unit", event.target.value)}
+                        />
+                      </div>
+                    ))}
+                    <button type="button" className="hsheet-value-add-btn" onClick={addExamValueRow}>
+                      + Agregar otro valor
+                    </button>
+                  </div>
+                  <label>
+                    <span>Resultado en tus palabras (opcional)</span>
+                    <input
+                      type="text"
+                      value={examDraft.summary}
+                      maxLength={360}
+                      placeholder="Ej: Colesterol un poco alto, repetir en 3 meses"
+                      onChange={(event) => setExamDraft((d) => ({ ...d, summary: event.target.value }))}
+                    />
+                  </label>
+                  {formError ? <p className="hsheet-form-error">{formError}</p> : null}
+                  <div className="hsheet-form-actions">
+                    <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("exam")}>
+                      {formBusy ? "Guardando…" : "Guardar"}
+                    </button>
+                    <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="hsheet-add-btn" onClick={() => { setOpenForm("exam"); setFormError(""); }}>
+                  + Anotar un examen a mano
+                </button>
+              )}
+            </div>
+          ) : null}
+
+          {/* ── Diagnósticos ── */}
+          {activeTab === "diagnosticos" ? (
+            <div className="hsheet-tab-panel">
               {diagnoses.length === 0 ? (
                 <p className="hsheet-empty">Aún no hay diagnósticos registrados. Puedes agregar uno abajo.</p>
               ) : (
@@ -313,15 +710,11 @@ export default function HealthSheetCard({ profileId }) {
                 </button>
               )}
             </div>
-          </details>
+          ) : null}
 
           {/* ── Vacunas ── */}
-          <details className="hsheet-section">
-            <summary>
-              <span aria-hidden>💉</span> Vacunas
-              <span className="hsheet-count">{vaccines.length}</span>
-            </summary>
-            <div className="hsheet-section-body">
+          {activeTab === "vacunas" ? (
+            <div className="hsheet-tab-panel">
               {vaccines.length === 0 ? (
                 <p className="hsheet-empty">Aún no hay vacunas registradas. Puedes agregar una abajo.</p>
               ) : (
@@ -381,125 +774,39 @@ export default function HealthSheetCard({ profileId }) {
                 </button>
               )}
             </div>
-          </details>
-
-          {/* ── Exámenes ── */}
-          <details className="hsheet-section">
-            <summary>
-              <span aria-hidden>🧪</span> Exámenes
-              <span className="hsheet-count">{exams.length}</span>
-            </summary>
-            <div className="hsheet-section-body">
-              {exams.length === 0 ? (
-                <p className="hsheet-empty">Aún no hay exámenes registrados. Puedes agregar uno abajo.</p>
-              ) : (
-                exams.map((item, index) => (
-                  <div className="hsheet-row" key={`exam-${index}`}>
-                    <div className="hsheet-row-copy">
-                      <strong>{cleanUiText(item.name)}</strong>
-                      {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
-                      {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
-                      {ensureArray(item.abnormal_values).length > 0 ? (
-                        <div className="hsheet-chip-row">
-                          {ensureArray(item.abnormal_values).slice(0, 4).map((value, valueIndex) => (
-                            <span className="hsheet-chip" key={`val-${index}-${valueIndex}`}>
-                              {cleanUiText(
-                                [value?.name || value?.label || "Valor", value?.value].filter(Boolean).join(": ")
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                      {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
-                    </div>
-                  </div>
-                ))
-              )}
-              {openForm === "exam" ? (
-                <div className="hsheet-form">
-                  <label>
-                    <span>¿Qué examen te hiciste?</span>
-                    <input
-                      type="text"
-                      value={examDraft.exam_name}
-                      maxLength={140}
-                      placeholder="Ej: Perfil lipídico"
-                      onChange={(event) => setExamDraft((d) => ({ ...d, exam_name: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>¿Cuándo? (opcional)</span>
-                    <input
-                      type="date"
-                      value={examDraft.performed_at}
-                      onChange={(event) => setExamDraft((d) => ({ ...d, performed_at: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Resultado en tus palabras (opcional)</span>
-                    <input
-                      type="text"
-                      value={examDraft.summary}
-                      maxLength={360}
-                      placeholder="Ej: Colesterol un poco alto, repetir en 3 meses"
-                      onChange={(event) => setExamDraft((d) => ({ ...d, summary: event.target.value }))}
-                    />
-                  </label>
-                  {formError ? <p className="hsheet-form-error">{formError}</p> : null}
-                  <div className="hsheet-form-actions">
-                    <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("exam")}>
-                      {formBusy ? "Guardando…" : "Guardar"}
-                    </button>
-                    <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" className="hsheet-add-btn" onClick={() => { setOpenForm("exam"); setFormError(""); }}>
-                  + Registrar examen
-                </button>
-              )}
-            </div>
-          </details>
+          ) : null}
 
           {/* ── Indicaciones ── */}
-          {indications.length > 0 ? (
-            <details className="hsheet-section">
-              <summary>
-                <span aria-hidden>📋</span> Indicaciones médicas
-                <span className="hsheet-count">{indications.length}</span>
-              </summary>
-              <div className="hsheet-section-body">
-                <p className="hsheet-hint">
-                  Si quieres que Klinip te recuerde una indicación, conviértela en pendiente.
-                </p>
-                {indications.map((item, index) => {
-                  const key = `${item.title}|${item?.source?.source_id || index}`;
-                  const created = actionsCreated.has(key);
-                  const busy = actionBusyKey === key;
-                  return (
-                    <div className="hsheet-row" key={`ind-${index}`}>
-                      <div className="hsheet-row-copy">
-                        <strong>{cleanUiText(item.title)}</strong>
-                        {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
-                        {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
-                      </div>
-                      <div className="hsheet-row-side">
-                        <button
-                          type="button"
-                          className={`hsheet-row-btn${created ? " is-done" : ""}`}
-                          disabled={busy || created}
-                          onClick={() => createActionFromIndication(item, key)}
-                        >
-                          {created ? "Pendiente creado ✓" : busy ? "Creando…" : "Recordármelo"}
-                        </button>
-                      </div>
+          {activeTab === "indicaciones" && indications.length > 0 ? (
+            <div className="hsheet-tab-panel">
+              <p className="hsheet-hint">
+                Si quieres que Klinip te recuerde una indicación, conviértela en pendiente.
+              </p>
+              {indications.map((item, index) => {
+                const key = `${item.title}|${item?.source?.source_id || index}`;
+                const created = actionsCreated.has(key);
+                const busy = actionBusyKey === key;
+                return (
+                  <div className="hsheet-row" key={`ind-${index}`}>
+                    <div className="hsheet-row-copy">
+                      <strong>{cleanUiText(item.title)}</strong>
+                      {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
+                      {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
                     </div>
-                  );
-                })}
-              </div>
-            </details>
+                    <div className="hsheet-row-side">
+                      <button
+                        type="button"
+                        className={`hsheet-row-btn${created ? " is-done" : ""}`}
+                        disabled={busy || created}
+                        onClick={() => createActionFromIndication(item, key)}
+                      >
+                        {created ? "Pendiente creado ✓" : busy ? "Creando…" : "Recordármelo"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : null}
         </div>
       )}

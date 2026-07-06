@@ -9,6 +9,7 @@ import {
   getAiLifeTimeline,
   getContinuityPanel,
   recordMedicationIntake,
+  updateContinuityTask,
 } from "../services/httpApi";
 import { ensureArray } from "../utils/arrays";
 import {
@@ -93,17 +94,19 @@ function describeMedicationStatus(medication, nextDose, now = new Date()) {
 function continuityRoute(item) {
   const source = String(item?.source_type || "").toLowerCase();
   const sourceId = item?.source_id ? String(item.source_id) : "";
+  const taskId = continuityTaskId(item);
+  const taskParam = taskId ? `&taskId=${encodeURIComponent(String(taskId))}` : "";
   if (source.includes("appointment") || source.includes("cita") || source.includes("exam")) {
     return sourceId
-      ? `/appointments?appointmentId=${sourceId}&source=continuity`
+      ? `/appointments?appointmentId=${sourceId}&source=continuity${taskParam}`
       : "/appointments";
   }
   if (source.includes("document") || source.includes("informe") || source.includes("resultado")) {
-    return sourceId ? `/documents?documentId=${sourceId}&source=continuity` : "/documents";
+    return sourceId ? `/documents?documentId=${sourceId}&source=continuity${taskParam}` : "/documents";
   }
   if (source.includes("prescription") || source.includes("medication") || source.includes("receta")) {
     return sourceId
-      ? `/medications?medicationId=${sourceId}&source=continuity`
+      ? `/medications?medicationId=${sourceId}&source=continuity${taskParam}`
       : "/medications";
   }
   return "/timeline";
@@ -116,6 +119,19 @@ function continuityDueLabel(item) {
     return `Venció el ${due.toLocaleDateString("es-CL", { day: "numeric", month: "short" })}`;
   }
   return `Vence: ${relativeDay(due)}`;
+}
+
+function continuityTaskId(item) {
+  const rawId = String(item?.id || "");
+  const match = rawId.match(/^task-(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+function continuitySnoozeDate(days = 7) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(9, 0, 0, 0);
+  return date.toISOString();
 }
 
 // El motor de episodios puede generar tareas gemelas (mismo texto y misma
@@ -217,6 +233,8 @@ export default function MiSalud() {
   const [intakeSuccess, setIntakeSuccess] = useState(null);
   const [continuity, setContinuity] = useState(null);
   const [continuityState, setContinuityState] = useState("loading");
+  const [continuityActionBusy, setContinuityActionBusy] = useState(null);
+  const [continuityActionError, setContinuityActionError] = useState("");
 
   const loadContinuity = useCallback(async (profileId) => {
     if (!profileId) {
@@ -316,6 +334,31 @@ export default function MiSalud() {
     setIntakeBusy(null);
   }, [intakeBusy, loadPanelData, profile?.id]);
 
+  const refreshContinuity = useCallback(async () => {
+    if (!profile?.id) return;
+    setContinuityState("loading");
+    await loadContinuity(profile.id);
+  }, [loadContinuity, profile?.id]);
+
+  const handleContinuityTaskUpdate = useCallback(async (item, payload) => {
+    const taskId = continuityTaskId(item);
+    if (!profile?.id || !taskId || continuityActionBusy) return;
+    setContinuityActionError("");
+    setContinuityActionBusy(`${taskId}-${payload.status || "pending"}`);
+    try {
+      await updateContinuityTask(profile.id, taskId, payload);
+      notifyClinicalDataChanged({
+        profileId: profile.id,
+        sources: ["continuity", "health-sheet"],
+      });
+      await loadContinuity(profile.id);
+    } catch {
+      setContinuityActionError("No se pudo actualizar el pendiente. Intenta nuevamente.");
+    } finally {
+      setContinuityActionBusy(null);
+    }
+  }, [continuityActionBusy, loadContinuity, profile?.id]);
+
   /* ── derived data ── */
   const now = new Date();
 
@@ -364,6 +407,40 @@ export default function MiSalud() {
   const continuityPrep = continuity?.upcoming_preparation || null;
   const continuityIsClear =
     !continuityNextStep && continuityPendingTotal === 0 && !continuityPrep;
+  const renderContinuityTaskActions = (item, variant = "row") => {
+    const taskId = continuityTaskId(item);
+    if (!taskId) return null;
+    const doneKey = `${taskId}-done`;
+    const snoozeKey = `${taskId}-pending`;
+    const busyDone = continuityActionBusy === doneKey;
+    const busySnooze = continuityActionBusy === snoozeKey;
+    return (
+      <div className={`clp-continuity-actions is-${variant}`}>
+        <button
+          type="button"
+          className="clp-continuity-action-btn is-done"
+          disabled={Boolean(continuityActionBusy)}
+          onClick={() => handleContinuityTaskUpdate(item, { status: "done" })}
+        >
+          {busyDone ? "Guardando..." : "Hecho"}
+        </button>
+        <button
+          type="button"
+          className="clp-continuity-action-btn"
+          disabled={Boolean(continuityActionBusy)}
+          onClick={() =>
+            handleContinuityTaskUpdate(item, {
+              status: "pending",
+              due_at: continuitySnoozeDate(7),
+              note: "Pospuesto desde Mi Salud",
+            })
+          }
+        >
+          {busySnooze ? "Posponiendo..." : "Posponer"}
+        </button>
+      </div>
+    );
+  };
   /* ── render ── */
   if (loading) {
     return (
@@ -431,7 +508,7 @@ export default function MiSalud() {
           ) : continuityState === "error" ? (
             <div className="clp-empty clp-continuity-error">
               <span>No pudimos revisar tu continuidad ahora.</span>
-              <button type="button" onClick={() => { setContinuityState("loading"); loadContinuity(profile?.id); }}>
+              <button type="button" onClick={refreshContinuity}>
                 Reintentar
               </button>
             </div>
@@ -454,10 +531,17 @@ export default function MiSalud() {
                       <small>{continuityDueLabel(continuityNextStep)}</small>
                     ) : null}
                   </div>
-                  <Link className="clp-next-step-cta" to={continuityRoute(continuityNextStep)}>
-                    {continuityNextStep.action_label || "Revisar"}
-                  </Link>
+                  <div className="clp-next-step-actions">
+                    <Link className="clp-next-step-cta" to={continuityRoute(continuityNextStep)}>
+                      {continuityNextStep.action_label || "Revisar"}
+                    </Link>
+                    {renderContinuityTaskActions(continuityNextStep, "next")}
+                  </div>
                 </div>
+              ) : null}
+
+              {continuityActionError ? (
+                <p className="clp-continuity-action-error">{continuityActionError}</p>
               ) : null}
 
               {continuityPendingTotal > 0 ? (
@@ -477,9 +561,12 @@ export default function MiSalud() {
                           <strong>{item.title}</strong>
                           {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
                         </div>
-                        <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
-                          {item.action_label || "Resolver"}
-                        </Link>
+                        <div className="clp-continuity-row-actions">
+                          <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                            {item.action_label || "Resolver"}
+                          </Link>
+                          {renderContinuityTaskActions(item)}
+                        </div>
                       </div>
                     ))}
                     {continuityActionsAll.map((item) => (
@@ -488,9 +575,12 @@ export default function MiSalud() {
                           <strong>{item.title}</strong>
                           {continuityDueLabel(item) ? <small>{continuityDueLabel(item)}</small> : null}
                         </div>
-                        <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
-                          {item.action_label || "Revisar"}
-                        </Link>
+                        <div className="clp-continuity-row-actions">
+                          <Link to={continuityRoute(item)} className="clp-continuity-row-cta">
+                            {item.action_label || "Revisar"}
+                          </Link>
+                          {renderContinuityTaskActions(item)}
+                        </div>
                       </div>
                     ))}
                   </div>

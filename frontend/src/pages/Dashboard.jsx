@@ -1574,34 +1574,34 @@ export default function Dashboard({
 
   const quickActions = [
     {
-      id: "photo",
-      icon: "camera",
-      label: "Tomar foto",
-      subtitle: "Registra un documento con una foto",
-      hint: "Rápido",
+      id: "calendar",
+      icon: "appointment",
+      label: "Mira tu calendario aquí",
+      subtitle: "Tus citas y exámenes del mes, día por día",
+      hint: "Calendario",
       tone: "blue",
-      onClick: () => setWizardOpen(true),
+      onClick: () => navigate("/calendar"),
     },
     {
       id: "medication",
       icon: "medication",
-      label: "Tomar medicamento",
+      label: "Registra tu medicamento aquí",
       subtitle: nextMedicationEvent
-        ? cleanUiText(nextMedicationEvent.title, "Revisa tus tomas activas")
+        ? cleanUiText(nextMedicationEvent.title, "Marca la dosis que ya tomaste")
         : activeMedications.length
-        ? "Revisa tus tomas activas"
-        : "Activa un tratamiento",
-      hint: nextMedicationEvent?.urgent ? "Ahora" : activeMedications.length ? "Pendiente" : "Ver",
+        ? "Marca la dosis que ya tomaste"
+        : "Guarda tu primer tratamiento",
+      hint: nextMedicationEvent?.urgent ? "Ahora" : activeMedications.length ? "Pendiente" : "Nuevo",
       tone: "amber",
       onClick: openMedicationFocus,
     },
     {
       id: "appointment",
       icon: "appointment",
-      label: "Ver próxima cita",
+      label: "Agenda una cita aquí",
       subtitle: nextAppointmentEvent
-        ? cleanUiText(nextAppointmentEvent.title, "Revisa tu agenda")
-        : "Agenda tu próximo control",
+        ? cleanUiText(nextAppointmentEvent.title, "Revisa o crea tus citas")
+        : "Crea tu próximo control médico",
       hint: nextAppointmentEvent ? toRelativeDayLabelSafe(nextAppointmentEvent.date) : "Sin cita",
       tone: "blue",
       onClick: openAppointmentFocus,
@@ -1609,11 +1609,11 @@ export default function Dashboard({
     {
       id: "document",
       icon: "upload",
-      label: "Documentos",
+      label: "Guarda un documento aquí",
       subtitle:
         pendingDocuments > 0
           ? `${pendingDocuments} por revisar`
-          : "Guarda y revisa exámenes e informes",
+          : "Sube recetas, exámenes e informes",
       hint: pendingDocuments > 0 ? "Revisar" : "Nuevo",
       tone: "teal",
       onClick: openDocumentsFocus,
@@ -1621,13 +1621,13 @@ export default function Dashboard({
     {
       id: "biometric",
       icon: "biometric",
-      label: "Ver biométricos",
+      label: "Registra tus mediciones aquí",
       subtitle: latestBiometricReading
         ? cleanUiText(
             `${latestBiometricMetric.label} · ${formatBiometricValue(latestBiometricReading)}`,
-            "Monitoreo activo"
+            "Presión, pulso y más"
           )
-        : "Activa tu monitoreo clínico",
+        : "Anota tu presión, pulso o peso",
       hint: latestBiometricReading
         ? `${activeBiometricMetricsCount} activo${activeBiometricMetricsCount === 1 ? "" : "s"}`
         : "Nuevo",

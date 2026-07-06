@@ -6,6 +6,7 @@ import {
   COVERAGE_STATUS_OPTIONS,
   formatCoverageAmount,
   getCoverageCategory,
+  getPayerTypeLabel,
   getCoverageStatusInfo,
 } from "./coverageTaxonomy";
 
@@ -19,6 +20,12 @@ function formatDay(value) {
   const date = parseDate(value);
   if (!date) return "Sin fecha";
   return date.toLocaleDateString("es-CL", { day: "numeric", month: "short" });
+}
+
+function formatDateLabel(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  return date.toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function getMonthLabel(value) {
@@ -51,6 +58,20 @@ function inputToAmount(value) {
   return cleaned ? Number(cleaned) : null;
 }
 
+function dateToInput(value) {
+  const date = parseDate(value);
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function inputToDate(value) {
+  const cleaned = String(value || "").trim();
+  return cleaned ? `${cleaned}T00:00:00` : null;
+}
+
 function buildDraft(doc) {
   return {
     category: doc?.coverageCategory || "otro",
@@ -62,12 +83,63 @@ function buildDraft(doc) {
     amount_covered: amountToInput(doc?.coverageAmounts?.covered),
     amount_patient: amountToInput(doc?.coverageAmounts?.patient),
     amount_reimbursed: amountToInput(doc?.coverageAmounts?.reimbursed),
+    issued_at: dateToInput(doc?.coverageDates?.issued),
+    service_at: dateToInput(doc?.coverageDates?.service),
+    period_start_at: dateToInput(doc?.coverageDates?.periodStart),
+    period_end_at: dateToInput(doc?.coverageDates?.periodEnd),
+    due_at: dateToInput(doc?.coverageDates?.due),
   };
+}
+
+function getReadStatus(doc) {
+  const status = String(doc?.ocr_status || "").trim().toLowerCase();
+  if (!status || status === "pending" || status === "processing") {
+    return { label: "Leyendo OCR/IA", tone: "reading", canRetry: false };
+  }
+  if (status === "done") {
+    return { label: "Leído", tone: "ready", canRetry: false };
+  }
+  if (status.startsWith("error") || status.startsWith("skipped")) {
+    return { label: "No leído", tone: "error", canRetry: true };
+  }
+  return { label: "Lectura pendiente", tone: "reading", canRetry: false };
+}
+
+function getDetectedData(doc, category, status, readStatus) {
+  const payerLabel = getPayerTypeLabel(doc.coveragePayerType);
+  const entity = doc.coverageEntity || doc.coverageProviderName || doc.coverageEntityName || "";
+  return [
+    { label: "Tipo", value: category?.label || "Por confirmar" },
+    { label: "Entidad", value: entity || payerLabel || "Sin entidad detectada" },
+    { label: "Estado", value: status.label || "Guardado" },
+    { label: "Lectura", value: readStatus.label },
+  ];
+}
+
+function buildDateParts(doc, categoryKey) {
+  const dates = doc?.coverageDates || {};
+  const parts = [];
+  if (categoryKey === "licencia") {
+    parts.push({ label: "Inicio licencia", value: formatDateLabel(dates.periodStart) });
+    parts.push({ label: "Término licencia", value: formatDateLabel(dates.periodEnd) });
+  } else {
+    parts.push({ label: "Emisión", value: formatDateLabel(dates.issued) });
+    parts.push({ label: "Atención / pago", value: formatDateLabel(dates.service) });
+  }
+  parts.push({ label: "Vence", value: formatDateLabel(dates.due) });
+  return parts.filter((item) => item.value);
 }
 
 // Lista agrupada por mes. Cada fila responde: qué es, de quién viene, cuánto
 // costó y en qué estado está, sin obligar a abrir el documento.
-export default function CoverageDocumentList({ documents, savingId, editError, onSave }) {
+export default function CoverageDocumentList({
+  documents,
+  savingId,
+  retryingReadId,
+  editError,
+  onSave,
+  onRetryRead,
+}) {
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const groups = [];
@@ -103,6 +175,11 @@ export default function CoverageDocumentList({ documents, savingId, editError, o
       amount_covered: inputToAmount(draft.amount_covered),
       amount_patient: inputToAmount(draft.amount_patient),
       amount_reimbursed: inputToAmount(draft.amount_reimbursed),
+      issued_at: inputToDate(draft.issued_at),
+      service_at: inputToDate(draft.service_at),
+      period_start_at: inputToDate(draft.period_start_at),
+      period_end_at: inputToDate(draft.period_end_at),
+      due_at: inputToDate(draft.due_at),
     });
     if (saved) {
       setEditingId(null);
@@ -131,6 +208,10 @@ export default function CoverageDocumentList({ documents, savingId, editError, o
               const amountParts = buildAmountParts(doc.coverageAmounts);
               const isEditing = editingId === doc.id;
               const isSaving = savingId === doc.id;
+              const isRetryingRead = retryingReadId === doc.id;
+              const readStatus = getReadStatus(doc);
+              const detectedData = getDetectedData(doc, category, status, readStatus);
+              const dateParts = buildDateParts(doc, doc.coverageCategory);
               const entityLine = [
                 doc.coverageEntity,
                 doc.center ? cleanUiText(doc.center) : "",
@@ -149,6 +230,7 @@ export default function CoverageDocumentList({ documents, savingId, editError, o
                       {category ? (
                         <span className="coverage-category-chip">{category.label}</span>
                       ) : null}
+                      <span className={`coverage-read-chip is-${readStatus.tone}`}>{readStatus.label}</span>
                       {entityLine ? (
                         <span className="coverage-entity-text">{entityLine}</span>
                       ) : null}
@@ -161,11 +243,50 @@ export default function CoverageDocumentList({ documents, savingId, editError, o
                           </span>
                         ))}
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className="coverage-document-amounts is-empty">
+                        <span>Montos <strong>Por confirmar</strong></span>
+                      </div>
+                    )}
+                    <div className="coverage-detected-grid" aria-label="Datos detectados">
+                      {detectedData.map((item) => (
+                        <span key={item.label}>
+                          {item.label}
+                          <strong>{item.value}</strong>
+                        </span>
+                      ))}
+                    </div>
+                    {dateParts.length ? (
+                      <div className="coverage-date-strip" aria-label="Fechas de cobertura">
+                        {dateParts.map((item) => (
+                          <span key={item.label}>
+                            {item.label}
+                            <strong>{item.value}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="coverage-date-strip is-empty">
+                        <span>
+                          Fechas
+                          <strong>Por confirmar</strong>
+                        </span>
+                      </div>
+                    )}
                     <small>{formatDay(doc.date || doc.created_at)}</small>
                   </div>
                   <div className="coverage-document-actions">
                     <span className={`coverage-document-status is-${status.tone}`}>{status.label}</span>
+                    {readStatus.canRetry && onRetryRead ? (
+                      <button
+                        type="button"
+                        className="coverage-document-edit-btn is-retry"
+                        disabled={isRetryingRead}
+                        onClick={() => onRetryRead(doc.id)}
+                      >
+                        {isRetryingRead ? "Leyendo..." : "Releer"}
+                      </button>
+                    ) : null}
                     {onSave ? (
                       <button
                         type="button"
@@ -267,6 +388,46 @@ export default function CoverageDocumentList({ documents, savingId, editError, o
                           value={draft.amount_reimbursed}
                           placeholder="0"
                           onChange={(event) => handleDraftChange("amount_reimbursed", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Emisión</span>
+                        <input
+                          type="date"
+                          value={draft.issued_at}
+                          onChange={(event) => handleDraftChange("issued_at", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Atención / pago</span>
+                        <input
+                          type="date"
+                          value={draft.service_at}
+                          onChange={(event) => handleDraftChange("service_at", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Inicio licencia</span>
+                        <input
+                          type="date"
+                          value={draft.period_start_at}
+                          onChange={(event) => handleDraftChange("period_start_at", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Término licencia</span>
+                        <input
+                          type="date"
+                          value={draft.period_end_at}
+                          onChange={(event) => handleDraftChange("period_end_at", event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        <span>Vencimiento</span>
+                        <input
+                          type="date"
+                          value={draft.due_at}
+                          onChange={(event) => handleDraftChange("due_at", event.target.value)}
                         />
                       </label>
                       {editError ? <p className="coverage-document-edit-error">{editError}</p> : null}

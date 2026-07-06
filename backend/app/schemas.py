@@ -1037,6 +1037,12 @@ class HealthSheetActionCreate(BaseModel):
     metadata_json: dict | None = None
 
 
+class ContinuityTaskUpdate(BaseModel):
+    status: str = "done"
+    due_at: datetime | None = None
+    note: str = ""
+
+
 class ContinuityActionOut(BaseModel):
     id: str
     title: str
@@ -1324,10 +1330,15 @@ class CoverageDocumentInfoOut(BaseModel):
     amount_reimbursed: Optional[float] = None
     currency: str = "CLP"
     status: str = ""
+    issued_at: Optional[datetime] = None
+    service_at: Optional[datetime] = None
+    period_start_at: Optional[datetime] = None
+    period_end_at: Optional[datetime] = None
+    due_at: Optional[datetime] = None
     metadata_json: dict | None = None
     updated_at: Optional[datetime] = None
 
-    @field_serializer('updated_at')
+    @field_serializer('issued_at', 'service_at', 'period_start_at', 'period_end_at', 'due_at', 'updated_at')
     def serialize_coverage_info_datetime(self, dt: Optional[datetime], _info):
         if dt is None:
             return None
@@ -1353,6 +1364,11 @@ class CoverageDocumentInfoUpdate(BaseModel):
     amount_reimbursed: Optional[float] = None
     currency: Optional[str] = None
     status: Optional[str] = None
+    issued_at: Optional[datetime] = None
+    service_at: Optional[datetime] = None
+    period_start_at: Optional[datetime] = None
+    period_end_at: Optional[datetime] = None
+    due_at: Optional[datetime] = None
     metadata_json: Optional[dict] = None
 
 

@@ -135,6 +135,13 @@ export function flattenCoverageDocument(item) {
       patient: coverage.amount_patient,
       reimbursed: coverage.amount_reimbursed,
     },
+    coverageDates: {
+      issued: coverage.issued_at || null,
+      service: coverage.service_at || null,
+      periodStart: coverage.period_start_at || null,
+      periodEnd: coverage.period_end_at || null,
+      due: coverage.due_at || null,
+    },
   };
 }
 
@@ -150,6 +157,34 @@ export function getCoverageCategoryCounts(documents) {
   return counts;
 }
 
+function isFilledAmount(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
+export function getCoverageAmountTotals(documents) {
+  const totals = {
+    total: 0,
+    covered: 0,
+    patient: 0,
+    reimbursed: 0,
+    hasAnyAmount: false,
+  };
+  (documents || []).forEach((doc) => {
+    const amounts = doc?.coverageAmounts || {};
+    [
+      ["total", amounts.total],
+      ["covered", amounts.covered],
+      ["patient", amounts.patient],
+      ["reimbursed", amounts.reimbursed],
+    ].forEach(([key, value]) => {
+      if (!isFilledAmount(value)) return;
+      totals[key] += Number(value);
+      totals.hasAnyAmount = true;
+    });
+  });
+  return totals;
+}
+
 const CLP_FORMATTER = (() => {
   try {
     return new Intl.NumberFormat("es-CL", {
@@ -163,8 +198,8 @@ const CLP_FORMATTER = (() => {
 })();
 
 export function formatCoverageAmount(value) {
+  if (!isFilledAmount(value)) return "";
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "";
   if (CLP_FORMATTER) return CLP_FORMATTER.format(numeric);
   return `$${Math.round(numeric)}`;
 }

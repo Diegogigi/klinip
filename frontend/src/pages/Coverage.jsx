@@ -1,13 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   getCoverageDocuments,
   getCoveragePreferences,
+  retryDocumentOcr,
   updateCoverageDocumentInfo,
   updateCoveragePreferences,
 } from "../services/httpApi";
 import {
   flattenCoverageDocument,
+  getCoverageAmountTotals,
   getCoverageCategoryCounts,
 } from "../components/coverage/coverageTaxonomy";
 import CoveragePlanCard from "../components/coverage/CoveragePlanCard";
@@ -16,6 +18,8 @@ import CoverageFilters from "../components/coverage/CoverageFilters";
 import CoverageDocumentList from "../components/coverage/CoverageDocumentList";
 import CoverageEmptyState from "../components/coverage/CoverageEmptyState";
 import CoverageGuide from "../components/coverage/CoverageGuide";
+import DocumentUploadWizard from "../components/DocumentUploadWizard";
+import { COVERAGE_UPLOAD_INTENT } from "../utils/coverageDocuments";
 
 function getDocumentTime(doc) {
   const raw = doc?.date || doc?.created_at;
@@ -33,36 +37,47 @@ export default function Coverage() {
   const [preferenceError, setPreferenceError] = useState("");
   const [savingDocumentId, setSavingDocumentId] = useState(null);
   const [documentEditError, setDocumentEditError] = useState("");
+  const [uploadWizardOpen, setUploadWizardOpen] = useState(false);
+  const [retryingReadId, setRetryingReadId] = useState(null);
+
+  const loadCoverage = useCallback(async ({ showLoading = true } = {}) => {
+    if (showLoading) setLoading(true);
+    setError("");
+    try {
+      const [docs, pref] = await Promise.all([
+        getCoverageDocuments().catch(() => null),
+        getCoveragePreferences().catch(() => null),
+      ]);
+      if (docs === null && pref === null) {
+        setError("No se pudo cargar tu información de cobertura. Revisa tu conexión e inténtalo de nuevo.");
+      }
+      setCoverageDocuments(
+        (Array.isArray(docs) ? docs : [])
+          .map((item) => flattenCoverageDocument(item))
+          .sort((a, b) => getDocumentTime(b) - getDocumentTime(a))
+      );
+      setPreference(pref || null);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    async function loadCoverage() {
-      setLoading(true);
-      setError("");
-      try {
-        const [docs, pref] = await Promise.all([
-          getCoverageDocuments().catch(() => null),
-          getCoveragePreferences().catch(() => null),
-        ]);
-        if (cancelled) return;
-        if (docs === null && pref === null) {
-          setError("No se pudo cargar tu información de cobertura. Revisa tu conexión e inténtalo de nuevo.");
-        }
-        setCoverageDocuments(
-          (Array.isArray(docs) ? docs : [])
-            .map((item) => flattenCoverageDocument(item))
-            .sort((a, b) => getDocumentTime(b) - getDocumentTime(a))
-        );
-        setPreference(pref || null);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
     loadCoverage();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [loadCoverage]);
+
+  const readingCount = coverageDocuments.filter((doc) => {
+    const status = String(doc?.ocr_status || "").trim().toLowerCase();
+    return !status || status === "pending" || status === "processing";
+  }).length;
+
+  useEffect(() => {
+    if (!readingCount) return undefined;
+    const timer = window.setInterval(() => {
+      loadCoverage({ showLoading: false });
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [loadCoverage, readingCount]);
 
   const handleSavePreference = async (payload) => {
     setSavingPreference(true);
@@ -109,8 +124,34 @@ export default function Coverage() {
     }
   };
 
+  const handleRetryRead = async (documentId) => {
+    if (!documentId || retryingReadId === documentId) return;
+    setRetryingReadId(documentId);
+    setDocumentEditError("");
+    try {
+      await retryDocumentOcr(documentId);
+      setCoverageDocuments((current) =>
+        current.map((doc) => (doc.id === documentId ? { ...doc, ocr_status: "pending" } : doc))
+      );
+      await loadCoverage({ showLoading: false });
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setDocumentEditError(
+        typeof detail === "string" && detail
+          ? detail
+          : "No se pudo iniciar una nueva lectura. Inténtalo otra vez."
+      );
+    } finally {
+      setRetryingReadId(null);
+    }
+  };
+
   const categoryCounts = useMemo(
     () => getCoverageCategoryCounts(coverageDocuments),
+    [coverageDocuments]
+  );
+  const amountTotals = useMemo(
+    () => getCoverageAmountTotals(coverageDocuments),
     [coverageDocuments]
   );
   const categoriesWithDocs = Object.values(categoryCounts).filter((count) => count > 0).length;
@@ -133,13 +174,25 @@ export default function Coverage() {
           </p>
         </div>
         <div className="health-hub-hero-actions">
-          <Link className="health-hub-hero-action" to="/documents">
-            Subir documento de cobertura
-          </Link>
+          <button
+            type="button"
+            className="health-hub-hero-action"
+            onClick={() => setUploadWizardOpen(true)}
+          >
+            Subir licencia, bono o reembolso
+          </button>
           <Link className="health-hub-hero-secondary" to="/ai">
             Preguntar a Klinip IA
           </Link>
         </div>
+      </section>
+
+      <section className="coverage-upload-note" aria-label="Lectura de documentos de cobertura">
+        <strong>PDF, foto o imagen</strong>
+        <span>
+          Klinip los guarda como cobertura, lee el contenido con OCR/IA y los clasifica como bono,
+          reembolso, licencia, copago, GES/CAEC o plan.
+        </span>
       </section>
 
       <CoveragePlanCard
@@ -153,10 +206,20 @@ export default function Coverage() {
         total={coverageDocuments.length}
         pending={pendingCount}
         categoriesCount={categoriesWithDocs}
+        amountTotals={amountTotals}
         loading={loading}
       />
 
       {error ? <div className="coverage-alert">{error}</div> : null}
+
+      {readingCount ? (
+        <div className="coverage-processing-banner" role="status">
+          <strong>Leyendo {readingCount} documento{readingCount === 1 ? "" : "s"}</strong>
+          <span>
+            Estamos extrayendo datos desde la foto o PDF. La lista se actualizará automáticamente.
+          </span>
+        </div>
+      ) : null}
 
       <section className="coverage-section">
         <div className="health-hub-section-head">
@@ -179,18 +242,28 @@ export default function Coverage() {
           <CoverageDocumentList
             documents={filteredDocuments}
             savingId={savingDocumentId}
+            retryingReadId={retryingReadId}
             editError={documentEditError}
             onSave={handleSaveDocumentInfo}
+            onRetryRead={handleRetryRead}
           />
         ) : (
           <CoverageEmptyState
             activeFilter={activeFilter}
             hasAnyCoverage={coverageDocuments.length > 0}
+            onUpload={() => setUploadWizardOpen(true)}
           />
         )}
       </section>
 
       <CoverageGuide />
+
+      <DocumentUploadWizard
+        open={uploadWizardOpen}
+        onClose={() => setUploadWizardOpen(false)}
+        initialIntent={COVERAGE_UPLOAD_INTENT}
+        onUploaded={() => loadCoverage({ showLoading: false })}
+      />
     </div>
   );
 }

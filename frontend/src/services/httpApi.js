@@ -661,6 +661,11 @@ export async function getContinuityPanel(profileId) {
   return res.data || {};
 }
 
+export async function updateContinuityTask(profileId, taskId, payload) {
+  const res = await api.put(`/health-profiles/${profileId}/continuity/tasks/${taskId}`, payload);
+  return res.data || {};
+}
+
 export async function getHealthSheet(profileId) {
   const res = await api.get(`/health-profiles/${profileId}/health-sheet`);
   return res.data || {};

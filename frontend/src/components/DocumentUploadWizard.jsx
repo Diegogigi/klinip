@@ -87,6 +87,11 @@ const UPLOAD_INTENTS = [
   },
 ];
 
+function getInitialUploadIntent(value) {
+  const normalized = String(value || "auto").trim();
+  return UPLOAD_INTENTS.some((intent) => intent.value === normalized) ? normalized : "auto";
+}
+
 const CAPTURE_TIPS = [
   "Incluye el documento completo dentro de la foto.",
   "Evita sombras, reflejos y fondos recargados.",
@@ -343,7 +348,13 @@ function getCameraErrorMessage(error) {
   return "No pudimos iniciar la cámara en vivo. Puedes reintentar o usar la cámara del dispositivo como respaldo.";
 }
 
-export default function DocumentUploadWizard({ open, onClose, profileId, onUploaded }) {
+export default function DocumentUploadWizard({
+  open,
+  onClose,
+  profileId,
+  onUploaded,
+  initialIntent = "auto",
+}) {
   const [step, setStep] = useState("choose");
   const [analysis, setAnalysis] = useState(null);
   const [docId, setDocId] = useState(null);
@@ -355,7 +366,8 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
   const [doneOpen, setDoneOpen] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [selectedSource, setSelectedSource] = useState("");
-  const [uploadIntent, setUploadIntent] = useState("auto");
+  const initialUploadIntent = useMemo(() => getInitialUploadIntent(initialIntent), [initialIntent]);
+  const [uploadIntent, setUploadIntent] = useState(() => getInitialUploadIntent(initialIntent));
   const [cameraBusy, setCameraBusy] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState("");
@@ -408,7 +420,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       setDoneOpen(false);
       setSelectedFileName("");
       setSelectedSource("");
-      setUploadIntent("auto");
+      setUploadIntent(initialUploadIntent);
       setCameraError("");
       setCameraReady(false);
       setCameraBusy(false);
@@ -420,7 +432,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
       cancelledRef.current = true;
       stopCameraStream();
     };
-  }, [open, stopCameraStream]);
+  }, [initialUploadIntent, open, stopCameraStream]);
 
   const pollAnalysis = useCallback(
     async (id) => {
@@ -469,7 +481,9 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
         if (cancelledRef.current) return;
         if (!data) {
           setErrorMsg(
-            "Tu documento se guardó correctamente. Klinip seguirá leyéndolo en segundo plano y aparecerá en Documentos en unos momentos.",
+            uploadIntent === COVERAGE_UPLOAD_INTENT
+              ? "Tu documento se guardó correctamente. Klinip seguirá leyéndolo en segundo plano y aparecerá en Cobertura en unos momentos."
+              : "Tu documento se guardó correctamente. Klinip seguirá leyéndolo en segundo plano y aparecerá en Documentos en unos momentos.",
           );
           setStep("error");
           return;
@@ -1183,7 +1197,7 @@ export default function DocumentUploadWizard({ open, onClose, profileId, onUploa
           { icon: "building", label: "Centro", value: centerVal || "Sin centro registrado" },
           { icon: "clock", label: "Fecha", value: dateVal || "Sin fecha" },
         ]}
-        secondaryLabel="Volver a documentos"
+        secondaryLabel={isCoverageUpload ? "Volver a cobertura" : "Volver a documentos"}
       />
     </>
   );

@@ -605,6 +605,11 @@ class DocumentCoverageInfo(Base):
     amount_reimbursed = Column(Float, nullable=True)
     currency = Column(String, default="CLP")
     status = Column(String, default="")
+    issued_at = Column(DateTime, nullable=True)
+    service_at = Column(DateTime, nullable=True)
+    period_start_at = Column(DateTime, nullable=True)
+    period_end_at = Column(DateTime, nullable=True)
+    due_at = Column(DateTime, nullable=True)
     metadata_json = Column(JSON, default=dict)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

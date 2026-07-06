@@ -20,6 +20,7 @@ import { canWriteProfile, isViewerProfile } from "../utils/profileAccess";
 import StepUpModal from "../components/StepUpModal";
 import DocumentUploadWizard from "../components/DocumentUploadWizard";
 import SuccessSheet from "../components/SuccessSheet";
+import ContinuityTaskResolution from "../components/ContinuityTaskResolution";
 import { cleanUiText } from "../utils/textEncoding";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 import {
@@ -219,6 +220,7 @@ export default function Documents() {
   const [docSuccess, setDocSuccess] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState(null);
+  const [continuityTaskContext, setContinuityTaskContext] = useState(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerTarget, setViewerTarget] = useState(null);
   const [viewerUrl, setViewerUrl] = useState("");
@@ -624,8 +626,9 @@ export default function Documents() {
     else if (pending.action === "download") handleDownload(pending.doc, token);
   };
 
-  const handleOpenDetail = (doc) => {
+  const handleOpenDetail = (doc, continuityContext = null) => {
     setDetailTarget(doc);
+    setContinuityTaskContext(continuityContext);
     setDetailRenameOpen(false);
     setDetailFilenameDraft(getDocumentFilename(doc));
     setDetailOpen(true);
@@ -635,6 +638,7 @@ export default function Documents() {
     if (detailSaving) return;
     setDetailOpen(false);
     setDetailTarget(null);
+    setContinuityTaskContext(null);
     setDetailRenameOpen(false);
     setDetailFilenameDraft("");
   };
@@ -648,10 +652,21 @@ export default function Documents() {
     if (!focusId) return;
     const target = docs.find((item) => String(item.id) === String(focusId));
     if (!target) return;
-    handleOpenDetail(target);
+    const taskId = params.get("taskId");
+    handleOpenDetail(target, taskId ? { taskId } : null);
     navigate("/documents", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search, docs]);
+
+  // Deep link (?scan=1): abre directamente el asistente de captura, por
+  // ejemplo desde "Fotografía tu examen" en la Ficha de Salud.
+  useEffect(() => {
+    if (!location.search) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("scan") !== "1") return;
+    setWizardOpen(true);
+    navigate("/documents", { replace: true });
+  }, [location.search, navigate]);
 
   const syncDocumentState = (updatedDoc) => {
     if (!updatedDoc?.id) return;
@@ -1091,6 +1106,12 @@ export default function Documents() {
                   {getOcrStatusLabel(detailTarget.ocr_status)}
                 </span>
               </div>
+              <ContinuityTaskResolution
+                profileId={activeProfile?.id}
+                taskId={continuityTaskContext?.taskId}
+                recordLabel="este documento"
+                canUpdate={canEditActiveProfile}
+              />
               <div className="detail-grid">
                 <div className="detail-field">
                   <div>

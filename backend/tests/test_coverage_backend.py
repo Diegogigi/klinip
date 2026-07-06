@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 
 import pytest
 from fastapi import HTTPException
@@ -100,7 +101,7 @@ def test_coverage_document_endpoint_classifies_existing_document(db_session):
         filename="bono-fonasa.pdf",
         file_path="",
         notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
-        ocr_text="Bono Fonasa total $12.000 copago $3.000 bonificacion $9.000 aprobado",
+        ocr_text="Bono Fonasa fecha de atencion 12/06/2026 total $12.000 copago $3.000 bonificacion $9.000 aprobado",
         ocr_status="done",
     )
     db_session.add(doc)
@@ -114,6 +115,34 @@ def test_coverage_document_endpoint_classifies_existing_document(db_session):
     assert payload[0].coverage.amount_total == 12000
     assert payload[0].coverage.amount_patient == 3000
     assert payload[0].coverage.status == "aprobado"
+    assert payload[0].coverage.service_at.date().isoformat() == "2026-06-12"
+
+
+def test_coverage_license_extracts_start_and_end_dates(db_session):
+    user, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="licencia-medica.jpg",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text=(
+            "Licencia medica COMPIN fecha de emision 01/07/2026 "
+            "reposo laboral desde 03/07/2026 hasta 17/07/2026 pendiente"
+        ),
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    payload = asyncio.run(main.get_coverage_documents(db=db_session, current_user=user))
+    assert len(payload) == 1
+    assert payload[0].coverage.category == "licencia"
+    assert payload[0].coverage.status == "pendiente"
+    assert payload[0].coverage.issued_at.date().isoformat() == "2026-07-01"
+    assert payload[0].coverage.period_start_at.date().isoformat() == "2026-07-03"
+    assert payload[0].coverage.period_end_at.date().isoformat() == "2026-07-17"
 
 
 def test_coverage_document_info_can_be_corrected_manually(db_session):
@@ -140,6 +169,8 @@ def test_coverage_document_info_can_be_corrected_manually(db_session):
                 provider_name="Seguro empresa",
                 amount_reimbursed=25000,
                 status="pendiente",
+                period_start_at=datetime(2026, 7, 3),
+                period_end_at=datetime(2026, 7, 17),
             ),
             db=db_session,
             current_user=user,
@@ -150,6 +181,8 @@ def test_coverage_document_info_can_be_corrected_manually(db_session):
     assert payload.coverage.payer_type == "seguro_complementario"
     assert payload.coverage.provider_name == "Seguro empresa"
     assert payload.coverage.amount_reimbursed == 25000
+    assert payload.coverage.period_start_at.date().isoformat() == "2026-07-03"
+    assert payload.coverage.period_end_at.date().isoformat() == "2026-07-17"
     assert payload.coverage.metadata_json["manual_override"] is True
 
 
