@@ -1011,6 +1011,32 @@ const buildMedicationPromptKey = (med, date, slotKey = "") => {
   return `klinip_med_prompt_${med.id}_${day}_${slot}`;
 };
 
+const getNotificationTarget = (item) => {
+  if (!item) return "";
+  const appointmentId = item.appointmentId || item.appointment_id;
+  const medicationId = item.medicationId || item.medication_id;
+  const documentId = item.documentId || item.document_id;
+  const postId = item.postId || item.post_id;
+  const raw = item.url || "";
+  const normalizedRaw = String(raw || "").startsWith("#") ? String(raw).slice(1) : String(raw || "");
+  const basePath = (normalizedRaw.split("?")[0] || "/").replace(/^\/#/, "") || "/";
+  const query = new URLSearchParams(normalizedRaw.split("?")[1] || "");
+
+  if (appointmentId && ["/", "/appointments"].includes(basePath) && !query.has("appointmentId") && !query.has("complete")) {
+    return `/appointments?appointmentId=${encodeURIComponent(appointmentId)}&source=notification`;
+  }
+  if (medicationId && ["/", "/medications"].includes(basePath) && !query.has("medicationId") && !query.has("intake")) {
+    return `/medications?medicationId=${encodeURIComponent(medicationId)}&source=notification`;
+  }
+  if (documentId && ["/", "/documents"].includes(basePath) && !query.has("documentId")) {
+    return `/documents?documentId=${encodeURIComponent(documentId)}&source=notification`;
+  }
+  if (postId && ["/", "/feed", "/family"].includes(basePath) && !query.has("postId")) {
+    return `/feed?postId=${encodeURIComponent(postId)}&source=notification`;
+  }
+  return raw;
+};
+
 const getPathFromNotification = (item) => {
   if (!item) return "";
   if (item.kind === "document") return "/documents";
@@ -1844,7 +1870,8 @@ export default function App() {
   const handleOpenNotification = (item) => {
     if (!item) return;
     removeNotificationsByPredicate((notif) => notif.id === item.id);
-    if (item.url) navigate(item.url);
+    const target = getNotificationTarget(item);
+    if (target) navigate(target);
   };
 
   useEffect(() => {

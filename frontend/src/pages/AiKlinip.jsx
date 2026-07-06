@@ -40,18 +40,38 @@ const ENTRY_ACTIONS = [
   { id: "prescription", label: "Explica mi receta", prompt: "Explícame mi receta o indicación médica más reciente en lenguaje simple." },
   { id: "appointment", label: "Preparar próxima cita", prompt: "Ayúdame a preparar mi próxima cita médica con preguntas clave y pendientes." },
   { id: "exam", label: "Entender examen", prompt: "Ayúdame a entender mi examen o resultado más reciente en palabras simples." },
+  { id: "health-summary", label: "Resume mi ficha", prompt: "Resume mi Ficha de Salud: problemas activos, vacunas, exámenes e indicaciones.", tone: "health" },
+  { id: "continuity-pending", label: "Qué tengo pendiente", prompt: "¿Qué tengo pendiente y cuál es mi próximo paso?", tone: "continuity" },
   { id: "today-meds", label: "Medicamentos de hoy", prompt: "¿Qué medicamentos debo tomar hoy y qué debería revisar?" },
   { id: "symptom", label: "Consultar síntoma", prompt: "Quiero consultar un síntoma de forma segura. Guíame con preguntas claras." },
+  { id: "health-vaccines", label: "Mis vacunas", prompt: "¿Qué vacunas tengo registradas y de dónde sale esa información?", tone: "health" },
+  { id: "continuity-prepare", label: "Qué debo llevar", prompt: "¿Qué debo llevar a mi próxima cita o examen?", tone: "continuity" },
   { id: "coverage-copago", label: "Explícame mi copago", prompt: "Explícame mi copago más reciente: cuánto pagué yo y cuánto cubrió mi previsión.", tone: "coverage" },
   { id: "coverage-reembolsos", label: "Qué reembolsos tengo", prompt: "¿Qué reembolsos tengo registrados y en qué estado está cada uno?", tone: "coverage" },
   { id: "coverage-seguros", label: "Qué documentos de seguro tengo", prompt: "¿Qué documentos de seguro tengo guardados en Klinip Cobertura?", tone: "coverage" },
   { id: "coverage-bonos", label: "Qué bonos tengo registrados", prompt: "¿Qué bonos tengo registrados y cuánto pagué en cada uno?", tone: "coverage" },
 ];
 
-// Presentación por tipo de referencia. Las de Klinip Cobertura se destacan
-// como "fuente" para que quede claro de qué documento salió la respuesta.
+const HEALTH_REFERENCE_KINDS = new Set(["health-sheet", "health-problem", "vaccine-record", "exam-result"]);
+const CONTINUITY_REFERENCE_KINDS = new Set(["continuity-next-step", "continuity-preparation"]);
+
+function getEntryToneClass(tone) {
+  return tone ? ` is-${tone}` : "";
+}
+
+// Presentación por tipo de referencia para que la respuesta muestre su origen real.
 function getReferencePresentation(kind) {
   const normalized = String(kind || "").toLowerCase();
+  if (HEALTH_REFERENCE_KINDS.has(normalized)) {
+    return {
+      icon: "🩺",
+      prefix: normalized === "health-sheet" ? "" : "Ficha: ",
+      className: "is-health",
+    };
+  }
+  if (CONTINUITY_REFERENCE_KINDS.has(normalized)) {
+    return { icon: "📋", prefix: "Continuidad: ", className: "is-continuity" };
+  }
   if (normalized === "coverage-document") {
     return { icon: "🧾", prefix: "Fuente: ", className: "is-coverage" };
   }
@@ -843,6 +863,24 @@ export default function AiKlinip({ user }) {
         label: `${coverageCount} en ${sourceLabel(inferredSources, "coverage", "Klinip Cobertura")}`,
         tone: "mint",
         prompt: "Resume mis documentos de cobertura: bonos, reembolsos y copagos.",
+      });
+    }
+    const healthSheetCount = sourceCount(inferredSources, "health-sheet");
+    if (healthSheetCount > 0) {
+      tags.push({
+        key: "health-sheet",
+        label: `${healthSheetCount} en ${sourceLabel(inferredSources, "health-sheet", "Ficha de Salud")}`,
+        tone: "health",
+        prompt: "Resume mi Ficha de Salud con problemas activos, vacunas, exámenes e indicaciones.",
+      });
+    }
+    const continuityCount = sourceCount(inferredSources, "continuity");
+    if (continuityCount > 0) {
+      tags.push({
+        key: "continuity",
+        label: `${continuityCount} en ${sourceLabel(inferredSources, "continuity", "Klinip Continuidad")}`,
+        tone: "continuity",
+        prompt: "¿Qué tengo pendiente y qué debo preparar ahora?",
       });
     }
     return tags;
@@ -1710,7 +1748,7 @@ export default function AiKlinip({ user }) {
                     <button
                       key={item.id}
                       type="button"
-                      className={`ai-entry-pill${item.tone === "coverage" ? " is-coverage" : ""}`}
+                      className={`ai-entry-pill${getEntryToneClass(item.tone)}`}
                       onClick={() => submitPrompt(item.prompt)}
                     >
                       {item.label}

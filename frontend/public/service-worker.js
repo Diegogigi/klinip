@@ -1,4 +1,4 @@
-const CACHE_NAME = "klinip-cache-v30";
+const CACHE_NAME = "klinip-cache-v32";
 const BRAND_ASSET_VERSION = "20260523a";
 const ICON_192 = `/icons/android-chrome-192x192.png?v=${BRAND_ASSET_VERSION}`;
 const ICON_512 = `/icons/android-chrome-512x512.png?v=${BRAND_ASSET_VERSION}`;
@@ -20,6 +20,86 @@ const ASSETS = [
 const NOTIFICATIONS_STORE = "klinip-notifications";
 const RECEIVED_STORE = "klinip-received-notifications";
 const BADGE_STORE = "klinip-badge";
+const GENERIC_SECTION_PATHS = new Set(["/", "/appointments", "/medications", "/documents"]);
+
+function getNotificationId(data, camelKey, snakeKey) {
+  const value = data?.[camelKey] ?? data?.[snakeKey] ?? null;
+  if (value === null || value === undefined || value === "") return "";
+  return String(value);
+}
+
+function normalizeAppPath(rawUrl) {
+  let raw = String(rawUrl || "").trim();
+  if (!raw) return "/";
+
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const parsed = new URL(raw);
+      raw = parsed.hash ? parsed.hash.slice(1) : `${parsed.pathname}${parsed.search || ""}`;
+    }
+  } catch (_err) {
+    raw = String(rawUrl || "").trim();
+  }
+
+  if (raw.startsWith("/#")) {
+    raw = raw.slice(2) || "/";
+  } else if (raw.startsWith("#")) {
+    raw = raw.slice(1) || "/";
+  }
+
+  if (!raw.startsWith("/")) {
+    raw = `/${raw}`;
+  }
+
+  return raw || "/";
+}
+
+function hasQueryParam(path, paramName) {
+  const query = String(path || "").split("?")[1] || "";
+  return new URLSearchParams(query).has(paramName);
+}
+
+function buildSpecificTargetUrl(notificationData = {}) {
+  const rawUrl = String(notificationData.url || "").trim();
+  const normalizedPath = normalizeAppPath(rawUrl);
+  const basePath = normalizedPath.split("?")[0] || "/";
+  const appointmentId = getNotificationId(notificationData, "appointmentId", "appointment_id");
+  const medicationId = getNotificationId(notificationData, "medicationId", "medication_id");
+  const documentId = getNotificationId(notificationData, "documentId", "document_id");
+  const postId = getNotificationId(notificationData, "postId", "post_id");
+
+  if (
+    appointmentId &&
+    ["/", "/appointments"].includes(basePath) &&
+    !hasQueryParam(normalizedPath, "appointmentId") &&
+    !hasQueryParam(normalizedPath, "complete")
+  ) {
+    return `/appointments?appointmentId=${encodeURIComponent(appointmentId)}&source=push`;
+  }
+
+  if (
+    medicationId &&
+    ["/", "/medications"].includes(basePath) &&
+    !hasQueryParam(normalizedPath, "medicationId") &&
+    !hasQueryParam(normalizedPath, "intake")
+  ) {
+    return `/medications?medicationId=${encodeURIComponent(medicationId)}&source=push`;
+  }
+
+  if (documentId && ["/", "/documents"].includes(basePath) && !hasQueryParam(normalizedPath, "documentId")) {
+    return `/documents?documentId=${encodeURIComponent(documentId)}&source=push`;
+  }
+
+  if (postId && ["/", "/feed", "/family"].includes(basePath) && !hasQueryParam(normalizedPath, "postId")) {
+    return `/feed?postId=${encodeURIComponent(postId)}&source=push`;
+  }
+
+  if (!rawUrl && GENERIC_SECTION_PATHS.has(basePath)) {
+    return normalizedPath;
+  }
+
+  return rawUrl || normalizedPath || "/";
+}
 
 function buildNetworkUnavailableResponse() {
   return new Response("Network unavailable", {
@@ -347,14 +427,28 @@ async function checkAndShowPendingNotifications() {
         continue;
       }
 
+      const notificationData = {
+        ...(notification.data || {}),
+        url:
+          (notification.data && notification.data.url) ||
+          notification.url ||
+          "/",
+      };
+      const targetUrl = buildSpecificTargetUrl(notificationData);
+
       await recordReceivedNotification({
         id: notification.id,
         title: notification.title,
         body: notification.body,
-        url: notification.url || "/",
+        url: targetUrl,
         tag: notification.tag,
         timestamp: Date.now(),
         source: "scheduled",
+        kind: notificationData.kind || notificationData.type || "",
+        appointmentId: notificationData.appointmentId || null,
+        medicationId: notificationData.medicationId || null,
+        documentId: notificationData.documentId || null,
+        postId: notificationData.postId || null,
         userId: notification.userId || (notification.data && notification.data.userId) || null
       });
 
@@ -378,11 +472,8 @@ async function checkAndShowPendingNotifications() {
         badge: ICON_192,
         tag: notification.tag,
         data: {
-          ...(notification.data || {}),
-          url:
-            (notification.data && notification.data.url) ||
-            notification.url ||
-            "/",
+          ...notificationData,
+          url: targetUrl,
         },
         requireInteraction: true,
         vibrate: [200, 100, 200],
@@ -488,6 +579,7 @@ self.addEventListener("push", (event) => {
   const title = data.title || "Klinip - Recordatorio";
   const body = data.body || "Tienes un recordatorio pendiente";
   const url = data.url || "/";
+  const targetUrl = buildSpecificTargetUrl(data);
   const icon = data.icon || ICON_192;
   const priority = data.priority || "normal";
   const sound = data.sound || "default";
@@ -529,13 +621,13 @@ self.addEventListener("push", (event) => {
           icon: ICON_192
         },
         { action: "open", title: "Ver detalles", icon: ICON_192 }
-      ],
+    ],
     data: {
-      url,
       timestamp: Date.now(),
       sound,
       priority,
-      ...data
+      ...data,
+      url: targetUrl,
     }
   };
 
@@ -557,10 +649,15 @@ self.addEventListener("push", (event) => {
       id: tag,
       title,
       body,
-      url,
+      url: targetUrl,
       tag,
       timestamp: Date.now(),
       source: "push",
+      kind: data.kind || data.type || "",
+      appointmentId: data.appointmentId || null,
+      medicationId: data.medicationId || null,
+      documentId: data.documentId || null,
+      postId: data.postId || null,
       userId: data.userId || null
     }).catch((err) => {
       console.error("ERROR recordReceivedNotification:", err);
@@ -618,6 +715,11 @@ async function openNotificationTarget(targetUrl) {
   return null;
 }
 
+// Al tocar una notificación debe abrirse el registro específico, no solo la
+// sección. Si el payload trae el id (appointmentId/medicationId/documentId) y
+// la URL es genérica (sin query), se construye el enlace profundo que abre el
+// detalle. Las URLs que ya son específicas (notify=1, postId, tokens) se
+// respetan tal cual.
 self.addEventListener("notificationclick", (event) => {
   const notificationData = event.notification.data || {};
   event.notification.close();
@@ -643,13 +745,7 @@ self.addEventListener("notificationclick", (event) => {
   let targetUrl = notificationData.url || "/";
 
   if (isDefaultClick || event.action === "open") {
-    if (!notificationData.url && notificationData.appointmentId) {
-      targetUrl = `/appointments?notify=1&appointmentId=${notificationData.appointmentId}`;
-    } else if (!notificationData.url && notificationData.medicationId) {
-      targetUrl = `/medications?notify=1&medicationId=${notificationData.medicationId}`;
-    } else if (!notificationData.url && notificationData.kind === "note") {
-      targetUrl = "/";
-    }
+    targetUrl = buildSpecificTargetUrl(notificationData);
   }
 
   event.waitUntil(openNotificationTarget(targetUrl));

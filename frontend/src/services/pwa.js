@@ -1,8 +1,8 @@
 import { subscribePush, unsubscribePush } from "./httpApi";
 
 const PUBLIC_VAPID_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || "";
-const SERVICE_WORKER_URL = "/service-worker.js?v=20260618-font-fix-2";
-const APP_SHELL_VERSION = "20260618-font-fix-2";
+const SERVICE_WORKER_URL = "/service-worker.js?v=20260705-push-deeplink";
+const APP_SHELL_VERSION = "20260705-push-deeplink";
 const APP_SHELL_VERSION_KEY = "klinip-app-shell-version";
 let pendingPushSubscriptionPromise = null;
 

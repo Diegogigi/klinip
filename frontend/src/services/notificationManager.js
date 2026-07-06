@@ -22,6 +22,36 @@ const APPOINTMENT_TYPE_LABELS = [
 const DEFAULT_APPOINTMENT_LABEL = "Cita médica";
 const MEDICATION_LEAD_MINUTES = 5;
 
+function getNotificationId(data, camelKey, snakeKey) {
+  const value = data?.[camelKey] ?? data?.[snakeKey] ?? null;
+  if (value === null || value === undefined || value === "") return "";
+  return String(value);
+}
+
+function buildNotificationTarget(url = "/", data = {}) {
+  const rawUrl = String(url || "").trim();
+  const basePath = (rawUrl.split("?")[0] || "/").replace(/^\/#/, "") || "/";
+  const query = new URLSearchParams(rawUrl.split("?")[1] || "");
+  const appointmentId = getNotificationId(data, "appointmentId", "appointment_id");
+  const medicationId = getNotificationId(data, "medicationId", "medication_id");
+  const documentId = getNotificationId(data, "documentId", "document_id");
+  const postId = getNotificationId(data, "postId", "post_id");
+
+  if (appointmentId && ["/", "/appointments"].includes(basePath) && !query.has("appointmentId") && !query.has("complete")) {
+    return `/appointments?appointmentId=${encodeURIComponent(appointmentId)}&source=notification`;
+  }
+  if (medicationId && ["/", "/medications"].includes(basePath) && !query.has("medicationId") && !query.has("intake")) {
+    return `/medications?medicationId=${encodeURIComponent(medicationId)}&source=notification`;
+  }
+  if (documentId && ["/", "/documents"].includes(basePath) && !query.has("documentId")) {
+    return `/documents?documentId=${encodeURIComponent(documentId)}&source=notification`;
+  }
+  if (postId && ["/", "/feed", "/family"].includes(basePath) && !query.has("postId")) {
+    return `/feed?postId=${encodeURIComponent(postId)}&source=notification`;
+  }
+  return rawUrl || "/";
+}
+
 function getAppointmentTypeLabel(reminder) {
   const raw = `${reminder?.type || ""}`.toLowerCase();
   const found = APPOINTMENT_TYPE_LABELS.find(item => raw.includes(item.match));
@@ -350,11 +380,13 @@ async function showNotification(title, body, options = {}) {
     sound = "default",
     url = "/",
     data = {},
+    triggerAt = Date.now(),
     actions = [
       { action: "open", title: "Ver detalles" },
       { action: "close", title: "Cerrar" }
     ]
   } = options;
+  const targetUrl = buildNotificationTarget(url, data);
 
   // Aplicar throttling para evitar muchas notificaciones a la vez
   if (shouldThrottleNotification(tag)) {
@@ -377,21 +409,26 @@ async function showNotification(title, body, options = {}) {
         tag,
         actions,
         data: {
-          url,
           timestamp: Date.now(),
           sound,
-          ...data
+          ...data,
+          url: targetUrl
         }
       });
       console.log(`✅ Notificación enviada: ${title}`);
       recordNotificationInServiceWorker({
-        id: id || tag || buildScheduledNotificationId({ title, triggerAt: Date.now(), data }),
+        id: id || tag || buildScheduledNotificationId({ title, triggerAt, data }),
         title,
         body,
-        url,
+        url: targetUrl,
         tag,
         timestamp: Date.now(),
         source: "local",
+        kind: data.kind || data.type || "",
+        appointmentId: data.appointmentId || null,
+        medicationId: data.medicationId || null,
+        documentId: data.documentId || null,
+        postId: data.postId || null,
         data
       });
       return;
@@ -405,22 +442,27 @@ async function showNotification(title, body, options = {}) {
     body,
     icon,
     tag,
-    data: { url, ...data }
+    data: { ...data, url: targetUrl }
   });
 
   recordNotificationInServiceWorker({
-    id: id || tag || buildScheduledNotificationId({ title, triggerAt: Date.now(), data }),
+    id: id || tag || buildScheduledNotificationId({ title, triggerAt, data }),
     title,
     body,
-    url,
+    url: targetUrl,
     tag,
     timestamp: Date.now(),
-    source: "local"
+    source: "local",
+    kind: data.kind || data.type || "",
+    appointmentId: data.appointmentId || null,
+    medicationId: data.medicationId || null,
+    documentId: data.documentId || null,
+    postId: data.postId || null
   });
 
   notification.onclick = () => {
     window.focus();
-    if (url) window.location.href = url;
+    if (targetUrl) window.location.href = targetUrl;
     notification.close();
   };
 }

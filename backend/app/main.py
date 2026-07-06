@@ -10761,12 +10761,172 @@ def _structured_coverage_reply(message: str, context: dict) -> str:
     return " ".join(parts)
 
 
+def _message_asks_health_sheet(message: str | None) -> bool:
+    normalized = _normalize_text(message or "")
+    return any(
+        token in normalized
+        for token in [
+            "ficha de salud",
+            "ficha viva",
+            "mi salud",
+            "resumen de salud",
+            "problema activo",
+            "problemas activos",
+            "diagnostico activo",
+            "diagnóstico activo",
+            "diagnosticos activos",
+            "diagnósticos activos",
+            "vacuna",
+            "vacunas",
+            "vacunacion",
+            "vacunación",
+            "que significa este examen",
+            "qué significa este examen",
+            "entender examen",
+            "explicame este examen",
+            "explícame este examen",
+            "que significa mi examen",
+            "qué significa mi examen",
+            "examen estructurado",
+            "examenes estructurados",
+            "exámenes estructurados",
+            "indicaciones",
+            "que tengo pendiente",
+            "qué tengo pendiente",
+            "pendientes clinicos",
+            "pendientes clínicos",
+            "que debo llevar",
+            "qué debo llevar",
+            "proximo paso",
+            "próximo paso",
+        ]
+    )
+
+
+def _structured_health_sheet_reply(message: str, context: dict) -> str:
+    normalized = _normalize_text(message or "")
+    health_sheet = context.get("health_sheet") or {}
+    continuity = context.get("continuity_context") or {}
+    counts = health_sheet.get("counts") or {}
+    diagnoses = health_sheet.get("diagnoses") or []
+    vaccines = health_sheet.get("vaccines") or []
+    exams = health_sheet.get("exams") or []
+    indications = health_sheet.get("indications") or []
+
+    if any(token in normalized for token in ["que debo llevar", "qué debo llevar", "preparar", "preparacion", "preparación"]):
+        prep = continuity.get("upcoming_preparation") or {}
+        if prep:
+            docs = list(prep.get("documents_to_bring") or [])
+            questions = list(prep.get("suggested_questions") or [])
+            parts = [
+                f"Según Klinip Continuidad, prepara tu {prep.get('appointment_type') or 'atención'}"
+                + (f" en {prep.get('center')}" if prep.get("center") else "")
+                + "."
+            ]
+            if docs:
+                parts.append("Documentos sugeridos para llevar: " + ", ".join(docs[:5]) + ".")
+            parts.append(f"Medicamentos activos a revisar: {int(prep.get('active_medications_count') or 0)}.")
+            if questions:
+                parts.append("Preguntas útiles: " + " | ".join(questions[:4]) + ".")
+            return " ".join(parts)
+        return "No encuentro una próxima cita o examen con preparación registrada en Klinip Continuidad."
+
+    if any(token in normalized for token in ["pendiente", "pendientes", "proximo paso", "próximo paso", "atrasado", "atrasados"]):
+        next_step = continuity.get("next_step") or {}
+        overdue = continuity.get("overdue") or []
+        requires_action = continuity.get("requires_action") or []
+        if not next_step and not overdue and not requires_action:
+            return "Según Klinip Continuidad, no hay pendientes activos registrados para el perfil activo."
+        parts = [continuity.get("summary") or "Según Klinip Continuidad, hay acciones pendientes registradas."]
+        if next_step:
+            parts.append(
+                "Próximo paso: "
+                + (next_step.get("title") or "pendiente clínico")
+                + (f" ({next_step.get('action_label')})" if next_step.get("action_label") else "")
+                + "."
+            )
+        if overdue:
+            parts.append("Atrasados: " + "; ".join((item.get("title") or "Pendiente") for item in overdue[:3]) + ".")
+        elif requires_action:
+            parts.append("Requiere acción: " + "; ".join((item.get("title") or "Pendiente") for item in requires_action[:3]) + ".")
+        return " ".join(parts)
+
+    if any(token in normalized for token in ["vacuna", "vacunas", "vacunacion", "vacunación"]):
+        if not vaccines:
+            return "Según la Ficha de Salud, no hay vacunas estructuradas registradas para el perfil activo."
+        rendered = []
+        for item in vaccines[:6]:
+            source = item.get("source") or {}
+            rendered.append(
+                (item.get("name") or "Vacuna")
+                + (f" ({item.get('status')})" if item.get("status") else "")
+                + (f", fuente: {source.get('label')}" if source.get("label") else "")
+            )
+        return "Según la Ficha de Salud, vacunas registradas: " + "; ".join(rendered) + "."
+
+    if any(token in normalized for token in ["examen", "examenes", "exámenes", "resultado", "resultados"]):
+        if not exams:
+            return "Según la Ficha de Salud, no hay exámenes estructurados registrados para el perfil activo."
+        top = exams[0]
+        source = top.get("source") or {}
+        values = list(top.get("abnormal_values") or [])
+        parts = [
+            f"Según la Ficha de Salud, el examen más relevante es {top.get('name') or 'un examen registrado'}."
+        ]
+        if top.get("summary"):
+            parts.append(_clip_text(top.get("summary"), 260) + ".")
+        if values:
+            parts.append(
+                "Valores destacados: "
+                + "; ".join(
+                    _clip_text(
+                        " ".join(
+                            str(part)
+                            for part in [
+                                value.get("name") or value.get("label") or "",
+                                value.get("value") or "",
+                                value.get("unit") or "",
+                                value.get("flag") or "",
+                            ]
+                            if part
+                        ),
+                        90,
+                    )
+                    for value in values[:5]
+                    if isinstance(value, dict)
+                )
+                + "."
+            )
+        if source.get("label"):
+            parts.append(f"Fuente: {source.get('label')}.")
+        parts.append("Esto es orientación sobre el registro; no reemplaza la interpretación de un profesional.")
+        return " ".join(parts)
+
+    problem_text = "Sin problemas activos estructurados."
+    if diagnoses:
+        problem_text = "Problemas/hallazgos: " + "; ".join(
+            (item.get("name") or "Hallazgo")
+            + (f" ({item.get('status')})" if item.get("status") else "")
+            for item in diagnoses[:5]
+        ) + "."
+    return (
+        "Según la Ficha de Salud del perfil activo: "
+        f"{counts.get('diagnoses', len(diagnoses))} problema(s)/hallazgo(s), "
+        f"{counts.get('vaccines', len(vaccines))} vacuna(s), "
+        f"{counts.get('exams', len(exams))} examen(es) y "
+        f"{counts.get('indications', len(indications))} indicación(es) o pendiente(s). "
+        + problem_text
+    )
+
+
 def _maybe_resolve_structured_ai_query(message: str, context: dict) -> tuple[str, str, str] | None:
     normalized = _normalize_text(message or "")
     if not normalized:
         return None
     if _message_asks_coverage(message):
         return _structured_coverage_reply(message, context), "structured-memory", "structured-coverage"
+    if _message_asks_health_sheet(message):
+        return _structured_health_sheet_reply(message, context), "structured-memory", "structured-health-sheet"
     if any(token in normalized for token in ["que medicamentos", "cuales son mis medicamentos", "medicamentos activos", "que tomo"]):
         return _structured_medications_reply(context), "structured-memory", "structured-medications"
     appointment_question = any(
@@ -15479,6 +15639,12 @@ def _build_chat_context_base(
         "coverage_documents": 0,
         "medications": 0,
         "active_medications": 0,
+        "health_problems": 0,
+        "vaccines": 0,
+        "exams": 0,
+        "health_indications": 0,
+        "pending_tasks": 0,
+        "overdue_tasks": 0,
     }
     appointments: list[models.Appointment] = []
     documents: list[models.Document] = []
@@ -15487,6 +15653,8 @@ def _build_chat_context_base(
     profile_notes: list[models.ProfileNote] = []
     feed_posts: list[models.FeedPost] = []
     coverage_context: dict = {}
+    health_sheet_context: dict = {}
+    continuity_context: dict = {}
     family_access = (
         _build_family_access_context(
             db,
@@ -15617,6 +15785,36 @@ def _build_chat_context_base(
             observability=query_observability,
         )
         context_totals["coverage_documents"] = int((coverage_context or {}).get("documents_total") or 0)
+    if modules.get("health_sheet") and permissions_validated.get("view_profile"):
+        health_sheet_context = _safe_ai_context_query(
+            db,
+            module_name="health-sheet",
+            loader=lambda: _build_health_sheet(db, profile, int(target_user_id)),
+            default_value={},
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        health_counts = (health_sheet_context or {}).get("counts") or {}
+        context_totals["health_problems"] = int(health_counts.get("diagnoses") or 0)
+        context_totals["vaccines"] = int(health_counts.get("vaccines") or 0)
+        context_totals["exams"] = int(health_counts.get("exams") or 0)
+        context_totals["health_indications"] = int(health_counts.get("indications") or 0)
+    if modules.get("continuity") and permissions_validated.get("view_profile"):
+        continuity_context = _safe_ai_context_query(
+            db,
+            module_name="continuity",
+            loader=lambda: _build_continuity_panel(db, profile, int(target_user_id)),
+            default_value={},
+            degraded_reasons=degraded_reasons,
+            statement_timeout_ms=statement_timeout_ms,
+            context_deadline_ts=context_deadline_ts,
+            observability=query_observability,
+        )
+        continuity_counts = (continuity_context or {}).get("counts") or {}
+        context_totals["pending_tasks"] = int(continuity_counts.get("pending_tasks") or 0)
+        context_totals["overdue_tasks"] = int(continuity_counts.get("overdue_tasks") or 0)
     if modules.get("medications") and permissions_validated.get("view_medications"):
         context_totals["medications"] = _safe_ai_context_query(
             db,
@@ -16081,6 +16279,20 @@ def _build_chat_context_base(
             "count": int(context_totals.get("coverage_documents") or 0),
             "enabled": bool(modules.get("coverage")) and bool(permissions_validated.get("view_documents")),
         },
+        {
+            "key": "health-sheet",
+            "label": "Ficha de Salud",
+            "count": int(context_totals.get("health_problems") or 0)
+            + int(context_totals.get("vaccines") or 0)
+            + int(context_totals.get("exams") or 0),
+            "enabled": bool(modules.get("health_sheet")) and bool(permissions_validated.get("view_profile")),
+        },
+        {
+            "key": "continuity",
+            "label": "Klinip Continuidad",
+            "count": int(context_totals.get("pending_tasks") or 0),
+            "enabled": bool(modules.get("continuity")) and bool(permissions_validated.get("view_profile")),
+        },
         {"key": "document-memory", "label": "Memoria documental", "count": len(relevant_document_chunks), "enabled": bool(relevant_document_chunks)},
         {
             "key": "medications",
@@ -16133,6 +16345,8 @@ def _build_chat_context_base(
         "appointments": appointments,
         "documents": documents,
         "coverage_context": coverage_context,
+        "health_sheet": health_sheet_context,
+        "continuity_context": continuity_context,
         "medications": medications,
         "voice_sessions": voice_sessions,
         "external_records": [],
@@ -16194,6 +16408,8 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         "document_diagnoses_limit": 4,
         "document_chunks_limit": 4,
         "coverage_documents_limit": 5,
+        "health_sheet_items_limit": 5,
+        "continuity_actions_limit": 5,
         "chunk_chars": 420,
         "medications_limit": 6,
         "family_profiles_limit": 4,
@@ -16222,6 +16438,8 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "document_diagnoses_limit": 1,
                 "document_chunks_limit": 2,
                 "coverage_documents_limit": 3,
+                "health_sheet_items_limit": 3,
+                "continuity_actions_limit": 3,
                 "chunk_chars": 220,
                 "medications_limit": 3,
                 "family_profiles_limit": 1,
@@ -16250,6 +16468,8 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
                 "document_diagnoses_limit": 2,
                 "document_chunks_limit": 3,
                 "coverage_documents_limit": 4,
+                "health_sheet_items_limit": 4,
+                "continuity_actions_limit": 4,
                 "chunk_chars": 320,
                 "medications_limit": 4,
                 "family_profiles_limit": 2,
@@ -16276,6 +16496,10 @@ def _select_ai_prompt_profile(context: dict, timing_info: dict | None = None) ->
         profile["coverage_documents_limit"] = max(profile["coverage_documents_limit"], 5)
         profile["documents_limit"] = max(profile["documents_limit"], 2)
         profile["document_chunks_limit"] = max(profile["document_chunks_limit"], 3)
+    elif intent == "salud":
+        profile["health_sheet_items_limit"] = max(profile["health_sheet_items_limit"], 6)
+        profile["continuity_actions_limit"] = max(profile["continuity_actions_limit"], 6)
+        profile["document_summaries_limit"] = max(profile["document_summaries_limit"], 3)
     elif intent == "familiar":
         profile["family_profiles_limit"] = max(profile["family_profiles_limit"], 2)
     elif intent == "general":
@@ -16298,6 +16522,8 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
     conversation_summaries_limit = max(1, int(prompt_profile.get("conversation_summaries_limit", 3) or 3))
     document_chunks_limit = max(1, int(prompt_profile.get("document_chunks_limit", 4) or 4))
     coverage_documents_limit = max(1, int(prompt_profile.get("coverage_documents_limit", 5) or 5))
+    health_sheet_items_limit = max(1, int(prompt_profile.get("health_sheet_items_limit", 5) or 5))
+    continuity_actions_limit = max(1, int(prompt_profile.get("continuity_actions_limit", 5) or 5))
     chunk_chars = max(180, int(prompt_profile.get("chunk_chars", 420) or 420))
     medications_limit = max(1, int(prompt_profile.get("medications_limit", 6) or 6))
     voice_sessions_limit = max(1, int(prompt_profile.get("voice_sessions_limit", 3) or 3))
@@ -16480,6 +16706,116 @@ def _serialize_ai_context(context: dict, prompt_profile: dict | None = None) -> 
             "totals": coverage_context.get("totals") or {},
             "documents": (coverage_context.get("documents") or [])[:coverage_documents_limit],
         }
+    if enabled_modules.get("health_sheet") and context.get("health_sheet"):
+        health_sheet = context.get("health_sheet") or {}
+
+        def serialize_health_source(source: dict | None) -> dict | None:
+            if not source:
+                return None
+            return {
+                "source_type": source.get("source_type") or "",
+                "source_id": source.get("source_id"),
+                "label": _clip_text(source.get("label") or "", 120),
+                "date": _safe_iso_local(source.get("date"), timezone_name),
+            }
+
+        payload["health_sheet"] = {
+            "profile_id": health_sheet.get("profile_id"),
+            "profile_name": health_sheet.get("profile_name") or "",
+            "summary": _clip_text(health_sheet.get("summary") or "", max(220, brief_summary_chars)),
+            "counts": health_sheet.get("counts") or {},
+            "diagnoses": [
+                {
+                    "name": _clip_text(item.get("name") or "", 120),
+                    "detail": _clip_text(item.get("detail") or "", 220),
+                    "status": item.get("status") or "",
+                    "source": serialize_health_source(item.get("source")),
+                }
+                for item in (health_sheet.get("diagnoses") or [])[:health_sheet_items_limit]
+            ],
+            "vaccines": [
+                {
+                    "name": _clip_text(item.get("name") or "", 120),
+                    "status": item.get("status") or "",
+                    "date": _safe_iso_local(item.get("date"), timezone_name),
+                    "source": serialize_health_source(item.get("source")),
+                }
+                for item in (health_sheet.get("vaccines") or [])[:health_sheet_items_limit]
+            ],
+            "exams": [
+                {
+                    "name": _clip_text(item.get("name") or "", 140),
+                    "summary": _clip_text(item.get("summary") or "", 260),
+                    "date": _safe_iso_local(item.get("date"), timezone_name),
+                    "abnormal_values": list(item.get("abnormal_values") or [])[:6],
+                    "source": serialize_health_source(item.get("source")),
+                }
+                for item in (health_sheet.get("exams") or [])[:health_sheet_items_limit]
+            ],
+            "indications": [
+                {
+                    "title": _clip_text(item.get("title") or "", 120),
+                    "detail": _clip_text(item.get("detail") or "", 220),
+                    "indication_type": item.get("indication_type") or "",
+                    "status": item.get("status") or "",
+                    "source": serialize_health_source(item.get("source")),
+                }
+                for item in (health_sheet.get("indications") or [])[:health_sheet_items_limit]
+            ],
+            "sources": [
+                serialize_health_source(source)
+                for source in (health_sheet.get("sources") or [])[:health_sheet_items_limit]
+                if source
+            ],
+        }
+    if enabled_modules.get("continuity") and context.get("continuity_context"):
+        continuity = context.get("continuity_context") or {}
+
+        def serialize_continuity_action(item: dict | None) -> dict | None:
+            if not item:
+                return None
+            return {
+                "id": item.get("id") or "",
+                "title": _clip_text(item.get("title") or "", 140),
+                "description": _clip_text(item.get("description") or "", 220),
+                "status": item.get("status") or "",
+                "priority": item.get("priority") or "",
+                "due_at": _safe_iso_local(item.get("due_at"), timezone_name),
+                "episode_id": item.get("episode_id"),
+                "source_type": item.get("source_type") or "",
+                "source_id": item.get("source_id"),
+                "action_label": item.get("action_label") or "",
+            }
+
+        prep = continuity.get("upcoming_preparation") or None
+        payload["continuity_context"] = {
+            "profile_id": continuity.get("profile_id"),
+            "summary": _clip_text(continuity.get("summary") or "", 260),
+            "counts": continuity.get("counts") or {},
+            "next_step": serialize_continuity_action(continuity.get("next_step")),
+            "overdue": [
+                item
+                for item in [serialize_continuity_action(row) for row in (continuity.get("overdue") or [])[:continuity_actions_limit]]
+                if item
+            ],
+            "requires_action": [
+                item
+                for item in [serialize_continuity_action(row) for row in (continuity.get("requires_action") or [])[:continuity_actions_limit]]
+                if item
+            ],
+            "upcoming_preparation": {
+                "appointment_id": prep.get("appointment_id"),
+                "appointment_type": prep.get("appointment_type") or "",
+                "specialty": prep.get("specialty") or "",
+                "center": prep.get("center") or "",
+                "date_time": _safe_iso_local(prep.get("date_time"), timezone_name),
+                "documents_to_bring": list(prep.get("documents_to_bring") or [])[:5],
+                "active_medications_count": int(prep.get("active_medications_count") or 0),
+                "suggested_questions": list(prep.get("suggested_questions") or [])[:5],
+            }
+            if prep
+            else None,
+        }
     if enabled_modules.get("medications"):
         payload["medication_insights"] = context.get("medication_insights") or {}
         payload["medications"] = [
@@ -16633,6 +16969,9 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "33. No afirmes que guardaste, creaste, registraste o modificaste datos dentro de Klinip a menos que esa acción haya sido confirmada por el sistema. Si el usuario pide guardar algo y no hay confirmación del sistema, limita tu respuesta a redactar o preparar el contenido.\n"
         "34. Si existe 'feed_posts' en el contexto, usalo para responder preguntas sobre publicaciones recientes de la familia en KlinipFeed: quién publicó, qué compartió, cuándo, tipo de publicación (general, examen, consulta, medicamento) y nivel de interacción (reacciones y comentarios). No inventes publicaciones si no existen en el contexto.\n"
         "35. Si existe 'coverage_context' y el usuario pregunta por Isapre, Fonasa, seguro, bonos, reembolsos, copagos, licencias, GES/CAEC o documentos de cobertura, usa esos datos estructurados como fuente principal. Cita el nombre del documento o su id, explica montos como total, bonificado/cubierto, copago y reembolsado, y aclara cuando falte un monto o deba validarse con el prestador/asegurador.\n"
+        "36. Si existe 'health_sheet', úsalo como fuente principal para preguntas sobre Ficha de Salud, diagnósticos/problemas activos, vacunas, exámenes, indicaciones y resumen de salud. Cita el nombre del registro y su source.label cuando esté disponible.\n"
+        "37. Si existe 'continuity_context', úsalo como fuente principal para preguntas sobre pendientes, próximo paso, atrasos, preparación antes de consulta, qué llevar o seguimiento posterior. Prioriza next_step, overdue, requires_action y upcoming_preparation.\n"
+        "38. Si health_sheet o continuity_context contradicen datos antiguos de documentos, prioriza los datos estructurados porque son la ficha viva editable del usuario.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
@@ -17287,7 +17626,77 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
     family_access = context.get("family_access") or {}
     family_context = context.get("family_context") or {}
     coverage_context = context.get("coverage_context") or {}
+    health_sheet = context.get("health_sheet") or {}
+    continuity = context.get("continuity_context") or {}
     diagnosis_mentions = _diagnosis_mentions_from_context(context)
+
+    if health_sheet and _message_asks_health_sheet(message):
+        counts = health_sheet.get("counts") or {}
+        refs.append(
+            {
+                "kind": "health-sheet",
+                "label": "Ficha de Salud",
+                "detail": (
+                    f"Problemas {counts.get('diagnoses', 0)} | "
+                    f"Vacunas {counts.get('vaccines', 0)} | "
+                    f"Exámenes {counts.get('exams', 0)} | "
+                    f"Indicaciones {counts.get('indications', 0)}"
+                ),
+            }
+        )
+        if any(token in normalized for token in ["diagnostico", "diagnóstico", "problema", "problemas", "ficha"]):
+            for item in (health_sheet.get("diagnoses") or [])[:2]:
+                source = item.get("source") or {}
+                refs.append(
+                    {
+                        "kind": "health-problem",
+                        "label": item.get("name") or "Problema de salud",
+                        "detail": " | ".join([part for part in [item.get("status") or "", source.get("label") or ""] if part]),
+                    }
+                )
+        if any(token in normalized for token in ["vacuna", "vacunas", "vacunacion", "vacunación"]):
+            for item in (health_sheet.get("vaccines") or [])[:2]:
+                source = item.get("source") or {}
+                refs.append(
+                    {
+                        "kind": "vaccine-record",
+                        "label": item.get("name") or "Vacuna",
+                        "detail": " | ".join([part for part in [item.get("status") or "", source.get("label") or ""] if part]),
+                    }
+                )
+        if any(token in normalized for token in ["examen", "examenes", "exámenes", "resultado", "resultados"]):
+            for item in (health_sheet.get("exams") or [])[:2]:
+                source = item.get("source") or {}
+                refs.append(
+                    {
+                        "kind": "exam-result",
+                        "label": item.get("name") or "Examen",
+                        "detail": _clip_text(item.get("summary") or source.get("label") or "", 140),
+                    }
+                )
+
+    if continuity and any(
+        token in normalized
+        for token in ["pendiente", "pendientes", "proximo paso", "próximo paso", "que debo llevar", "qué debo llevar", "preparar", "atrasado"]
+    ):
+        next_step = continuity.get("next_step") or {}
+        if next_step:
+            refs.append(
+                {
+                    "kind": "continuity-next-step",
+                    "label": next_step.get("title") or "Próximo paso",
+                    "detail": " | ".join([part for part in [next_step.get("priority") or "", next_step.get("action_label") or ""] if part]),
+                }
+            )
+        prep = continuity.get("upcoming_preparation") or {}
+        if prep:
+            refs.append(
+                {
+                    "kind": "continuity-preparation",
+                    "label": "Preparación de próxima atención",
+                    "detail": " | ".join([part for part in [prep.get("appointment_type") or "", prep.get("center") or "", prep.get("specialty") or ""] if part]),
+                }
+            )
 
     referenced_document = (
         relevant_documents[0]
@@ -23493,6 +23902,36 @@ def detect_chat_intent(message: str | None) -> str:
         return "familiar"
     if _message_asks_coverage(message):
         return "cobertura"
+    health_sheet_tokens = [
+        "ficha de salud",
+        "ficha viva",
+        "mi salud",
+        "problema activo",
+        "problemas activos",
+        "diagnosticos activos",
+        "diagnósticos activos",
+        "diagnostico activo",
+        "diagnóstico activo",
+        "vacuna",
+        "vacunas",
+        "vacunacion",
+        "vacunación",
+        "que significa este examen",
+        "qué significa este examen",
+        "entender examen",
+        "explicame este examen",
+        "explícame este examen",
+        "que significa mi examen",
+        "qué significa mi examen",
+        "que tengo pendiente",
+        "qué tengo pendiente",
+        "pendientes clinicos",
+        "pendientes clínicos",
+        "que debo llevar",
+        "qué debo llevar",
+    ]
+    if any(token in normalized for token in health_sheet_tokens):
+        return "salud"
     voice_tokens = [
         "klinip voice",
         "audio",
@@ -23578,6 +24017,8 @@ def select_context_modules(intent: str) -> dict:
     base_modules = {
         "profile_notes": True,
         "voice_sessions": True,
+        "health_sheet": True,
+        "continuity": True,
         "appointments": False,
         "documents": False,
         "document_summaries": False,
@@ -23594,12 +24035,22 @@ def select_context_modules(intent: str) -> dict:
     elif intent == "documentos":
         base_modules["documents"] = True
         base_modules["document_summaries"] = True
+        base_modules["health_sheet"] = True
     elif intent == "cobertura":
         base_modules["documents"] = True
         base_modules["document_summaries"] = True
         base_modules["coverage"] = True
+        base_modules["health_sheet"] = True
     elif intent == "citas":
         base_modules["appointments"] = True
+        base_modules["continuity"] = True
+    elif intent == "salud":
+        base_modules["appointments"] = True
+        base_modules["documents"] = True
+        base_modules["document_summaries"] = True
+        base_modules["medications"] = True
+        base_modules["health_sheet"] = True
+        base_modules["continuity"] = True
     elif intent == "familiar":
         base_modules["family"] = True
     elif intent == "feed":

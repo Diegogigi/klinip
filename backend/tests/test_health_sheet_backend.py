@@ -235,3 +235,102 @@ def test_health_sheet_action_creates_clinical_task(db_session):
     assert task.source_record_type == "health_problem"
     assert panel["counts"]["pending_tasks"] == 1
     assert panel["requires_action"][0]["title"] == "Agendar control de presión"
+
+
+def test_ai_context_uses_health_sheet_and_continuity_sources(db_session):
+    user, profile = _seed_profile(db_session)
+    link = (
+        db_session.query(models.ProfileRelationship)
+        .filter_by(profile_id=profile.id, user_id=user.id)
+        .one()
+    )
+    now = datetime.now()
+
+    problem = asyncio.run(
+        main.create_health_problem(
+            profile.id,
+            schemas.HealthProblemCreate(name="Asma", detail="Usa inhalador de rescate según indicación."),
+            db=db_session,
+            current_user=user,
+        )
+    )
+    asyncio.run(
+        main.create_health_vaccine(
+            profile.id,
+            schemas.HealthVaccineRecordCreate(
+                vaccine_name="Influenza",
+                administered_at=now - timedelta(days=10),
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+    asyncio.run(
+        main.create_health_exam_result(
+            profile.id,
+            schemas.HealthExamResultCreate(
+                exam_name="Espirometría",
+                summary="Resultado compatible con seguimiento respiratorio.",
+                performed_at=now - timedelta(days=3),
+                values_json=[{"name": "VEF1", "value": "78", "unit": "%", "flag": "low"}],
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+    asyncio.run(
+        main.create_health_sheet_action(
+            profile.id,
+            schemas.HealthSheetActionCreate(
+                title="Llevar espirometría al control",
+                task_type="appointment_follow_up",
+                due_at=now + timedelta(days=1),
+                source_type="health_problem",
+                source_id=problem.id,
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+
+    assert main.detect_chat_intent("qué tengo pendiente en mi ficha de salud") == "salud"
+    assert main.detect_chat_intent("qué significa este examen") == "salud"
+    modules = main.select_context_modules("salud")
+    assert modules["health_sheet"] is True
+    assert modules["continuity"] is True
+
+    context, _timing = main._build_chat_context_base(
+        db_session,
+        user,
+        profile,
+        link,
+        user.id,
+        message="qué tengo pendiente en mi ficha de salud",
+        intent="salud",
+        modules=modules,
+    )
+
+    assert context["health_sheet"]["counts"]["diagnoses"] == 1
+    assert context["health_sheet"]["counts"]["vaccines"] == 1
+    assert context["health_sheet"]["counts"]["exams"] == 1
+    assert context["continuity_context"]["counts"]["pending_tasks"] == 1
+
+    serialized = main._serialize_ai_context(
+        context,
+        {"health_sheet_items_limit": 5, "continuity_actions_limit": 5},
+    )
+    assert serialized["health_sheet"]["diagnoses"][0]["name"] == "Asma"
+    assert serialized["health_sheet"]["vaccines"][0]["name"] == "Influenza"
+    assert serialized["health_sheet"]["exams"][0]["name"] == "Espirometría"
+    assert serialized["continuity_context"]["next_step"]["title"] == "Llevar espirometría al control"
+
+    refs = main._build_ai_references("qué tengo pendiente en mi ficha de salud", context)
+    assert any(ref["kind"] == "health-sheet" for ref in refs)
+    assert any(ref["kind"] == "continuity-next-step" for ref in refs)
+
+    structured = main._maybe_resolve_structured_ai_query("qué tengo pendiente en mi ficha de salud", context)
+    assert structured is not None
+    reply, model_name, mode = structured
+    assert model_name == "structured-memory"
+    assert mode == "structured-health-sheet"
+    assert "Llevar espirometría al control" in reply
