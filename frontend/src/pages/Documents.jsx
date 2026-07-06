@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   getAiDocumentIntelligence,
   getDocuments,
@@ -210,6 +210,7 @@ function normalizeAbnormalValues(items) {
 
 export default function Documents() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [docs, setDocs] = useState([]);
   const [documentIntelligence, setDocumentIntelligence] = useState([]);
   const [activeProfile, setActiveProfile] = useState(null);
@@ -637,6 +638,20 @@ export default function Documents() {
     setDetailRenameOpen(false);
     setDetailFilenameDraft("");
   };
+
+  // Deep link (?documentId=X): abre directamente el detalle del documento,
+  // por ejemplo desde los pendientes de "Lo que falta hacer" en Mi Salud.
+  useEffect(() => {
+    if (!location.search || !docs.length) return;
+    const params = new URLSearchParams(location.search);
+    const focusId = params.get("documentId");
+    if (!focusId) return;
+    const target = docs.find((item) => String(item.id) === String(focusId));
+    if (!target) return;
+    handleOpenDetail(target);
+    navigate("/documents", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, docs]);
 
   const syncDocumentState = (updatedDoc) => {
     if (!updatedDoc?.id) return;

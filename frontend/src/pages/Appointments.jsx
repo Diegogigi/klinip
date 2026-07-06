@@ -271,6 +271,22 @@ export default function Appointments() {
     setDetailTarget(null);
   };
 
+  // Deep link (?appointmentId=X&source=continuity): abre directamente el
+  // detalle de la cita, por ejemplo desde "Lo que falta hacer" en Mi Salud.
+  // No interfiere con los flujos existentes de notify=1 ni complete.
+  useEffect(() => {
+    if (!location.search || !appointments.length) return;
+    const params = new URLSearchParams(location.search);
+    if (params.get("notify") === "1" || params.get("complete")) return;
+    const focusId = params.get("appointmentId");
+    if (!focusId) return;
+    const target = appointments.find((a) => String(a.id) === String(focusId));
+    if (!target) return;
+    handleOpenDetail(target);
+    navigate("/appointments", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, appointments]);
+
   const getAppointmentLabel = (appt) => {
     const typeLabel = cleanUiText(typeLabels[appt.type] || appt.type || "Actividad");
     const detail = cleanUiText(appt.specialty || appt.center || "Sin detalle");

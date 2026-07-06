@@ -1162,6 +1162,18 @@ export default function Medications() {
     setDetailIntakesLoading(false);
   };
 
+  // Deep link (?medicationId=X&source=continuity): abre directamente el
+  // detalle del medicamento, por ejemplo desde "Lo que falta hacer" en Mi
+  // Salud. El flujo de recordatorios (source=reminder) sigue aparte.
+  useEffect(() => {
+    if (routeFocusSource !== "continuity" || !routeMedicationId || !meds.length) return;
+    const target = meds.find((med) => String(med.id) === String(routeMedicationId));
+    if (!target) return;
+    handleOpenDetail(target);
+    navigate("/medications", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeFocusSource, routeMedicationId, meds]);
+
   const closeNotifyModal = () => {
     if (notifyActionLoading) return;
     if (notifyPromptKey) {

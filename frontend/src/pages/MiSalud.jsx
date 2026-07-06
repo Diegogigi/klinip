@@ -88,16 +88,23 @@ function describeMedicationStatus(medication, nextDose, now = new Date()) {
 }
 
 // Panel de Continuidad: a qué ruta lleva cada pendiente según su origen.
+// Cuando hay id del registro, el enlace abre directamente ese registro en la
+// página destino (deep link con source=continuity).
 function continuityRoute(item) {
   const source = String(item?.source_type || "").toLowerCase();
+  const sourceId = item?.source_id ? String(item.source_id) : "";
   if (source.includes("appointment") || source.includes("cita") || source.includes("exam")) {
-    return "/appointments";
+    return sourceId
+      ? `/appointments?appointmentId=${sourceId}&source=continuity`
+      : "/appointments";
   }
   if (source.includes("document") || source.includes("informe") || source.includes("resultado")) {
-    return "/documents";
+    return sourceId ? `/documents?documentId=${sourceId}&source=continuity` : "/documents";
   }
   if (source.includes("prescription") || source.includes("medication") || source.includes("receta")) {
-    return "/medications";
+    return sourceId
+      ? `/medications?medicationId=${sourceId}&source=continuity`
+      : "/medications";
   }
   return "/timeline";
 }
