@@ -155,6 +155,7 @@ class HealthProfileOut(BaseModel):
     access_role: Optional[str] = None
     access_status: Optional[str] = None
     relationship_type: Optional[str] = None
+    access_permissions: List[str] = []
 
     @field_serializer('birth_date', 'created_at')
     def serialize_profile_datetime(self, dt: Optional[datetime], _info):
@@ -176,6 +177,7 @@ class ProfileRelationshipOut(BaseModel):
     relationship_type: Optional[str] = ""
     role: str
     status: str
+    permissions: List[str] = []
     invited_at: Optional[datetime] = None
     accepted_at: Optional[datetime] = None
     created_at: datetime

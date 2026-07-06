@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+
+import pytest
+from fastapi import HTTPException
 
 from app import main, models, schemas
 
@@ -32,6 +36,30 @@ def _seed_profile(db_session):
     db_session.refresh(user)
     db_session.refresh(profile)
     return user, profile
+
+
+def _seed_family_collaborator(db_session, profile, *, role="viewer", permissions=None):
+    collaborator = models.User(
+        email=f"family-{role}-{len(permissions or [])}@example.com",
+        password_hash="hash",
+        name="Family Collaborator",
+    )
+    db_session.add(collaborator)
+    db_session.flush()
+    link = models.ProfileRelationship(
+        profile_id=profile.id,
+        user_id=collaborator.id,
+        relationship_type="cuidador",
+        role=role,
+        status="accepted",
+        permissions_json=json.dumps(permissions or []),
+    )
+    collaborator.active_health_profile_id = profile.id
+    db_session.add_all([link, collaborator])
+    db_session.commit()
+    db_session.refresh(collaborator)
+    db_session.refresh(link)
+    return collaborator, link
 
 
 def test_coverage_preferences_can_be_saved_per_profile(db_session):
@@ -123,6 +151,103 @@ def test_coverage_document_info_can_be_corrected_manually(db_session):
     assert payload.coverage.provider_name == "Seguro empresa"
     assert payload.coverage.amount_reimbursed == 25000
     assert payload.coverage.metadata_json["manual_override"] is True
+
+
+def test_family_coverage_requires_module_permission(db_session):
+    owner, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=owner.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="bono-familiar.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text="Bono Fonasa total $20.000 copago $5.000 bonificacion $15.000 aprobado",
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    collaborator, link = _seed_family_collaborator(
+        db_session,
+        profile,
+        role="viewer",
+        permissions=["view_profile", "view_documents"],
+    )
+    with pytest.raises(HTTPException) as denied:
+        asyncio.run(
+            main.get_coverage_documents(
+                profile_id=profile.id,
+                db=db_session,
+                current_user=collaborator,
+            )
+        )
+    assert denied.value.status_code == 403
+
+    link.permissions_json = json.dumps(["view_profile", "view_documents", "view_coverage"])
+    db_session.add(link)
+    db_session.commit()
+    payload = asyncio.run(
+        main.get_coverage_documents(
+            profile_id=profile.id,
+            db=db_session,
+            current_user=collaborator,
+        )
+    )
+    assert len(payload) == 1
+    assert payload[0].document.id == doc.id
+
+
+def test_family_coverage_edit_requires_edit_permission(db_session):
+    owner, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=owner.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="reembolso-familiar.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text="Reembolso seguro complementario total $60.000 pendiente",
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.commit()
+
+    collaborator, link = _seed_family_collaborator(
+        db_session,
+        profile,
+        role="caregiver",
+        permissions=["view_profile", "view_coverage"],
+    )
+    update_payload = schemas.CoverageDocumentInfoUpdate(
+        category="reembolso",
+        payer_type="seguro complementario",
+        amount_reimbursed=30000,
+    )
+    with pytest.raises(HTTPException) as denied:
+        asyncio.run(
+            main.update_coverage_document_info(
+                doc.id,
+                update_payload,
+                db=db_session,
+                current_user=collaborator,
+            )
+        )
+    assert denied.value.status_code == 403
+
+    link.permissions_json = json.dumps(["view_profile", "view_coverage", "edit_coverage"])
+    db_session.add(link)
+    db_session.commit()
+    payload = asyncio.run(
+        main.update_coverage_document_info(
+            doc.id,
+            update_payload,
+            db=db_session,
+            current_user=collaborator,
+        )
+    )
+    assert payload.coverage.category == "reembolso"
+    assert payload.coverage.amount_reimbursed == 30000
 
 
 def test_ai_context_includes_coverage_sources_and_amounts(db_session):

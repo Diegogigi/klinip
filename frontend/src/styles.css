@@ -3530,12 +3530,16 @@ body.theme-dark .family-role-row,
 body.theme-dark .family-inv-row,
 body.theme-dark .family-report-kpi,
 body.theme-dark .family-report-empty,
-body.theme-dark .family-report-highlight {
+body.theme-dark .family-report-highlight,
+body.theme-dark .family-permission-module,
+body.theme-dark .family-caregiver-today-item {
   background: #0b1224;
   border-color: #1e293b;
 }
 
 body.theme-dark .family-role-name,
+body.theme-dark .family-permission-module legend,
+body.theme-dark .family-caregiver-today-main strong,
 body.theme-dark .family-timeline-text,
 body.theme-dark .family-notes-history-title,
 body.theme-dark .family-note-item-author,
@@ -3551,8 +3555,24 @@ body.theme-dark .family-subsection-label,
 body.theme-dark .family-activity-divider p,
 body.theme-dark .family-note-purpose,
 body.theme-dark .family-note-item-body,
-body.theme-dark .family-timeline-note-preview {
+body.theme-dark .family-timeline-note-preview,
+body.theme-dark .family-permission-panel-head p,
+body.theme-dark .family-permission-check,
+body.theme-dark .family-caregiver-today-main span {
   color: #64748b;
+}
+
+body.theme-dark .family-permission-panel {
+  border-top-color: #1e293b;
+}
+
+body.theme-dark .family-permission-error {
+  color: #fca5a5;
+}
+
+body.theme-dark .family-caregiver-today-item:hover {
+  border-color: rgba(96, 165, 250, 0.5);
+  box-shadow: 0 10px 20px rgba(2, 6, 23, 0.28);
 }
 
 body.theme-dark .family-member-summary-text {
@@ -11698,6 +11718,7 @@ body.theme-dark .family-member-owner {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
   padding: 0.9rem 1rem;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
@@ -11762,6 +11783,196 @@ body.theme-dark .family-member-owner {
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
+}
+
+.family-permission-panel {
+  flex: 0 0 100%;
+  display: grid;
+  gap: 0.58rem;
+  margin-top: 0.2rem;
+  padding-top: 0.72rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.family-permission-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.family-permission-panel-head p,
+.family-permission-panel-head span {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.family-permission-panel-head span {
+  color: #2563eb;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.family-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.family-permission-module {
+  min-width: 0;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 0.58rem;
+}
+
+.family-permission-module legend {
+  padding: 0 0.2rem;
+  color: #0f172a;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.family-permission-checks {
+  display: grid;
+  gap: 0.38rem;
+  margin-top: 0.12rem;
+}
+
+.family-permission-check {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.family-permission-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+
+.family-permission-check span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.family-permission-error {
+  margin: 0.2rem 0 0;
+  color: #b91c1c;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.family-caregiver-today-card {
+  margin-top: 1rem;
+}
+
+.family-caregiver-today-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.58rem;
+}
+
+.family-caregiver-today-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.56rem;
+  min-width: 0;
+  min-height: 76px;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 0.72rem;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+
+.family-caregiver-today-item:hover {
+  border-color: #93c5fd;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1);
+  transform: translateY(-1px);
+}
+
+.family-caregiver-today-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: #dbeafe;
+  position: relative;
+}
+
+.family-caregiver-today-icon::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.family-caregiver-today-icon.is-medications {
+  background: #dcfce7;
+}
+
+.family-caregiver-today-icon.is-medications::after {
+  background: #16a34a;
+}
+
+.family-caregiver-today-icon.is-documents,
+.family-caregiver-today-icon.is-coverage {
+  background: #fef3c7;
+}
+
+.family-caregiver-today-icon.is-documents::after,
+.family-caregiver-today-icon.is-coverage::after {
+  background: #d97706;
+}
+
+.family-caregiver-today-icon.is-alerts {
+  background: #fee2e2;
+}
+
+.family-caregiver-today-icon.is-alerts::after {
+  background: #dc2626;
+}
+
+.family-caregiver-today-main {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.family-caregiver-today-main strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.family-caregiver-today-main span,
+.family-caregiver-today-cta {
+  color: #64748b;
+  font-size: 0.74rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.family-caregiver-today-cta {
+  grid-column: 2;
+  color: #2563eb;
+  font-weight: 800;
 }
 
 .family-invitations-block {
@@ -12594,6 +12805,48 @@ body.theme-dark .family-member-owner {
   .family-role-actions .secondary-btn,
   .family-automation-actions .secondary-btn {
     width: 100%;
+  }
+
+  .family-permission-grid,
+  .family-caregiver-today-list {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .family-permission-panel {
+    padding-top: 0.58rem;
+  }
+
+  .family-permission-module {
+    padding: 0.5rem 0.55rem;
+  }
+
+  .family-permission-checks {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .family-caregiver-today-card {
+    margin-top: 0.75rem;
+  }
+
+  .family-caregiver-today-item {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 54px;
+    padding: 0.58rem 0.64rem;
+  }
+
+  .family-caregiver-today-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 9px;
+  }
+
+  .family-caregiver-today-icon::after {
+    inset: 7px;
+  }
+
+  .family-caregiver-today-cta {
+    grid-column: auto;
   }
 
   .family-role-avatar {
@@ -44894,6 +45147,8 @@ body.theme-dark .settings-shell-native-scene .settings-logout-btn {
 .settings-shell-native-scene .settings-section-familia .family-smart-alert,
 .settings-shell-native-scene .settings-section-familia .family-report-kpi,
 .settings-shell-native-scene .settings-section-familia .family-report-highlight,
+.settings-shell-native-scene .settings-section-familia .family-permission-module,
+.settings-shell-native-scene .settings-section-familia .family-caregiver-today-item,
 .settings-shell-native-scene .settings-section-familia .family-automation-row,
 .settings-shell-native-scene .settings-section-familia .family-item {
   border: 1px solid var(--family-native-border);
@@ -44907,7 +45162,8 @@ body.theme-dark .settings-shell-native-scene .settings-logout-btn {
 .settings-shell-native-scene .settings-section-familia .family-note-item,
 .settings-shell-native-scene .settings-section-familia .family-timeline-item,
 .settings-shell-native-scene .settings-section-familia .family-smart-alert,
-.settings-shell-native-scene .settings-section-familia .family-report-highlight {
+.settings-shell-native-scene .settings-section-familia .family-report-highlight,
+.settings-shell-native-scene .settings-section-familia .family-caregiver-today-item {
   border-radius: 20px;
   padding: 0.88rem 0.94rem;
 }
@@ -44965,6 +45221,8 @@ body.theme-dark .settings-shell-native-scene .settings-logout-btn {
 .settings-shell-native-scene .settings-section-familia .family-notes-history,
 .settings-shell-native-scene .settings-section-familia .family-timeline,
 .settings-shell-native-scene .settings-section-familia .family-smart-alerts,
+.settings-shell-native-scene .settings-section-familia .family-permission-grid,
+.settings-shell-native-scene .settings-section-familia .family-caregiver-today-list,
 .settings-shell-native-scene .settings-section-familia .family-automation-list,
 .settings-shell-native-scene .settings-section-familia .family-list {
   gap: 0.72rem;
@@ -45065,6 +45323,8 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .family-t
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-title-green,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-member-name,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-role-name,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-permission-module legend,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-caregiver-today-main strong,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-report-highlight-name,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-title,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-name,
@@ -45078,6 +45338,9 @@ body.theme-dark .settings-shell-native-scene .settings-section-familia .family-m
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-inline-muted,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-note-purpose,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-role-meta,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-permission-panel-head p,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-permission-check,
+body.theme-dark .settings-shell-native-scene .settings-section-familia .family-caregiver-today-main span,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-body,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-smart-alert-tip,
 body.theme-dark .settings-shell-native-scene .settings-section-familia .family-timeline-meta,

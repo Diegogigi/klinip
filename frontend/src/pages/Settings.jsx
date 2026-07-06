@@ -45,6 +45,7 @@ import {
   revokeSession,
   revokeAllSessions,
   getAuditLogs,
+  updateRelationshipPermissions,
 } from "../api";
 import { toIsoOrNull, toLocaleDateOrEmpty, toLocaleDateTimeOrEmpty } from "../utils/dates";
 import { ensureArray } from "../utils/arrays";
@@ -66,6 +67,112 @@ const ACTION_TYPE_LABELS = {
   note_added: "Nota agregada",
   note_updated: "Nota actualizada",
   note_deleted: "Nota eliminada",
+  permissions_updated: "Permisos actualizados",
+  coverage_document_updated: "Cobertura corregida",
+  document_downloaded: "Documento abierto",
+};
+
+const FAMILY_PERMISSION_MODULES = [
+  {
+    key: "appointments",
+    label: "Citas",
+    permissions: [
+      { key: "view_appointments", label: "Ver" },
+      { key: "edit_appointments", label: "Editar" },
+    ],
+  },
+  {
+    key: "medications",
+    label: "Medicamentos",
+    permissions: [
+      { key: "view_medications", label: "Ver" },
+      { key: "edit_medications", label: "Editar" },
+    ],
+  },
+  {
+    key: "documents",
+    label: "Documentos",
+    permissions: [
+      { key: "view_documents", label: "Ver" },
+      { key: "edit_documents", label: "Editar" },
+      { key: "download_documents", label: "Abrir" },
+    ],
+  },
+  {
+    key: "coverage",
+    label: "Cobertura",
+    permissions: [
+      { key: "view_coverage", label: "Ver" },
+      { key: "edit_coverage", label: "Editar" },
+    ],
+  },
+  {
+    key: "ai",
+    label: "Klinip IA",
+    permissions: [{ key: "use_ai", label: "Usar" }],
+  },
+];
+
+const FAMILY_PERMISSION_DEFAULTS = {
+  viewer: [
+    "view_profile",
+    "view_appointments",
+    "view_medications",
+    "view_documents",
+    "view_coverage",
+    "use_ai",
+  ],
+  caregiver: [
+    "view_profile",
+    "view_appointments",
+    "edit_appointments",
+    "view_medications",
+    "edit_medications",
+    "view_documents",
+    "edit_documents",
+    "download_documents",
+    "view_coverage",
+    "edit_coverage",
+    "use_ai",
+    "receive_alerts",
+    "manage_refills",
+  ],
+  admin: [
+    "view_profile",
+    "view_appointments",
+    "edit_appointments",
+    "view_medications",
+    "edit_medications",
+    "view_documents",
+    "edit_documents",
+    "download_documents",
+    "view_coverage",
+    "edit_coverage",
+    "use_ai",
+    "receive_alerts",
+    "manage_refills",
+  ],
+};
+
+const FAMILY_PERMISSION_DEPENDENCIES = {
+  edit_appointments: ["view_appointments"],
+  edit_medications: ["view_medications"],
+  edit_documents: ["view_documents"],
+  download_documents: ["view_documents"],
+  edit_coverage: ["view_coverage"],
+};
+
+const FAMILY_PERMISSION_DEPENDENTS = {
+  view_appointments: ["edit_appointments"],
+  view_medications: ["edit_medications"],
+  view_documents: ["edit_documents", "download_documents"],
+  view_coverage: ["edit_coverage"],
+};
+
+const normalizeFamilyPermissions = (permissions, role) => {
+  const fallback = FAMILY_PERMISSION_DEFAULTS[String(role || "viewer").toLowerCase()] || FAMILY_PERMISSION_DEFAULTS.viewer;
+  const source = Array.isArray(permissions) && permissions.length ? permissions : fallback;
+  return Array.from(new Set(source.filter(Boolean)));
 };
 
 const SECURITY_EVENT_LABELS = {
@@ -273,6 +380,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
   const [activeFamilyProfileId, setActiveFamilyProfileId] = useState(null);
   const [familyStatus, setFamilyStatus] = useState("");
   const [familyLoading, setFamilyLoading] = useState(false);
+  const [permissionSavingId, setPermissionSavingId] = useState(null);
+  const [permissionError, setPermissionError] = useState("");
   const [newFamilyProfile, setNewFamilyProfile] = useState({
     full_name: "",
     relation_with_owner: "",
@@ -465,6 +574,60 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     null;
   const activeHealthProfile =
     familyProfiles.find((item) => Number(item.id) === Number(activeFamilyProfileId)) || familyProfiles[0] || null;
+  const activeProfilePanel =
+    activeHealthProfile ? panelByProfileId.get(Number(activeHealthProfile.id)) || {} : {};
+  const activeFamilyAiProfile =
+    activeHealthProfile && familyAiContext?.profiles
+      ? familyAiContext.profiles.find((item) => Number(item.profile_id) === Number(activeHealthProfile.id)) || null
+      : null;
+  const activeProfileAlerts = activeHealthProfile
+    ? familyAlerts.filter((item) => Number(item.profile_id) === Number(activeHealthProfile.id))
+    : [];
+  const activeNextAppointment =
+    activeProfilePanel.next_appointment_at || activeFamilyAiProfile?.next_appointment_at || null;
+  const activeMedicationCount = Number(
+    activeProfilePanel.active_medications_count ??
+      activeFamilyAiProfile?.active_medications ??
+      familyReportHighlight?.medications_active ??
+      0
+  );
+  const activePendingDocuments = Number(
+    activeFamilyAiProfile?.pending_documents_count ??
+      activeProfilePanel.pending_documents_count ??
+      0
+  );
+  const caregiverTodayItems = [
+    {
+      key: "appointment",
+      label: "Próxima cita",
+      value: activeNextAppointment ? toLocaleDateTimeOrEmpty(activeNextAppointment) : "Sin cita próxima",
+      to: "/appointments",
+    },
+    {
+      key: "medications",
+      label: "Medicamentos",
+      value: activeMedicationCount > 0 ? `${activeMedicationCount} activo${activeMedicationCount === 1 ? "" : "s"}` : "Sin activos",
+      to: "/medications",
+    },
+    {
+      key: "documents",
+      label: "Documentos",
+      value: activePendingDocuments > 0 ? `${activePendingDocuments} pendiente${activePendingDocuments === 1 ? "" : "s"}` : "Al día",
+      to: "/documents",
+    },
+    {
+      key: "coverage",
+      label: "Cobertura",
+      value: "Bonos, copagos y seguros",
+      to: "/coverage",
+    },
+    {
+      key: "alerts",
+      label: "Alertas",
+      value: activeProfileAlerts.length ? `${activeProfileAlerts.length} requiere acción` : "Sin alertas",
+      to: "/settings/familia",
+    },
+  ];
   const collaboratorCards = (caregivers || []).map((row, index) => {
     const tone = familyAccentTones[(familyMemberCards.length + index) % familyAccentTones.length];
     return {
@@ -929,7 +1092,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     setStepUpOpen(false);
     const pending = stepUpPending;
     setStepUpPending(null);
-    if (pending === "deleteAccount") handleDeleteAccount(token);
+    if (pending === "deleteAccount") {
+      handleDeleteAccount(token);
+      return;
+    }
+    if (pending?.type === "permissionUpdate") {
+      applyRelationshipPermissions(pending.relationshipId, pending.permissions || [], token);
+    }
   };
 
   const handleSendPrivacyRequest = async () => {
@@ -1436,6 +1605,114 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
     </article>
   );
 
+  const buildNextPermissions = (row, permissionKey, checked) => {
+    const next = new Set(normalizeFamilyPermissions(row?.permissions, row?.role));
+    if (checked) {
+      next.add(permissionKey);
+      (FAMILY_PERMISSION_DEPENDENCIES[permissionKey] || []).forEach((key) => next.add(key));
+    } else {
+      next.delete(permissionKey);
+      (FAMILY_PERMISSION_DEPENDENTS[permissionKey] || []).forEach((key) => next.delete(key));
+    }
+    next.add("view_profile");
+    return Array.from(next);
+  };
+
+  const applyRelationshipPermissions = async (relationshipId, nextPermissions, stepUpToken = "") => {
+    if (!activeFamilyProfileId || !relationshipId) return;
+    setPermissionError("");
+    setPermissionSavingId(relationshipId);
+    try {
+      await updateRelationshipPermissions(
+        activeFamilyProfileId,
+        relationshipId,
+        nextPermissions,
+        stepUpToken
+      );
+      const [careList, actList] = await Promise.all([
+        getProfileCaregivers(activeFamilyProfileId),
+        shouldLoadFamilyActivity ? getHealthProfileActivity(activeFamilyProfileId) : Promise.resolve([]),
+      ]);
+      setCaregivers(normalizeCaregivers(careList));
+      setActivityLog(ensureArray(actList));
+      setFamilyStatus("Permisos actualizados");
+    } catch (err) {
+      if (err.stepUpRequired && !stepUpToken) {
+        setStepUpPending({ type: "permissionUpdate", relationshipId, permissions: nextPermissions });
+        setStepUpOpen(true);
+        return;
+      }
+      const detail = err?.response?.data?.detail;
+      setPermissionError(detail || "No se pudieron actualizar los permisos");
+      console.error("Error actualizando permisos:", err);
+    } finally {
+      setPermissionSavingId(null);
+    }
+  };
+
+  const handlePermissionToggle = (row, permissionKey, checked) => {
+    const nextPermissions = buildNextPermissions(row, permissionKey, checked);
+    applyRelationshipPermissions(row.id, nextPermissions);
+  };
+
+  const renderPermissionPanel = (row) => {
+    const rowPermissions = normalizeFamilyPermissions(row.permissions, row.role);
+    const disabled = !canManageCaregiverRow(row) || permissionSavingId === row.id;
+    return (
+      <div className="family-permission-panel">
+        <div className="family-permission-panel-head">
+          <p>Permisos por módulo</p>
+          {permissionSavingId === row.id ? <span>Guardando...</span> : null}
+        </div>
+        <div className="family-permission-grid">
+          {FAMILY_PERMISSION_MODULES.map((module) => (
+            <fieldset className="family-permission-module" key={module.key}>
+              <legend>{module.label}</legend>
+              <div className="family-permission-checks">
+                {module.permissions.map((permission) => (
+                  <label className="family-permission-check" key={permission.key}>
+                    <input
+                      type="checkbox"
+                      checked={rowPermissions.includes(permission.key)}
+                      disabled={disabled}
+                      onChange={(event) => handlePermissionToggle(row, permission.key, event.target.checked)}
+                    />
+                    <span>{permission.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCaregiverTodayCard = () => (
+    <section className="family-collab-card family-canvas-card family-caregiver-today-card">
+      <div className="family-card-head">
+        <div>
+          <p className="family-card-kicker family-title-blue">Qué necesita hoy</p>
+          <p className="family-inline-muted">
+            {activeHealthProfile?.full_name || "Perfil activo"}: próximos pasos para cuidar mejor.
+          </p>
+        </div>
+      </div>
+      <div className="family-caregiver-today-list">
+        {caregiverTodayItems.map((item) => (
+          <Link className="family-caregiver-today-item" to={item.to} key={item.key}>
+            <span className={`family-caregiver-today-icon is-${item.key}`} aria-hidden="true" />
+            <span className="family-caregiver-today-main">
+              <strong>{item.label}</strong>
+              <span>{item.value}</span>
+            </span>
+            <span className="family-caregiver-today-cta">Abrir</span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+
   const handleToggleAutomationSetting = (key, value) => {
     setAutomationSettings((prev) => ({ ...prev, [key]: !!value }));
   };
@@ -1837,6 +2114,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         ))}
       </div>
 
+      {renderCaregiverTodayCard()}
+
       <section
         className="family-collab-card family-canvas-card family-roles-card family-roles-card-standalone"
         ref={familyRolesCardRef}
@@ -1901,9 +2180,11 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                   </button>
                 ) : null}
               </div>
+              {renderPermissionPanel(row)}
             </article>
           ))}
         </div>
+        {permissionError ? <p className="family-permission-error">{permissionError}</p> : null}
 
         <div className="family-invitations-block">
           <p className="family-subsection-label">Invitaciones</p>
@@ -2442,6 +2723,8 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
           )}
         </div>
 
+        {renderCaregiverTodayCard()}
+
         <div className="family-lower-layout">
           <div className="family-lower-left">
             <section className="family-collab-card family-canvas-card family-roles-card" ref={familyRolesCardRef}>
@@ -2512,9 +2795,11 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
                         </button>
                       ) : null}
                     </div>
+                    {renderPermissionPanel(row)}
                   </article>
                 ))}
               </div>
+              {permissionError ? <p className="family-permission-error">{permissionError}</p> : null}
 
               <div className="family-invitations-block">
                 <p className="family-subsection-label">Invitaciones</p>
@@ -3834,7 +4119,13 @@ export default function Settings({ user, onLogout, onUserUpdate, initialSection 
         onClose={() => { setStepUpOpen(false); setStepUpPending(null); }}
         onVerified={handleSettingsStepUpVerified}
         hasMfa={!!mfaStatus?.mfa_enabled}
-        actionLabel={stepUpPending === "deleteAccount" ? "eliminar tu cuenta" : "esta acción"}
+        actionLabel={
+          stepUpPending === "deleteAccount"
+            ? "eliminar tu cuenta"
+            : stepUpPending?.type === "permissionUpdate"
+              ? "actualizar permisos familiares"
+              : "esta acción"
+        }
       />
       {pinFlow ? (
         <PinLock

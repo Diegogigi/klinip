@@ -9542,6 +9542,7 @@ def _profile_out(profile: models.HealthProfile, link: models.ProfileRelationship
         access_role=(link.role if link else None),
         access_status=(link.status if link else None),
         relationship_type=(link.relationship_type if link else None),
+        access_permissions=(_get_profile_permissions(link) if link else []),
     )
 
 
@@ -9565,6 +9566,7 @@ def _relationship_out(link: models.ProfileRelationship):
         relationship_type=link.relationship_type or "",
         role=link.role or "viewer",
         status=link.status or "accepted",
+        permissions=_get_profile_permissions(link),
         invited_at=link.invited_at,
         accepted_at=link.accepted_at,
         created_at=link.created_at,
@@ -15630,8 +15632,11 @@ def _build_chat_context_base(
     timezone_name = _resolve_user_tz_name(current_user)
     permissions_validated = {
         "view_profile": _check_permission(db, current_user, int(profile.id), "view_profile"),
+        "view_appointments": _check_permission(db, current_user, int(profile.id), "view_appointments"),
         "view_medications": _check_permission(db, current_user, int(profile.id), "view_medications"),
         "view_documents": _check_permission(db, current_user, int(profile.id), "view_documents"),
+        "view_coverage": _check_permission(db, current_user, int(profile.id), "view_coverage"),
+        "use_ai": _check_permission(db, current_user, int(profile.id), "use_ai"),
     }
     context_totals = {
         "appointments": 0,
@@ -15664,7 +15669,7 @@ def _build_chat_context_base(
         if intent == "familiar" or bool(modules.get("family")) or include_family_context
         else {"available": False, "owner_user_id": None, "owner_name": "", "profiles": []}
     )
-    if modules.get("appointments"):
+    if modules.get("appointments") and permissions_validated.get("view_appointments"):
         context_totals["appointments"] = _safe_ai_context_query(
             db,
             module_name="appointments-count",
@@ -15767,7 +15772,7 @@ def _build_chat_context_base(
             context_deadline_ts=context_deadline_ts,
             observability=query_observability,
         )
-    if modules.get("coverage") and permissions_validated.get("view_documents"):
+    if modules.get("coverage") and permissions_validated.get("view_coverage"):
         coverage_context = _safe_ai_context_query(
             db,
             module_name="coverage",
@@ -16277,7 +16282,7 @@ def _build_chat_context_base(
             "key": "coverage",
             "label": "Klinip Cobertura",
             "count": int(context_totals.get("coverage_documents") or 0),
-            "enabled": bool(modules.get("coverage")) and bool(permissions_validated.get("view_documents")),
+            "enabled": bool(modules.get("coverage")) and bool(permissions_validated.get("view_coverage")),
         },
         {
             "key": "health-sheet",
@@ -18960,21 +18965,62 @@ def revoke_all_sessions(
 # Permisos válidos para relaciones familiares/cuidadores
 VALID_PERMISSIONS = {
     "view_profile",
+    "view_appointments",
+    "edit_appointments",
     "view_medications",
     "edit_medications",
     "view_documents",
+    "edit_documents",
     "download_documents",
+    "view_coverage",
+    "edit_coverage",
+    "use_ai",
     "receive_alerts",
     "manage_refills",
 }
 
 # Permisos por defecto según rol
 _DEFAULT_PERMISSIONS = {
-    "viewer": ["view_profile", "view_medications", "view_documents"],
-    "caregiver": ["view_profile", "view_medications", "edit_medications",
-                  "view_documents", "receive_alerts", "manage_refills"],
+    "viewer": [
+        "view_profile",
+        "view_appointments",
+        "view_medications",
+        "view_documents",
+        "view_coverage",
+        "use_ai",
+    ],
+    "caregiver": [
+        "view_profile",
+        "view_appointments",
+        "edit_appointments",
+        "view_medications",
+        "edit_medications",
+        "view_documents",
+        "edit_documents",
+        "download_documents",
+        "view_coverage",
+        "edit_coverage",
+        "use_ai",
+        "receive_alerts",
+        "manage_refills",
+    ],
     "admin": list(VALID_PERMISSIONS),
 }
+
+
+def _permission_catalog() -> list[dict]:
+    return [
+        {"key": "view_appointments", "module": "citas", "label": "Ver citas"},
+        {"key": "edit_appointments", "module": "citas", "label": "Editar citas"},
+        {"key": "view_medications", "module": "medicamentos", "label": "Ver medicamentos"},
+        {"key": "edit_medications", "module": "medicamentos", "label": "Editar medicamentos"},
+        {"key": "view_documents", "module": "documentos", "label": "Ver documentos"},
+        {"key": "edit_documents", "module": "documentos", "label": "Editar documentos"},
+        {"key": "download_documents", "module": "documentos", "label": "Descargar documentos"},
+        {"key": "view_coverage", "module": "cobertura", "label": "Ver cobertura"},
+        {"key": "edit_coverage", "module": "cobertura", "label": "Editar cobertura"},
+        {"key": "use_ai", "module": "ia", "label": "Usar Klinip IA"},
+    ]
 
 
 def _get_profile_permissions(link: models.ProfileRelationship) -> list:
@@ -18982,7 +19028,9 @@ def _get_profile_permissions(link: models.ProfileRelationship) -> list:
     if link.permissions_json:
         try:
             import json as _json
-            return _json.loads(link.permissions_json)
+            values = _json.loads(link.permissions_json)
+            if isinstance(values, list):
+                return [item for item in values if item in VALID_PERMISSIONS]
         except Exception:
             pass
     role = (link.role or "viewer").strip().lower()
@@ -19015,6 +19063,16 @@ def _check_permission(
     return permission in _get_profile_permissions(link)
 
 
+def _require_profile_permission(
+    db: Session,
+    current_user: models.User,
+    profile: models.HealthProfile,
+    permission: str,
+):
+    if not _check_permission(db, current_user, int(profile.id), permission):
+        raise HTTPException(status_code=403, detail="No tienes permisos para este módulo")
+
+
 @app.get("/health-profiles/{profile_id}/permissions")
 def get_profile_permissions(
     profile_id: int,
@@ -19030,7 +19088,12 @@ def get_profile_permissions(
 
     # Owner: todos los permisos
     if profile.owner_user_id == current_user.id:
-        return {"permissions": list(VALID_PERMISSIONS), "role": "owner"}
+        return {
+            "permissions": list(VALID_PERMISSIONS),
+            "role": "owner",
+            "catalog": _permission_catalog(),
+            "defaults": _DEFAULT_PERMISSIONS,
+        }
 
     link = db.query(models.ProfileRelationship).filter(
         models.ProfileRelationship.profile_id == profile_id,
@@ -19043,6 +19106,8 @@ def get_profile_permissions(
     return {
         "permissions": _get_profile_permissions(link),
         "role": link.role or "viewer",
+        "catalog": _permission_catalog(),
+        "defaults": _DEFAULT_PERMISSIONS,
     }
 
 
@@ -19101,6 +19166,16 @@ def update_relationship_permissions(
         ip_address=_get_client_ip(request),
         metadata={"profile_id": profile_id, "permissions": valid},
     )
+    collaborator_name = link.user.name if getattr(link, "user", None) and link.user.name else link.user.email if getattr(link, "user", None) else "Colaborador"
+    _log_profile_activity(
+        db,
+        profile_id=profile_id,
+        actor_user_id=current_user.id,
+        action_type="permissions_updated",
+        description=f"{current_user.name or current_user.email} actualizó permisos de {collaborator_name}",
+        metadata_json={"relationship_id": relationship_id, "permissions": valid},
+    )
+    db.commit()
     return {"ok": True, "permissions": valid}
 
 
@@ -19964,6 +20039,7 @@ async def update_profile_relationship(
     # otros colaboradores, incluidos otros administradores (salvo el titular y uno mismo).
     role = _normalize_role(payload.role)
     link.role = role
+    link.permissions_json = None
     if payload.relationship_type is not None:
         link.relationship_type = payload.relationship_type
     db.add(link)
@@ -20550,6 +20626,7 @@ async def ai_chat(
     context_modules = select_context_modules(chat_intent)
     include_document_text = _should_include_document_text_for_chat(message)
     profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     timezone_name = _resolve_user_tz_name(current_user)
     conversation_id = (payload.conversation_id or "").strip()
     if not conversation_id:
@@ -25246,6 +25323,7 @@ async def get_coverage_preferences(
 ):
     ensure_coverage_schema(force=True)
     profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_coverage")
     pref = (
         db.query(models.CoveragePreference)
         .filter(models.CoveragePreference.profile_id == int(profile.id))
@@ -25265,6 +25343,7 @@ async def update_coverage_preferences(
 ):
     ensure_coverage_schema(force=True)
     profile, _, owner_user_id = _requested_or_active_profile_for_write(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "edit_coverage")
     pref = (
         db.query(models.CoveragePreference)
         .filter(models.CoveragePreference.profile_id == int(profile.id))
@@ -25304,6 +25383,7 @@ async def get_coverage_documents(
 ):
     ensure_coverage_schema(force=True)
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_coverage")
     docs = (
         db.query(models.Document)
         .filter(*_document_scope_filter(profile, target_user_id))
@@ -25344,6 +25424,7 @@ async def update_coverage_document_info(
 ):
     ensure_coverage_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_coverage")
     doc = (
         db.query(models.Document)
         .filter(
@@ -25402,6 +25483,18 @@ async def update_coverage_document_info(
     info.owner_user_id = int(getattr(doc, "user_id", 0) or 0)
     info.updated_at = datetime.now()
     db.add(info)
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="coverage_document_updated",
+        description=f"{current_user.name or current_user.email} corrigió un documento de cobertura",
+        metadata_json={
+            "document_id": doc.id,
+            "filename": doc.filename or "",
+            "category": info.category,
+        },
+    )
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
@@ -25423,6 +25516,7 @@ async def generate_ai_clinical_report(
     _check_rate_limit(request, "ai-clinical-report")
     context = _requested_or_active_profile_context(db, current_user, profile_id)
     profile, _ = _get_profile_access_or_404(db, current_user, int(context["profile"]["id"]))
+    _require_profile_permission(db, current_user, profile, "use_ai")
     report_payload = _build_clinical_report_payload(
         context,
         report_type=(payload.report_type or "consulta_medica").strip() or "consulta_medica",
@@ -25445,6 +25539,7 @@ async def list_ai_clinical_reports(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, _ = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     reports = (
         db.query(models.ClinicalReport)
         .filter(models.ClinicalReport.profile_id == profile.id)
@@ -25464,7 +25559,8 @@ async def get_ai_clinical_report(
     report = db.query(models.ClinicalReport).filter(models.ClinicalReport.id == report_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
-    _get_profile_access_or_404(db, current_user, report.profile_id)
+    profile, _ = _get_profile_access_or_404(db, current_user, report.profile_id)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     return report
 
 
@@ -25477,7 +25573,8 @@ async def get_ai_clinical_report_pdf(
     report = db.query(models.ClinicalReport).filter(models.ClinicalReport.id == report_id).first()
     if not report or not report.pdf_data:
         raise HTTPException(status_code=404, detail="PDF no encontrado")
-    _get_profile_access_or_404(db, current_user, report.profile_id)
+    profile, _ = _get_profile_access_or_404(db, current_user, report.profile_id)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     headers = {"Content-Disposition": f'attachment; filename="{report.pdf_filename or "klinip_reporte.pdf"}"'}
     return Response(content=report.pdf_data, media_type="application/pdf", headers=headers)
 
@@ -25489,6 +25586,7 @@ async def delete_ai_conversation(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, link, _ = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     conversation_id = (conversation_id or "").strip()
     if not conversation_id:
         raise HTTPException(status_code=400, detail="Conversacion invalida")
@@ -25529,6 +25627,7 @@ async def clear_ai_history(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, link, _ = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "use_ai")
     deleted = (
         db.query(models.AiConversationMessage)
         .filter(models.AiConversationMessage.profile_id == profile.id)
@@ -25554,6 +25653,7 @@ async def list_appointments(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_appointments")
     base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     return (
         db.query(models.Appointment)
@@ -25572,6 +25672,7 @@ async def create_appointment(
 ):
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_appointments")
     appt = models.Appointment(
         user_id=target_user_id,
         profile_id=int(getattr(profile, "id", 0) or 0) or None,
@@ -25619,6 +25720,7 @@ async def update_appointment(
 ):
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_appointments")
     base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     appt = (
         db.query(models.Appointment)
@@ -25666,6 +25768,7 @@ async def delete_appointment(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_appointments")
     base_filter, profile_filter = _appointment_scope_filter(profile, target_user_id)
     appt = (
         db.query(models.Appointment)
@@ -25694,6 +25797,7 @@ async def list_medications(
 ):
     ensure_medication_schema(force=True)
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_medications")
     medications = (
         db.query(models.Medication)
         .filter(models.Medication.user_id == target_user_id)
@@ -25718,6 +25822,7 @@ async def create_medication(
     try:
         ensure_medication_schema(force=True)
         profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+        _require_profile_permission(db, current_user, profile, "edit_medications")
         available_refill_contacts = _medication_refill_contacts(db, target_user_id)
         refill_enabled = bool(getattr(med_in, "refill_enabled", False))
         refill_mode = str(getattr(med_in, "refill_mode", None) or "rotativo")
@@ -25797,6 +25902,8 @@ async def create_medication(
         except Exception as exc:
             print(f"WARNING push medication created {med.id}: {exc}")
         return med
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         print(f"Error al crear medicamento: {str(e)}")
@@ -25815,6 +25922,7 @@ async def update_medication(
     ensure_medication_schema(force=True)
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -25926,6 +26034,7 @@ async def record_medication_intake(
 ):
     ensure_medication_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -26112,7 +26221,8 @@ async def list_medication_intakes(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     ensure_medication_schema(force=True)
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    _require_profile_permission(db, current_user, profile, "view_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -26177,6 +26287,7 @@ async def backfill_medication_intakes(
     ensure_medication_schema(force=True)
     ensure_medication_intake_schema()
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -26247,7 +26358,8 @@ async def list_medication_purchases(
 ):
     ensure_medication_schema(force=True)
     ensure_medication_purchase_schema(force=True)
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    _require_profile_permission(db, current_user, profile, "view_medications")
     query = db.query(models.MedicationPurchase).filter(
         models.MedicationPurchase.user_id == target_user_id,
     )
@@ -26280,6 +26392,7 @@ async def create_medication_purchase(
     ensure_medication_schema(force=True)
     ensure_medication_purchase_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -26359,7 +26472,8 @@ async def get_medication_purchase_receipt(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     ensure_medication_purchase_schema(force=True)
-    _, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=False)
+    _require_profile_permission(db, current_user, profile, "view_medications")
     purchase = (
         db.query(models.MedicationPurchase)
         .filter(
@@ -26394,6 +26508,7 @@ async def mark_medication_refill_purchased(
     ensure_medication_schema(force=True)
     ensure_medication_purchase_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -26451,6 +26566,7 @@ async def delete_medication(
     ensure_medication_schema(force=True)
     ensure_medication_purchase_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_medications")
     med = (
         db.query(models.Medication)
         .filter(
@@ -27234,6 +27350,7 @@ async def list_documents(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_documents")
     docs = (
         db.query(models.Document)
         .filter(*_document_scope_filter(profile, target_user_id))
@@ -27253,6 +27370,7 @@ async def get_document_analysis(
     """Devuelve el análisis del documento (tipo, resumen amigable y entidades
     clínicas limpias) para mostrar en el asistente de subida."""
     profile, _, target_user_id = _requested_or_active_profile_only(db, current_user, profile_id)
+    _require_profile_permission(db, current_user, profile, "view_documents")
     doc = (
         db.query(models.Document)
         .filter(
@@ -27300,6 +27418,7 @@ async def upload_document(
 ):
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_documents")
     # Leer y validar el archivo
     file_content = await file.read()
     original_filename = file.filename or "document"
@@ -27359,6 +27478,7 @@ async def delete_document(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_documents")
     doc = (
         db.query(models.Document)
         .filter(
@@ -27393,6 +27513,7 @@ async def update_document(
 ):
     ensure_episode_schema(force=True)
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_documents")
     doc = (
         db.query(models.Document)
         .filter(
@@ -27424,6 +27545,7 @@ async def retry_document_ocr(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_documents")
     doc = (
         db.query(models.Document)
         .filter(
@@ -27457,6 +27579,7 @@ async def activate_document_items(
     """Crea los ítems activos (medicamentos/citas) de un documento que se detectó
     como histórico, cuando el usuario confirma que es vigente."""
     profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    _require_profile_permission(db, current_user, profile, "edit_documents")
     doc = (
         db.query(models.Document)
         .filter(
@@ -27491,6 +27614,7 @@ async def get_document_file(
 ):
     """Sirve un archivo de documento solo si el usuario tiene acceso."""
     profile, link, target_user_id = _get_active_profile_context(db, current_user)
+    _require_profile_permission(db, current_user, profile, "view_documents")
 
     # Verificar permiso granular de descarga (owners siempre pueden)
     if profile.owner_user_id != current_user.id:
@@ -27538,6 +27662,15 @@ async def get_document_file(
         user_agent=request.headers.get("user-agent", ""),
         metadata={"filename": doc.filename or ""},
     )
+    _log_profile_activity(
+        db,
+        profile_id=profile.id,
+        actor_user_id=current_user.id,
+        action_type="document_downloaded",
+        description=f"{current_user.name or current_user.email} abrió o descargó {doc.filename or 'un documento'}",
+        metadata_json={"document_id": document_id, "filename": doc.filename or ""},
+    )
+    db.commit()
 
     # Prioridad 1: Archivo almacenado en BD (file_data)
     if doc.file_data:

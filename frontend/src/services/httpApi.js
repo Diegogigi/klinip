@@ -1078,10 +1078,13 @@ export async function getProfilePermissions(profileId) {
   return res.data;
 }
 
-export async function updateRelationshipPermissions(profileId, relationshipId, permissions) {
+export async function updateRelationshipPermissions(profileId, relationshipId, permissions, stepUpToken = "") {
   const res = await api.put(
     `/health-profiles/${profileId}/relationships/${relationshipId}/permissions`,
-    { permissions }
+    { permissions },
+    {
+      headers: stepUpToken ? { "X-StepUp-Token": stepUpToken } : {},
+    }
   );
   return res.data;
 }
