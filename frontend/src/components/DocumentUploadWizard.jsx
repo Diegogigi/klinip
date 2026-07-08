@@ -470,6 +470,7 @@ export default function DocumentUploadWizard({
         const created = await uploadDocument({
           doc_type: "otro",
           notes: uploadIntent === COVERAGE_UPLOAD_INTENT ? buildCoverageNotes("") : "",
+          profile_id: profileId || undefined,
           file,
         });
         const id = created?.id;

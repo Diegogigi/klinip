@@ -237,6 +237,116 @@ def test_health_sheet_action_creates_clinical_task(db_session):
     assert panel["requires_action"][0]["title"] == "Agendar control de presión"
 
 
+def test_ai_preparation_reply_uses_health_sheet_and_continuity_sources(db_session):
+    user, profile = _seed_profile(db_session)
+    link = (
+        db_session.query(models.ProfileRelationship)
+        .filter_by(profile_id=profile.id, user_id=user.id)
+        .one()
+    )
+    now = datetime.now()
+
+    asyncio.run(
+        main.create_health_problem(
+            profile.id,
+            schemas.HealthProblemCreate(name="Asma", detail="Control respiratorio activo"),
+            db=db_session,
+            current_user=user,
+        )
+    )
+    asyncio.run(
+        main.create_health_exam_result(
+            profile.id,
+            schemas.HealthExamResultCreate(
+                exam_name="Espirometria",
+                summary="Resultado para revisar en control.",
+                performed_at=now - timedelta(days=2),
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+    asyncio.run(
+        main.create_health_sheet_action(
+            profile.id,
+            schemas.HealthSheetActionCreate(
+                title="Preguntar por uso de inhalador",
+                task_type="appointment_follow_up",
+                due_at=now + timedelta(days=1),
+                source_type="health_sheet",
+            ),
+            db=db_session,
+            current_user=user,
+        )
+    )
+
+    episode = models.ClinicalEpisode(
+        profile_id=profile.id,
+        owner_user_id=user.id,
+        title="Control respiratorio",
+        episode_type="clinical_follow_up",
+    )
+    db_session.add(episode)
+    db_session.flush()
+    appointment = models.Appointment(
+        user_id=user.id,
+        profile_id=profile.id,
+        episode_id=episode.id,
+        type=models.AppointmentType.cita,
+        specialty="Broncopulmonar",
+        center="Centro Respiratorio",
+        date_time=now + timedelta(days=2),
+        status=models.AppointmentStatus.agendada,
+    )
+    document = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        episode_id=episode.id,
+        doc_type=models.DocumentType.resultado,
+        filename="espirometria.pdf",
+        file_path="",
+        date=now - timedelta(days=2),
+    )
+    medication = models.Medication(
+        user_id=user.id,
+        profile_id=profile.id,
+        episode_id=episode.id,
+        name="Salbutamol",
+        dose="segun indicacion",
+        completed=False,
+    )
+    db_session.add_all([appointment, document, medication])
+    db_session.commit()
+
+    modules = main.select_context_modules("salud")
+    context, _timing = main._build_chat_context_base(
+        db_session,
+        user,
+        profile,
+        link,
+        user.id,
+        message="que debo llevar a mi proxima cita",
+        intent="salud",
+        modules=modules,
+    )
+
+    structured = main._maybe_resolve_structured_ai_query("que debo llevar a mi proxima cita", context)
+    assert structured is not None
+    reply, model_name, mode = structured
+    assert model_name == "structured-memory"
+    assert mode == "structured-health-sheet"
+    assert "Centro Respiratorio" in reply
+    assert "espirometria.pdf" in reply
+    assert "Asma" in reply
+    assert "Espirometria" in reply
+    assert "Fuentes usadas: Klinip Continuidad y Ficha de Salud." in reply
+
+    refs = main._build_ai_references("que debo llevar a mi proxima cita", context)
+    assert any(ref["kind"] == "continuity-preparation" for ref in refs), refs
+    assert any(ref["kind"] == "health-problem" and ref["label"] == "Asma" for ref in refs)
+    assert any(ref["kind"] == "exam-result" and ref["label"] == "Espirometria" for ref in refs)
+
+
 def test_ai_context_uses_health_sheet_and_continuity_sources(db_session):
     user, profile = _seed_profile(db_session)
     link = (

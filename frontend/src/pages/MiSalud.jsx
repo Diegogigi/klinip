@@ -134,6 +134,13 @@ function continuitySnoozeDate(days = 7) {
   return date.toISOString();
 }
 
+function continuityActionNote(item, action) {
+  const title = String(item?.title || "pendiente").trim();
+  if (action === "done") return `Marcado como hecho desde Mi Salud: ${title}`;
+  if (action === "cancelled") return `Descartado desde Mi Salud: ${title}`;
+  return `Pospuesto desde Mi Salud: ${title}`;
+}
+
 // El motor de episodios puede generar tareas gemelas (mismo texto y misma
 // fecha); mostrarlas repetidas solo confunde.
 function dedupeContinuityItems(items) {
@@ -412,15 +419,22 @@ export default function MiSalud() {
     if (!taskId) return null;
     const doneKey = `${taskId}-done`;
     const snoozeKey = `${taskId}-pending`;
+    const cancelKey = `${taskId}-cancelled`;
     const busyDone = continuityActionBusy === doneKey;
     const busySnooze = continuityActionBusy === snoozeKey;
+    const busyCancel = continuityActionBusy === cancelKey;
     return (
       <div className={`clp-continuity-actions is-${variant}`}>
         <button
           type="button"
           className="clp-continuity-action-btn is-done"
           disabled={Boolean(continuityActionBusy)}
-          onClick={() => handleContinuityTaskUpdate(item, { status: "done" })}
+          onClick={() =>
+            handleContinuityTaskUpdate(item, {
+              status: "done",
+              note: continuityActionNote(item, "done"),
+            })
+          }
         >
           {busyDone ? "Guardando..." : "Hecho"}
         </button>
@@ -432,11 +446,24 @@ export default function MiSalud() {
             handleContinuityTaskUpdate(item, {
               status: "pending",
               due_at: continuitySnoozeDate(7),
-              note: "Pospuesto desde Mi Salud",
+              note: continuityActionNote(item, "pending"),
             })
           }
         >
           {busySnooze ? "Posponiendo..." : "Posponer"}
+        </button>
+        <button
+          type="button"
+          className="clp-continuity-action-btn is-cancel"
+          disabled={Boolean(continuityActionBusy)}
+          onClick={() =>
+            handleContinuityTaskUpdate(item, {
+              status: "cancelled",
+              note: continuityActionNote(item, "cancelled"),
+            })
+          }
+        >
+          {busyCancel ? "Descartando..." : "Descartar"}
         </button>
       </div>
     );

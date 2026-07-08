@@ -11,6 +11,7 @@ import {
   getHealthProfiles,
   getActiveHealthProfile,
   setActiveHealthProfile,
+  getCoveragePreferences,
   updateCoveragePreferences,
   isAuthSessionError,
 } from "./api";
@@ -88,6 +89,7 @@ const Settings = lazyWithRecovery(() => import("./pages/Settings"), "settings");
 const Timeline = lazyWithRecovery(() => import("./pages/Timeline"), "timeline");
 const Stats = lazyWithRecovery(() => import("./pages/Stats"), "stats");
 const MiSalud = lazyWithRecovery(() => import("./pages/MiSalud"), "mi-salud");
+const HealthSheet = lazyWithRecovery(() => import("./pages/HealthSheet"), "health-sheet");
 const Biometrics = lazyWithRecovery(() => import("./pages/Biometrics"), "biometrics");
 const AiKlinip = lazyWithRecovery(() => import("./pages/AiKlinip"), "ai-klinip");
 const ClinicalReports = lazyWithRecovery(() => import("./pages/ClinicalReports"), "clinical-reports");
@@ -232,6 +234,7 @@ const ROUTE_TRANSITION_ORDER = [
 
 const HEALTH_SECTION_PATHS = [
   "/mi-salud",
+  "/mi-salud/ficha",
   "/mi-salud/biometricos",
   "/appointments",
   "/calendar",
@@ -658,6 +661,7 @@ function Topbar({
     "/feed": "Familia",
     "/voice": "Voz",
     "/mi-salud": "Mi salud",
+    "/mi-salud/ficha": "Ficha de Salud",
     "/mi-salud/biometricos": "Biométricos",
     "/clinical-reports": "Reportes",
     "/settings": "Perfil",
@@ -981,6 +985,13 @@ const ONBOARDING_TIMEZONE_OPTIONS = [
   "Europe/London",
   "UTC",
 ];
+const ONBOARDING_COVERAGE_PAYER_OPTIONS = [
+  { value: "unknown", label: "Aún no lo sé" },
+  { value: "fonasa", label: "Fonasa" },
+  { value: "isapre", label: "Isapre" },
+  { value: "seguro_complementario", label: "Seguro complementario" },
+  { value: "prestador", label: "Prestador / convenio" },
+];
 const getUserKey = (base, userId) => (userId ? `${base}_${userId}` : base);
 
 function inferCoveragePayerType(provider, enabled) {
@@ -1174,6 +1185,7 @@ export default function App() {
   const [onboardingPinFlowOpen, setOnboardingPinFlowOpen] = useState(false);
   const [onboardingPinSyncing, setOnboardingPinSyncing] = useState(false);
   const [onboardingPinMessage, setOnboardingPinMessage] = useState("");
+  const [onboardingCoverageMessage, setOnboardingCoverageMessage] = useState("");
   const [planInfo, setPlanInfo] = useState(null);
   const [healthProfiles, setHealthProfiles] = useState([]);
   const [activeHealthProfileId, setActiveHealthProfileId] = useState(null);
@@ -1190,7 +1202,9 @@ export default function App() {
     chronicCondition: "",
     primaryCareCenter: "",
     coverageEnabled: "",
+    coveragePayerType: "unknown",
     coverageProvider: "",
+    coveragePlanName: "",
   });
   const globalMedCheckRef = useRef(Date.now() - MED_ALERT_POLL_MS);
   const medAlertPollingRef = useRef(false);
@@ -1634,25 +1648,54 @@ export default function App() {
   }, [user?.id, user?.notifications_consent, consentOpen, onboardingOpen]);
 
   useEffect(() => {
-    if (!user || booting || consentOpen || notifConsentOpen) return;
+    if (!user || booting || consentOpen || notifConsentOpen || onboardingOpen) return;
     const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
     const onboardingDone = localStorage.getItem(onboardingKey) === "true";
     if (onboardingDone) return;
     const notifConsent = localStorage.getItem(
       getUserKey(NOTIF_CONSENT_KEY_BASE, user.id)
     ) || "";
-    setOnboardingData({
+    let cancelled = false;
+    const baseData = {
       notificationsConsent: notifConsent,
       timezone: user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Santiago",
       reminderPreferredTime: user?.reminder_preferred_time || "08:00",
       hasChronicCondition: (user?.chronic_condition || "").trim() ? "yes" : "no",
       chronicCondition: user?.chronic_condition || "",
       primaryCareCenter: user?.primary_care_center || "",
-    });
-    setOnboardingNotifMessage("");
-    setOnboardingStep(0);
-    setOnboardingOpen(true);
-  }, [user, booting, consentOpen, notifConsentOpen]);
+      coverageEnabled: "",
+      coveragePayerType: "unknown",
+      coverageProvider: "",
+      coveragePlanName: "",
+    };
+    const loadOnboardingDefaults = async () => {
+      let coverageDefaults = {};
+      try {
+        const pref = await getCoveragePreferences(
+          activeHealthProfileId ? { profileId: activeHealthProfileId } : {}
+        );
+        const hasConfiguredCoverage = Boolean(pref?.id || pref?.updated_at || pref?.provider_name || pref?.plan_name);
+        coverageDefaults = {
+          coverageEnabled: hasConfiguredCoverage ? (pref?.enabled ? "yes" : "no") : "",
+          coveragePayerType: pref?.payer_type || "unknown",
+          coverageProvider: pref?.provider_name || "",
+          coveragePlanName: pref?.plan_name || "",
+        };
+      } catch (err) {
+        console.error("No se pudo cargar preferencias de cobertura para onboarding", err);
+      }
+      if (cancelled) return;
+      setOnboardingData({ ...baseData, ...coverageDefaults });
+      setOnboardingNotifMessage("");
+      setOnboardingCoverageMessage("");
+      setOnboardingStep(0);
+      setOnboardingOpen(true);
+    };
+    loadOnboardingDefaults();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, booting, consentOpen, notifConsentOpen, onboardingOpen, activeHealthProfileId]);
 
   useEffect(() => {
     clearScheduledNotifications();
@@ -2331,6 +2374,7 @@ export default function App() {
   const handleCompleteOnboarding = async () => {
     if (!user?.id) return;
     setOnboardingSaving(true);
+    setOnboardingCoverageMessage("");
     try {
       const condition =
         onboardingData.hasChronicCondition === "yes"
@@ -2352,22 +2396,39 @@ export default function App() {
       const lastPromptKey = getUserKey(NOTIF_LAST_PROMPT_KEY_BASE, user.id);
       localStorage.setItem(consentKey, notifConsent);
       localStorage.setItem(lastPromptKey, nowIso);
-      const coverageEnabled = onboardingData.coverageEnabled === "yes";
+      const coverageChoice = onboardingData.coverageEnabled || "";
+      const coverageEnabled = coverageChoice === "yes";
       const coverageProvider = (onboardingData.coverageProvider || "").trim();
-      try {
-        await updateCoveragePreferences({
-          enabled: coverageEnabled,
-          payer_type: inferCoveragePayerType(coverageProvider, coverageEnabled),
-          provider_name: coverageProvider,
-        });
-      } catch (coverageErr) {
-        console.error("No se pudo guardar preferencias de cobertura:", coverageErr);
+      const coveragePlanName = (onboardingData.coveragePlanName || "").trim();
+      const shouldSaveCoverage =
+        coverageChoice === "yes" || coverageChoice === "no" || coverageProvider || coveragePlanName;
+      const selectedPayerType = onboardingData.coveragePayerType || "unknown";
+      const payerType =
+        coverageEnabled && selectedPayerType === "unknown"
+          ? inferCoveragePayerType(coverageProvider, coverageEnabled)
+          : selectedPayerType;
+      if (shouldSaveCoverage) {
+        await updateCoveragePreferences(
+          {
+            enabled: coverageEnabled,
+            payer_type: coverageEnabled ? payerType : "none",
+            provider_name: coverageEnabled ? coverageProvider : "",
+            plan_name: coverageEnabled ? coveragePlanName : "",
+          },
+          activeHealthProfileId ? { profileId: activeHealthProfileId } : {}
+        );
       }
       const onboardingKey = getUserKey(ONBOARDING_COMPLETED_KEY_BASE, user.id);
       localStorage.setItem(onboardingKey, "true");
       setOnboardingOpen(false);
     } catch (err) {
       console.error("Error guardando onboarding", err);
+      const detail = err?.response?.data?.detail;
+      setOnboardingCoverageMessage(
+        typeof detail === "string" && detail
+          ? detail
+          : "No se pudo guardar tu configuración. Revisa la conexión e inténtalo de nuevo."
+      );
     } finally {
       setOnboardingSaving(false);
     }
@@ -2817,20 +2878,58 @@ export default function App() {
                       <button
                         className={`ob-toggle-btn${onboardingData.coverageEnabled === "no" ? " ob-toggle-active" : ""}`}
                         type="button"
-                        onClick={() => setOnboardingData((prev) => ({ ...prev, coverageEnabled: "no", coverageProvider: "" }))}
+                        onClick={() => setOnboardingData((prev) => ({
+                          ...prev,
+                          coverageEnabled: "no",
+                          coveragePayerType: "none",
+                          coverageProvider: "",
+                          coveragePlanName: "",
+                        }))}
                       >Después</button>
                     </div>
                     <div className="ob-form">
+                      <label className="ob-input-label" htmlFor="onboarding-coverage-payer">
+                        Tipo de cobertura
+                      </label>
+                      <select
+                        id="onboarding-coverage-payer"
+                        className="ob-input"
+                        value={onboardingData.coveragePayerType || "unknown"}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, coveragePayerType: e.target.value }))}
+                        disabled={onboardingData.coverageEnabled === "no"}
+                      >
+                        {ONBOARDING_COVERAGE_PAYER_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="ob-input-label" htmlFor="onboarding-coverage-provider">
+                        Institución o seguro
+                      </label>
                       <input
+                        id="onboarding-coverage-provider"
                         className="ob-input"
                         type="text"
                         value={onboardingData.coverageProvider}
                         onChange={(e) => setOnboardingData((prev) => ({ ...prev, coverageProvider: e.target.value }))}
-                        placeholder="Fonasa, Isapre o seguro complementario (opcional)"
+                        placeholder="Ej: Fonasa, Colmena, Bupa, MetLife"
                         disabled={onboardingData.coverageEnabled === "no"}
                       />
-                      <p className="ob-msg">
-                        Al subir documentos podrás elegir “Cobertura / seguro” para que Klinip los ordene aparte.
+                      <label className="ob-input-label" htmlFor="onboarding-coverage-plan">
+                        Plan o convenio
+                      </label>
+                      <input
+                        id="onboarding-coverage-plan"
+                        className="ob-input"
+                        type="text"
+                        value={onboardingData.coveragePlanName}
+                        onChange={(e) => setOnboardingData((prev) => ({ ...prev, coveragePlanName: e.target.value }))}
+                        placeholder="Ej: plan, tramo, póliza o convenio"
+                        disabled={onboardingData.coverageEnabled === "no"}
+                      />
+                      <p className={`ob-msg${onboardingCoverageMessage ? " ob-msg-error" : ""}`}>
+                        {onboardingCoverageMessage || "Al subir documentos podrás elegir “Cobertura / seguro” para que Klinip los ordene aparte."}
                       </p>
                     </div>
                   </>
@@ -3141,7 +3240,10 @@ export default function App() {
                 path="/coverage"
                 element={
                   <ProtectedRoute user={user}>
-                    <Coverage key={`coverage-${activeHealthProfileId || "none"}`} />
+                    <Coverage
+                      key={`coverage-${activeHealthProfileId || "none"}`}
+                      profileId={activeHealthProfileId}
+                    />
                   </ProtectedRoute>
                 }
               />
@@ -3182,6 +3284,14 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <MiSalud key={`mi-salud-${activeHealthProfileId || "none"}`} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/mi-salud/ficha"
+                element={
+                  <ProtectedRoute user={user}>
+                    <HealthSheet key={`health-sheet-${activeHealthProfileId || "none"}`} />
                   </ProtectedRoute>
                 }
               />

@@ -27,7 +27,7 @@ function getDocumentTime(doc) {
   return date && !Number.isNaN(date.getTime()) ? date.getTime() : Number(doc?.id || 0);
 }
 
-export default function Coverage() {
+export default function Coverage({ profileId = null }) {
   const [coverageDocuments, setCoverageDocuments] = useState([]);
   const [preference, setPreference] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,10 +43,11 @@ export default function Coverage() {
   const loadCoverage = useCallback(async ({ showLoading = true } = {}) => {
     if (showLoading) setLoading(true);
     setError("");
+    const requestOptions = profileId ? { profileId } : {};
     try {
       const [docs, pref] = await Promise.all([
-        getCoverageDocuments().catch(() => null),
-        getCoveragePreferences().catch(() => null),
+        getCoverageDocuments(requestOptions).catch(() => null),
+        getCoveragePreferences(requestOptions).catch(() => null),
       ]);
       if (docs === null && pref === null) {
         setError("No se pudo cargar tu información de cobertura. Revisa tu conexión e inténtalo de nuevo.");
@@ -60,7 +61,7 @@ export default function Coverage() {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, []);
+  }, [profileId]);
 
   useEffect(() => {
     loadCoverage();
@@ -83,7 +84,7 @@ export default function Coverage() {
     setSavingPreference(true);
     setPreferenceError("");
     try {
-      const saved = await updateCoveragePreferences(payload);
+      const saved = await updateCoveragePreferences(payload, profileId ? { profileId } : {});
       setPreference(saved || payload);
       return true;
     } catch (err) {
@@ -261,6 +262,7 @@ export default function Coverage() {
       <DocumentUploadWizard
         open={uploadWizardOpen}
         onClose={() => setUploadWizardOpen(false)}
+        profileId={profileId}
         initialIntent={COVERAGE_UPLOAD_INTENT}
         onUploaded={() => loadCoverage({ showLoading: false })}
       />

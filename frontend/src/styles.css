@@ -3141,6 +3141,12 @@ body.theme-dark .continuity-resolution-btn.is-done {
   color: #86efac;
 }
 
+body.theme-dark .continuity-resolution-btn.is-cancel {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.32);
+  color: #fca5a5;
+}
+
 body.theme-dark .detail-field {
   background: #111b2e;
   border-bottom-color: transparent;
@@ -5783,6 +5789,10 @@ body.theme-dark .kfeed-family-panel-btn:focus-visible {
     padding: 0.3rem 0.55rem;
   }
 
+  .continuity-resolution-btn.is-cancel {
+    grid-column: 1 / -1;
+  }
+
   .detail-highlight {
     margin-bottom: 0.64rem;
   }
@@ -7858,6 +7868,12 @@ body.theme-dark .security-pin-row strong {
   border-color: rgba(134, 239, 172, 0.9);
   background: #f0fdf4;
   color: #166534;
+}
+
+.continuity-resolution-btn.is-cancel {
+  border-color: rgba(254, 202, 202, 0.95);
+  background: #fff7ed;
+  color: #991b1b;
 }
 
 .continuity-resolution-btn:disabled {
@@ -35712,6 +35728,11 @@ body.theme-dark .ob-back-btn {
   box-sizing: border-box;
 }
 
+.ob-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 body.theme-dark .ob-input {
   background: #1e293b;
   border-color: #334155;
@@ -35802,6 +35823,15 @@ body.theme-dark .ob-toggle-active {
   color: #6b7280;
   margin: 0;
   text-align: center;
+}
+
+.ob-msg-error {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+body.theme-dark .ob-msg-error {
+  color: #fca5a5;
 }
 
 .ob-security-card {
@@ -36116,6 +36146,21 @@ body.theme-dark .ob-quick-btn {
 }
 
 @media (max-width: 420px) {
+  .ob-form {
+    gap: 0.42rem;
+  }
+
+  .ob-input-label {
+    font-size: 0.72rem;
+    margin-top: 0.05rem;
+  }
+
+  .ob-input {
+    padding: 0.62rem 0.85rem;
+    font-size: 0.82rem;
+    border-radius: 10px;
+  }
+
   .ob-quick-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -53706,6 +53751,33 @@ body.theme-dark .health-hub-quick-card.tone-green {
   cursor: pointer;
 }
 
+.hsheet-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.hsheet-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  color: #1d4ed8;
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+body.theme-dark .hsheet-back-link {
+  color: #93c5fd;
+}
+
 .hsheet-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -53980,6 +54052,12 @@ body.theme-dark .health-hub-quick-card.tone-green {
   border-color: rgba(134, 239, 172, 0.9);
   background: #f0fdf4;
   color: #166534;
+}
+
+.clp-continuity-action-btn.is-cancel {
+  border-color: rgba(254, 202, 202, 0.95);
+  background: #fff7ed;
+  color: #991b1b;
 }
 
 .clp-continuity-action-btn:disabled {
@@ -55012,6 +55090,12 @@ body.theme-dark .clp-continuity-action-btn.is-done {
   color: #86efac;
 }
 
+body.theme-dark .clp-continuity-action-btn.is-cancel {
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.32);
+  color: #fca5a5;
+}
+
 body.theme-dark .clp-continuity-action-error {
   color: #fca5a5;
 }
@@ -55197,6 +55281,10 @@ body.theme-dark .clp-loading-pulse {
   .clp-continuity-action-btn {
     min-height: 32px;
     padding: 0.3rem 0.55rem;
+  }
+
+  .clp-continuity-action-btn.is-cancel {
+    grid-column: 1 / -1;
   }
 
   .clp-continuity-prep {

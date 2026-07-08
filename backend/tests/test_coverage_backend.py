@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 import json
 from datetime import datetime
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 
 from app import main, models, schemas
 
@@ -281,6 +282,38 @@ def test_family_coverage_edit_requires_edit_permission(db_session):
     )
     assert payload.coverage.category == "reembolso"
     assert payload.coverage.amount_reimbursed == 30000
+
+
+def test_family_coverage_upload_uses_requested_profile(db_session, monkeypatch):
+    owner, profile = _seed_profile(db_session)
+    collaborator, _link = _seed_family_collaborator(
+        db_session,
+        profile,
+        role="caregiver",
+        permissions=["view_profile", "view_documents", "edit_documents", "view_coverage", "edit_coverage"],
+    )
+    monkeypatch.setattr(main, "_queue_document_post_upload_tasks", lambda *args, **kwargs: None)
+
+    uploaded = asyncio.run(
+        main.upload_document(
+            BackgroundTasks(),
+            doc_type="otro",
+            episode_id=None,
+            appointment_id=None,
+            profile_id=profile.id,
+            date=None,
+            center="",
+            notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+            send_email_backup=False,
+            file=UploadFile(filename="licencia-medica.jpg", file=BytesIO(b"\xff\xd8\xff\xe0fake-image")),
+            db=db_session,
+            current_user=collaborator,
+        )
+    )
+
+    assert uploaded.profile_id == profile.id
+    assert uploaded.user_id == owner.id
+    assert uploaded.notes == "[KLINIP_COVERAGE_INTENT] Cobertura / seguro"
 
 
 def test_ai_context_includes_coverage_sources_and_amounts(db_session):

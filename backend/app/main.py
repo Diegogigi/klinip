@@ -10977,6 +10977,15 @@ def _structured_health_sheet_reply(message: str, context: dict) -> str:
         if prep:
             docs = list(prep.get("documents_to_bring") or [])
             questions = list(prep.get("suggested_questions") or [])
+            active_diagnoses = [
+                item for item in diagnoses
+                if _normalize_text(item.get("status") or "active") not in {"resolved", "resuelto", "inactive", "inactivo"}
+            ]
+            recent_exams = exams[:3]
+            active_indications = [
+                item for item in indications
+                if _normalize_text(item.get("status") or "pending") not in {"done", "completed", "cancelled", "resuelto"}
+            ][:3]
             parts = [
                 f"Según Klinip Continuidad, prepara tu {prep.get('appointment_type') or 'atención'}"
                 + (f" en {prep.get('center')}" if prep.get("center") else "")
@@ -10985,8 +10994,30 @@ def _structured_health_sheet_reply(message: str, context: dict) -> str:
             if docs:
                 parts.append("Documentos sugeridos para llevar: " + ", ".join(docs[:5]) + ".")
             parts.append(f"Medicamentos activos a revisar: {int(prep.get('active_medications_count') or 0)}.")
+            if active_diagnoses:
+                parts.append(
+                    "Problemas activos relevantes en Ficha de Salud: "
+                    + "; ".join((item.get("name") or "Problema activo") for item in active_diagnoses[:3])
+                    + "."
+                )
+            if recent_exams:
+                rendered_exams = []
+                for item in recent_exams:
+                    source = item.get("source") or {}
+                    rendered_exams.append(
+                        (item.get("name") or "Examen")
+                        + (f" ({source.get('label')})" if source.get("label") else "")
+                    )
+                parts.append("Exámenes recientes para comentar: " + "; ".join(rendered_exams) + ".")
+            if active_indications:
+                parts.append(
+                    "Indicaciones o pendientes relacionados: "
+                    + "; ".join((item.get("title") or "Indicación") for item in active_indications)
+                    + "."
+                )
             if questions:
                 parts.append("Preguntas útiles: " + " | ".join(questions[:4]) + ".")
+            parts.append("Fuentes usadas: Klinip Continuidad y Ficha de Salud.")
             return " ".join(parts)
         return "No encuentro una próxima cita o examen con preparación registrada en Klinip Continuidad."
 
@@ -17794,6 +17825,10 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
 
     if health_sheet and _message_asks_health_sheet(message):
         counts = health_sheet.get("counts") or {}
+        asks_preparation = any(
+            token in normalized
+            for token in ["que debo llevar", "qué debo llevar", "preparar", "preparacion", "preparación"]
+        )
         refs.append(
             {
                 "kind": "health-sheet",
@@ -17806,7 +17841,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                 ),
             }
         )
-        if any(token in normalized for token in ["diagnostico", "diagnóstico", "problema", "problemas", "ficha"]):
+        if asks_preparation or any(token in normalized for token in ["diagnostico", "diagnóstico", "problema", "problemas", "ficha"]):
             for item in (health_sheet.get("diagnoses") or [])[:2]:
                 source = item.get("source") or {}
                 refs.append(
@@ -17826,7 +17861,7 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                         "detail": " | ".join([part for part in [item.get("status") or "", source.get("label") or ""] if part]),
                     }
                 )
-        if any(token in normalized for token in ["examen", "examenes", "exámenes", "resultado", "resultados"]):
+        if asks_preparation or any(token in normalized for token in ["examen", "examenes", "exámenes", "resultado", "resultados"]):
             for item in (health_sheet.get("exams") or [])[:2]:
                 source = item.get("source") or {}
                 refs.append(
@@ -17837,19 +17872,15 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                     }
                 )
 
-    if continuity and any(
+    asks_continuity_preparation = any(
         token in normalized
-        for token in ["pendiente", "pendientes", "proximo paso", "próximo paso", "que debo llevar", "qué debo llevar", "preparar", "atrasado"]
+        for token in ["que debo llevar", "preparar", "preparacion", "preparación"]
+    )
+    if continuity and (
+        asks_continuity_preparation
+        or any(token in normalized for token in ["pendiente", "pendientes", "proximo paso", "próximo paso", "atrasado"])
     ):
         next_step = continuity.get("next_step") or {}
-        if next_step:
-            refs.append(
-                {
-                    "kind": "continuity-next-step",
-                    "label": next_step.get("title") or "Próximo paso",
-                    "detail": " | ".join([part for part in [next_step.get("priority") or "", next_step.get("action_label") or ""] if part]),
-                }
-            )
         prep = continuity.get("upcoming_preparation") or {}
         if prep:
             refs.append(
@@ -17857,6 +17888,22 @@ def _build_ai_references(message: str, context: dict) -> list[dict]:
                     "kind": "continuity-preparation",
                     "label": "Preparación de próxima atención",
                     "detail": " | ".join([part for part in [prep.get("appointment_type") or "", prep.get("center") or "", prep.get("specialty") or ""] if part]),
+                }
+            )
+        elif asks_continuity_preparation and next_step:
+            refs.append(
+                {
+                    "kind": "continuity-preparation",
+                    "label": "Preparación desde próximo paso",
+                    "detail": " | ".join([part for part in [next_step.get("title") or "", next_step.get("action_label") or ""] if part]),
+                }
+            )
+        if next_step:
+            refs.append(
+                {
+                    "kind": "continuity-next-step",
+                    "label": next_step.get("title") or "Próximo paso",
+                    "detail": " | ".join([part for part in [next_step.get("priority") or "", next_step.get("action_label") or ""] if part]),
                 }
             )
 
@@ -27643,6 +27690,7 @@ async def upload_document(
     doc_type: str = Form(...),
     episode_id: int | None = Form(None),
     appointment_id: int | None = Form(None),
+    profile_id: int | None = Form(None),
     date: str | None = Form(None),
     center: str | None = Form(""),
     notes: str | None = Form(""),
@@ -27652,7 +27700,7 @@ async def upload_document(
     current_user: models.User = Depends(auth.get_current_user),
 ):
     ensure_episode_schema(force=True)
-    profile, _, target_user_id = _get_active_profile_context(db, current_user, require_write=True)
+    profile, _, target_user_id = _requested_or_active_profile_for_write(db, current_user, profile_id)
     _require_profile_permission(db, current_user, profile, "edit_documents")
     # Leer y validar el archivo
     file_content = await file.read()
