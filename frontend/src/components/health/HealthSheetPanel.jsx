@@ -67,14 +67,6 @@ function sourceLabel(source) {
   return `Fuente: ${label}`;
 }
 
-function latestByDate(items, field = "date") {
-  return [...ensureArray(items)].sort((left, right) => {
-    const leftTime = parseDate(left?.[field])?.getTime() || 0;
-    const rightTime = parseDate(right?.[field])?.getTime() || 0;
-    return rightTime - leftTime;
-  })[0] || null;
-}
-
 function isAbnormalFlag(flag) {
   return ABNORMAL_FLAGS.has(String(flag || "").toLowerCase());
 }
@@ -341,50 +333,19 @@ export default function HealthSheetPanel({ profileId }) {
   const exams = ensureArray(sheet?.exams);
   const indications = ensureArray(sheet?.indications);
   const totalItems = diagnoses.length + vaccines.length + exams.length;
-  const activeDiagnoses = diagnoses.filter((item) =>
-    ["active", "monitoring"].includes(String(item?.status || "").toLowerCase())
-  );
-  const latestVaccine = latestByDate(vaccines);
   const labHistory = buildLabHistory(examRecords);
   const importedDocumentIds = new Set(
     examRecords
       .filter((record) => String(record?.source_type || "") === "document" && record?.source_id)
       .map((record) => Number(record.source_id))
   );
-  const latestExam = latestByDate(exams);
-
-  const healthSnapshotItems = [
-    {
-      label: "Problemas activos",
-      value: activeDiagnoses.length,
-      helper: activeDiagnoses.length
-        ? "Revisa controles y seguimiento"
-        : diagnoses.length
-        ? "Sin activos marcados"
-        : "Sin diagnósticos registrados",
-      tone: activeDiagnoses.length ? "warn" : "ok",
-    },
-    {
-      label: "Valores en historial",
-      value: labHistory.length,
-      helper: labHistory.length
-        ? "Parámetros con seguimiento"
-        : "Fotografía un examen para empezar",
-      tone: labHistory.length ? "teal" : "muted",
-    },
-    {
-      label: "Última vacuna",
-      value: latestVaccine ? cleanUiText(latestVaccine.name, "Registrada") : "Sin datos",
-      helper: latestVaccine?.date ? fmtSheetDate(latestVaccine.date) : "Agrega tu carnet o registro",
-      tone: latestVaccine ? "teal" : "muted",
-    },
-    {
-      label: "Último examen",
-      value: latestExam ? cleanUiText(latestExam.name, "Registrado") : "Sin datos",
-      helper: latestExam?.date ? fmtSheetDate(latestExam.date) : "Guarda resultados estructurados",
-      tone: latestExam ? "info" : "muted",
-    },
-  ];
+  // Los exámenes leídos desde documentos cuyos valores aún no pasan al
+  // historial son la acción prioritaria; el resto queda plegado.
+  const pendingImportExams = exams.filter((item) => {
+    const documentId = item?.source?.source_type === "document" ? item?.source?.source_id : null;
+    return documentId && !importedDocumentIds.has(Number(documentId));
+  });
+  const storedExams = exams.filter((item) => !pendingImportExams.includes(item));
 
   const tabs = [
     { key: "examenes", icon: "🧪", label: "Exámenes", count: exams.length },
@@ -425,16 +386,6 @@ export default function HealthSheetPanel({ profileId }) {
         </div>
       ) : (
         <div className="hsheet-body">
-          <div className="hsheet-live-grid" aria-label="Resumen vivo de salud">
-            {healthSnapshotItems.map((item) => (
-              <article className={`hsheet-live-card is-${item.tone}`} key={item.label}>
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-                <small>{item.helper}</small>
-              </article>
-            ))}
-          </div>
-
           <div className="hsheet-tabs" role="tablist" aria-label="Secciones de la ficha">
             {tabs.map((tab) => (
               <button
@@ -515,14 +466,42 @@ export default function HealthSheetPanel({ profileId }) {
 
               {importMessage ? <p className="hsheet-import-message">{importMessage}</p> : null}
 
-              {exams.length > 0 ? (
+              {pendingImportExams.length > 0 ? (
                 <div className="hsheet-exam-list">
-                  <h3 className="hsheet-block-title">Tus exámenes</h3>
-                  {exams.map((item, index) => {
-                    const documentId = item?.source?.source_type === "document" ? item?.source?.source_id : null;
-                    const alreadyImported = documentId ? importedDocumentIds.has(Number(documentId)) : false;
+                  <h3 className="hsheet-block-title">Exámenes leídos: pásalos a tu historial</h3>
+                  {pendingImportExams.map((item, index) => {
+                    const documentId = item?.source?.source_id;
                     const busy = importBusyId === documentId;
                     return (
+                      <div className="hsheet-row" key={`exam-pending-${index}`}>
+                        <div className="hsheet-row-copy">
+                          <strong>{cleanUiText(item.name)}</strong>
+                          {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
+                        </div>
+                        <div className="hsheet-row-side">
+                          <button
+                            type="button"
+                            className="hsheet-row-btn"
+                            disabled={busy}
+                            onClick={() => importExamValues(item)}
+                          >
+                            {busy ? "Traspasando…" : "Pasar valores al historial"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {storedExams.length > 0 ? (
+                <details className="hsheet-section">
+                  <summary>
+                    <span aria-hidden>🗂️</span> Ver todos tus exámenes
+                    <span className="hsheet-count">{storedExams.length}</span>
+                  </summary>
+                  <div className="hsheet-section-body">
+                    {storedExams.map((item, index) => (
                       <div className="hsheet-row" key={`exam-${index}`}>
                         <div className="hsheet-row-copy">
                           <strong>{cleanUiText(item.name)}</strong>
@@ -530,26 +509,10 @@ export default function HealthSheetPanel({ profileId }) {
                           {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
                           {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
                         </div>
-                        {documentId ? (
-                          <div className="hsheet-row-side">
-                            <button
-                              type="button"
-                              className={`hsheet-row-btn${alreadyImported ? " is-done" : ""}`}
-                              disabled={busy || alreadyImported}
-                              onClick={() => importExamValues(item)}
-                            >
-                              {alreadyImported
-                                ? "En tu historial ✓"
-                                : busy
-                                ? "Traspasando…"
-                                : "Pasar valores al historial"}
-                            </button>
-                          </div>
-                        ) : null}
                       </div>
-                    );
-                  })}
-                </div>
+                    ))}
+                  </div>
+                </details>
               ) : null}
 
               {openForm === "exam" ? (

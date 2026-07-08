@@ -47732,6 +47732,72 @@ body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:
   background: #10b981;
 }
 
+.documents-wizard-pages-strip {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding: 0.35rem 0.1rem;
+  scrollbar-width: none;
+}
+
+.documents-wizard-pages-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.documents-wizard-page-thumb {
+  position: relative;
+  flex-shrink: 0;
+  display: grid;
+  gap: 0.2rem;
+  justify-items: center;
+}
+
+.documents-wizard-page-thumb img {
+  width: 64px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 2px solid rgba(74, 222, 128, 0.85);
+  background: #f1f5f9;
+}
+
+.documents-wizard-page-thumb span {
+  color: #475569;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.documents-wizard-page-thumb button {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+body.theme-dark .documents-wizard-page-thumb img {
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(15, 23, 42, 0.8);
+}
+
+body.theme-dark .documents-wizard-page-thumb span {
+  color: #94a3b8;
+}
+
+body.theme-dark .documents-wizard-page-thumb button {
+  border-color: rgba(71, 85, 105, 0.9);
+  background: rgba(15, 23, 42, 0.95);
+  color: #cbd5e1;
+}
+
 body.theme-dark .documents-wizard-autocapture-toggle {
   background: rgba(15, 23, 42, 0.88);
   border-color: rgba(100, 116, 139, 0.5);

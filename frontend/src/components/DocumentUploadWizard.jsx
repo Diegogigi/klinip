@@ -196,6 +196,65 @@ function buildLiveCaptureHint(metrics) {
   return { tone: "ok", ready: true, message: "¡Se ve bien! Mantén la posición." };
 }
 
+// Captura multi-hoja: los exámenes largos (hemograma, perfiles) vienen en
+// varias páginas. Cada hoja se fotografía por separado y al subir se unen en
+// una sola imagen vertical para que el OCR lea el documento completo.
+const PAGE_STITCH_MAX_WIDTH = 1400;
+const PAGE_STITCH_GAP = 24;
+
+function canvasToBlob(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (value) => (value ? resolve(value) : reject(new Error("stitch_failed"))),
+      "image/jpeg",
+      quality,
+    );
+  });
+}
+
+function loadImageFromUrl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("img_load_failed"));
+    img.src = url;
+  });
+}
+
+async function stitchPagesToFile(pages) {
+  if (!pages.length) return null;
+  if (pages.length === 1) {
+    return new File([pages[0].blob], `captura-klinip-${Date.now()}.jpg`, { type: "image/jpeg" });
+  }
+  const images = await Promise.all(pages.map((page) => loadImageFromUrl(page.previewUrl)));
+  const targetWidth = Math.min(PAGE_STITCH_MAX_WIDTH, Math.max(...images.map((img) => img.naturalWidth || img.width)));
+  const heights = images.map((img) => {
+    const width = img.naturalWidth || img.width || 1;
+    const height = img.naturalHeight || img.height || 1;
+    return Math.max(1, Math.round(height * (targetWidth / width)));
+  });
+  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + PAGE_STITCH_GAP * (images.length - 1);
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = totalHeight;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("stitch_context_unavailable");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, targetWidth, totalHeight);
+  let offsetY = 0;
+  images.forEach((img, index) => {
+    context.drawImage(img, 0, offsetY, targetWidth, heights[index]);
+    offsetY += heights[index] + PAGE_STITCH_GAP;
+  });
+  let quality = 0.88;
+  let blob = await canvasToBlob(canvas, quality);
+  while (blob.size > MAX_BYTES && quality > 0.5) {
+    quality -= 0.12;
+    blob = await canvasToBlob(canvas, quality);
+  }
+  return new File([blob], `examen-${pages.length}-hojas-${Date.now()}.jpg`, { type: "image/jpeg" });
+}
+
 function isOcrActive(status) {
   return ACTIVE_OCR.has(String(status || "").trim().toLowerCase());
 }
@@ -384,6 +443,21 @@ export default function DocumentUploadWizard({
   const prevFrameRef = useRef(null);
   const readyTicksRef = useRef(0);
   const autoCapturedRef = useRef(false);
+  const [capturedPages, setCapturedPages] = useState([]);
+  const [pageReviewMode, setPageReviewMode] = useState(false);
+  const capturedPagesRef = useRef([]);
+  capturedPagesRef.current = capturedPages;
+
+  const discardCapturedPages = useCallback(() => {
+    capturedPagesRef.current.forEach((page) => {
+      try {
+        URL.revokeObjectURL(page.previewUrl);
+      } catch (_) {
+        // noop
+      }
+    });
+    setCapturedPages([]);
+  }, []);
 
   const cameraSupported = useMemo(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") return false;
@@ -424,15 +498,17 @@ export default function DocumentUploadWizard({
       setCameraError("");
       setCameraReady(false);
       setCameraBusy(false);
+      discardCapturedPages();
     } else {
       stopCameraStream();
+      discardCapturedPages();
     }
 
     return () => {
       cancelledRef.current = true;
       stopCameraStream();
     };
-  }, [initialUploadIntent, open, stopCameraStream]);
+  }, [discardCapturedPages, initialUploadIntent, open, stopCameraStream]);
 
   const pollAnalysis = useCallback(
     async (id) => {
@@ -607,17 +683,70 @@ export default function DocumentUploadWizard({
         );
       });
 
-      const file = new File([blob], `captura-klinip-${Date.now()}.jpg`, {
-        type: "image/jpeg",
+      // La hoja queda en la lista local; el usuario decide si captura otra o
+      // sube todo junto. Así los exámenes de varias páginas entran completos.
+      autoCapturedRef.current = true;
+      setPageReviewMode(true);
+      const previewUrl = URL.createObjectURL(blob);
+      setCapturedPages((current) => {
+        const next = [...current, { blob, previewUrl }];
+        setLiveHint({
+          tone: "ok",
+          ready: true,
+          message: `Hoja ${next.length} lista. Si el examen tiene más hojas, captura la siguiente.`,
+        });
+        return next;
       });
-
-      await handleFile(file, "live-camera");
     } catch (_) {
       setCameraError("No pudimos capturar la foto. Reintenta o usa la cámara del dispositivo.");
     } finally {
       setCameraBusy(false);
     }
-  }, [cameraBusy, handleFile]);
+  }, [cameraBusy]);
+
+  const handleAddAnotherPage = useCallback(() => {
+    autoCapturedRef.current = false;
+    readyTicksRef.current = 0;
+    prevFrameRef.current = null;
+    setPageReviewMode(false);
+    setLiveHint({ tone: "info", ready: false, message: "Encuadra la siguiente hoja del documento." });
+  }, []);
+
+  const handleRemovePage = useCallback((index) => {
+    setCapturedPages((current) => {
+      const target = current[index];
+      if (target) {
+        try {
+          URL.revokeObjectURL(target.previewUrl);
+        } catch (_) {
+          // noop
+        }
+      }
+      const next = current.filter((_, itemIndex) => itemIndex !== index);
+      if (!next.length) {
+        autoCapturedRef.current = false;
+        readyTicksRef.current = 0;
+        setPageReviewMode(false);
+        setLiveHint(null);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSubmitPages = useCallback(async () => {
+    const pages = capturedPagesRef.current;
+    if (!pages.length || cameraBusy) return;
+    setCameraBusy(true);
+    try {
+      const file = await stitchPagesToFile(pages);
+      discardCapturedPages();
+      await handleFile(file, pages.length > 1 ? "live-camera-multi" : "live-camera");
+    } catch (_) {
+      setCameraError("No pudimos preparar las hojas. Reintenta o usa la cámara del dispositivo.");
+    } finally {
+      setCameraBusy(false);
+    }
+  }, [cameraBusy, discardCapturedPages, handleFile]);
 
   useEffect(() => {
     if (!open || step !== "camera" || !cameraReady || cameraBusy || cameraError) {
@@ -627,7 +756,11 @@ export default function DocumentUploadWizard({
       return undefined;
     }
 
-    autoCapturedRef.current = false;
+    // Con hojas ya capturadas, la captura automática queda en pausa hasta que
+    // el usuario pida "otra hoja"; si no, se rearma normalmente.
+    if (!capturedPagesRef.current.length) {
+      autoCapturedRef.current = false;
+    }
     if (!analysisCanvasRef.current && typeof document !== "undefined") {
       analysisCanvasRef.current = document.createElement("canvas");
     }
@@ -784,11 +917,37 @@ export default function DocumentUploadWizard({
               ref={fileInputRef}
               type="file"
               accept="image/*,application/pdf"
+              multiple
               style={{ display: "none" }}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
+              onChange={async (event) => {
+                const files = Array.from(event.target.files || []);
                 event.target.value = "";
-                handleFile(file, "file");
+                if (!files.length) return;
+                const images = files.filter((item) => String(item.type || "").startsWith("image/"));
+                // Varias imágenes = hojas del mismo documento: se unen en una
+                // sola antes de subir para que el OCR lea el examen completo.
+                if (images.length > 1 && images.length === files.length) {
+                  const pages = images.map((item) => ({
+                    blob: item,
+                    previewUrl: URL.createObjectURL(item),
+                  }));
+                  try {
+                    const stitched = await stitchPagesToFile(pages);
+                    await handleFile(stitched, "file-multi");
+                  } catch (_) {
+                    await handleFile(images[0], "file");
+                  } finally {
+                    pages.forEach((page) => {
+                      try {
+                        URL.revokeObjectURL(page.previewUrl);
+                      } catch (_) {
+                        // noop
+                      }
+                    });
+                  }
+                  return;
+                }
+                handleFile(files[0], "file");
               }}
             />
 
@@ -903,18 +1062,72 @@ export default function DocumentUploadWizard({
                     : "Captura automática desactivada"}
                 </button>
 
+                {capturedPages.length > 0 ? (
+                  <div className="documents-wizard-pages-strip" aria-label="Hojas capturadas">
+                    {capturedPages.map((page, index) => (
+                      <div className="documents-wizard-page-thumb" key={page.previewUrl}>
+                        <img src={page.previewUrl} alt={`Hoja ${index + 1}`} />
+                        <span>Hoja {index + 1}</span>
+                        <button
+                          type="button"
+                          aria-label={`Quitar hoja ${index + 1}`}
+                          onClick={() => handleRemovePage(index)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
                 <div className="documents-wizard-button-stack">
-                  <button
-                    type="button"
-                    className="primary-btn"
-                    disabled={cameraBusy || !cameraReady}
-                    onClick={handleCaptureFrame}
-                  >
-                    {cameraBusy ? "Preparando captura..." : "Capturar foto"}
-                  </button>
-                  <button type="button" className="secondary-btn" onClick={handleDeviceCameraFallback}>
-                    Usar cámara del dispositivo
-                  </button>
+                  {capturedPages.length > 0 && pageReviewMode ? (
+                    <>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        disabled={cameraBusy}
+                        onClick={handleSubmitPages}
+                      >
+                        {cameraBusy
+                          ? "Preparando..."
+                          : `Subir ${capturedPages.length} hoja${capturedPages.length !== 1 ? "s" : ""}`}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary-btn"
+                        disabled={cameraBusy || !cameraReady}
+                        onClick={handleAddAnotherPage}
+                      >
+                        Capturar otra hoja
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="primary-btn"
+                        disabled={cameraBusy || !cameraReady}
+                        onClick={handleCaptureFrame}
+                      >
+                        {cameraBusy ? "Preparando captura..." : "Capturar foto"}
+                      </button>
+                      {capturedPages.length > 0 ? (
+                        <button
+                          type="button"
+                          className="secondary-btn"
+                          disabled={cameraBusy}
+                          onClick={handleSubmitPages}
+                        >
+                          Subir {capturedPages.length} hoja{capturedPages.length !== 1 ? "s" : ""}
+                        </button>
+                      ) : (
+                        <button type="button" className="secondary-btn" onClick={handleDeviceCameraFallback}>
+                          Usar cámara del dispositivo
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <div className="documents-wizard-inline-actions">
@@ -926,7 +1139,11 @@ export default function DocumentUploadWizard({
                   <button type="button" className="documents-wizard-inline-action" onClick={handleLibraryFallback}>
                     Subir archivo
                   </button>
-                  <button type="button" className="documents-wizard-inline-action" onClick={() => setStep("choose")}>
+                  <button
+                    type="button"
+                    className="documents-wizard-inline-action"
+                    onClick={() => { discardCapturedPages(); setStep("choose"); }}
+                  >
                     Volver
                   </button>
                 </div>
