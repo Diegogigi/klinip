@@ -44,6 +44,9 @@ def _endpoint_env(monkeypatch, db_session):
         "_get_active_profile_context",
         lambda db, current_user, require_write=False: (None, None, user.id),
     )
+    # El contexto de perfil está simulado (profile=None); la validación de
+    # permisos por módulo se prueba aparte.
+    monkeypatch.setattr(main, "_require_profile_permission", lambda *args, **kwargs: None)
     return user, med, db_session
 
 

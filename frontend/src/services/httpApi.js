@@ -832,6 +832,12 @@ export async function uploadDocument(payload) {
   if (!(payload instanceof FormData)) {
     Object.entries(payload || {}).forEach(([key, value]) => {
       if (value === undefined || value === null) return;
+      // Hojas adicionales del mismo documento: el backend las combina en un
+      // solo PDF para que el OCR lea el examen completo.
+      if (key === "pages" && Array.isArray(value)) {
+        value.forEach((page) => formData.append("pages", page));
+        return;
+      }
       formData.append(key, value);
     });
   }

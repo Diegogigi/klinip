@@ -15,14 +15,34 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_MS = 45000;
 const ACTIVE_OCR = new Set(["pending", "processing", ""]);
+// Resolución en vertical (los documentos se fotografían con el teléfono
+// parado); pedir 1920x1080 horizontal dejaba el documento pequeño y lejano.
 const LIVE_CAMERA_CONSTRAINTS = {
   audio: false,
   video: {
     facingMode: { ideal: "environment" },
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
+    width: { ideal: 1440 },
+    height: { ideal: 2560 },
   },
 };
+
+// Zoom moderado automático cuando la cámara lo soporta: acerca el documento
+// sin que la persona tenga que acercar tanto el teléfono.
+function applyDocumentZoom(stream) {
+  try {
+    const [track] = stream.getVideoTracks();
+    const capabilities = track?.getCapabilities?.();
+    const zoomRange = capabilities?.zoom;
+    if (!zoomRange || typeof zoomRange.max !== "number") return;
+    const minZoom = typeof zoomRange.min === "number" ? zoomRange.min : 1;
+    const target = Math.min(2, zoomRange.max);
+    if (target > minZoom) {
+      track.applyConstraints({ advanced: [{ zoom: target }] }).catch(() => {});
+    }
+  } catch (_) {
+    // Zoom no soportado: la vista queda con el encuadre normal.
+  }
+}
 
 const TYPE_COPY = {
   receta: {
@@ -197,62 +217,28 @@ function buildLiveCaptureHint(metrics) {
 }
 
 // Captura multi-hoja: los exámenes largos (hemograma, perfiles) vienen en
-// varias páginas. Cada hoja se fotografía por separado y al subir se unen en
-// una sola imagen vertical para que el OCR lea el documento completo.
-const PAGE_STITCH_MAX_WIDTH = 1400;
-const PAGE_STITCH_GAP = 24;
+// varias páginas. Cada hoja se fotografía por separado y se suben todas
+// juntas; el backend las combina en un solo PDF para que el OCR lea el
+// documento completo (unirlas en el teléfono revienta los límites de canvas).
+const PAGE_CHANGE_DIFF = 22;
+const PAGE_CHANGE_TICKS = 2;
 
-function canvasToBlob(canvas, quality) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (value) => (value ? resolve(value) : reject(new Error("stitch_failed"))),
-      "image/jpeg",
-      quality,
-    );
-  });
+function meanGrayDiff(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let diff = 0;
+  let samples = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    diff += Math.abs(a[i] - b[i]);
+    samples += 1;
+  }
+  return diff / Math.max(1, samples);
 }
 
-function loadImageFromUrl(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("img_load_failed"));
-    img.src = url;
-  });
-}
-
-async function stitchPagesToFile(pages) {
-  if (!pages.length) return null;
-  if (pages.length === 1) {
-    return new File([pages[0].blob], `captura-klinip-${Date.now()}.jpg`, { type: "image/jpeg" });
-  }
-  const images = await Promise.all(pages.map((page) => loadImageFromUrl(page.previewUrl)));
-  const targetWidth = Math.min(PAGE_STITCH_MAX_WIDTH, Math.max(...images.map((img) => img.naturalWidth || img.width)));
-  const heights = images.map((img) => {
-    const width = img.naturalWidth || img.width || 1;
-    const height = img.naturalHeight || img.height || 1;
-    return Math.max(1, Math.round(height * (targetWidth / width)));
-  });
-  const totalHeight = heights.reduce((sum, height) => sum + height, 0) + PAGE_STITCH_GAP * (images.length - 1);
-  const canvas = document.createElement("canvas");
-  canvas.width = targetWidth;
-  canvas.height = totalHeight;
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) throw new Error("stitch_context_unavailable");
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, targetWidth, totalHeight);
-  let offsetY = 0;
-  images.forEach((img, index) => {
-    context.drawImage(img, 0, offsetY, targetWidth, heights[index]);
-    offsetY += heights[index] + PAGE_STITCH_GAP;
-  });
-  let quality = 0.88;
-  let blob = await canvasToBlob(canvas, quality);
-  while (blob.size > MAX_BYTES && quality > 0.5) {
-    quality -= 0.12;
-    blob = await canvasToBlob(canvas, quality);
-  }
-  return new File([blob], `examen-${pages.length}-hojas-${Date.now()}.jpg`, { type: "image/jpeg" });
+function capturedPagesToFiles(pages) {
+  return pages.map(
+    (page, index) =>
+      new File([page.blob], `hoja-${index + 1}-${Date.now()}.jpg`, { type: "image/jpeg" }),
+  );
 }
 
 function isOcrActive(status) {
@@ -443,6 +429,8 @@ export default function DocumentUploadWizard({
   const prevFrameRef = useRef(null);
   const readyTicksRef = useRef(0);
   const autoCapturedRef = useRef(false);
+  const lastCapturedGrayRef = useRef(null);
+  const pageChangeTicksRef = useRef(0);
   const [capturedPages, setCapturedPages] = useState([]);
   const [pageReviewMode, setPageReviewMode] = useState(false);
   const capturedPagesRef = useRef([]);
@@ -530,7 +518,7 @@ export default function DocumentUploadWizard({
   );
 
   const handleFile = useCallback(
-    async (file, source = "") => {
+    async (file, source = "", extraPages = []) => {
       if (!file) return;
       stopCameraStream();
       setSelectedFileName(String(file.name || "documento"));
@@ -548,6 +536,7 @@ export default function DocumentUploadWizard({
           notes: uploadIntent === COVERAGE_UPLOAD_INTENT ? buildCoverageNotes("") : "",
           profile_id: profileId || undefined,
           file,
+          pages: extraPages.length ? extraPages : undefined,
         });
         const id = created?.id;
         if (!id) throw new Error("upload_no_id");
@@ -605,6 +594,7 @@ export default function DocumentUploadWizard({
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      applyDocumentZoom(stream);
       setCameraReady(true);
     } catch (error) {
       stopCameraStream();
@@ -686,6 +676,8 @@ export default function DocumentUploadWizard({
       // La hoja queda en la lista local; el usuario decide si captura otra o
       // sube todo junto. Así los exámenes de varias páginas entran completos.
       autoCapturedRef.current = true;
+      lastCapturedGrayRef.current = prevFrameRef.current;
+      pageChangeTicksRef.current = 0;
       setPageReviewMode(true);
       const previewUrl = URL.createObjectURL(blob);
       setCapturedPages((current) => {
@@ -693,7 +685,7 @@ export default function DocumentUploadWizard({
         setLiveHint({
           tone: "ok",
           ready: true,
-          message: `Hoja ${next.length} lista. Si el examen tiene más hojas, captura la siguiente.`,
+          message: `Hoja ${next.length} lista. Pasa a la siguiente hoja y la capturo sola, o presiona Subir.`,
         });
         return next;
       });
@@ -707,6 +699,7 @@ export default function DocumentUploadWizard({
   const handleAddAnotherPage = useCallback(() => {
     autoCapturedRef.current = false;
     readyTicksRef.current = 0;
+    pageChangeTicksRef.current = 0;
     prevFrameRef.current = null;
     setPageReviewMode(false);
     setLiveHint({ tone: "info", ready: false, message: "Encuadra la siguiente hoja del documento." });
@@ -738,9 +731,9 @@ export default function DocumentUploadWizard({
     if (!pages.length || cameraBusy) return;
     setCameraBusy(true);
     try {
-      const file = await stitchPagesToFile(pages);
+      const [firstFile, ...extraFiles] = capturedPagesToFiles(pages);
       discardCapturedPages();
-      await handleFile(file, pages.length > 1 ? "live-camera-multi" : "live-camera");
+      await handleFile(firstFile, pages.length > 1 ? "live-camera-multi" : "live-camera", extraFiles);
     } catch (_) {
       setCameraError("No pudimos preparar las hojas. Reintenta o usa la cámara del dispositivo.");
     } finally {
@@ -774,7 +767,30 @@ export default function DocumentUploadWizard({
       const video = videoRef.current;
       const canvas = analysisCanvasRef.current;
       if (!video || !canvas || !video.videoWidth || video.readyState < 2) return;
-      if (autoCapturedRef.current) return;
+
+      // Tras capturar una hoja la cámara queda en pausa. Si la escena cambia
+      // de forma clara (el usuario pasó a la página siguiente), se rearma sola
+      // para capturar la nueva hoja sin tocar botones.
+      if (autoCapturedRef.current) {
+        if (!autoCapture || !capturedPagesRef.current.length) return;
+        const pausedMetrics = analyzeVideoFrame(video, canvas, prevFrameRef.current);
+        if (!pausedMetrics) return;
+        prevFrameRef.current = pausedMetrics.gray;
+        const sceneDiff = meanGrayDiff(pausedMetrics.gray, lastCapturedGrayRef.current);
+        if (sceneDiff > PAGE_CHANGE_DIFF) {
+          pageChangeTicksRef.current += 1;
+          if (pageChangeTicksRef.current >= PAGE_CHANGE_TICKS) {
+            autoCapturedRef.current = false;
+            readyTicksRef.current = 0;
+            pageChangeTicksRef.current = 0;
+            setPageReviewMode(false);
+            applyHint({ tone: "info", ready: false, message: "Nueva hoja detectada. Enfócala y la capturo sola." });
+          }
+        } else {
+          pageChangeTicksRef.current = 0;
+        }
+        return;
+      }
 
       const metrics = analyzeVideoFrame(video, canvas, prevFrameRef.current);
       if (!metrics) return;
@@ -919,32 +935,15 @@ export default function DocumentUploadWizard({
               accept="image/*,application/pdf"
               multiple
               style={{ display: "none" }}
-              onChange={async (event) => {
+              onChange={(event) => {
                 const files = Array.from(event.target.files || []);
                 event.target.value = "";
                 if (!files.length) return;
                 const images = files.filter((item) => String(item.type || "").startsWith("image/"));
-                // Varias imágenes = hojas del mismo documento: se unen en una
-                // sola antes de subir para que el OCR lea el examen completo.
+                // Varias imágenes = hojas del mismo documento: el backend las
+                // combina en un solo PDF para que el OCR lea el examen completo.
                 if (images.length > 1 && images.length === files.length) {
-                  const pages = images.map((item) => ({
-                    blob: item,
-                    previewUrl: URL.createObjectURL(item),
-                  }));
-                  try {
-                    const stitched = await stitchPagesToFile(pages);
-                    await handleFile(stitched, "file-multi");
-                  } catch (_) {
-                    await handleFile(images[0], "file");
-                  } finally {
-                    pages.forEach((page) => {
-                      try {
-                        URL.revokeObjectURL(page.previewUrl);
-                      } catch (_) {
-                        // noop
-                      }
-                    });
-                  }
+                  handleFile(images[0], "file-multi", images.slice(1));
                   return;
                 }
                 handleFile(files[0], "file");

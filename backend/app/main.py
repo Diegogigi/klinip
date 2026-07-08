@@ -5910,7 +5910,7 @@ def _startup_event():
 
 
 OCR_MAX_BYTES = 4 * 1024 * 1024
-OCR_MAX_PAGES = 3
+OCR_MAX_PAGES = 8
 OCR_LANG_DEFAULT = "spa"
 
 
@@ -8721,15 +8721,19 @@ def _image_to_data_uri(pil_img, max_side: int = 1536, quality: int = 85) -> str 
 
 
 def _document_images_for_vision(data: bytes, filename: str) -> list[str]:
-    """Hasta 2 imágenes (data URIs) del documento para enviar al modelo de visión."""
+    """Hasta 6 imágenes (data URIs) del documento para enviar al modelo de visión.
+
+    Los exámenes de laboratorio completos suelen venir en 4-6 hojas; limitar a
+    menos páginas dejaba la mitad de los valores sin leer.
+    """
     uris: list[str] = []
     try:
         if filename.lower().endswith(".pdf"):
             if not convert_from_bytes:
                 return []
             poppler_path = os.getenv("POPPLER_PATH") or None
-            pages = convert_from_bytes(data, first_page=1, last_page=2, poppler_path=poppler_path)
-            for page in pages[:2]:
+            pages = convert_from_bytes(data, first_page=1, last_page=6, poppler_path=poppler_path)
+            for page in pages[:6]:
                 uri = _image_to_data_uri(page)
                 if uri:
                     uris.append(uri)
@@ -27684,6 +27688,41 @@ async def get_document_analysis(
     )
 
 
+def _combine_images_to_pdf(image_items: list[tuple[bytes, str]]) -> bytes | None:
+    """Une varias fotos (hojas de un mismo documento) en un solo PDF.
+
+    Los exámenes largos vienen en varias páginas; combinarlas en el servidor
+    evita los límites de canvas de los teléfonos y deja un único documento
+    que el OCR puede leer completo.
+    """
+    if not Image or len(image_items) < 2:
+        return None
+    try:
+        pil_images = []
+        for content, _name in image_items:
+            img = Image.open(io.BytesIO(content))
+            try:
+                img = ImageOps.exif_transpose(img)
+            except Exception:
+                pass
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.thumbnail((2000, 2000))
+            pil_images.append(img)
+        buffer = io.BytesIO()
+        pil_images[0].save(
+            buffer,
+            format="PDF",
+            save_all=True,
+            append_images=pil_images[1:],
+            resolution=150,
+        )
+        return buffer.getvalue()
+    except Exception as exc:
+        print(f"WARNING _combine_images_to_pdf: {exc}")
+        return None
+
+
 @app.post("/documents", response_model=schemas.DocumentOut)
 async def upload_document(
     background_tasks: BackgroundTasks,
@@ -27696,6 +27735,7 @@ async def upload_document(
     notes: str | None = Form(""),
     send_email_backup: bool = Form(False),
     file: UploadFile = File(...),
+    pages: list[UploadFile] | None = File(None),
     db: Session = Depends(auth.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
@@ -27705,6 +27745,21 @@ async def upload_document(
     # Leer y validar el archivo
     file_content = await file.read()
     original_filename = file.filename or "document"
+
+    # Hojas adicionales del mismo documento: se combinan con la primera en un
+    # solo PDF para que el OCR lea el examen completo.
+    if pages:
+        image_items: list[tuple[bytes, str]] = [(file_content, original_filename)]
+        for page in pages[:11]:
+            page_content = await page.read()
+            if page_content:
+                image_items.append((page_content, page.filename or "hoja.jpg"))
+        if len(image_items) > 1:
+            combined = _combine_images_to_pdf(image_items)
+            if combined:
+                file_content = combined
+                original_filename = f"examen-{len(image_items)}-hojas.pdf"
+
     _detected_mime, safe_filename = _validate_upload(file_content, original_filename)
 
     parsed_date = None
