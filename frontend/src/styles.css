@@ -47665,13 +47665,13 @@ body.theme-dark .family-quick-card:not(:nth-child(2n)):not(:nth-child(3n)):not(:
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.2rem;
+  padding: 0.6rem;
   pointer-events: none;
 }
 
 .documents-wizard-camera-frame {
   position: relative;
-  width: min(88%, 500px);
+  width: min(96%, 580px);
   aspect-ratio: 0.72;
   border-radius: 28px;
   border: 2px solid rgba(255, 255, 255, 0.92);
@@ -48600,7 +48600,7 @@ body.theme-dark .documents-ai-flag span {
 
   .documents-wizard-camera-stage,
   .documents-wizard-camera-video {
-    min-height: min(66vh, 560px);
+    min-height: min(74vh, 640px);
   }
 
   .documents-wizard-camera-stage {
@@ -48608,11 +48608,11 @@ body.theme-dark .documents-ai-flag span {
   }
 
   .documents-wizard-camera-mask {
-    padding: 0.85rem;
+    padding: 0.45rem;
   }
 
   .documents-wizard-camera-frame {
-    width: min(94%, 420px);
+    width: min(98%, 480px);
     border-radius: 22px;
   }
 

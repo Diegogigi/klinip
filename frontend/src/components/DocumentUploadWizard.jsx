@@ -15,14 +15,18 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_MS = 45000;
 const ACTIVE_OCR = new Set(["pending", "processing", ""]);
-// Resolución en vertical (los documentos se fotografían con el teléfono
-// parado); pedir 1920x1080 horizontal dejaba el documento pequeño y lejano.
+// Pedir un ancho/alto de píxeles exacto (ej. 1440x2560) hace que varios
+// navegadores móviles recorten/amplíen digitalmente el sensor para calzar
+// esa resolución, lo que se percibe como "mucho zoom" respecto a la app de
+// cámara nativa. Con aspectRatio ideal el navegador elige el modo nativo del
+// sensor (sin zoom digital) y solo recorta al encuadre, igual que al abrir
+// la cámara del teléfono.
 const LIVE_CAMERA_CONSTRAINTS = {
   audio: false,
   video: {
     facingMode: { ideal: "environment" },
-    width: { ideal: 1440 },
-    height: { ideal: 2560 },
+    aspectRatio: { ideal: 3 / 4 },
+    zoom: { ideal: 1 },
   },
 };
 
