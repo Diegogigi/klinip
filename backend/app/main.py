@@ -13676,7 +13676,122 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
                 "source_text": line[:240],
             }
         )
-    return entities[:24]
+    # Respaldo para tablas: si la extracción línea a línea encontró pocos
+    # valores pero el texto tiene pinta de informe de laboratorio (columnas
+    # Parámetro/Resultado/Unidad/Referencia), Tesseract suele leer cada fila
+    # con columnas separadas por 2+ espacios en vez de "nombre valor unidad"
+    # pegado. Se intenta un segundo parseo tolerante a esa forma.
+    if len(entities) < 3:
+        table_entities = _extract_lab_table_entities(text, exclude_names=seen_names)
+        for item in table_entities:
+            key = _normalize_text(item["entity_name"])
+            if not key or key in seen_names:
+                continue
+            seen_names.add(key)
+            entities.append(item)
+    return entities[:32]
+
+
+_LAB_TABLE_UNIT_TOKENS = {
+    "mg/dl", "g/dl", "mg/l", "mmol/l", "mcg/dl", "ug/dl", "ui/l", "u/l", "meq/l",
+    "seg", "min", "%", "millon/mm3", "mill/mm3", "mil/mm3", "/mm3", "fl", "pg",
+    "mm/h", "ng/ml", "ng/dl", "pmol/l", "mui/l", "mosm/kg", "mg/24h",
+}
+
+
+def _looks_like_lab_table(text: str) -> bool:
+    norm = _normalize_text(text)
+    header_hits = sum(
+        1
+        for token in ("parametro", "resultado", "valor referencia", "u medida", "unidad", "resultado anterior")
+        if token in norm
+    )
+    return header_hits >= 2
+
+
+def _split_table_row(line: str) -> list[str]:
+    # Columnas separadas por 2+ espacios/tabs (layout típico al copiar una
+    # tabla con OCR que respeta la posición horizontal de cada celda).
+    parts = re.split(r"\s{2,}|\t+", line.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None) -> list[dict]:
+    if not text or not _looks_like_lab_table(text):
+        return []
+    exclude_names = exclude_names or set()
+    entities: list[dict] = []
+    seen_names: set[str] = set()
+    numeric_pattern = re.compile(r"^[<>]?\d+(?:[.,]\d+)?$")
+    range_pattern = re.compile(r"\[?\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*\]?")
+    for raw_line in text.splitlines()[:200]:
+        line = _safe_text(raw_line)
+        if not line or ":" in line:
+            continue
+        columns = _split_table_row(line)
+        if len(columns) < 2:
+            continue
+        norm_first = _normalize_text(columns[0])
+        # Saltar encabezados y líneas que son solo el nombre del análisis
+        # (ej. "TIEMPO DE PROTROMBINA (TP)" sin resultado en la misma fila).
+        if norm_first in {"parametro", "resultado", "unidad", "u medida", "valor referencia", "resultado anterior"}:
+            continue
+        if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", columns[0]):
+            continue
+        # Buscar la primera columna numérica: es el resultado.
+        value_index = None
+        for index in range(1, len(columns)):
+            if numeric_pattern.match(columns[index].replace(",", ".")):
+                value_index = index
+                break
+        if value_index is None:
+            continue
+        name = columns[0]
+        key = _normalize_text(name)
+        if not key or key in seen_names or key in exclude_names:
+            continue
+        value = columns[value_index].replace(",", ".")
+        remaining = columns[value_index + 1 :]
+        unit = ""
+        reference_range = ""
+        for token in remaining:
+            range_match = range_pattern.search(token)
+            if range_match and not reference_range:
+                reference_range = f"{range_match.group(1)}-{range_match.group(2)}"
+                continue
+            if not unit and (
+                token.strip().lower() in _LAB_TABLE_UNIT_TOKENS
+                or re.match(r"^[A-Za-zµ%/0-9.^-]{1,14}$", token)
+            ):
+                unit = token
+        flag = "unknown"
+        try:
+            numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
+            if reference_range:
+                low_str, high_str = reference_range.split("-", 1)
+                low_value, high_value = float(low_str), float(high_str)
+                if numeric < low_value:
+                    flag = "low"
+                elif numeric > high_value:
+                    flag = "high"
+                else:
+                    flag = "normal"
+        except Exception:
+            flag = "unknown"
+        seen_names.add(key)
+        entities.append(
+            {
+                "entity_type": "lab_value",
+                "entity_name": name[:120],
+                "entity_value": value[:80],
+                "unit": unit[:24],
+                "reference_range": reference_range[:80],
+                "flag": flag,
+                "confidence": 70,
+                "source_text": line[:240],
+            }
+        )
+    return entities[:32]
 
 
 # Medicamentos de receta retenida / controlada (nombres canónicos del mapa).
@@ -27838,7 +27953,10 @@ async def upload_document(
 
     # Hojas adicionales del mismo documento: se combinan con la primera en un
     # solo PDF para que el OCR lea el examen completo.
-    if pages:
+    # (isinstance guard: cuando no se manda "pages" en la request, FastAPI
+    # resuelve el default a None, pero al llamar la función directamente
+    # -como en tests- el default crudo es el objeto File(...), que es truthy.)
+    if isinstance(pages, list) and pages:
         image_items: list[tuple[bytes, str]] = [(file_content, original_filename)]
         for page in pages[:11]:
             page_content = await page.read()
