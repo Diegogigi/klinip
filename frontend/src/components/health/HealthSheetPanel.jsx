@@ -112,7 +112,7 @@ function buildLabHistory(examRecords) {
   return params.sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
-const SWIPE_REVEAL_PX = 140;
+const SWIPE_REVEAL_FALLBACK_PX = 140;
 
 // Fila de un parámetro con gesto de deslizar hacia la izquierda para revelar
 // Editar/Eliminar (como el swipe-to-delete de iOS). Usa eventos de puntero
@@ -138,8 +138,23 @@ function SwipeableParamRow({
   const lockRef = useRef(null);
   const startRef = useRef({ x: 0, y: 0, base: 0 });
   const suppressClickRef = useRef(false);
+  const actionsRef = useRef(null);
+  // El ancho de los botones Editar/Eliminar cambia en mobile (CSS), así que
+  // se mide el elemento real en vez de asumir un ancho fijo: si no, el
+  // deslizar en el celular dejaba una franja sin botón visible.
+  const [revealPx, setRevealPx] = useState(SWIPE_REVEAL_FALLBACK_PX);
 
-  const clamp = (value) => Math.min(0, Math.max(-SWIPE_REVEAL_PX, value));
+  useEffect(() => {
+    const measure = () => {
+      const width = actionsRef.current?.getBoundingClientRect().width;
+      if (width) setRevealPx(width);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  const clamp = (value) => Math.min(0, Math.max(-revealPx, value));
 
   const handlePointerDown = (event) => {
     draggingRef.current = true;
@@ -164,7 +179,7 @@ function SwipeableParamRow({
     draggingRef.current = false;
     if (lockRef.current === "x") {
       suppressClickRef.current = true;
-      setDragX((current) => (current < -SWIPE_REVEAL_PX / 2 ? -SWIPE_REVEAL_PX : 0));
+      setDragX((current) => (current < -revealPx / 2 ? -revealPx : 0));
       window.setTimeout(() => {
         suppressClickRef.current = false;
       }, 0);
@@ -186,7 +201,7 @@ function SwipeableParamRow({
 
   return (
     <div className="hsheet-swipe-row">
-      <div className="hsheet-swipe-actions">
+      <div className="hsheet-swipe-actions" ref={actionsRef}>
         <button
           type="button"
           className="hsheet-swipe-btn is-edit"

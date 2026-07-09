@@ -50649,6 +50649,8 @@ body.theme-dark .coverage-processing-banner span {
 .coverage-plan-copy {
   display: grid;
   gap: 0.12rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .coverage-plan-copy strong {
@@ -51174,7 +51176,6 @@ body.theme-dark .coverage-document-edit-error {
   .coverage-detected-grid span {
     padding: 0.34rem 0.42rem;
     border-radius: 10px;
-    font-size: 0.6rem;
   }
 
   .coverage-detected-grid strong {
@@ -51230,9 +51231,22 @@ body.theme-dark .coverage-document-edit-error {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .coverage-plan-card {
+  .coverage-plan-card:not(.is-editing) {
+    flex-wrap: wrap;
     padding: 0.72rem 0.85rem;
     border-radius: 15px;
+  }
+
+  .coverage-plan-card.is-editing {
+    padding: 0.72rem 0.85rem;
+    border-radius: 15px;
+  }
+
+  /* Con texto largo (previsión + nombre de plan), la copia y el botón
+     "Editar" ya no caben en una sola fila sin apretarse u overflowear; la
+     copia pasa a ocupar toda la fila y el botón baja a su propia línea. */
+  .coverage-plan-copy {
+    flex-basis: 100%;
   }
 
   .coverage-payer-options {
@@ -51378,6 +51392,19 @@ body.theme-dark .coverage-document-edit-error {
 
   .health-hub-card-compact .health-hub-card-footer {
     margin-top: -0.18rem;
+  }
+}
+
+/* En telefonos angostos, 2 columnas siguen apretando selects y campos de
+   fecha con 13 campos en el formulario de corrección de un documento de
+   cobertura; a 1 columna cada campo queda usable. */
+@media (max-width: 480px) {
+  .coverage-document-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .coverage-stats-grid.is-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -55795,10 +55822,6 @@ body.theme-dark .clp-loading-pulse {
   .hsheet-live-card {
     padding: 0.52rem 0.58rem;
     border-radius: 12px;
-  }
-
-  .hsheet-live-card span {
-    font-size: 0.62rem;
   }
 
   .hsheet-live-card strong {
