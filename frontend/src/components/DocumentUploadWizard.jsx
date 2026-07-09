@@ -26,23 +26,6 @@ const LIVE_CAMERA_CONSTRAINTS = {
   },
 };
 
-// Zoom moderado automático cuando la cámara lo soporta: acerca el documento
-// sin que la persona tenga que acercar tanto el teléfono.
-function applyDocumentZoom(stream) {
-  try {
-    const [track] = stream.getVideoTracks();
-    const capabilities = track?.getCapabilities?.();
-    const zoomRange = capabilities?.zoom;
-    if (!zoomRange || typeof zoomRange.max !== "number") return;
-    const minZoom = typeof zoomRange.min === "number" ? zoomRange.min : 1;
-    const target = Math.min(2, zoomRange.max);
-    if (target > minZoom) {
-      track.applyConstraints({ advanced: [{ zoom: target }] }).catch(() => {});
-    }
-  } catch (_) {
-    // Zoom no soportado: la vista queda con el encuadre normal.
-  }
-}
 
 const TYPE_COPY = {
   receta: {
@@ -594,7 +577,6 @@ export default function DocumentUploadWizard({
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      applyDocumentZoom(stream);
       setCameraReady(true);
     } catch (error) {
       stopCameraStream();

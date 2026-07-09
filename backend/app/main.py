@@ -9074,7 +9074,7 @@ def _run_document_ocr(document_id: int):
 
         profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
         try:
-            _upsert_document_intelligence(db, doc)
+            _upsert_document_intelligence(db, doc, vision_meta=vision_meta)
             _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
             db.commit()  # Persistir resumen/entidades y dejar la transacción limpia.
             db.refresh(doc)
@@ -13941,11 +13941,101 @@ def _extract_diagnosis_entities(text: str) -> list[dict]:
     return entities[:10]
 
 
-def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict]:
+_VISION_EXAM_STATE_TO_FLAG = {
+    "normal": "normal",
+    "alto": "high",
+    "alta": "high",
+    "bajo": "low",
+    "baja": "low",
+    "critico": "critical",
+    "crítico": "critical",
+}
+
+
+def _vision_exams_to_lab_entities(examenes: list) -> list[dict]:
+    """Convierte la lista estructurada `examenes` de la visión IA en entidades
+    lab_value. La visión ya leyó la tabla completa (columnas Parámetro,
+    Resultado, U.Medida, Valor Referencia); es mucho más confiable que la
+    regex sobre el texto OCR crudo, que espera una sola línea por valor y
+    falla cuando el documento es una tabla de varias columnas."""
+    entities: list[dict] = []
+    seen_names: set[str] = set()
+    for item in examenes or []:
+        if not isinstance(item, dict):
+            continue
+        name = _safe_text(str(item.get("nombre") or "")).strip()
+        value = _safe_text(str(item.get("valor") or "")).strip()
+        if not name or not value:
+            continue
+        key = _normalize_text(name)
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
+        estado = _normalize_text(str(item.get("estado") or ""))
+        entities.append(
+            {
+                "entity_type": "lab_value",
+                "entity_name": name[:120],
+                "entity_value": value[:80],
+                "unit": _safe_text(str(item.get("unidad") or ""))[:24],
+                "reference_range": _safe_text(str(item.get("rango") or ""))[:80],
+                "flag": _VISION_EXAM_STATE_TO_FLAG.get(estado, "unknown"),
+                "confidence": 90,
+                "source_text": f"{name} {value}"[:240],
+            }
+        )
+    return entities[:40]
+
+
+def _vision_meds_to_prescription_entities(medicamentos: list) -> list[dict]:
+    """Convierte la lista estructurada `medicamentos` de la visión IA en
+    entidades medication_instruction, igual criterio que los exámenes."""
+    entities: list[dict] = []
+    seen_names: set[str] = set()
+    for item in medicamentos or []:
+        if not isinstance(item, dict):
+            continue
+        name = _safe_text(str(item.get("nombre") or "")).strip()
+        if not name:
+            continue
+        key = _normalize_text(name)
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
+        dose = _safe_text(str(item.get("dosis") or ""))
+        frequency = _safe_text(str(item.get("frecuencia") or ""))
+        duration = _safe_text(str(item.get("duracion") or ""))
+        summary_parts = [part for part in [dose, frequency, duration] if part]
+        entities.append(
+            {
+                "entity_type": "medication_instruction",
+                "entity_name": name[:120],
+                "entity_value": (", ".join(summary_parts) if summary_parts else name)[:240],
+                "unit": dose[:40],
+                "reference_range": "",
+                "flag": "clinical",
+                "confidence": 90,
+                "source_text": name[:240],
+            }
+        )
+    return entities[:20]
+
+
+def _build_document_intelligence(
+    doc: models.Document, vision_meta: dict | None = None
+) -> tuple[list[dict], dict]:
     doc_type = _infer_document_type(doc)
     file_format = _document_file_format(doc)
     text = (doc.ocr_text or "").strip()
-    if doc_type == "resultado":
+    vision_entities: list[dict] = []
+    if vision_meta:
+        if doc_type == "resultado":
+            vision_entities = _vision_exams_to_lab_entities(vision_meta.get("examenes"))
+        elif doc_type == "receta":
+            vision_entities = _vision_meds_to_prescription_entities(vision_meta.get("medicamentos"))
+    if vision_entities:
+        entities = vision_entities
+    elif doc_type == "resultado":
         entities = _extract_document_lab_entities(text)
     elif doc_type == "receta":
         entities = _extract_prescription_entities(text)
@@ -14073,9 +14163,9 @@ def _build_document_intelligence(doc: models.Document) -> tuple[list[dict], dict
     }
 
 
-def _upsert_document_intelligence(db: Session, doc: models.Document):
+def _upsert_document_intelligence(db: Session, doc: models.Document, vision_meta: dict | None = None):
     db.query(models.DocumentClinicalEntity).filter(models.DocumentClinicalEntity.document_id == doc.id).delete()
-    entities, summary_payload = _build_document_intelligence(doc)
+    entities, summary_payload = _build_document_intelligence(doc, vision_meta=vision_meta)
     for entity in entities:
         db.add(models.DocumentClinicalEntity(document_id=doc.id, **entity))
     summary = (
