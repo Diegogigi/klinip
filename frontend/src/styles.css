@@ -17433,8 +17433,8 @@ body.theme-dark .home-ops-action-icon {
 }
 
 .home-radar-item.tone-ok {
-  border-color: #bfe7d1;
-  background: #f3fbf7;
+  border-color: #86e0ac;
+  background: #e5f9ec;
 }
 
 .home-radar-item.tone-ok .home-radar-icon {
@@ -17442,9 +17442,13 @@ body.theme-dark .home-ops-action-icon {
   color: #12a150;
 }
 
+.home-radar-item.tone-ok .home-radar-label {
+  color: #0f7a3d;
+}
+
 .home-radar-item.tone-warn {
-  border-color: #ffe0a6;
-  background: #fff8ec;
+  border-color: #ffc670;
+  background: #fef1d6;
 }
 
 .home-radar-item.tone-warn .home-radar-icon {
@@ -17452,14 +17456,24 @@ body.theme-dark .home-ops-action-icon {
   color: #d88912;
 }
 
+.home-radar-item.tone-warn .home-radar-label {
+  color: #a6620a;
+}
+
+/* La tarjeta completa se tiñe de rojo, no solo el ícono: el radar debe leerse
+   como urgente de un vistazo (ej. cita próxima), no solo por un detalle chico. */
 .home-radar-item.tone-alert {
-  border-color: #f6c7cc;
-  background: #fff5f5;
+  border-color: #f3a0a9;
+  background: #fde3e5;
 }
 
 .home-radar-item.tone-alert .home-radar-icon {
   background: #ffe0e3;
   color: #dc4b5f;
+}
+
+.home-radar-item.tone-alert .home-radar-label {
+  color: #b91c2c;
 }
 
 .home-upcoming-list,
@@ -23456,19 +23470,31 @@ body.theme-dark .home-loading {
 }
 
 body.theme-dark .home-radar-item.tone-ok {
-  background: rgba(13, 148, 136, 0.09);
-  border-color: rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.16);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+body.theme-dark .home-radar-item.tone-ok .home-radar-label {
+  color: #6ee7b7;
 }
 
 body.theme-dark .home-radar-item.tone-warn {
-  background: rgba(217, 119, 6, 0.11);
-  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.18);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+body.theme-dark .home-radar-item.tone-warn .home-radar-label {
+  color: #fcd34d;
 }
 
 body.theme-dark .home-radar-item.tone-alert,
 body.theme-dark .home-upcoming-item.is-urgent {
-  background: rgba(220, 75, 95, 0.1);
-  border-color: rgba(244, 114, 182, 0.2);
+  background: rgba(220, 75, 95, 0.22);
+  border-color: rgba(244, 114, 182, 0.45);
+}
+
+body.theme-dark .home-radar-item.tone-alert .home-radar-label {
+  color: #fda4af;
 }
 
 body.theme-dark .home-radar-item:hover,
@@ -49989,22 +50015,15 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
   gap: 1rem;
 }
 
-.coverage-hero {
-  background:
-    radial-gradient(circle at top right, rgba(20, 184, 166, 0.13), transparent 28%),
-    linear-gradient(135deg, #ffffff 0%, #f5fffb 52%, #effaf7 100%) !important;
-  border-color: rgba(153, 246, 228, 0.84) !important;
-}
-
 .coverage-upload-note {
   display: flex;
   align-items: center;
   gap: 0.65rem;
   padding: 0.78rem 0.9rem;
-  border: 1px solid rgba(153, 246, 228, 0.82);
+  border: 1px solid rgba(132, 163, 255, 0.55);
   border-radius: 16px;
-  background: rgba(240, 253, 250, 0.86);
-  color: #0f766e;
+  background: #e4f2ff;
+  color: #0d47f7;
   line-height: 1.4;
 }
 
@@ -50073,12 +50092,12 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
   gap: 0.18rem;
   padding: 0.78rem 0.85rem;
   border-radius: 16px;
-  border: 1px solid rgba(153, 246, 228, 0.76);
-  background: linear-gradient(180deg, rgba(240, 253, 250, 0.95) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border: 1px solid rgba(132, 163, 255, 0.45);
+  background: linear-gradient(180deg, #e4f2ff 0%, #ffffff 100%);
 }
 
 .coverage-amount-card span {
-  color: #0f766e;
+  color: #0d47f7;
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.03em;
@@ -50241,17 +50260,10 @@ body.theme-dark .health-hub-card.health-hub-card-amber {
   min-height: 150px;
 }
 
-body.theme-dark .coverage-hero {
-  background:
-    radial-gradient(circle at top right, rgba(45, 212, 191, 0.16), transparent 28%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(20, 83, 76, 0.82) 56%, rgba(15, 23, 42, 0.98) 100%) !important;
-  border-color: rgba(45, 212, 191, 0.28) !important;
-}
-
 body.theme-dark .coverage-upload-note {
-  border-color: rgba(45, 212, 191, 0.28);
-  background: rgba(19, 78, 74, 0.32);
-  color: #5eead4;
+  border-color: rgba(96, 165, 250, 0.3);
+  background: rgba(13, 71, 247, 0.16);
+  color: #93c5fd;
 }
 
 body.theme-dark .coverage-upload-note span {
@@ -50280,12 +50292,12 @@ body.theme-dark .coverage-empty {
 }
 
 body.theme-dark .coverage-amount-card {
-  border-color: rgba(45, 212, 191, 0.28);
-  background: linear-gradient(180deg, rgba(19, 78, 74, 0.38) 0%, rgba(15, 23, 42, 0.76) 100%);
+  border-color: rgba(96, 165, 250, 0.28);
+  background: linear-gradient(180deg, rgba(13, 71, 247, 0.18) 0%, rgba(15, 23, 42, 0.76) 100%);
 }
 
 body.theme-dark .coverage-amount-card span {
-  color: #5eead4;
+  color: #93c5fd;
 }
 
 body.theme-dark .coverage-amount-card strong {
@@ -50339,8 +50351,8 @@ body.theme-dark .coverage-processing-banner span {
   gap: 0.75rem;
   padding: 0.85rem 1rem;
   border-radius: 18px;
-  border: 1px solid rgba(153, 246, 228, 0.9);
-  background: rgba(240, 253, 250, 0.92);
+  border: 1px solid rgba(132, 163, 255, 0.55);
+  background: #e4f2ff;
 }
 
 .coverage-plan-edit-btn {
@@ -50399,13 +50411,13 @@ body.theme-dark .coverage-processing-banner span {
 }
 
 .coverage-payer-option.is-active {
-  border-color: rgba(13, 148, 136, 0.6);
-  background: #ccfbf1;
+  border-color: #0d47f7;
+  background: #e4f2ff;
 }
 
 .coverage-payer-option.is-active strong,
 .coverage-payer-option.is-active span {
-  color: #0f766e;
+  color: #0d47f7;
 }
 
 .coverage-plan-field {
@@ -50828,8 +50840,8 @@ body.theme-dark .coverage-processing-banner span {
 }
 
 body.theme-dark .coverage-plan-card {
-  border-color: rgba(45, 212, 191, 0.28);
-  background: rgba(19, 78, 74, 0.35);
+  border-color: rgba(96, 165, 250, 0.3);
+  background: rgba(13, 71, 247, 0.16);
 }
 
 body.theme-dark .coverage-plan-copy strong {
@@ -50946,13 +50958,13 @@ body.theme-dark .coverage-payer-option span {
 }
 
 body.theme-dark .coverage-payer-option.is-active {
-  border-color: rgba(45, 212, 191, 0.45);
-  background: rgba(19, 78, 74, 0.55);
+  border-color: rgba(96, 165, 250, 0.6);
+  background: rgba(13, 71, 247, 0.24);
 }
 
 body.theme-dark .coverage-payer-option.is-active strong,
 body.theme-dark .coverage-payer-option.is-active span {
-  color: #5eead4;
+  color: #93c5fd;
 }
 
 body.theme-dark .coverage-plan-field span {
@@ -53474,20 +53486,12 @@ body.theme-dark .health-hub-quick-card.tone-green {
   line-height: 1.3;
 }
 
-.hsheet-live-card.is-warn {
-  border-color: rgba(251, 191, 36, 0.58);
-  background: rgba(255, 251, 235, 0.9);
-}
-
+.hsheet-live-card.is-warn,
 .hsheet-live-card.is-ok,
-.hsheet-live-card.is-teal {
-  border-color: rgba(153, 246, 228, 0.86);
-  background: rgba(240, 253, 250, 0.9);
-}
-
+.hsheet-live-card.is-teal,
 .hsheet-live-card.is-info {
-  border-color: rgba(191, 219, 254, 0.92);
-  background: rgba(239, 246, 255, 0.9);
+  border-color: rgba(132, 163, 255, 0.5);
+  background: #e4f2ff;
 }
 
 .hsheet-live-card.is-muted {
@@ -55355,20 +55359,12 @@ body.theme-dark .hsheet-live-card strong {
   color: #e2e8f0;
 }
 
-body.theme-dark .hsheet-live-card.is-warn {
-  border-color: rgba(251, 191, 36, 0.24);
-  background: rgba(69, 26, 3, 0.36);
-}
-
+body.theme-dark .hsheet-live-card.is-warn,
 body.theme-dark .hsheet-live-card.is-ok,
-body.theme-dark .hsheet-live-card.is-teal {
-  border-color: rgba(45, 212, 191, 0.28);
-  background: rgba(19, 78, 74, 0.32);
-}
-
+body.theme-dark .hsheet-live-card.is-teal,
 body.theme-dark .hsheet-live-card.is-info {
-  border-color: rgba(37, 99, 235, 0.34);
-  background: rgba(30, 58, 138, 0.28);
+  border-color: rgba(96, 165, 250, 0.28);
+  background: rgba(13, 71, 247, 0.16);
 }
 
 body.theme-dark .hsheet-section,
