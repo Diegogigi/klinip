@@ -8219,6 +8219,48 @@ def _compose_document_notes_deterministic(doc, summary, entities: list) -> str |
     return None
 
 
+def _repair_truncated_json_object(text: str) -> dict | None:
+    """Rescata un JSON cortado a mitad de un array/objeto (respuesta de IA
+    truncada por límite de tokens, ej. un "examenes" largo). Recorta al
+    último elemento completo antes del corte y cierra lo que haya quedado
+    abierto, en vez de descartar toda la respuesta por un problema al final."""
+    start = text.find("{")
+    if start == -1:
+        return None
+    body = text[start:]
+    cut = max(body.rfind("},"), body.rfind("}\n"), body.rfind("} "))
+    if cut == -1:
+        return None
+    truncated = body[: cut + 1]
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    for ch in truncated:
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+    if not stack:
+        return None
+    closers = "".join("}" if ch == "{" else "]" for ch in reversed(stack))
+    try:
+        obj = json.loads(truncated + closers)
+        return obj if isinstance(obj, dict) else None
+    except Exception:
+        return None
+
+
 def _parse_json_object(raw: str) -> dict | None:
     if not raw:
         return None
@@ -8226,13 +8268,14 @@ def _parse_json_object(raw: str) -> dict | None:
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
     start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        return None
-    try:
-        obj = json.loads(text[start : end + 1])
-        return obj if isinstance(obj, dict) else None
-    except Exception:
-        return None
+    if start != -1 and end != -1 and end > start:
+        try:
+            obj = json.loads(text[start : end + 1])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            pass
+    return _repair_truncated_json_object(text)
 
 
 def _ai_document_metadata(doc: models.Document, entities: list) -> tuple[str, str] | None:
@@ -8758,6 +8801,13 @@ def _document_images_for_vision(data: bytes, filename: str) -> list[str]:
     return uris
 
 
+# Informes de laboratorio con varias hojas/áreas (química, hematología,
+# orina, coagulación...) pueden traer 50+ parámetros. La transcripción
+# completa más un "examenes" de esa magnitud no entra en 2000 tokens: la
+# respuesta se cortaba a mitad del JSON y se perdían casi todos los valores.
+_VISION_MAX_OUTPUT_TOKENS = 6000
+
+
 def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str]) -> str | None:
     """Llama a un modelo de visión con una o más imágenes. Devuelve texto o None."""
     api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
@@ -8775,7 +8825,7 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
     ]
     try:
         response = client.responses.create(
-            model=model, input=responses_input, temperature=0.1, max_output_tokens=2000,
+            model=model, input=responses_input, temperature=0.1, max_output_tokens=_VISION_MAX_OUTPUT_TOKENS,
         )
         content = (getattr(response, "output_text", "") or "").strip()
         if content:
@@ -8794,7 +8844,7 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": cc_content},
             ],
-            temperature=0.1, max_tokens=2000,
+            temperature=0.1, max_tokens=_VISION_MAX_OUTPUT_TOKENS,
         )
         return (completion.choices[0].message.content or "").strip()
     except Exception as exc:
@@ -8805,9 +8855,12 @@ def _call_openai_vision(system_prompt: str, user_text: str, image_uris: list[str
 _VISION_DOC_SYSTEM = (
     "Eres un asistente clínico que lee documentos de salud chilenos (recetas, "
     "órdenes médicas, resultados de laboratorio, informes y documentos de cobertura/seguro), incluso fotos, "
-    "manuscritos, formularios y documentos con logos. Lee TODO el documento de "
-    "la(s) imagen(es) y responde EXCLUSIVAMENTE con un JSON válido con estos campos:\n"
-    '- "transcripcion": todo el texto legible del documento.\n'
+    "manuscritos, formularios y documentos con logos, y documentos de VARIAS hojas/páginas "
+    "fotografiadas como una sola imagen combinada (ej. un informe de laboratorio con hojas de "
+    "coagulación, química, orina y hematología). Lee TODO el documento, TODAS las hojas y TODAS "
+    "las secciones/áreas (cada una puede traer su propio encabezado de tabla repetido) y responde "
+    "EXCLUSIVAMENTE con un JSON válido con estos campos. Para no perder datos si la respuesta es "
+    "muy larga, completa primero los campos cortos y dejar 'transcripcion' AL FINAL:\n"
     '- "tipo": uno de "receta","orden","resultado","informe","otro". Si es bono, reembolso, licencia, copago, GES/CAEC o seguro, usa "otro" aquí.\n'
     '- "categoria_cobertura": uno de "bono","reembolso","licencia","copago","ges_caec","plan_seguro","otro","". Usa "" si no es cobertura/seguro.\n'
     '- "entidad_cobertura": Isapre, Fonasa, seguro, prestador o "" si no aparece.\n'
@@ -8820,16 +8873,35 @@ _VISION_DOC_SYSTEM = (
     '- "nota": resumen muy breve de lo importante (1-2 frases). En receta, las indicaciones; '
     "en resultado, los valores fuera de rango.\n"
     '- "medicamentos": lista de {"nombre","dosis","frecuencia","duracion"} (vacía si no aplica).\n'
-    '- "examenes": lista de {"nombre","valor","unidad","rango","estado"} con estado '
-    '"normal"/"alto"/"bajo"/"critico" (vacía si no aplica). MUY IMPORTANTE en tablas de '
-    "laboratorio (ej. hemograma con muchas filas de tipos celulares): lee cada fila de forma "
-    "INDEPENDIENTE, alineando el resultado exactamente con su propio parámetro en la misma "
+    '- "examenes": lista de {"nombre","valor","unidad","rango","estado","seccion"} con estado '
+    '"normal"/"alto"/"bajo"/"critico". "seccion" es el tipo de muestra o área de esa fila tal '
+    'como aparece en el documento (ej. "Plasma", "Suero", "Orina", "Sangre/EDTA"); "" si no hay '
+    "una sección clara. Este campo es MUY IMPORTANTE cuando el mismo nombre de parámetro se "
+    "repite en más de una sección con significados distintos (ej. \"GLUCOSA\" en sangre y "
+    "\"GLUCOSA\" en orina, o \"LEUCOCITOS\" en el examen químico de orina y en el sedimento de "
+    "orina): en ese caso incluye AMBAS filas completas, cada una con su propia \"seccion\", en vez "
+    "de reportar solo una. Incluye TODOS los parámetros de "
+    "TODAS las hojas/áreas del documento (un informe de laboratorio completo puede traer 50 o más "
+    "filas entre coagulación, perfil hepático, perfil lipídico, función renal, orina completa y "
+    "hemograma: no te detengas en las primeras filas, procesa la tabla entera de cada sección). "
+    "MUY IMPORTANTE en tablas con muchas filas de tipos celulares u otros analitos: lee cada fila de "
+    "forma INDEPENDIENTE, alineando el resultado exactamente con su propio parámetro en la misma "
     "línea horizontal. NUNCA copies o repitas el valor de una fila para otra fila distinta, "
     "aunque se vean parecidas o tengan el mismo rango de referencia. Si el resultado de una "
     "fila específica no es legible o no está impreso (ej. un tipo celular con recuento 0 que "
     "no se detalla), omite esa fila del todo en vez de adivinar o usar el límite del rango de "
-    "referencia como si fuera el resultado.\n"
-    "No inventes datos: si algo no está, déjalo vacío. No diagnostiques ni recomiendes tratamientos."
+    "referencia como si fuera el resultado. Si el resultado NO es numérico (ej. orina completa: "
+    "'Negativo', 'Positivo', 'Normal', 'Claro', 'Turbio', 'Amarillo', 'Trazas', 'Escasas', '+', "
+    "'No se observan'), inclúyelo igual como texto en \"valor\" tal como aparece impreso, no lo "
+    "omitas ni lo conviertas a número. Si una tabla viene TRANSPUESTA (los nombres de los "
+    "parámetros van como encabezados de columna arriba, y más abajo hay una fila 'Resultado' y "
+    "otra 'Valor de Referencia' con los números en esas mismas columnas, como en fórmula "
+    "diferencial o valores absolutos de un hemograma), igual genera un item de \"examenes\" por "
+    "cada columna: el nombre es el encabezado de esa columna, el valor es el número de la fila "
+    "'Resultado' en esa misma columna, y el rango el de la fila 'Valor de Referencia' en esa "
+    "columna.\n"
+    "No inventes datos: si algo no está, déjalo vacío. No diagnostiques ni recomiendes tratamientos.\n"
+    '- "transcripcion": todo el texto legible del documento (este campo va al final a propósito).'
 )
 
 
@@ -13639,7 +13711,72 @@ _LAB_LEGACY_PATTERN = re.compile(
 )
 
 
+# Detecta el inicio de una nueva sub-tabla de laboratorio ("Muestra: Suero",
+# "ÁREA: HEMATOLOGÍA"). Un mismo informe de varias hojas puede repetir el
+# mismo nombre de parámetro en secciones distintas con significados
+# distintos (ej. "GLUCOSA" en sangre vs. "GLUCOSA" en orina, o "LEUCOCITOS"
+# en el examen químico de orina vs. en el sedimento); sin esta noción de
+# sección, el segundo se descartaba como si fuera un duplicado del primero.
+_LAB_SECTION_PATTERN = re.compile(r"^(?:muestra|[aá]rea)\s*:\s*(.+)$", re.IGNORECASE)
+
+
+def _split_lab_text_into_sections(text: str) -> list[tuple[str, str]]:
+    lines = text.splitlines()
+    sections: list[tuple[str, list[str]]] = []
+    current_label = ""
+    current_lines: list[str] = []
+    for line in lines:
+        match = _LAB_SECTION_PATTERN.match(line.strip())
+        if match:
+            if current_lines:
+                sections.append((current_label, current_lines))
+            current_label = _safe_text(match.group(1))[:40]
+            current_lines = [line]
+        else:
+            current_lines.append(line)
+    if current_lines:
+        sections.append((current_label, current_lines))
+    if not sections:
+        return [("", text)]
+    return [(label, "\n".join(chunk_lines)) for label, chunk_lines in sections]
+
+
+def _disambiguate_lab_entities_by_section(entities: list[dict]) -> None:
+    """Si el mismo parámetro aparece en más de una sección/muestra del
+    documento con una etiqueta de sección distinta, anota la sección en el
+    nombre para no perder ninguno de los dos (ej. "GLUCOSA (Orina aislada)")."""
+    by_name: dict[str, list[dict]] = {}
+    for item in entities:
+        key = _normalize_text(item.get("entity_name", ""))
+        by_name.setdefault(key, []).append(item)
+    for items in by_name.values():
+        if len(items) < 2:
+            continue
+        labels = {item.get("_section_label", "") for item in items}
+        if len(labels) < 2:
+            continue
+        for item in items:
+            label = item.get("_section_label", "")
+            if label:
+                item["entity_name"] = f"{item['entity_name']} ({label})"[:120]
+
+
 def _extract_document_lab_entities(text: str) -> list[dict]:
+    if not text:
+        return []
+    entities: list[dict] = []
+    for label, chunk in _split_lab_text_into_sections(text):
+        chunk_entities = _extract_lab_entities_from_chunk(chunk)
+        for item in chunk_entities:
+            item["_section_label"] = label
+        entities.extend(chunk_entities)
+    _disambiguate_lab_entities_by_section(entities)
+    for item in entities:
+        item.pop("_section_label", None)
+    return entities[:80]
+
+
+def _extract_lab_entities_from_chunk(text: str) -> list[dict]:
     entities: list[dict] = []
     if not text:
         return entities
@@ -13736,26 +13873,42 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
                 "source_text": line[:240],
             }
         )
-    # Respaldo para tablas: si la extracción línea a línea encontró pocos
-    # valores pero el texto tiene pinta de informe de laboratorio (columnas
-    # Parámetro/Resultado/Unidad/Referencia), Tesseract suele leer cada fila
-    # con columnas separadas por 2+ espacios en vez de "nombre valor unidad"
-    # pegado. Se intenta un segundo parseo tolerante a esa forma.
-    if len(entities) < 3:
-        table_entities = _extract_lab_table_entities(text, exclude_names=seen_names)
-        for item in table_entities:
-            key = _normalize_text(item["entity_name"])
-            if not key or key in seen_names:
-                continue
-            seen_names.add(key)
-            entities.append(item)
-    return entities[:32]
+    # Respaldo para tablas: si el texto tiene pinta de informe de laboratorio
+    # (columnas Parámetro/Resultado/Unidad/Referencia), Tesseract suele leer
+    # cada fila con columnas separadas por 2+ espacios en vez de "nombre
+    # valor unidad" pegado. Se intenta siempre un segundo parseo tolerante a
+    # esa forma, sin importar cuántos valores ya encontró la regex de una
+    # sola línea: un informe de varias hojas/áreas (química, orina,
+    # hematología...) puede tener filas que sí calzan con la regex simple
+    # (ya contadas) y muchas más que solo el parser de columnas detecta
+    # (sin unidad/rango, o con resultado cualitativo). Limitar esto a "pocos
+    # valores encontrados" hacía que, apenas la regex simple encontraba 3
+    # filas fáciles en la primera hoja, el resto del documento se perdiera
+    # por completo.
+    table_entities = _extract_lab_table_entities(text, exclude_names=seen_names)
+    for item in table_entities:
+        key = _normalize_text(item["entity_name"])
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
+        entities.append(item)
+    return entities
 
 
 _LAB_TABLE_UNIT_TOKENS = {
     "mg/dl", "g/dl", "mg/l", "mmol/l", "mcg/dl", "ug/dl", "ui/l", "u/l", "meq/l",
     "seg", "min", "%", "millon/mm3", "mill/mm3", "mil/mm3", "/mm3", "fl", "pg",
     "mm/h", "ng/ml", "ng/dl", "pmol/l", "mui/l", "mosm/kg", "mg/24h",
+}
+
+# Resultados no numéricos frecuentes en orina completa y otros exámenes
+# cualitativos. Sin esta lista, el parser de tabla los descarta por completo
+# porque exige un token numérico como "resultado".
+_LAB_QUALITATIVE_VALUES = {
+    "negativo", "positivo", "normal", "anormal", "claro", "turbio", "ligeramente turbio",
+    "amarillo", "amarillo claro", "amarillo oscuro", "ambar", "trazas", "escasas",
+    "regular", "abundante", "no se observan", "presente", "ausente", "reactivo",
+    "no reactivo", "indeterminado", "escaso",
 }
 
 
@@ -13782,6 +13935,23 @@ def _split_table_row(line: str) -> list[str]:
     return [part.strip() for part in parts if part.strip()]
 
 
+def _is_qualitative_lab_value(token: str) -> bool:
+    normalized = _normalize_text(token)
+    if normalized in _LAB_QUALITATIVE_VALUES:
+        return True
+    return bool(re.fullmatch(r"\++", token.strip()))
+
+
+def _qualitative_reference_word(token: str) -> str:
+    """Si `token` es una columna de referencia tipo 'NEGATIVO (< 10 Leu/uL)',
+    devuelve la palabra cualitativa esperada ('negativo'); si no, ''."""
+    normalized = _normalize_text(token)
+    for word in _LAB_QUALITATIVE_VALUES:
+        if normalized == word or normalized.startswith(f"{word} ") or normalized.startswith(f"{word}("):
+            return word
+    return ""
+
+
 def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None) -> list[dict]:
     if not text or not _looks_like_lab_table(text):
         return []
@@ -13791,10 +13961,16 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
     numeric_pattern = re.compile(r"^[<>]?\d+(?:[.,]\d+)?$")
     range_pattern = re.compile(r"\[?\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*\]?")
     for raw_line in text.splitlines()[:200]:
+        # OJO: dividir columnas ANTES de pasar por _safe_text, que colapsa
+        # cualquier corrida de 2+ espacios a uno solo. _split_table_row
+        # depende exactamente de esas corridas de espacios para separar
+        # celdas; hacerlo después de _safe_text las destruye y la fila entera
+        # queda como una sola columna (el fallback de tabla nunca dividía
+        # nada en la práctica).
         line = _safe_text(raw_line)
         if not line or ":" in line:
             continue
-        columns = _split_table_row(line)
+        columns = [_safe_text(col) for col in _split_table_row(raw_line)]
         if len(columns) < 2:
             continue
         norm_first = _normalize_text(columns[0])
@@ -13829,6 +14005,7 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
             return prev_tok in {"-", "–", "a"} or next_tok in {"-", "–", "a"}
 
         value_index = None
+        is_qualitative = False
         for index in range(1, len(columns)):
             candidate = columns[index].replace(",", ".")
             if not (numeric_pattern.match(candidate) and len(columns[index]) <= 10):
@@ -13838,39 +14015,58 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
             value_index = index
             break
         if value_index is None:
+            # Resultado cualitativo (orina completa, serologías, etc.): sin
+            # esto se perdían filas enteras como "LEUCOCITOS Negativo" solo
+            # por no traer un número.
+            for index in range(1, len(columns)):
+                if _is_qualitative_lab_value(columns[index]):
+                    value_index = index
+                    is_qualitative = True
+                    break
+        if value_index is None:
             continue
         name = columns[0]
         key = _normalize_text(name)
         if not key or key in seen_names or key in exclude_names:
             continue
-        value = columns[value_index].replace(",", ".")
+        value = columns[value_index] if is_qualitative else columns[value_index].replace(",", ".")
         remaining = columns[value_index + 1 :]
         unit = ""
         reference_range = ""
-        for token in remaining:
-            range_match = range_pattern.search(token)
-            if range_match and not reference_range:
-                reference_range = f"{range_match.group(1)}-{range_match.group(2)}"
-                continue
-            if not unit and (
-                token.strip().lower() in _LAB_TABLE_UNIT_TOKENS
-                or re.match(r"^[A-Za-zµ%/0-9.^-]{1,14}$", token)
-            ):
-                unit = token
+        if not is_qualitative:
+            for token in remaining:
+                range_match = range_pattern.search(token)
+                if range_match and not reference_range:
+                    reference_range = f"{range_match.group(1)}-{range_match.group(2)}"
+                    continue
+                if not unit and (
+                    token.strip().lower() in _LAB_TABLE_UNIT_TOKENS
+                    or re.match(r"^[A-Za-zµ%/0-9.^-]{1,14}$", token)
+                ):
+                    unit = token
         flag = "unknown"
-        try:
-            numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
-            if reference_range:
-                low_str, high_str = reference_range.split("-", 1)
-                low_value, high_value = float(low_str), float(high_str)
-                if numeric < low_value:
-                    flag = "low"
-                elif numeric > high_value:
-                    flag = "high"
-                else:
-                    flag = "normal"
-        except Exception:
-            flag = "unknown"
+        if is_qualitative:
+            reference_range = ""
+            for token in remaining:
+                ref_word = _qualitative_reference_word(token)
+                if ref_word:
+                    reference_range = token.strip()[:80]
+                    flag = "normal" if _normalize_text(value) == ref_word else "abnormal"
+                    break
+        else:
+            try:
+                numeric = float(re.sub(r"[^0-9.<>-]", "", value).replace(">", "").replace("<", ""))
+                if reference_range:
+                    low_str, high_str = reference_range.split("-", 1)
+                    low_value, high_value = float(low_str), float(high_str)
+                    if numeric < low_value:
+                        flag = "low"
+                    elif numeric > high_value:
+                        flag = "high"
+                    else:
+                        flag = "normal"
+            except Exception:
+                flag = "unknown"
         seen_names.add(key)
         entities.append(
             {
@@ -13884,7 +14080,7 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
                 "source_text": line[:240],
             }
         )
-    return entities[:32]
+    return entities[:80]
 
 
 # Medicamentos de receta retenida / controlada (nombres canónicos del mapa).
@@ -14167,7 +14363,7 @@ def _vision_exams_to_lab_entities(examenes: list) -> list[dict]:
     regex sobre el texto OCR crudo, que espera una sola línea por valor y
     falla cuando el documento es una tabla de varias columnas."""
     entities: list[dict] = []
-    seen_names: set[str] = set()
+    seen_exact: set[tuple[str, str, str]] = set()
     for item in examenes or []:
         if not isinstance(item, dict):
             continue
@@ -14175,24 +14371,34 @@ def _vision_exams_to_lab_entities(examenes: list) -> list[dict]:
         value = _safe_text(str(item.get("valor") or "")).strip()
         if not name or not value:
             continue
-        key = _normalize_text(name)
-        if not key or key in seen_names:
+        unit = _safe_text(str(item.get("unidad") or ""))[:24]
+        # Solo se descarta si nombre+valor+unidad son EXACTAMENTE iguales (un
+        # repetido real del modelo). Un mismo nombre con distinto valor (ej.
+        # "GLUCOSA" en sangre vs. en orina) es una fila legítima aparte, no
+        # un duplicado; antes se perdía la segunda por comparar solo el
+        # nombre.
+        exact_key = (_normalize_text(name), _normalize_text(value), _normalize_text(unit))
+        if exact_key in seen_exact:
             continue
-        seen_names.add(key)
+        seen_exact.add(exact_key)
         estado = _normalize_text(str(item.get("estado") or ""))
         entities.append(
             {
                 "entity_type": "lab_value",
                 "entity_name": name[:120],
                 "entity_value": value[:80],
-                "unit": _safe_text(str(item.get("unidad") or ""))[:24],
+                "unit": unit,
                 "reference_range": _safe_text(str(item.get("rango") or ""))[:80],
                 "flag": _VISION_EXAM_STATE_TO_FLAG.get(estado, "unknown"),
                 "confidence": 90,
                 "source_text": f"{name} {value}"[:240],
+                "_section_label": _safe_text(str(item.get("seccion") or ""))[:40],
             }
         )
-    return entities[:40]
+    _disambiguate_lab_entities_by_section(entities)
+    for item in entities:
+        item.pop("_section_label", None)
+    return entities[:80]
 
 
 def _vision_meds_to_prescription_entities(medicamentos: list) -> list[dict]:
