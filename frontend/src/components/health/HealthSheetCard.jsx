@@ -179,9 +179,6 @@ export default function HealthSheetCard({ profileId }) {
               </article>
             ))}
           </div>
-          <Link to="/mi-salud/ficha" className="primary-btn hsheet-open-btn">
-            Abrir mi Ficha de Salud completa
-          </Link>
         </div>
       )}
     </section>

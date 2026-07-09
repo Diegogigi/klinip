@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   createHealthExamResult,
   createHealthProblem,
@@ -295,7 +294,6 @@ function SwipeableParamRow({
 // médico). Diagnósticos, vacunas e indicaciones quedan en una sección
 // secundaria plegada, para mantener la pantalla simple.
 export default function HealthSheetPanel({ profileId }) {
-  const navigate = useNavigate();
   const [sheet, setSheet] = useState(null);
   const [examRecords, setExamRecords] = useState([]);
   const [state, setState] = useState("loading");
@@ -661,14 +659,6 @@ export default function HealthSheetPanel({ profileId }) {
         </div>
       ) : (
         <div className="hsheet-body">
-          <button
-            type="button"
-            className="primary-btn hsheet-scan-btn"
-            onClick={() => navigate("/documents?scan=1")}
-          >
-            <span aria-hidden>📷</span> Fotografía tu examen aquí
-          </button>
-
           {labHistory.length > 0 ? (
             <div className="hsheet-indicator-row" aria-label="Resumen de tus indicadores">
               <span className="hsheet-indicator is-alt">

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { getActiveHealthProfile } from "../services/httpApi";
 import HealthSheetPanel from "../components/health/HealthSheetPanel";
 
@@ -57,10 +56,6 @@ export default function HealthSheet() {
           No pudimos identificar tu perfil activo. Vuelve a Mi Salud e inténtalo de nuevo.
         </div>
       )}
-
-      <Link to="/mi-salud" className="hsheet-back-link">
-        ← Volver a Mi Salud
-      </Link>
     </div>
   );
 }

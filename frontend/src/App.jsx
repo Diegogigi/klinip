@@ -969,7 +969,7 @@ const ONBOARDING_FINAL_STEP = ONBOARDING_TOTAL_STEPS - 1;
 const NOTIF_PROMPT_DAYS = 5;
 const NOTIF_PROMPT_SESSIONS = 5;
 const MED_ALERT_POLL_MS = 60000;
-const APP_LOCK_GRACE_MS = 0;
+const PIN_HIDE_DEBOUNCE_MS = 2500;
 const MED_ALERT_INITIAL_DELAY_MS = 15000;
 const FAMILY_CONTEXT_ROUTE_REFRESH_MS = 30000;
 const BOOTSTRAP_SESSION_TIMEOUT_MS = 12000;
@@ -1383,37 +1383,54 @@ export default function App() {
   }, [booting, pinStatusReady, user?.id, user?.pin_enabled, user?.pin_set]);
 
   // Re-bloqueo al volver de segundo plano. Si el PIN está activo, se vuelve a
-  // pedir cada vez que la app reaparece.
+  // pedir cada vez que la app reaparece tras estar oculta un rato real (no un
+  // parpadeo breve de visibilidad, como el que provocan los diálogos nativos
+  // window.confirm/alert en varios navegadores móviles y PWA instaladas).
   useEffect(() => {
     if (!user?.id) return undefined;
-    const markBackgroundExit = () => {
+    let relockTimer = null;
+    const cancelPendingRelock = () => {
+      if (relockTimer) {
+        window.clearTimeout(relockTimer);
+        relockTimer = null;
+      }
+    };
+    const markBackgroundExitImmediate = () => {
+      cancelPendingRelock();
       pinHiddenAtRef.current = Date.now();
       markPinRelockRequired();
     };
+    const markBackgroundExitDebounced = () => {
+      pinHiddenAtRef.current = Date.now();
+      cancelPendingRelock();
+      relockTimer = window.setTimeout(() => {
+        relockTimer = null;
+        markPinRelockRequired();
+      }, PIN_HIDE_DEBOUNCE_MS);
+    };
     const requestRelockIfNeeded = () => {
+      cancelPendingRelock();
       if (!isPinProtectionActive(user)) return;
-      const hiddenFor = pinHiddenAtRef.current
-        ? Date.now() - pinHiddenAtRef.current
-        : 0;
-      if (hiddenFor > APP_LOCK_GRACE_MS || hasPinRelockRequired()) {
+      if (hasPinRelockRequired()) {
         setAppLocked(true);
       }
     };
     const handleVisibility = () => {
       if (document.hidden) {
-        markBackgroundExit();
+        markBackgroundExitDebounced();
         return;
       }
       requestRelockIfNeeded();
     };
     window.addEventListener("focus", requestRelockIfNeeded);
     window.addEventListener("pageshow", requestRelockIfNeeded);
-    window.addEventListener("pagehide", markBackgroundExit);
+    window.addEventListener("pagehide", markBackgroundExitImmediate);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
+      cancelPendingRelock();
       window.removeEventListener("focus", requestRelockIfNeeded);
       window.removeEventListener("pageshow", requestRelockIfNeeded);
-      window.removeEventListener("pagehide", markBackgroundExit);
+      window.removeEventListener("pagehide", markBackgroundExitImmediate);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [user?.id, user?.pin_enabled, user?.pin_set]);

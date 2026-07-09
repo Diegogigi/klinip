@@ -245,7 +245,17 @@ export default function Documents() {
   const [ocrSyncing, setOcrSyncing] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
   const [retryingOcrIds, setRetryingOcrIds] = useState([]);
+  const [deleteNotice, setDeleteNotice] = useState("");
   const loadRef = useRef(null);
+  const deleteNoticeTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (deleteNoticeTimeoutRef.current) {
+        window.clearTimeout(deleteNoticeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const canEditActiveProfile = canWriteProfile(activeProfile);
   const isReadOnlyProfile = isViewerProfile(activeProfile);
@@ -549,6 +559,13 @@ export default function Documents() {
       if (viewerTarget?.id === doc.id) {
         closeViewer();
       }
+      if (deleteNoticeTimeoutRef.current) {
+        window.clearTimeout(deleteNoticeTimeoutRef.current);
+      }
+      setDeleteNotice("Documento eliminado correctamente.");
+      deleteNoticeTimeoutRef.current = window.setTimeout(() => {
+        setDeleteNotice("");
+      }, 4000);
     } catch (err) {
       console.error(err);
       window.alert("No se pudo eliminar el documento.");
@@ -886,6 +903,12 @@ export default function Documents() {
               <strong>Perfil en modo lectura.</strong> Puedes revisar y descargar documentos, pero no subir ni eliminar archivos.
             </p>
           </div>
+        </div>
+      ) : null}
+
+      {deleteNotice ? (
+        <div className="security-inline-notice is-success">
+          <span>{deleteNotice}</span>
         </div>
       ) : null}
 
