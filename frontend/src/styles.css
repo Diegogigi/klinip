@@ -53720,47 +53720,60 @@ body.theme-dark .health-hub-quick-card.tone-green {
   font-weight: 700;
 }
 
-/* ── Ficha de Salud: resumen de indicadores y lista principal ───── */
+/* ── Ficha de Salud: página sin caja, resumen de indicadores y lista ── */
+.hsheet-page-panel {
+  display: block;
+}
+
 .hsheet-indicator-row {
   display: flex;
-  gap: 0.5rem;
+  gap: 1.1rem;
+  padding: 0.2rem 0.1rem;
 }
 
 .hsheet-indicator {
   flex: 1;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.1rem;
-  padding: 0.6rem 0.4rem;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  background: #ffffff;
-  color: #475569;
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-align: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.hsheet-indicator em {
+  flex-shrink: 0;
+  width: 4px;
+  align-self: stretch;
+  min-height: 30px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  font-style: normal;
 }
 
 .hsheet-indicator strong {
-  font-size: 1.25rem;
-  line-height: 1.1;
+  display: block;
+  color: #0f172a;
+  font-size: 1.3rem;
+  line-height: 1.15;
 }
 
-.hsheet-indicator.is-alt {
-  border-color: rgba(253, 186, 116, 0.7);
-  background: #fff7ed;
-  color: #9a3412;
+.hsheet-indicator small {
+  display: block;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.hsheet-indicator.is-ok {
-  border-color: rgba(134, 239, 172, 0.8);
-  background: #ecfdf5;
-  color: #047857;
+.hsheet-indicator.is-alt em {
+  background: #fb923c;
 }
 
-.hsheet-indicator.is-muted {
-  color: #475569;
+.hsheet-indicator.is-ok em {
+  background: #10b981;
+}
+
+.hsheet-indicator.is-muted em {
+  background: #0d9488;
 }
 
 .hsheet-pending-list {
@@ -53774,16 +53787,38 @@ body.theme-dark .health-hub-quick-card.tone-green {
   font-weight: 800;
 }
 
+.hsheet-results-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hsheet-results-head {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.hsheet-results-title {
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
 .hsheet-indicator-list {
   display: grid;
-  gap: 0.4rem;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  overflow: hidden;
 }
 
 .hsheet-indicator-item {
-  border: 1px solid rgba(226, 232, 240, 0.95);
-  border-radius: 12px;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
   background: #ffffff;
-  padding: 0.6rem 0.75rem;
+  padding: 0.65rem 0.85rem;
+}
+
+.hsheet-indicator-item:last-child {
+  border-bottom: none;
 }
 
 .hsheet-indicator-item summary {
@@ -53914,33 +53949,29 @@ body.theme-dark .health-hub-quick-card.tone-green {
   gap: 0.45rem;
 }
 
-body.theme-dark .hsheet-indicator {
-  border-color: rgba(51, 65, 85, 0.92);
-  background: rgba(15, 23, 42, 0.72);
-  color: #cbd5e1;
+body.theme-dark .hsheet-indicator strong {
+  color: #e2e8f0;
 }
 
-body.theme-dark .hsheet-indicator.is-alt {
-  border-color: rgba(251, 146, 60, 0.35);
-  background: rgba(69, 26, 3, 0.35);
-  color: #fdba74;
+body.theme-dark .hsheet-indicator small {
+  color: #94a3b8;
 }
 
-body.theme-dark .hsheet-indicator.is-ok {
-  border-color: rgba(52, 211, 153, 0.32);
-  background: rgba(6, 78, 59, 0.35);
-  color: #6ee7b7;
-}
-
+body.theme-dark .hsheet-results-title,
 body.theme-dark .hsheet-pending-title,
 body.theme-dark .hsheet-indicator-name,
 body.theme-dark .hsheet-indicator-item[open] summary {
   color: #e2e8f0;
 }
 
-body.theme-dark .hsheet-indicator-item {
+body.theme-dark .hsheet-indicator-list {
   border-color: rgba(51, 65, 85, 0.92);
   background: rgba(15, 23, 42, 0.72);
+}
+
+body.theme-dark .hsheet-indicator-item {
+  border-bottom-color: rgba(51, 65, 85, 0.85);
+  background: transparent;
 }
 
 body.theme-dark .hsheet-indicator-value {

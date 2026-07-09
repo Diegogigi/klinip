@@ -8812,7 +8812,14 @@ _VISION_DOC_SYSTEM = (
     "en resultado, los valores fuera de rango.\n"
     '- "medicamentos": lista de {"nombre","dosis","frecuencia","duracion"} (vacía si no aplica).\n'
     '- "examenes": lista de {"nombre","valor","unidad","rango","estado"} con estado '
-    '"normal"/"alto"/"bajo"/"critico" (vacía si no aplica).\n'
+    '"normal"/"alto"/"bajo"/"critico" (vacía si no aplica). MUY IMPORTANTE en tablas de '
+    "laboratorio (ej. hemograma con muchas filas de tipos celulares): lee cada fila de forma "
+    "INDEPENDIENTE, alineando el resultado exactamente con su propio parámetro en la misma "
+    "línea horizontal. NUNCA copies o repitas el valor de una fila para otra fila distinta, "
+    "aunque se vean parecidas o tengan el mismo rango de referencia. Si el resultado de una "
+    "fila específica no es legible o no está impreso (ej. un tipo celular con recuento 0 que "
+    "no se detalla), omite esa fila del todo en vez de adivinar o usar el límite del rango de "
+    "referencia como si fuera el resultado.\n"
     "No inventes datos: si algo no está, déjalo vacío. No diagnostiques ni recomiendes tratamientos."
 )
 
@@ -13789,12 +13796,29 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
         # que sea un token corto (no "3" suelto dentro de "3 semanas de
         # evolución", que ya habría quedado fuera del filtro de columnas por
         # los espacios simples, pero se revalida por seguridad).
+        #
+        # Se descarta cualquier número pegado a un guion vecino ("0", "-",
+        # "25"): eso es el límite de un rango de referencia impreso como
+        # columna propia, no el resultado. Es un caso real y frecuente en
+        # diferenciales de hemograma: cuando el resultado de un tipo celular
+        # raro es 0/ausente y no se imprime, el parser sin este resguardo
+        # tomaba por error el límite superior del rango ("0 - 25" -> "25")
+        # como si fuera el valor medido, repitiendo el mismo número en varias
+        # filas distintas.
+        def _is_range_boundary(idx: int) -> bool:
+            prev_tok = columns[idx - 1] if idx > 0 else ""
+            next_tok = columns[idx + 1] if idx + 1 < len(columns) else ""
+            return prev_tok in {"-", "–", "a"} or next_tok in {"-", "–", "a"}
+
         value_index = None
         for index in range(1, len(columns)):
             candidate = columns[index].replace(",", ".")
-            if numeric_pattern.match(candidate) and len(columns[index]) <= 10:
-                value_index = index
-                break
+            if not (numeric_pattern.match(candidate) and len(columns[index]) <= 10):
+                continue
+            if _is_range_boundary(index):
+                continue
+            value_index = index
+            break
         if value_index is None:
             continue
         name = columns[0]

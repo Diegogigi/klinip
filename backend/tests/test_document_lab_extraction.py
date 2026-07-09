@@ -74,6 +74,37 @@ def test_table_fallback_does_not_misread_clinical_notes_as_values():
     assert entities == []
 
 
+def test_table_fallback_skips_reference_range_boundary_as_value():
+    # Regresión: en un diferencial de hemograma, cuando el resultado de un
+    # tipo celular raro es 0/ausente y no se imprime, solo queda visible el
+    # rango de referencia ("0 - 25"). Sin el resguardo, el parser tomaba el
+    # limite superior del rango como si fuera el resultado medido, repitiendo
+    # el mismo numero en varias filas distintas (ej. "25 mg/dl" en 6 tipos
+    # celulares diferentes que no pueden tener todos el mismo valor real).
+    text = (
+        "Parametro        Resultado   U.Medida   Valor Referencia\n"
+        "PROMIELOCITOS    0    -    25    %\n"
+        "MIELOCITOS       0    -    25    %\n"
+        "JUVENILES        0    -    25    %\n"
+    )
+    entities = main._extract_document_lab_entities(text)
+    # Ninguna fila debe generar un valor inventado: es mejor omitirlas que
+    # reportar un numero que no corresponde al resultado real.
+    assert entities == []
+
+
+def test_table_fallback_still_reads_genuine_result_next_to_a_range():
+    text = (
+        "Parametro     Resultado   U.Medida   Valor Referencia\n"
+        "EOSINOFILOS   3           %           0    -    25\n"
+    )
+    entities = main._extract_document_lab_entities(text)
+    assert len(entities) == 1
+    assert entities[0]["entity_name"] == "EOSINOFILOS"
+    assert entities[0]["entity_value"] == "3"
+    assert entities[0]["unit"] == "%"
+
+
 def test_vision_examenes_convert_to_lab_entities():
     examenes = [
         {"nombre": "Glucosa", "valor": "95", "unidad": "mg/dL", "rango": "70-100", "estado": "normal"},

@@ -14,25 +14,6 @@ import { ensureArray } from "../../utils/arrays";
 import { cleanUiText } from "../../utils/textEncoding";
 import { notifyClinicalDataChanged } from "../../utils/clinicalRefresh";
 
-const svgProps = {
-  viewBox: "0 0 24 24",
-  fill: "none",
-  stroke: "currentColor",
-  strokeWidth: 1.7,
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-};
-
-function IcoSheet() {
-  return (
-    <svg {...svgProps}>
-      <path d="M9 11l3 3 4-4" />
-      <rect x="2" y="6" width="20" height="12" rx="2" />
-      <path d="M8 6V4a2 2 0 0 1 4 0v2" />
-    </svg>
-  );
-}
-
 const PROBLEM_STATUS_LABELS = {
   active: { label: "Activo", tone: "warn" },
   monitoring: { label: "En control", tone: "info" },
@@ -377,17 +358,7 @@ export default function HealthSheetPanel({ profileId }) {
   const moreItemsCount = diagnoses.length + vaccines.length + indications.length;
 
   return (
-    <section className="clp-card tone-teal hsheet-card" aria-labelledby="clp-hsheet-h">
-      <div className="clp-card-head">
-        <span className="clp-card-icon tone-teal"><IcoSheet /></span>
-        <div className="clp-card-head-main">
-          <div className="clp-card-titles">
-            <h2 className="clp-card-title" id="clp-hsheet-h">Ficha de Salud</h2>
-            <p className="clp-card-sub">Tus exámenes y valores, en un solo lugar</p>
-          </div>
-        </div>
-      </div>
-
+    <section className="hsheet-page-panel" aria-label="Ficha de Salud">
       {state === "loading" ? (
         <div className="clp-empty">Preparando tu ficha de salud…</div>
       ) : state === "error" ? (
@@ -410,13 +381,19 @@ export default function HealthSheetPanel({ profileId }) {
           {labHistory.length > 0 ? (
             <div className="hsheet-indicator-row" aria-label="Resumen de tus indicadores">
               <span className="hsheet-indicator is-alt">
-                <strong>{indicatorStats.altered}</strong> Alterados
+                <em />
+                <strong>{indicatorStats.altered}</strong>
+                <small>Alterados</small>
               </span>
               <span className="hsheet-indicator is-ok">
-                <strong>{indicatorStats.normal}</strong> Normales
+                <em />
+                <strong>{indicatorStats.normal}</strong>
+                <small>Normales</small>
               </span>
               <span className="hsheet-indicator is-muted">
-                <strong>{labHistory.length}</strong> Total
+                <em />
+                <strong>{labHistory.length}</strong>
+                <small>Total</small>
               </span>
             </div>
           ) : null}
@@ -452,7 +429,12 @@ export default function HealthSheetPanel({ profileId }) {
           ) : null}
 
           {labHistory.length > 0 ? (
-            <div className="hsheet-indicator-list">
+            <div className="hsheet-results-block">
+              <div className="hsheet-results-head">
+                <span className="hsheet-results-title">Últimos resultados</span>
+                <span className="hsheet-hint">Toca un valor para ver cómo ha cambiado en el tiempo</span>
+              </div>
+              <div className="hsheet-indicator-list">
               {labHistory.map((param) => {
                 const latest = param.entries[0];
                 const status = getValueStatus(latest?.flag);
@@ -481,6 +463,7 @@ export default function HealthSheetPanel({ profileId }) {
                   </details>
                 );
               })}
+              </div>
             </div>
           ) : (
             <p className="hsheet-empty">
