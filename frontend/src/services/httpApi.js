@@ -716,6 +716,11 @@ export async function updateHealthExamResult(profileId, examId, payload) {
   return res.data || {};
 }
 
+export async function deleteHealthExamResult(profileId, examId) {
+  const res = await api.delete(`/health-profiles/${profileId}/exam-results/${examId}`);
+  return res.data || {};
+}
+
 export async function createHealthSheetAction(profileId, payload) {
   const res = await api.post(`/health-profiles/${profileId}/health-sheet/actions`, payload);
   return res.data || {};

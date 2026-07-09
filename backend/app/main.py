@@ -25660,6 +25660,32 @@ async def update_health_exam_result(
     return row
 
 
+@app.delete("/health-profiles/{profile_id}/exam-results/{exam_id}")
+async def delete_health_exam_result(
+    profile_id: int,
+    exam_id: int,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    ensure_health_sheet_schema(force=True)
+    profile, link = _get_profile_access_or_404(db, current_user, profile_id)
+    _require_role(link, "caregiver")
+    row = _get_health_exam_or_404(db, profile, int(profile.owner_user_id), exam_id)
+    exam_name = row.exam_name
+    _log_profile_activity(
+        db,
+        profile.id,
+        current_user.id,
+        "health_exam_deleted",
+        f"Se eliminó examen estructurado: {exam_name}",
+        {"exam_result_id": int(exam_id)},
+    )
+    db.delete(row)
+    _mark_profile_ai_dirty(db, profile, include_family=True)
+    db.commit()
+    return {"ok": True}
+
+
 @app.post(
     "/health-profiles/{profile_id}/health-sheet/actions",
     response_model=schemas.ClinicalTaskOut,

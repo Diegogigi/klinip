@@ -4,6 +4,8 @@ import {
   createHealthProblem,
   createHealthSheetAction,
   createHealthVaccine,
+  deleteDocument,
+  deleteHealthExamResult,
   getDocumentAnalysis,
   getHealthExamResults,
   getHealthSheet,
@@ -314,6 +316,7 @@ export default function HealthSheetPanel({ profileId }) {
   const [importBusyId, setImportBusyId] = useState(null);
   const [importMessage, setImportMessage] = useState("");
   const [dismissingDocId, setDismissingDocId] = useState(null);
+  const [deletingExamKey, setDeletingExamKey] = useState(null);
   const [expandedParamKey, setExpandedParamKey] = useState("");
   const [editingParamKey, setEditingParamKey] = useState("");
   const [editDraft, setEditDraft] = useState({ value: "", unit: "" });
@@ -530,6 +533,35 @@ export default function HealthSheetPanel({ profileId }) {
       window.alert("No se pudo actualizar el documento. Inténtalo de nuevo.");
     } finally {
       setDismissingDocId(null);
+    }
+  };
+
+  // Elimina un examen de "Ver todos tus exámenes". Si vino de un documento
+  // fotografiado, se borra el documento (igual que desde Mis Documentos); si
+  // es un examen estructurado creado a mano o traspasado, se borra el
+  // registro de HealthExamResult directamente.
+  const deleteStoredExam = async (item) => {
+    const sourceType = item?.source?.source_type;
+    const sourceId = item?.source?.source_id;
+    if (!sourceId || deletingExamKey) return;
+    if (!window.confirm(`¿Eliminar "${cleanUiText(item.name, "este examen")}" de tu ficha de salud?`)) return;
+    const key = `${sourceType}-${sourceId}`;
+    setDeletingExamKey(key);
+    try {
+      if (sourceType === "document") {
+        await deleteDocument(sourceId);
+      } else {
+        await deleteHealthExamResult(profileId, sourceId);
+      }
+      await loadSheet();
+      notifyClinicalDataChanged({
+        profileId,
+        sources: sourceType === "document" ? ["health-sheet", "documents", "health-radar"] : ["health-sheet", "health-radar"],
+      });
+    } catch {
+      window.alert("No se pudo eliminar el examen. Inténtalo de nuevo.");
+    } finally {
+      setDeletingExamKey(null);
     }
   };
 
@@ -759,16 +791,34 @@ export default function HealthSheetPanel({ profileId }) {
                   <span className="hsheet-count">{storedExams.length}</span>
                 </summary>
                 <div className="hsheet-section-body">
-                  {storedExams.map((item, index) => (
-                    <div className="hsheet-row" key={`exam-${index}`}>
-                      <div className="hsheet-row-copy">
-                        <strong>{cleanUiText(item.name)}</strong>
-                        {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
-                        {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
-                        {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                  {storedExams.map((item, index) => {
+                    const sourceType = item?.source?.source_type;
+                    const sourceId = item?.source?.source_id;
+                    const examKey = `${sourceType}-${sourceId}`;
+                    const deleting = deletingExamKey === examKey;
+                    return (
+                      <div className="hsheet-row" key={`exam-${index}`}>
+                        <div className="hsheet-row-copy">
+                          <strong>{cleanUiText(item.name)}</strong>
+                          {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
+                          {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
+                          {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                        </div>
+                        {sourceId ? (
+                          <div className="hsheet-row-side">
+                            <button
+                              type="button"
+                              className="hsheet-link-btn hsheet-dismiss-btn"
+                              disabled={Boolean(deletingExamKey) && !deleting}
+                              onClick={() => deleteStoredExam(item)}
+                            >
+                              {deleting ? "Eliminando…" : "Eliminar"}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </details>
             ) : null}

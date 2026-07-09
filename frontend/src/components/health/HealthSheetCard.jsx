@@ -151,7 +151,7 @@ export default function HealthSheetCard({ profileId }) {
             <h2 className="clp-card-title" id="clp-hsheet-h">Ficha de Salud</h2>
             <p className="clp-card-sub">El resumen de tus diagnósticos, exámenes y vacunas</p>
           </div>
-          <div className="clp-card-head-meta">
+          <div className="clp-card-head-meta clp-card-head-meta-action-only">
             <Link to="/mi-salud/ficha" className="clp-card-link clp-card-link-primary">
               Abrir ficha <IcoChevron />
             </Link>
