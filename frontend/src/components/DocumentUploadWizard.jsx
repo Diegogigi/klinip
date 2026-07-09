@@ -10,6 +10,7 @@ import SuccessSheet from "./SuccessSheet";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
 import { cleanUiText } from "../utils/textEncoding";
 import { buildCoverageNotes, COVERAGE_UPLOAD_INTENT } from "../utils/coverageDocuments";
+import { suppressNextPinRelock } from "../utils/pinLock";
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const POLL_INTERVAL_MS = 2500;
@@ -568,6 +569,10 @@ export default function DocumentUploadWizard({
     stopCameraStream();
     setCameraError("");
     setCameraBusy(true);
+    // El primer permiso de cámara puede mostrar un diálogo nativo que oculta
+    // la pestaña un momento; sin esto, ese hand-off se confunde con salir de
+    // la app y fuerza a pedir el PIN de nuevo.
+    suppressNextPinRelock();
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia(LIVE_CAMERA_CONSTRAINTS);
@@ -603,6 +608,7 @@ export default function DocumentUploadWizard({
   const handleOpenLiveCamera = useCallback(() => {
     setCameraError("");
     if (!cameraSupported) {
+      suppressNextPinRelock();
       cameraInputRef.current?.click();
       return;
     }
@@ -611,11 +617,18 @@ export default function DocumentUploadWizard({
 
   const handleDeviceCameraFallback = useCallback(() => {
     stopCameraStream();
+    // Se abre la cámara nativa del sistema: la pestaña queda oculta hasta
+    // que el usuario toma la foto y vuelve, un hand-off esperado y no un
+    // abandono de la app.
+    suppressNextPinRelock();
     cameraInputRef.current?.click();
   }, [stopCameraStream]);
 
   const handleLibraryFallback = useCallback(() => {
     stopCameraStream();
+    // Igual que con la cámara nativa: el selector de galería del sistema
+    // oculta la pestaña mientras el usuario elige una imagen.
+    suppressNextPinRelock();
     fileInputRef.current?.click();
   }, [stopCameraStream]);
 

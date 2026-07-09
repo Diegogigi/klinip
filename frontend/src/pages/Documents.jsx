@@ -23,6 +23,7 @@ import SuccessSheet from "../components/SuccessSheet";
 import ContinuityTaskResolution from "../components/ContinuityTaskResolution";
 import { cleanUiText } from "../utils/textEncoding";
 import useMobileOverlayLock from "../hooks/useMobileOverlayLock";
+import { suppressNextPinRelock } from "../utils/pinLock";
 import {
   buildCoverageNotes,
   COVERAGE_FORM_VALUE,
@@ -1103,6 +1104,7 @@ export default function Documents() {
                   className="input-field"
                   type="file"
                   accept="image/*,application/pdf"
+                  onClick={() => suppressNextPinRelock()}
                   onChange={(event) => setFile(event.target.files?.[0] || null)}
                 />
                 <span className="tiny-note">Puedes cargar imágenes o PDF de hasta 10 MB.</span>

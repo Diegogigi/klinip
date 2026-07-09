@@ -36,6 +36,7 @@ import {
   consumePinRecentPasswordLogin,
   consumePinRecoveryLogin,
   hasPinRelockRequired,
+  isPinRelockSuppressed,
   markPinRelockRequired,
 } from "./utils/pinLock";
 import { observeMojibakeRepair } from "./utils/textEncoding";
@@ -1159,6 +1160,7 @@ export default function App() {
   const [appLocked, setAppLocked] = useState(false);
   const [pinStatusReady, setPinStatusReady] = useState(false);
   const pinHiddenAtRef = useRef(0);
+  const bootstrappedPinUserIdRef = useRef(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [updateRegistration, setUpdateRegistration] = useState(null);
   const [activeUpdateKey, setActiveUpdateKey] = useState("");
@@ -1281,6 +1283,11 @@ export default function App() {
                 ? pinStatus.pin_enabled
                 : me?.pin_enabled,
           };
+          // Ya tenemos el estado de PIN fresco y confiable de este arranque;
+          // evita que el efecto de sincronización repita la misma consulta
+          // segundos después y, con una respuesta más lenta o distinta,
+          // vuelva a bloquear la app a mitad de sesión sin motivo real.
+          bootstrappedPinUserIdRef.current = resolvedUser?.id ?? null;
         } catch (_) {
           resolvedUser = me;
         }
@@ -1306,6 +1313,14 @@ export default function App() {
 
   useEffect(() => {
     if (!user?.id) {
+      setPinStatusReady(true);
+      return undefined;
+    }
+    if (bootstrappedPinUserIdRef.current === user.id) {
+      // El arranque ya resolvió el estado de PIN de este usuario con una
+      // llamada fresca; no repetirla para no abrir una segunda ventana de
+      // carrera que podría re-bloquear la app mientras ya la está usando.
+      bootstrappedPinUserIdRef.current = null;
       setPinStatusReady(true);
       return undefined;
     }
@@ -1398,6 +1413,7 @@ export default function App() {
     const markBackgroundExitImmediate = () => {
       cancelPendingRelock();
       pinHiddenAtRef.current = Date.now();
+      if (isPinRelockSuppressed()) return;
       markPinRelockRequired();
     };
     const markBackgroundExitDebounced = () => {
@@ -1405,6 +1421,7 @@ export default function App() {
       cancelPendingRelock();
       relockTimer = window.setTimeout(() => {
         relockTimer = null;
+        if (isPinRelockSuppressed()) return;
         markPinRelockRequired();
       }, PIN_HIDE_DEBOUNCE_MS);
     };
