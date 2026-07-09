@@ -6498,6 +6498,15 @@ def _guess_doc_type(text: str) -> str | None:
     lowered = _normalize_text(text)
     if _is_coverage_document_text(lowered):
         return "otro"
+    # "Solicitud de examen(es)" es una ORDEN (referral), no un resultado, aunque
+    # dentro liste los nombres de los exámenes pedidos (glucosa, hemograma...) —
+    # esas palabras por sí solas hacían que la clasificación de "resultado" se
+    # disparara antes de llegar a esta señal, mucho más decisiva y sin ambigüedad.
+    if any(
+        phrase in lowered
+        for phrase in ("solicitud de examen", "solicitud de examenes", "solicito", "se solicita")
+    ):
+        return "orden"
     if "rp" in lowered and (
         "favor realizar" in lowered
         or "ecografia" in lowered
@@ -12306,6 +12315,15 @@ def _classify_document_type_from_ocr(text: str, filename: str) -> str:
     """Clasifica el tipo de documento clínico a partir de texto OCR y nombre de archivo.
     Usa solo coincidencia de keywords — sin llamadas a APIs."""
     combined = _normalize_text(f"{filename} {text}")[:2000]
+    # "Solicitud de examen(es)" es una ORDEN, no un resultado, aunque liste los
+    # nombres de los exámenes pedidos (glucosa, hemograma...). Esta señal va
+    # primero porque es mucho más decisiva que las palabras genéricas de
+    # "resultado" que aparecen más abajo.
+    if any(
+        phrase in combined
+        for phrase in ("solicitud de examen", "solicitud de examenes", "solicito", "se solicita")
+    ):
+        return "orden"
     if any(w in combined for w in ["receta", "prescripcion", "prescripcion medica", "medicamento prescrito", "rp "]):
         return "receta"
     if any(w in combined for w in ["resultado", "laboratorio", "hemograma", "glucosa", "colesterol", "examen de sangre",

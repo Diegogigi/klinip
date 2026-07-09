@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   createHealthExamResult,
@@ -8,6 +8,8 @@ import {
   getDocumentAnalysis,
   getHealthExamResults,
   getHealthSheet,
+  updateDocument,
+  updateHealthExamResult,
   updateHealthProblem,
 } from "../../services/httpApi";
 import { ensureArray } from "../../utils/arrays";
@@ -93,6 +95,10 @@ function buildLabHistory(examRecords) {
         range: cleanUiText(value?.reference_range || value?.range || "", "").trim(),
         flag: String(value?.flag || "").toLowerCase(),
         examName: cleanUiText(record?.exam_name || "", "").trim(),
+        // Se guarda el registro y el nombre "crudo" tal como está en
+        // values_json para poder editar/eliminar este valor puntual después.
+        recordId: record?.id,
+        rawName: value?.name || value?.label || "",
       });
     });
   });
@@ -103,6 +109,185 @@ function buildLabHistory(examRecords) {
     ),
   }));
   return params.sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+const SWIPE_REVEAL_PX = 140;
+
+// Fila de un parámetro con gesto de deslizar hacia la izquierda para revelar
+// Editar/Eliminar (como el swipe-to-delete de iOS). Usa eventos de puntero
+// (mouse + touch) y bloquea el gesto al primer movimiento claramente
+// horizontal, para no interferir con el scroll vertical de la página ni con
+// el toque normal que expande el historial.
+function SwipeableParamRow({
+  param,
+  isExpanded,
+  onToggleExpand,
+  onEdit,
+  onDelete,
+  isEditing,
+  editDraft,
+  onEditDraftChange,
+  onSaveEdit,
+  onCancelEdit,
+  editBusy,
+  editError,
+}) {
+  const [dragX, setDragX] = useState(0);
+  const draggingRef = useRef(false);
+  const lockRef = useRef(null);
+  const startRef = useRef({ x: 0, y: 0, base: 0 });
+  const suppressClickRef = useRef(false);
+
+  const clamp = (value) => Math.min(0, Math.max(-SWIPE_REVEAL_PX, value));
+
+  const handlePointerDown = (event) => {
+    draggingRef.current = true;
+    lockRef.current = null;
+    startRef.current = { x: event.clientX, y: event.clientY, base: dragX };
+  };
+
+  const handlePointerMove = (event) => {
+    if (!draggingRef.current) return;
+    const dx = event.clientX - startRef.current.x;
+    const dy = event.clientY - startRef.current.y;
+    if (!lockRef.current) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      lockRef.current = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    }
+    if (lockRef.current !== "x") return;
+    setDragX(clamp(startRef.current.base + dx));
+  };
+
+  const endDrag = () => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    if (lockRef.current === "x") {
+      suppressClickRef.current = true;
+      setDragX((current) => (current < -SWIPE_REVEAL_PX / 2 ? -SWIPE_REVEAL_PX : 0));
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    }
+    lockRef.current = null;
+  };
+
+  const handleRowActivate = () => {
+    if (suppressClickRef.current) return;
+    if (dragX !== 0) {
+      setDragX(0);
+      return;
+    }
+    onToggleExpand();
+  };
+
+  const latest = param.entries[0];
+  const status = getValueStatus(latest?.flag);
+
+  return (
+    <div className="hsheet-swipe-row">
+      <div className="hsheet-swipe-actions">
+        <button
+          type="button"
+          className="hsheet-swipe-btn is-edit"
+          onClick={() => {
+            setDragX(0);
+            onEdit(param);
+          }}
+        >
+          Editar
+        </button>
+        <button
+          type="button"
+          className="hsheet-swipe-btn is-delete"
+          onClick={() => {
+            setDragX(0);
+            onDelete(param);
+          }}
+        >
+          Eliminar
+        </button>
+      </div>
+      <div
+        className="hsheet-swipe-content"
+        style={{ transform: `translateX(${dragX}px)` }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
+        {isEditing ? (
+          <div className="hsheet-indicator-item is-editing">
+            <div className="hsheet-indicator-edit-form">
+              <span className="hsheet-indicator-name">{param.name}</span>
+              <div className="hsheet-indicator-edit-row">
+                <input
+                  type="text"
+                  value={editDraft.value}
+                  maxLength={40}
+                  placeholder="Resultado"
+                  aria-label="Nuevo resultado"
+                  onChange={(event) => onEditDraftChange({ ...editDraft, value: event.target.value })}
+                />
+                <input
+                  type="text"
+                  value={editDraft.unit}
+                  maxLength={20}
+                  placeholder="Unidad"
+                  aria-label="Unidad"
+                  onChange={(event) => onEditDraftChange({ ...editDraft, unit: event.target.value })}
+                />
+              </div>
+              {editError ? <p className="hsheet-form-error">{editError}</p> : null}
+              <div className="hsheet-form-actions">
+                <button type="button" className="primary-btn" disabled={editBusy} onClick={() => onSaveEdit(param)}>
+                  {editBusy ? "Guardando…" : "Guardar"}
+                </button>
+                <button type="button" className="secondary-btn" disabled={editBusy} onClick={onCancelEdit}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            className="hsheet-indicator-item"
+            role="button"
+            tabIndex={0}
+            onClick={handleRowActivate}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleRowActivate();
+              }
+            }}
+          >
+            <div className="hsheet-indicator-summary-row">
+              <span className="hsheet-indicator-name">{param.name}</span>
+              <span className="hsheet-indicator-value">
+                {latest.value}{latest.unit ? ` ${latest.unit}` : ""}
+              </span>
+              <span className={`hsheet-indicator-pill is-${status.tone}`}>{status.label}</span>
+            </div>
+            {isExpanded ? (
+              <div className="hsheet-indicator-history">
+                {param.entries.map((entry, entryIndex) => (
+                  <div className="hsheet-indicator-entry" key={`${param.key}-${entryIndex}`}>
+                    <span>{fmtSheetDate(entry.date) || "Sin fecha"}</span>
+                    <strong>{entry.value}{entry.unit ? ` ${entry.unit}` : ""}</strong>
+                    <small>
+                      {[entry.range ? `Rango: ${entry.range}` : "", entry.examName]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </small>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Ficha de Salud: la vista principal es tu último panel de exámenes, con un
@@ -130,6 +315,12 @@ export default function HealthSheetPanel({ profileId }) {
   const [actionsCreated, setActionsCreated] = useState(() => new Set());
   const [importBusyId, setImportBusyId] = useState(null);
   const [importMessage, setImportMessage] = useState("");
+  const [dismissingDocId, setDismissingDocId] = useState(null);
+  const [expandedParamKey, setExpandedParamKey] = useState("");
+  const [editingParamKey, setEditingParamKey] = useState("");
+  const [editDraft, setEditDraft] = useState({ value: "", unit: "" });
+  const [editBusy, setEditBusy] = useState(false);
+  const [paramActionError, setParamActionError] = useState("");
 
   const loadSheet = useCallback(async () => {
     if (!profileId) {
@@ -325,6 +516,106 @@ export default function HealthSheetPanel({ profileId }) {
     }
   };
 
+  // "Esto no es un examen": para solicitudes/órdenes que Klinip clasificó mal
+  // como resultado y por eso insisten en pedir el traspaso de valores que
+  // nunca van a existir. Se corrige el tipo del documento (misma acción que
+  // "marcar como examen", en sentido contrario) y desaparece de esta lista.
+  const dismissPendingExam = async (item) => {
+    const documentId = item?.source?.source_id;
+    if (!documentId || dismissingDocId) return;
+    setDismissingDocId(documentId);
+    try {
+      await updateDocument(documentId, { doc_type: "orden" });
+      await loadSheet();
+      notifyClinicalDataChanged({ profileId, sources: ["health-sheet", "documents"] });
+    } catch {
+      window.alert("No se pudo actualizar el documento. Inténtalo de nuevo.");
+    } finally {
+      setDismissingDocId(null);
+    }
+  };
+
+  const toggleParamExpanded = (key) => {
+    setExpandedParamKey((current) => (current === key ? "" : key));
+  };
+
+  const startEditParam = (param) => {
+    setParamActionError("");
+    const latest = param.entries[0];
+    setEditingParamKey(param.key);
+    setEditDraft({ value: latest?.value || "", unit: latest?.unit || "" });
+  };
+
+  const cancelEditParam = () => {
+    setEditingParamKey("");
+    setParamActionError("");
+  };
+
+  // Edita solo el valor más reciente de este parámetro: reescribe esa entrada
+  // dentro del registro de examen donde vive (values_json), sin tocar el
+  // resto de los valores de ese mismo examen.
+  const saveEditParam = async (param) => {
+    const latest = param.entries[0];
+    if (!latest?.recordId || editBusy) return;
+    const nextValue = editDraft.value.trim();
+    if (!nextValue) {
+      setParamActionError("Ingresa un valor.");
+      return;
+    }
+    setEditBusy(true);
+    setParamActionError("");
+    try {
+      const record = examRecords.find((item) => item.id === latest.recordId);
+      const values = ensureArray(record?.values_json).map((entry) => {
+        const entryName = cleanUiText(entry?.name || entry?.label || "", "").trim().toLowerCase();
+        if (entryName !== param.key) return entry;
+        return { ...entry, value: nextValue, unit: editDraft.unit.trim() };
+      });
+      await updateHealthExamResult(profileId, latest.recordId, { values_json: values });
+      setEditingParamKey("");
+      await loadSheet();
+      notifyClinicalDataChanged({ profileId, sources: ["health-sheet"] });
+    } catch {
+      setParamActionError("No se pudo guardar el cambio. Inténtalo de nuevo.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
+  // Elimina este parámetro de TODO su historial (todas las hojas donde
+  // aparece), no solo del valor más reciente.
+  const deleteParam = async (param) => {
+    if (editBusy) return;
+    if (
+      !window.confirm(
+        `¿Eliminar "${param.name}" de tu historial? Se quitará de los ${param.entries.length} registro${
+          param.entries.length !== 1 ? "s" : ""
+        } donde aparece.`
+      )
+    ) {
+      return;
+    }
+    setEditBusy(true);
+    try {
+      const affectedRecordIds = new Set(param.entries.map((entry) => entry.recordId).filter(Boolean));
+      for (const recordId of affectedRecordIds) {
+        const record = examRecords.find((item) => item.id === recordId);
+        if (!record) continue;
+        const values = ensureArray(record.values_json).filter((entry) => {
+          const entryName = cleanUiText(entry?.name || entry?.label || "", "").trim().toLowerCase();
+          return entryName !== param.key;
+        });
+        await updateHealthExamResult(profileId, recordId, { values_json: values });
+      }
+      await loadSheet();
+      notifyClinicalDataChanged({ profileId, sources: ["health-sheet"] });
+    } catch {
+      window.alert("No se pudo eliminar el parámetro. Inténtalo de nuevo.");
+    } finally {
+      setEditBusy(false);
+    }
+  };
+
   if (!profileId) return null;
 
   const diagnoses = ensureArray(sheet?.diagnoses);
@@ -406,6 +697,7 @@ export default function HealthSheetPanel({ profileId }) {
               {pendingImportExams.map((item, index) => {
                 const documentId = item?.source?.source_id;
                 const busy = importBusyId === documentId;
+                const dismissing = dismissingDocId === documentId;
                 return (
                   <div className="hsheet-row" key={`exam-pending-${index}`}>
                     <div className="hsheet-row-copy">
@@ -416,10 +708,18 @@ export default function HealthSheetPanel({ profileId }) {
                       <button
                         type="button"
                         className="hsheet-row-btn"
-                        disabled={busy}
+                        disabled={busy || dismissing}
                         onClick={() => importExamValues(item)}
                       >
                         {busy ? "Traspasando…" : "Pasar valores"}
+                      </button>
+                      <button
+                        type="button"
+                        className="hsheet-link-btn hsheet-dismiss-btn"
+                        disabled={busy || dismissing}
+                        onClick={() => dismissPendingExam(item)}
+                      >
+                        {dismissing ? "Actualizando…" : "No es un examen"}
                       </button>
                     </div>
                   </div>
@@ -432,37 +732,26 @@ export default function HealthSheetPanel({ profileId }) {
             <div className="hsheet-results-block">
               <div className="hsheet-results-head">
                 <span className="hsheet-results-title">Últimos resultados</span>
-                <span className="hsheet-hint">Toca un valor para ver cómo ha cambiado en el tiempo</span>
+                <span className="hsheet-hint">Toca un valor para ver su historial. Desliza a la izquierda para editar o eliminar.</span>
               </div>
               <div className="hsheet-indicator-list">
-              {labHistory.map((param) => {
-                const latest = param.entries[0];
-                const status = getValueStatus(latest?.flag);
-                return (
-                  <details className="hsheet-indicator-item" key={param.key}>
-                    <summary>
-                      <span className="hsheet-indicator-name">{param.name}</span>
-                      <span className="hsheet-indicator-value">
-                        {latest.value}{latest.unit ? ` ${latest.unit}` : ""}
-                      </span>
-                      <span className={`hsheet-indicator-pill is-${status.tone}`}>{status.label}</span>
-                    </summary>
-                    <div className="hsheet-indicator-history">
-                      {param.entries.map((entry, entryIndex) => (
-                        <div className="hsheet-indicator-entry" key={`${param.key}-${entryIndex}`}>
-                          <span>{fmtSheetDate(entry.date) || "Sin fecha"}</span>
-                          <strong>{entry.value}{entry.unit ? ` ${entry.unit}` : ""}</strong>
-                          <small>
-                            {[entry.range ? `Rango: ${entry.range}` : "", entry.examName]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </small>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                );
-              })}
+                {labHistory.map((param) => (
+                  <SwipeableParamRow
+                    key={param.key}
+                    param={param}
+                    isExpanded={expandedParamKey === param.key}
+                    onToggleExpand={() => toggleParamExpanded(param.key)}
+                    onEdit={startEditParam}
+                    onDelete={deleteParam}
+                    isEditing={editingParamKey === param.key}
+                    editDraft={editDraft}
+                    onEditDraftChange={setEditDraft}
+                    onSaveEdit={saveEditParam}
+                    onCancelEdit={cancelEditParam}
+                    editBusy={editBusy}
+                    editError={editingParamKey === param.key ? paramActionError : ""}
+                  />
+                ))}
               </div>
             </div>
           ) : (

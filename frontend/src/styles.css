@@ -53805,32 +53805,25 @@ body.theme-dark .health-hub-quick-card.tone-green {
 
 .hsheet-indicator-list {
   display: grid;
-  border-radius: 16px;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  overflow: hidden;
+  gap: 0.5rem;
+}
+
+.hsheet-swipe-row {
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.85);
 }
 
 .hsheet-indicator-item {
-  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
   background: #ffffff;
-  padding: 0.65rem 0.85rem;
-}
-
-.hsheet-indicator-item:last-child {
-  border-bottom: none;
-}
-
-.hsheet-indicator-item summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
   cursor: pointer;
 }
 
-.hsheet-indicator-item[open] summary {
-  margin-bottom: 0.5rem;
+.hsheet-indicator-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .hsheet-indicator-name {
@@ -53840,6 +53833,80 @@ body.theme-dark .health-hub-quick-card.tone-green {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Fila deslizable (swipe-to-reveal Editar/Eliminar) ───────────── */
+.hsheet-swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.85);
+}
+
+.hsheet-indicator-list > .hsheet-swipe-row:last-child {
+  border-bottom: none;
+}
+
+.hsheet-swipe-actions {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: stretch;
+}
+
+.hsheet-swipe-btn {
+  width: 70px;
+  border: none;
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hsheet-swipe-btn.is-edit {
+  background: #2563eb;
+}
+
+.hsheet-swipe-btn.is-delete {
+  background: #dc2626;
+}
+
+.hsheet-swipe-content {
+  position: relative;
+  background: #ffffff;
+  touch-action: pan-y;
+  will-change: transform;
+}
+
+.hsheet-indicator-item.is-editing {
+  cursor: default;
+}
+
+.hsheet-indicator-edit-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hsheet-indicator-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.hsheet-indicator-edit-row input {
+  min-height: 42px;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  border: 1px solid rgba(203, 213, 225, 0.95);
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+.hsheet-dismiss-btn {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  padding: 0;
 }
 
 .hsheet-indicator-value {
@@ -53959,19 +54026,27 @@ body.theme-dark .hsheet-indicator small {
 
 body.theme-dark .hsheet-results-title,
 body.theme-dark .hsheet-pending-title,
-body.theme-dark .hsheet-indicator-name,
-body.theme-dark .hsheet-indicator-item[open] summary {
+body.theme-dark .hsheet-indicator-name {
   color: #e2e8f0;
 }
 
-body.theme-dark .hsheet-indicator-list {
+body.theme-dark .hsheet-swipe-row {
   border-color: rgba(51, 65, 85, 0.92);
+}
+
+body.theme-dark .hsheet-indicator-item,
+body.theme-dark .hsheet-swipe-content {
   background: rgba(15, 23, 42, 0.72);
 }
 
-body.theme-dark .hsheet-indicator-item {
-  border-bottom-color: rgba(51, 65, 85, 0.85);
-  background: transparent;
+body.theme-dark .hsheet-indicator-edit-row input {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e2e8f0;
+}
+
+body.theme-dark .hsheet-dismiss-btn {
+  color: #64748b;
 }
 
 body.theme-dark .hsheet-indicator-value {
@@ -55789,15 +55864,31 @@ body.theme-dark .clp-loading-pulse {
     font-size: 1.1rem;
   }
 
-  .hsheet-indicator-item summary {
-    grid-template-columns: minmax(0, 1fr) auto;
-    row-gap: 0.3rem;
+  .hsheet-indicator-summary-row {
+    gap: 0.4rem;
+  }
+
+  .hsheet-indicator-name {
+    font-size: 0.85rem;
   }
 
   .hsheet-indicator-value {
-    grid-column: 1 / -1;
-    font-size: 0.82rem;
+    font-size: 0.78rem;
     color: #64748b;
+  }
+
+  .hsheet-indicator-pill {
+    padding: 0.12rem 0.45rem;
+    font-size: 0.66rem;
+  }
+
+  .hsheet-swipe-btn {
+    width: 62px;
+    font-size: 0.72rem;
+  }
+
+  .hsheet-indicator-edit-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .hsheet-indicator-entry {
