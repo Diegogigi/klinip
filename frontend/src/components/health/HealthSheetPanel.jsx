@@ -40,7 +40,7 @@ const PROBLEM_STATUS_LABELS = {
   documented: { label: "Documentado", tone: "muted" },
 };
 
-const ABNORMAL_FLAGS = new Set(["high", "low", "abnormal", "alto", "bajo", "anormal"]);
+const ABNORMAL_FLAGS = new Set(["high", "low", "abnormal", "critical", "alto", "bajo", "anormal", "critico"]);
 
 const EMPTY_VALUE_ROW = { name: "", value: "", unit: "" };
 
@@ -71,9 +71,17 @@ function isAbnormalFlag(flag) {
   return ABNORMAL_FLAGS.has(String(flag || "").toLowerCase());
 }
 
-// Agrupa todos los valores estructurados de exámenes por parámetro (Glucosa,
-// Colesterol, etc.), ordenados del más reciente al más antiguo, para armar el
-// historial que se ve como tabla.
+// Estado del valor en palabras simples, con el mismo criterio que la tarjeta
+// resumen: solo se etiqueta "Normal" cuando el propio dato trae un rango de
+// referencia y cae dentro de él, para no inventar una clasificación que no
+// podemos respaldar.
+function getValueStatus(flag) {
+  const key = String(flag || "").toLowerCase();
+  if (isAbnormalFlag(key)) return { label: "Alterado", tone: "alt" };
+  if (key === "normal") return { label: "Normal", tone: "ok" };
+  return { label: "Sin rango", tone: "muted" };
+}
+
 // Un parámetro de laboratorio real es un nombre corto ("GLUCOSA", "TIEMPO DE
 // PROTROMBINA"), no una frase clínica larga. Filtra registros defectuosos que
 // hayan quedado guardados antes de este endurecimiento, para que la sección
@@ -82,6 +90,9 @@ function isPlausibleLabParamName(name) {
   return Boolean(name) && name.length <= 60 && name.trim().split(/\s+/).length <= 6;
 }
 
+// Agrupa todos los valores estructurados de exámenes por parámetro (Glucosa,
+// Colesterol, etc.), ordenados del más reciente al más antiguo, para armar el
+// historial que se ve como lista de indicadores.
 function buildLabHistory(examRecords) {
   const paramsByKey = new Map();
   ensureArray(examRecords).forEach((record) => {
@@ -113,16 +124,15 @@ function buildLabHistory(examRecords) {
   return params.sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
-// Ficha de Salud: pestañas con el resumen vivo del perfil. El foco del flujo
-// de exámenes es fotografiar el resultado, traspasar sus valores y construir
-// un historial estructurado por parámetro. Copy y controles pensados para
-// adultos mayores: una acción clara a la vez.
+// Ficha de Salud: la vista principal es tu último panel de exámenes, con un
+// resumen de cuántos valores están alterados o normales (como un chequeo
+// médico). Diagnósticos, vacunas e indicaciones quedan en una sección
+// secundaria plegada, para mantener la pantalla simple.
 export default function HealthSheetPanel({ profileId }) {
   const navigate = useNavigate();
   const [sheet, setSheet] = useState(null);
   const [examRecords, setExamRecords] = useState([]);
   const [state, setState] = useState("loading");
-  const [activeTab, setActiveTab] = useState("examenes");
   const [openForm, setOpenForm] = useState("");
   const [formBusy, setFormBusy] = useState(false);
   const [formError, setFormError] = useState("");
@@ -340,7 +350,6 @@ export default function HealthSheetPanel({ profileId }) {
   const vaccines = ensureArray(sheet?.vaccines);
   const exams = ensureArray(sheet?.exams);
   const indications = ensureArray(sheet?.indications);
-  const totalItems = diagnoses.length + vaccines.length + exams.length;
   const labHistory = buildLabHistory(examRecords);
   const importedDocumentIds = new Set(
     examRecords
@@ -355,14 +364,17 @@ export default function HealthSheetPanel({ profileId }) {
   });
   const storedExams = exams.filter((item) => !pendingImportExams.includes(item));
 
-  const tabs = [
-    { key: "examenes", icon: "🧪", label: "Exámenes", count: exams.length },
-    { key: "diagnosticos", icon: "🩺", label: "Diagnósticos", count: diagnoses.length },
-    { key: "vacunas", icon: "💉", label: "Vacunas", count: vaccines.length },
-    ...(indications.length
-      ? [{ key: "indicaciones", icon: "📋", label: "Indicaciones", count: indications.length }]
-      : []),
-  ];
+  const indicatorStats = labHistory.reduce(
+    (acc, param) => {
+      const status = getValueStatus(param.entries[0]?.flag);
+      if (status.tone === "alt") acc.altered += 1;
+      else if (status.tone === "ok") acc.normal += 1;
+      return acc;
+    },
+    { altered: 0, normal: 0 }
+  );
+
+  const moreItemsCount = diagnoses.length + vaccines.length + indications.length;
 
   return (
     <section className="clp-card tone-teal hsheet-card" aria-labelledby="clp-hsheet-h">
@@ -371,14 +383,7 @@ export default function HealthSheetPanel({ profileId }) {
         <div className="clp-card-head-main">
           <div className="clp-card-titles">
             <h2 className="clp-card-title" id="clp-hsheet-h">Ficha de Salud</h2>
-            <p className="clp-card-sub">Tus diagnósticos, vacunas y exámenes, ordenados en una sola hoja</p>
-          </div>
-          <div className="clp-card-head-meta">
-            {totalItems > 0 ? (
-              <span className="clp-card-metric">
-                {totalItems} registro{totalItems !== 1 ? "s" : ""}
-              </span>
-            ) : null}
+            <p className="clp-card-sub">Tus exámenes y valores, en un solo lugar</p>
           </div>
         </div>
       </div>
@@ -394,384 +399,50 @@ export default function HealthSheetPanel({ profileId }) {
         </div>
       ) : (
         <div className="hsheet-body">
-          <div className="hsheet-tabs" role="tablist" aria-label="Secciones de la ficha">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab.key}
-                className={`hsheet-tab${activeTab === tab.key ? " is-active" : ""}`}
-                onClick={() => { setActiveTab(tab.key); closeForm(); }}
-              >
-                <span aria-hidden>{tab.icon}</span> {tab.label}
-                <span className="hsheet-count">{tab.count}</span>
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            className="primary-btn hsheet-scan-btn"
+            onClick={() => navigate("/documents?scan=1")}
+          >
+            <span aria-hidden>📷</span> Fotografía tu examen aquí
+          </button>
 
-          {/* ── Exámenes ── */}
-          {activeTab === "examenes" ? (
-            <div className="hsheet-tab-panel">
-              <div className="hsheet-scan-row">
-                <button
-                  type="button"
-                  className="primary-btn hsheet-scan-btn"
-                  onClick={() => navigate("/documents?scan=1")}
-                >
-                  <span aria-hidden>📷</span> Fotografía tu examen aquí
-                </button>
-                <p className="hsheet-hint">
-                  Klinip lee la foto y deja los valores listos para guardarlos en tu historial.
-                </p>
-              </div>
-
-              {labHistory.length > 0 ? (
-                <div className="hsheet-history">
-                  <h3 className="hsheet-block-title">Historial de valores</h3>
-                  <p className="hsheet-hint">Toca un parámetro para ver cómo ha cambiado en el tiempo.</p>
-                  <div className="hsheet-param-list">
-                    {labHistory.map((param) => {
-                      const latest = param.entries[0];
-                      const abnormal = isAbnormalFlag(latest?.flag);
-                      return (
-                        <details className="hsheet-param" key={param.key}>
-                          <summary>
-                            <span className="hsheet-param-name">{param.name}</span>
-                            <span className={`hsheet-param-value${abnormal ? " is-abnormal" : ""}`}>
-                              {latest.value}{latest.unit ? ` ${latest.unit}` : ""}
-                            </span>
-                            <span className="hsheet-param-date">{fmtSheetDate(latest.date) || "Sin fecha"}</span>
-                          </summary>
-                          <div className="hsheet-param-history">
-                            {param.entries.map((entry, entryIndex) => (
-                              <div className="hsheet-param-entry" key={`${param.key}-${entryIndex}`}>
-                                <span className="hsheet-param-entry-date">
-                                  {fmtSheetDate(entry.date) || "Sin fecha"}
-                                </span>
-                                <strong className={isAbnormalFlag(entry.flag) ? "is-abnormal" : ""}>
-                                  {entry.value}{entry.unit ? ` ${entry.unit}` : ""}
-                                </strong>
-                                <small>
-                                  {[entry.range ? `Rango: ${entry.range}` : "", entry.examName]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                                </small>
-                              </div>
-                            ))}
-                          </div>
-                        </details>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <p className="hsheet-empty">
-                  Todavía no hay valores en tu historial. Fotografía un examen de sangre o anota los
-                  valores a mano, y quedarán ordenados aquí para comparar en el tiempo.
-                </p>
-              )}
-
-              {importMessage ? <p className="hsheet-import-message">{importMessage}</p> : null}
-
-              {pendingImportExams.length > 0 ? (
-                <div className="hsheet-exam-list">
-                  <h3 className="hsheet-block-title">Exámenes leídos: pásalos a tu historial</h3>
-                  {pendingImportExams.map((item, index) => {
-                    const documentId = item?.source?.source_id;
-                    const busy = importBusyId === documentId;
-                    return (
-                      <div className="hsheet-row" key={`exam-pending-${index}`}>
-                        <div className="hsheet-row-copy">
-                          <strong>{cleanUiText(item.name)}</strong>
-                          {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
-                        </div>
-                        <div className="hsheet-row-side">
-                          <button
-                            type="button"
-                            className="hsheet-row-btn"
-                            disabled={busy}
-                            onClick={() => importExamValues(item)}
-                          >
-                            {busy ? "Traspasando…" : "Pasar valores al historial"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-
-              {storedExams.length > 0 ? (
-                <details className="hsheet-section">
-                  <summary>
-                    <span aria-hidden>🗂️</span> Ver todos tus exámenes
-                    <span className="hsheet-count">{storedExams.length}</span>
-                  </summary>
-                  <div className="hsheet-section-body">
-                    {storedExams.map((item, index) => (
-                      <div className="hsheet-row" key={`exam-${index}`}>
-                        <div className="hsheet-row-copy">
-                          <strong>{cleanUiText(item.name)}</strong>
-                          {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
-                          {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
-                          {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
-              ) : null}
-
-              {openForm === "exam" ? (
-                <div className="hsheet-form">
-                  <label>
-                    <span>¿Qué examen te hiciste?</span>
-                    <input
-                      type="text"
-                      value={examDraft.exam_name}
-                      maxLength={140}
-                      placeholder="Ej: Perfil lipídico"
-                      onChange={(event) => setExamDraft((d) => ({ ...d, exam_name: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>¿Cuándo? (opcional)</span>
-                    <input
-                      type="date"
-                      value={examDraft.performed_at}
-                      onChange={(event) => setExamDraft((d) => ({ ...d, performed_at: event.target.value }))}
-                    />
-                  </label>
-                  <div className="hsheet-form-values">
-                    <span className="hsheet-form-values-title">Valores del examen (opcional)</span>
-                    {examDraft.values.map((row, index) => (
-                      <div className="hsheet-form-value-row" key={`value-row-${index}`}>
-                        <input
-                          type="text"
-                          value={row.name}
-                          maxLength={80}
-                          placeholder="Ej: Glucosa"
-                          aria-label="Nombre del valor"
-                          onChange={(event) => updateExamValueRow(index, "name", event.target.value)}
-                        />
-                        <input
-                          type="text"
-                          value={row.value}
-                          maxLength={40}
-                          placeholder="Ej: 98"
-                          aria-label="Resultado"
-                          onChange={(event) => updateExamValueRow(index, "value", event.target.value)}
-                        />
-                        <input
-                          type="text"
-                          value={row.unit}
-                          maxLength={20}
-                          placeholder="mg/dL"
-                          aria-label="Unidad"
-                          onChange={(event) => updateExamValueRow(index, "unit", event.target.value)}
-                        />
-                      </div>
-                    ))}
-                    <button type="button" className="hsheet-value-add-btn" onClick={addExamValueRow}>
-                      + Agregar otro valor
-                    </button>
-                  </div>
-                  <label>
-                    <span>Resultado en tus palabras (opcional)</span>
-                    <input
-                      type="text"
-                      value={examDraft.summary}
-                      maxLength={360}
-                      placeholder="Ej: Colesterol un poco alto, repetir en 3 meses"
-                      onChange={(event) => setExamDraft((d) => ({ ...d, summary: event.target.value }))}
-                    />
-                  </label>
-                  {formError ? <p className="hsheet-form-error">{formError}</p> : null}
-                  <div className="hsheet-form-actions">
-                    <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("exam")}>
-                      {formBusy ? "Guardando…" : "Guardar"}
-                    </button>
-                    <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" className="hsheet-add-btn" onClick={() => { setOpenForm("exam"); setFormError(""); }}>
-                  + Anotar un examen a mano
-                </button>
-              )}
+          {labHistory.length > 0 ? (
+            <div className="hsheet-indicator-row" aria-label="Resumen de tus indicadores">
+              <span className="hsheet-indicator is-alt">
+                <strong>{indicatorStats.altered}</strong> Alterados
+              </span>
+              <span className="hsheet-indicator is-ok">
+                <strong>{indicatorStats.normal}</strong> Normales
+              </span>
+              <span className="hsheet-indicator is-muted">
+                <strong>{labHistory.length}</strong> Total
+              </span>
             </div>
           ) : null}
 
-          {/* ── Diagnósticos ── */}
-          {activeTab === "diagnosticos" ? (
-            <div className="hsheet-tab-panel">
-              {diagnoses.length === 0 ? (
-                <p className="hsheet-empty">Aún no hay diagnósticos registrados. Puedes agregar uno abajo.</p>
-              ) : (
-                diagnoses.map((item, index) => {
-                  const status = getProblemStatusInfo(item.status);
-                  const isManual = item?.source?.source_type === "health_problem" && item?.source?.source_id;
-                  const busy = problemBusyId === item?.source?.source_id;
-                  return (
-                    <div className="hsheet-row" key={`diag-${index}`}>
-                      <div className="hsheet-row-copy">
-                        <strong>{cleanUiText(item.name)}</strong>
-                        {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
-                        {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
-                      </div>
-                      <div className="hsheet-row-side">
-                        <span className={`hsheet-status is-${status.tone}`}>{status.label}</span>
-                        {isManual ? (
-                          <button
-                            type="button"
-                            className="hsheet-row-btn"
-                            disabled={busy}
-                            onClick={() => toggleProblemResolved(item)}
-                          >
-                            {busy
-                              ? "Guardando…"
-                              : String(item.status).toLowerCase() === "resolved"
-                              ? "Volver a activo"
-                              : "Marcar resuelto"}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {openForm === "problem" ? (
-                <div className="hsheet-form">
-                  <label>
-                    <span>¿Qué problema o diagnóstico quieres registrar?</span>
-                    <input
-                      type="text"
-                      value={problemDraft.name}
-                      maxLength={120}
-                      placeholder="Ej: Hipertensión"
-                      onChange={(event) => setProblemDraft((d) => ({ ...d, name: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Detalle (opcional)</span>
-                    <input
-                      type="text"
-                      value={problemDraft.detail}
-                      maxLength={260}
-                      placeholder="Ej: Diagnosticada en 2024, en control"
-                      onChange={(event) => setProblemDraft((d) => ({ ...d, detail: event.target.value }))}
-                    />
-                  </label>
-                  {formError ? <p className="hsheet-form-error">{formError}</p> : null}
-                  <div className="hsheet-form-actions">
-                    <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("problem")}>
-                      {formBusy ? "Guardando…" : "Guardar"}
-                    </button>
-                    <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" className="hsheet-add-btn" onClick={() => { setOpenForm("problem"); setFormError(""); }}>
-                  + Agregar problema o diagnóstico
-                </button>
-              )}
-            </div>
-          ) : null}
+          {importMessage ? <p className="hsheet-import-message">{importMessage}</p> : null}
 
-          {/* ── Vacunas ── */}
-          {activeTab === "vacunas" ? (
-            <div className="hsheet-tab-panel">
-              {vaccines.length === 0 ? (
-                <p className="hsheet-empty">Aún no hay vacunas registradas. Puedes agregar una abajo.</p>
-              ) : (
-                vaccines.map((item, index) => (
-                  <div className="hsheet-row" key={`vac-${index}`}>
+          {pendingImportExams.length > 0 ? (
+            <div className="hsheet-pending-list">
+              <span className="hsheet-pending-title">Exámenes leídos: pásalos a tu historial</span>
+              {pendingImportExams.map((item, index) => {
+                const documentId = item?.source?.source_id;
+                const busy = importBusyId === documentId;
+                return (
+                  <div className="hsheet-row" key={`exam-pending-${index}`}>
                     <div className="hsheet-row-copy">
                       <strong>{cleanUiText(item.name)}</strong>
-                      {fmtSheetDate(item.date) ? <p>Aplicada el {fmtSheetDate(item.date)}</p> : null}
-                      {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
-                    </div>
-                  </div>
-                ))
-              )}
-              {openForm === "vaccine" ? (
-                <div className="hsheet-form">
-                  <label>
-                    <span>¿Qué vacuna te pusieron?</span>
-                    <input
-                      type="text"
-                      value={vaccineDraft.vaccine_name}
-                      maxLength={120}
-                      placeholder="Ej: Influenza 2026"
-                      onChange={(event) => setVaccineDraft((d) => ({ ...d, vaccine_name: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>¿Cuándo? (opcional)</span>
-                    <input
-                      type="date"
-                      value={vaccineDraft.administered_at}
-                      onChange={(event) => setVaccineDraft((d) => ({ ...d, administered_at: event.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Dosis (opcional)</span>
-                    <input
-                      type="text"
-                      value={vaccineDraft.dose_label}
-                      maxLength={80}
-                      placeholder="Ej: Primera dosis, refuerzo"
-                      onChange={(event) => setVaccineDraft((d) => ({ ...d, dose_label: event.target.value }))}
-                    />
-                  </label>
-                  {formError ? <p className="hsheet-form-error">{formError}</p> : null}
-                  <div className="hsheet-form-actions">
-                    <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("vaccine")}>
-                      {formBusy ? "Guardando…" : "Guardar"}
-                    </button>
-                    <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button type="button" className="hsheet-add-btn" onClick={() => { setOpenForm("vaccine"); setFormError(""); }}>
-                  + Registrar vacuna
-                </button>
-              )}
-            </div>
-          ) : null}
-
-          {/* ── Indicaciones ── */}
-          {activeTab === "indicaciones" && indications.length > 0 ? (
-            <div className="hsheet-tab-panel">
-              <p className="hsheet-hint">
-                Si quieres que Klinip te recuerde una indicación, conviértela en pendiente.
-              </p>
-              {indications.map((item, index) => {
-                const key = `${item.title}|${item?.source?.source_id || index}`;
-                const created = actionsCreated.has(key);
-                const busy = actionBusyKey === key;
-                return (
-                  <div className="hsheet-row" key={`ind-${index}`}>
-                    <div className="hsheet-row-copy">
-                      <strong>{cleanUiText(item.title)}</strong>
-                      {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
-                      {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                      {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
                     </div>
                     <div className="hsheet-row-side">
                       <button
                         type="button"
-                        className={`hsheet-row-btn${created ? " is-done" : ""}`}
-                        disabled={busy || created}
-                        onClick={() => createActionFromIndication(item, key)}
+                        className="hsheet-row-btn"
+                        disabled={busy}
+                        onClick={() => importExamValues(item)}
                       >
-                        {created ? "Pendiente creado ✓" : busy ? "Creando…" : "Recordármelo"}
+                        {busy ? "Traspasando…" : "Pasar valores"}
                       </button>
                     </div>
                   </div>
@@ -779,6 +450,327 @@ export default function HealthSheetPanel({ profileId }) {
               })}
             </div>
           ) : null}
+
+          {labHistory.length > 0 ? (
+            <div className="hsheet-indicator-list">
+              {labHistory.map((param) => {
+                const latest = param.entries[0];
+                const status = getValueStatus(latest?.flag);
+                return (
+                  <details className="hsheet-indicator-item" key={param.key}>
+                    <summary>
+                      <span className="hsheet-indicator-name">{param.name}</span>
+                      <span className="hsheet-indicator-value">
+                        {latest.value}{latest.unit ? ` ${latest.unit}` : ""}
+                      </span>
+                      <span className={`hsheet-indicator-pill is-${status.tone}`}>{status.label}</span>
+                    </summary>
+                    <div className="hsheet-indicator-history">
+                      {param.entries.map((entry, entryIndex) => (
+                        <div className="hsheet-indicator-entry" key={`${param.key}-${entryIndex}`}>
+                          <span>{fmtSheetDate(entry.date) || "Sin fecha"}</span>
+                          <strong>{entry.value}{entry.unit ? ` ${entry.unit}` : ""}</strong>
+                          <small>
+                            {[entry.range ? `Rango: ${entry.range}` : "", entry.examName]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </small>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="hsheet-empty">
+              Todavía no hay valores en tu historial. Fotografía un examen de sangre o anota los
+              valores a mano, y quedarán ordenados aquí para comparar en el tiempo.
+            </p>
+          )}
+
+          <div className="hsheet-secondary-links">
+            {storedExams.length > 0 ? (
+              <details className="hsheet-section">
+                <summary>
+                  <span aria-hidden>🗂️</span> Ver todos tus exámenes
+                  <span className="hsheet-count">{storedExams.length}</span>
+                </summary>
+                <div className="hsheet-section-body">
+                  {storedExams.map((item, index) => (
+                    <div className="hsheet-row" key={`exam-${index}`}>
+                      <div className="hsheet-row-copy">
+                        <strong>{cleanUiText(item.name)}</strong>
+                        {fmtSheetDate(item.date) ? <p>Realizado el {fmtSheetDate(item.date)}</p> : null}
+                        {item.summary ? <p>{cleanUiText(item.summary)}</p> : null}
+                        {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            ) : null}
+
+            {openForm === "exam" ? (
+              <div className="hsheet-form">
+                <label>
+                  <span>¿Qué examen te hiciste?</span>
+                  <input
+                    type="text"
+                    value={examDraft.exam_name}
+                    maxLength={140}
+                    placeholder="Ej: Perfil lipídico"
+                    onChange={(event) => setExamDraft((d) => ({ ...d, exam_name: event.target.value }))}
+                  />
+                </label>
+                <label>
+                  <span>¿Cuándo? (opcional)</span>
+                  <input
+                    type="date"
+                    value={examDraft.performed_at}
+                    onChange={(event) => setExamDraft((d) => ({ ...d, performed_at: event.target.value }))}
+                  />
+                </label>
+                <div className="hsheet-form-values">
+                  <span className="hsheet-form-values-title">Valores del examen (opcional)</span>
+                  {examDraft.values.map((row, index) => (
+                    <div className="hsheet-form-value-row" key={`value-row-${index}`}>
+                      <input
+                        type="text"
+                        value={row.name}
+                        maxLength={80}
+                        placeholder="Ej: Glucosa"
+                        aria-label="Nombre del valor"
+                        onChange={(event) => updateExamValueRow(index, "name", event.target.value)}
+                      />
+                      <input
+                        type="text"
+                        value={row.value}
+                        maxLength={40}
+                        placeholder="Ej: 98"
+                        aria-label="Resultado"
+                        onChange={(event) => updateExamValueRow(index, "value", event.target.value)}
+                      />
+                      <input
+                        type="text"
+                        value={row.unit}
+                        maxLength={20}
+                        placeholder="mg/dL"
+                        aria-label="Unidad"
+                        onChange={(event) => updateExamValueRow(index, "unit", event.target.value)}
+                      />
+                    </div>
+                  ))}
+                  <button type="button" className="hsheet-value-add-btn" onClick={addExamValueRow}>
+                    + Agregar otro valor
+                  </button>
+                </div>
+                <label>
+                  <span>Resultado en tus palabras (opcional)</span>
+                  <input
+                    type="text"
+                    value={examDraft.summary}
+                    maxLength={360}
+                    placeholder="Ej: Colesterol un poco alto, repetir en 3 meses"
+                    onChange={(event) => setExamDraft((d) => ({ ...d, summary: event.target.value }))}
+                  />
+                </label>
+                {formError ? <p className="hsheet-form-error">{formError}</p> : null}
+                <div className="hsheet-form-actions">
+                  <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("exam")}>
+                    {formBusy ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="hsheet-link-btn" onClick={() => { setOpenForm("exam"); setFormError(""); }}>
+                + Anotar un examen a mano
+              </button>
+            )}
+          </div>
+
+          {/* ── Diagnósticos, vacunas e indicaciones: sección secundaria plegada ── */}
+          <details className="hsheet-more">
+            <summary>
+              Más de tu ficha: diagnósticos, vacunas e indicaciones
+              {moreItemsCount > 0 ? <span className="hsheet-count">{moreItemsCount}</span> : null}
+            </summary>
+            <div className="hsheet-more-body">
+              <div className="hsheet-more-block">
+                <span className="hsheet-block-title">🩺 Problemas y diagnósticos</span>
+                {diagnoses.length === 0 ? (
+                  <p className="hsheet-empty">Aún no hay diagnósticos registrados.</p>
+                ) : (
+                  diagnoses.map((item, index) => {
+                    const status = getProblemStatusInfo(item.status);
+                    const isManual = item?.source?.source_type === "health_problem" && item?.source?.source_id;
+                    const busy = problemBusyId === item?.source?.source_id;
+                    return (
+                      <div className="hsheet-row" key={`diag-${index}`}>
+                        <div className="hsheet-row-copy">
+                          <strong>{cleanUiText(item.name)}</strong>
+                          {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
+                          {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                        </div>
+                        <div className="hsheet-row-side">
+                          <span className={`hsheet-status is-${status.tone}`}>{status.label}</span>
+                          {isManual ? (
+                            <button
+                              type="button"
+                              className="hsheet-row-btn"
+                              disabled={busy}
+                              onClick={() => toggleProblemResolved(item)}
+                            >
+                              {busy
+                                ? "Guardando…"
+                                : String(item.status).toLowerCase() === "resolved"
+                                ? "Volver a activo"
+                                : "Marcar resuelto"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                {openForm === "problem" ? (
+                  <div className="hsheet-form">
+                    <label>
+                      <span>¿Qué problema o diagnóstico quieres registrar?</span>
+                      <input
+                        type="text"
+                        value={problemDraft.name}
+                        maxLength={120}
+                        placeholder="Ej: Hipertensión"
+                        onChange={(event) => setProblemDraft((d) => ({ ...d, name: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Detalle (opcional)</span>
+                      <input
+                        type="text"
+                        value={problemDraft.detail}
+                        maxLength={260}
+                        placeholder="Ej: Diagnosticada en 2024, en control"
+                        onChange={(event) => setProblemDraft((d) => ({ ...d, detail: event.target.value }))}
+                      />
+                    </label>
+                    {formError ? <p className="hsheet-form-error">{formError}</p> : null}
+                    <div className="hsheet-form-actions">
+                      <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("problem")}>
+                        {formBusy ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="hsheet-link-btn" onClick={() => { setOpenForm("problem"); setFormError(""); }}>
+                    + Agregar problema o diagnóstico
+                  </button>
+                )}
+              </div>
+
+              <div className="hsheet-more-block">
+                <span className="hsheet-block-title">💉 Vacunas</span>
+                {vaccines.length === 0 ? (
+                  <p className="hsheet-empty">Aún no hay vacunas registradas.</p>
+                ) : (
+                  vaccines.map((item, index) => (
+                    <div className="hsheet-row" key={`vac-${index}`}>
+                      <div className="hsheet-row-copy">
+                        <strong>{cleanUiText(item.name)}</strong>
+                        {fmtSheetDate(item.date) ? <p>Aplicada el {fmtSheetDate(item.date)}</p> : null}
+                        {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {openForm === "vaccine" ? (
+                  <div className="hsheet-form">
+                    <label>
+                      <span>¿Qué vacuna te pusieron?</span>
+                      <input
+                        type="text"
+                        value={vaccineDraft.vaccine_name}
+                        maxLength={120}
+                        placeholder="Ej: Influenza 2026"
+                        onChange={(event) => setVaccineDraft((d) => ({ ...d, vaccine_name: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>¿Cuándo? (opcional)</span>
+                      <input
+                        type="date"
+                        value={vaccineDraft.administered_at}
+                        onChange={(event) => setVaccineDraft((d) => ({ ...d, administered_at: event.target.value }))}
+                      />
+                    </label>
+                    <label>
+                      <span>Dosis (opcional)</span>
+                      <input
+                        type="text"
+                        value={vaccineDraft.dose_label}
+                        maxLength={80}
+                        placeholder="Ej: Primera dosis, refuerzo"
+                        onChange={(event) => setVaccineDraft((d) => ({ ...d, dose_label: event.target.value }))}
+                      />
+                    </label>
+                    {formError ? <p className="hsheet-form-error">{formError}</p> : null}
+                    <div className="hsheet-form-actions">
+                      <button type="button" className="primary-btn" disabled={formBusy} onClick={() => submitForm("vaccine")}>
+                        {formBusy ? "Guardando…" : "Guardar"}
+                      </button>
+                      <button type="button" className="secondary-btn" disabled={formBusy} onClick={closeForm}>
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" className="hsheet-link-btn" onClick={() => { setOpenForm("vaccine"); setFormError(""); }}>
+                    + Registrar vacuna
+                  </button>
+                )}
+              </div>
+
+              {indications.length > 0 ? (
+                <div className="hsheet-more-block">
+                  <span className="hsheet-block-title">📋 Indicaciones médicas</span>
+                  <p className="hsheet-hint">
+                    Si quieres que Klinip te recuerde una indicación, conviértela en pendiente.
+                  </p>
+                  {indications.map((item, index) => {
+                    const key = `${item.title}|${item?.source?.source_id || index}`;
+                    const created = actionsCreated.has(key);
+                    const busy = actionBusyKey === key;
+                    return (
+                      <div className="hsheet-row" key={`ind-${index}`}>
+                        <div className="hsheet-row-copy">
+                          <strong>{cleanUiText(item.title)}</strong>
+                          {item.detail ? <p>{cleanUiText(item.detail)}</p> : null}
+                          {sourceLabel(item.source) ? <small>{sourceLabel(item.source)}</small> : null}
+                        </div>
+                        <div className="hsheet-row-side">
+                          <button
+                            type="button"
+                            className={`hsheet-row-btn${created ? " is-done" : ""}`}
+                            disabled={busy || created}
+                            onClick={() => createActionFromIndication(item, key)}
+                          >
+                            {created ? "Pendiente creado ✓" : busy ? "Creando…" : "Recordármelo"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+          </details>
         </div>
       )}
     </section>

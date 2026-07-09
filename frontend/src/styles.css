@@ -8219,6 +8219,25 @@ body.theme-dark .security-pin-row strong {
   border-color: rgba(153, 246, 228, 0.9);
 }
 
+.docs-detail-exam-bridge.is-warning {
+  border-style: solid;
+  border-color: rgba(253, 186, 116, 0.85);
+  background: rgba(255, 247, 237, 0.7);
+}
+
+.docs-detail-exam-bridge.is-warning p {
+  color: #9a3412;
+}
+
+body.theme-dark .docs-detail-exam-bridge.is-warning {
+  border-color: rgba(251, 146, 60, 0.4);
+  background: rgba(69, 26, 3, 0.3);
+}
+
+body.theme-dark .docs-detail-exam-bridge.is-warning p {
+  color: #fdba74;
+}
+
 body.theme-dark .docs-detail-exam-bridge {
   border-color: rgba(45, 212, 191, 0.35);
   background: rgba(19, 78, 74, 0.25);
@@ -53701,6 +53720,272 @@ body.theme-dark .health-hub-quick-card.tone-green {
   font-weight: 700;
 }
 
+/* ── Ficha de Salud: resumen de indicadores y lista principal ───── */
+.hsheet-indicator-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.hsheet-indicator {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.6rem 0.4rem;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.hsheet-indicator strong {
+  font-size: 1.25rem;
+  line-height: 1.1;
+}
+
+.hsheet-indicator.is-alt {
+  border-color: rgba(253, 186, 116, 0.7);
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.hsheet-indicator.is-ok {
+  border-color: rgba(134, 239, 172, 0.8);
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.hsheet-indicator.is-muted {
+  color: #475569;
+}
+
+.hsheet-pending-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.hsheet-pending-title {
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.hsheet-indicator-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.hsheet-indicator-item {
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.6rem 0.75rem;
+}
+
+.hsheet-indicator-item summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+
+.hsheet-indicator-item[open] summary {
+  margin-bottom: 0.5rem;
+}
+
+.hsheet-indicator-name {
+  color: #0f172a;
+  font-size: 0.9rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hsheet-indicator-value {
+  color: #334155;
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hsheet-indicator-pill {
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.hsheet-indicator-pill.is-alt {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.hsheet-indicator-pill.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.hsheet-indicator-pill.is-muted {
+  background: rgba(100, 116, 139, 0.1);
+  color: #475569;
+}
+
+.hsheet-indicator-history {
+  display: grid;
+  gap: 0.32rem;
+  border-top: 1px dashed rgba(203, 213, 225, 0.9);
+  padding-top: 0.5rem;
+}
+
+.hsheet-indicator-entry {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.hsheet-indicator-entry span {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.hsheet-indicator-entry strong {
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.hsheet-indicator-entry small {
+  color: #94a3b8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hsheet-secondary-links {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.hsheet-link-btn {
+  justify-self: start;
+  padding: 0.4rem 0;
+  background: transparent;
+  border: none;
+  color: #0f766e;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.hsheet-more {
+  border-top: 1px solid rgba(226, 232, 240, 0.9);
+  padding-top: 0.7rem;
+}
+
+.hsheet-more summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  color: #475569;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.hsheet-more[open] summary {
+  margin-bottom: 0.6rem;
+}
+
+.hsheet-more-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.hsheet-more-block {
+  display: grid;
+  gap: 0.45rem;
+}
+
+body.theme-dark .hsheet-indicator {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.72);
+  color: #cbd5e1;
+}
+
+body.theme-dark .hsheet-indicator.is-alt {
+  border-color: rgba(251, 146, 60, 0.35);
+  background: rgba(69, 26, 3, 0.35);
+  color: #fdba74;
+}
+
+body.theme-dark .hsheet-indicator.is-ok {
+  border-color: rgba(52, 211, 153, 0.32);
+  background: rgba(6, 78, 59, 0.35);
+  color: #6ee7b7;
+}
+
+body.theme-dark .hsheet-pending-title,
+body.theme-dark .hsheet-indicator-name,
+body.theme-dark .hsheet-indicator-item[open] summary {
+  color: #e2e8f0;
+}
+
+body.theme-dark .hsheet-indicator-item {
+  border-color: rgba(51, 65, 85, 0.92);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+body.theme-dark .hsheet-indicator-value {
+  color: #cbd5e1;
+}
+
+body.theme-dark .hsheet-indicator-pill.is-alt {
+  background: rgba(69, 26, 3, 0.5);
+  color: #fdba74;
+}
+
+body.theme-dark .hsheet-indicator-pill.is-ok {
+  background: rgba(6, 78, 59, 0.4);
+  color: #6ee7b7;
+}
+
+body.theme-dark .hsheet-indicator-pill.is-muted {
+  background: rgba(148, 163, 184, 0.14);
+  color: #cbd5e1;
+}
+
+body.theme-dark .hsheet-indicator-history {
+  border-top-color: rgba(51, 65, 85, 0.92);
+}
+
+body.theme-dark .hsheet-indicator-entry span {
+  color: #94a3b8;
+}
+
+body.theme-dark .hsheet-indicator-entry strong {
+  color: #e2e8f0;
+}
+
+body.theme-dark .hsheet-link-btn {
+  color: #5eead4;
+}
+
+body.theme-dark .hsheet-more {
+  border-top-color: rgba(51, 65, 85, 0.92);
+}
+
+body.theme-dark .hsheet-more summary {
+  color: #94a3b8;
+}
+
 .hsheet-block-title {
   margin: 0;
   color: #0f172a;
@@ -55456,6 +55741,39 @@ body.theme-dark .clp-loading-pulse {
   }
 
   .hsheet-param-entry small {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+
+  .hsheet-indicator-row {
+    gap: 0.35rem;
+  }
+
+  .hsheet-indicator {
+    padding: 0.5rem 0.3rem;
+    font-size: 0.68rem;
+  }
+
+  .hsheet-indicator strong {
+    font-size: 1.1rem;
+  }
+
+  .hsheet-indicator-item summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.3rem;
+  }
+
+  .hsheet-indicator-value {
+    grid-column: 1 / -1;
+    font-size: 0.82rem;
+    color: #64748b;
+  }
+
+  .hsheet-indicator-entry {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .hsheet-indicator-entry small {
     grid-column: 1 / -1;
     white-space: normal;
   }

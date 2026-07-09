@@ -756,6 +756,7 @@ export default function Documents() {
     try {
       const updatedDoc = await updateDocument(detailTarget.id, { doc_type: "resultado" });
       syncDocumentState(updatedDoc);
+      await load({ silent: true });
       notifyClinicalDataChanged({
         profileId: activeProfile?.id,
         sources: ["documents", "health-sheet", "health-radar"],
@@ -1148,9 +1149,26 @@ export default function Documents() {
                     {markingAsExam ? "Confirmando…" : "Es un examen: agregar a mi Ficha de Salud"}
                   </button>
                 </div>
-              ) : detailTarget.doc_type === "resultado" ? (
+              ) : detailTarget.doc_type === "resultado" && detailIntelligence ? (
                 <div className="docs-detail-exam-bridge is-confirmed">
                   <p>Este documento ya aparece en tu Ficha de Salud, en la pestaña Exámenes.</p>
+                </div>
+              ) : detailTarget.doc_type === "resultado" ? (
+                <div className="docs-detail-exam-bridge is-warning">
+                  <p>
+                    Klinip aún no terminó de procesar este examen para tu Ficha de Salud (puede pasar si
+                    la lectura se interrumpió). Vuelve a leerlo para intentarlo de nuevo.
+                  </p>
+                  {canEditActiveProfile ? (
+                    <button
+                      type="button"
+                      className="secondary-btn"
+                      disabled={retryingOcrIds.includes(String(detailTarget.id))}
+                      onClick={() => void handleRetryDocumentOcr(detailTarget)}
+                    >
+                      {retryingOcrIds.includes(String(detailTarget.id)) ? "Reintentando…" : "Volver a leer"}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
               <ContinuityTaskResolution

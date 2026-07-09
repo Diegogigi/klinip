@@ -9073,10 +9073,16 @@ def _run_document_ocr(document_id: int):
                 return
 
         profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
+        # Intelligence (resumen + entidades, de lo que depende la Ficha de
+        # Salud) se confirma en SU PROPIA transacción, separada de la memoria
+        # conversacional: si _upsert_document_memory_chunks fallaba (ej. la API
+        # de embeddings), el rollback compartido borraba también el resumen y
+        # las entidades ya extraídas correctamente, aunque el documento
+        # mostrara "Leído por IA" — el examen quedaba guardado pero invisible
+        # en la Ficha de Salud sin ningún aviso de error.
         try:
             _upsert_document_intelligence(db, doc, vision_meta=vision_meta)
-            _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
-            db.commit()  # Persistir resumen/entidades y dejar la transacción limpia.
+            db.commit()
             db.refresh(doc)
         except Exception as exc:
             db.rollback()
@@ -9087,6 +9093,13 @@ def _run_document_ocr(document_id: int):
             if not doc:
                 return
             profile = _resolve_document_profile_for_ocr(db, doc) or _resolve_profile_for_user_learning(db, doc.user_id)
+
+        try:
+            _upsert_document_memory_chunks(db, doc, profile_id=_resolve_document_profile_id(db, doc))
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            _klog(f"KLINIP_DOCREAD: memory_chunks EXC: {type(exc).__name__}: {exc}")
 
         try:
             _enrich_document_metadata(db, doc, original_user_note, vision_meta)
