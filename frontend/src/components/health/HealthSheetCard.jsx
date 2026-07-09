@@ -51,12 +51,19 @@ function latestByDate(items, field = "date") {
   })[0] || null;
 }
 
+// Un parámetro de laboratorio real es un nombre corto ("GLUCOSA", "TIEMPO DE
+// PROTROMBINA"), no una frase clínica larga. Filtra registros defectuosos que
+// hayan quedado guardados antes de este endurecimiento.
+function isPlausibleLabParamName(name) {
+  return Boolean(name) && name.length <= 60 && name.trim().split(/\s+/).length <= 6;
+}
+
 function countLabParameters(examRecords) {
   const keys = new Set();
   ensureArray(examRecords).forEach((record) => {
     ensureArray(record?.values_json).forEach((value) => {
       const name = cleanUiText(value?.name || value?.label || "", "").trim();
-      if (name) keys.add(name.toLowerCase());
+      if (name && isPlausibleLabParamName(name)) keys.add(name.toLowerCase());
     });
   });
   return keys.size;

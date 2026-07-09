@@ -60,6 +60,20 @@ def test_table_fallback_skips_when_no_lab_header():
     assert entities == []
 
 
+def test_table_fallback_does_not_misread_clinical_notes_as_values():
+    # Regresión: aunque el texto mencione "parametro"/"resultado" de forma
+    # genérica (falso positivo de _looks_like_lab_table), una frase clínica
+    # larga con espacios anchos de OCR no debe leerse como un valor de
+    # laboratorio (ej. "Paciente refiere gonalgia..." con un numero suelto).
+    text = (
+        "Evaluacion medica: revise el parametro clinico y el resultado del reposo\n"
+        "Paciente refiere gonalgia izquierda de evolucion   1   sin trauma previo\n"
+        "REPOSO: 1 mes\n"
+    )
+    entities = main._extract_document_lab_entities(text)
+    assert entities == []
+
+
 def test_vision_examenes_convert_to_lab_entities():
     examenes = [
         {"nombre": "Glucosa", "valor": "95", "unidad": "mg/dL", "rango": "70-100", "estado": "normal"},

@@ -13544,6 +13544,19 @@ _LAB_FALLBACK_RANGES: dict[str, tuple[float, float, str]] = {
 # por tiempos (ej. PTGO: "GLUCOSA 120 MIN"). Nunca son unidades de un valor.
 _LAB_TIME_UNITS = {"min", "mins", "minuto", "minutos"}
 
+# Palabras españolas comunes que la regex de línea única puede confundir con
+# una "unidad" (ej. "...reposo por 1 mes" -> nombre="...reposo por" valor="1"
+# unidad="mes"). Sin este freno, cualquier frase con "<texto> <número>
+# <palabra corta>" se leía como un valor de laboratorio falso.
+_LAB_NOT_UNIT_WORDS = {
+    "mes", "meses", "ano", "anos", "dia", "dias", "semana", "semanas",
+    "sin", "con", "por", "las", "los", "sus", "que", "era", "fue", "hay",
+    "aun", "mas", "muy", "del", "para", "este", "esta", "estos", "estas",
+    "sobre", "entre", "desde", "hasta", "tras", "ante", "bajo", "tal",
+    "cada", "vez", "veces", "cual", "cuando", "donde", "segun", "luego",
+    "aproximadamente", "aprox", "unidad", "unidades", "reposo", "evolucion",
+}
+
 # Umbrales de valor crítico ("pánico"). Muy conservadores: solo se marca
 # flag="critical" cuando el valor está claramente en zona peligrosa.
 # (low_critico, high_critico) — None desactiva ese extremo.
@@ -13605,6 +13618,11 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
         marker = groups.get("marker") or ""
         unit = _safe_text(groups.get("unit") or "")
         rlow_raw, rhigh_raw = groups.get("rlow"), groups.get("rhigh")
+        # Una "unidad" que en realidad es una palabra española común (mes,
+        # sin, por...) no cuenta como señal real: es casi siempre una frase,
+        # no un valor de laboratorio.
+        if unit and _normalize_text(unit) in _LAB_NOT_UNIT_WORDS:
+            unit = ""
         # Guard de precisión: exigir señal real (unidad, marcador o rango impreso)
         # para no confundir direcciones, teléfonos o fechas con análisis.
         if not (unit or marker or rlow_raw):
@@ -13613,6 +13631,10 @@ def _extract_document_lab_entities(text: str) -> list[dict]:
         if _normalize_text(unit) in _LAB_TIME_UNITS:
             continue
         name = _safe_text(groups.get("name") or "")
+        # Un parámetro real es corto (1-6 palabras); una frase clínica larga
+        # ("Paciente refiere gonalgia izquierda de evolucion") no lo es.
+        if len(name) > 40 or len(name.split()) > 6:
+            continue
         value = (groups.get("value") or "").replace(",", ".")
         reference_range = ""
         flag = "unknown"
@@ -13700,13 +13722,19 @@ _LAB_TABLE_UNIT_TOKENS = {
 
 
 def _looks_like_lab_table(text: str) -> bool:
+    # Exige la palabra "parametro" (encabezado propio de tablas de laboratorio,
+    # poco común en notas clínicas) más al menos otra señal de columna, para
+    # no disparar el parseo de tabla sobre informes o licencias médicas que
+    # solo mencionan "resultado" o "unidad" de forma genérica.
     norm = _normalize_text(text)
-    header_hits = sum(
+    if "parametro" not in norm:
+        return False
+    other_hits = sum(
         1
-        for token in ("parametro", "resultado", "valor referencia", "u medida", "unidad", "resultado anterior")
+        for token in ("resultado", "valor referencia", "u medida", "unidad", "resultado anterior")
         if token in norm
     )
-    return header_hits >= 2
+    return other_hits >= 1
 
 
 def _split_table_row(line: str) -> list[str]:
@@ -13738,10 +13766,20 @@ def _extract_lab_table_entities(text: str, exclude_names: set[str] | None = None
             continue
         if not re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}", columns[0]):
             continue
-        # Buscar la primera columna numérica: es el resultado.
+        # Un parámetro de laboratorio real es un nombre corto (ej. "GLUCOSA",
+        # "TIEMPO DE PROTROMBINA"); una nota clínica ("Paciente refiere...")
+        # también puede caer en una columna ancha por espacios de OCR, así que
+        # se descarta cualquier candidato demasiado largo o con muchas palabras.
+        if len(columns[0]) > 42 or len(columns[0].split()) > 6:
+            continue
+        # Buscar la primera columna numérica AISLADA: es el resultado. Se exige
+        # que sea un token corto (no "3" suelto dentro de "3 semanas de
+        # evolución", que ya habría quedado fuera del filtro de columnas por
+        # los espacios simples, pero se revalida por seguridad).
         value_index = None
         for index in range(1, len(columns)):
-            if numeric_pattern.match(columns[index].replace(",", ".")):
+            candidate = columns[index].replace(",", ".")
+            if numeric_pattern.match(candidate) and len(columns[index]) <= 10:
                 value_index = index
                 break
         if value_index is None:
@@ -28074,12 +28112,25 @@ async def update_document(
     update_values = doc_in.dict(exclude_unset=True)
     if "filename" in update_values:
         doc.filename = _normalize_document_filename_update(doc.filename, update_values.pop("filename"))
+    type_changed = "doc_type" in update_values and update_values["doc_type"] != doc.doc_type
     for field, value in update_values.items():
         setattr(doc, field, value)
     refresh_episode_links_for_record(db, profile, "document", doc)
     _mark_profile_ai_dirty(db, profile, include_family=True)
     db.commit()
     db.refresh(doc)
+    if type_changed:
+        # Reclasificar a mano (ej. desde "otro" a "resultado") debe reintentar
+        # la extracción de entidades con el tipo correcto: la primera pasada
+        # pudo no haber generado valores de laboratorio si el documento no
+        # se detectó como examen automáticamente.
+        try:
+            _upsert_document_intelligence(db, doc)
+            db.commit()
+            db.refresh(doc)
+        except Exception as exc:
+            db.rollback()
+            print(f"WARNING update_document: no se pudo reprocesar inteligencia tras cambio de tipo: {exc}")
     return doc
 
 

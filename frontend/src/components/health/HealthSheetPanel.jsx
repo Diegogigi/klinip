@@ -74,6 +74,14 @@ function isAbnormalFlag(flag) {
 // Agrupa todos los valores estructurados de exámenes por parámetro (Glucosa,
 // Colesterol, etc.), ordenados del más reciente al más antiguo, para armar el
 // historial que se ve como tabla.
+// Un parámetro de laboratorio real es un nombre corto ("GLUCOSA", "TIEMPO DE
+// PROTROMBINA"), no una frase clínica larga. Filtra registros defectuosos que
+// hayan quedado guardados antes de este endurecimiento, para que la sección
+// no muestre notas médicas como si fueran valores de examen.
+function isPlausibleLabParamName(name) {
+  return Boolean(name) && name.length <= 60 && name.trim().split(/\s+/).length <= 6;
+}
+
 function buildLabHistory(examRecords) {
   const paramsByKey = new Map();
   ensureArray(examRecords).forEach((record) => {
@@ -81,7 +89,7 @@ function buildLabHistory(examRecords) {
     ensureArray(record?.values_json).forEach((value) => {
       const name = cleanUiText(value?.name || value?.label || "", "").trim();
       const measured = cleanUiText(String(value?.value ?? ""), "").trim();
-      if (!name || !measured) return;
+      if (!name || !measured || !isPlausibleLabParamName(name)) return;
       const key = name.toLowerCase();
       if (!paramsByKey.has(key)) {
         paramsByKey.set(key, { key, name, entries: [] });

@@ -241,6 +241,7 @@ export default function Documents() {
   const [detailRenameOpen, setDetailRenameOpen] = useState(false);
   const [detailFilenameDraft, setDetailFilenameDraft] = useState("");
   const [detailSaving, setDetailSaving] = useState(false);
+  const [markingAsExam, setMarkingAsExam] = useState(false);
   const [ocrSyncing, setOcrSyncing] = useState(false);
   const [uploadNotice, setUploadNotice] = useState("");
   const [retryingOcrIds, setRetryingOcrIds] = useState([]);
@@ -744,6 +745,32 @@ export default function Documents() {
     }
   };
 
+  // Puente manual entre Documentos y la Ficha de Salud: la clasificación
+  // automática (OCR/IA) no siempre acierta con el tipo de documento. Este
+  // botón deja que la persona confirme "esto es un examen" y el backend
+  // reintenta extraer los valores con el tipo correcto, sin tener que volver
+  // a fotografiar nada.
+  const handleMarkAsExamResult = async () => {
+    if (!detailTarget?.id || !canEditActiveProfile || markingAsExam) return;
+    setMarkingAsExam(true);
+    try {
+      const updatedDoc = await updateDocument(detailTarget.id, { doc_type: "resultado" });
+      syncDocumentState(updatedDoc);
+      notifyClinicalDataChanged({
+        profileId: activeProfile?.id,
+        sources: ["documents", "health-sheet", "health-radar"],
+      });
+      window.alert(
+        "Listo. Klinip volvió a revisar el documento como examen. Abre tu Ficha de Salud para pasar los valores al historial."
+      );
+    } catch (err) {
+      console.error("No se pudo marcar el documento como examen:", err);
+      window.alert(getErrorDetail(err, "No se pudo actualizar el documento."));
+    } finally {
+      setMarkingAsExam(false);
+    }
+  };
+
   const viewerFilename = useMemo(
     () => (viewerTarget ? getDocumentFilename(viewerTarget) : ""),
     [viewerTarget]
@@ -1106,6 +1133,26 @@ export default function Documents() {
                   {getOcrStatusLabel(detailTarget.ocr_status)}
                 </span>
               </div>
+              {canEditActiveProfile && detailTarget.doc_type !== "resultado" ? (
+                <div className="docs-detail-exam-bridge">
+                  <p>
+                    ¿Este documento es un examen (sangre, orina, imagenología)? Si Klinip no lo detectó
+                    solo, puedes confirmarlo para que aparezca en tu Ficha de Salud.
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    disabled={markingAsExam}
+                    onClick={handleMarkAsExamResult}
+                  >
+                    {markingAsExam ? "Confirmando…" : "Es un examen: agregar a mi Ficha de Salud"}
+                  </button>
+                </div>
+              ) : detailTarget.doc_type === "resultado" ? (
+                <div className="docs-detail-exam-bridge is-confirmed">
+                  <p>Este documento ya aparece en tu Ficha de Salud, en la pestaña Exámenes.</p>
+                </div>
+              ) : null}
               <ContinuityTaskResolution
                 profileId={activeProfile?.id}
                 taskId={continuityTaskContext?.taskId}
