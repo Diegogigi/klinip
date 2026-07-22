@@ -1,0 +1,14 @@
+title = "Klinip secret scanning configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Explicitly fictitious database values used by logging security tests"
+condition = "AND"
+paths = ['''backend/tests/test_database_logging\.py''']
+stopwords = [
+  '''db_user_sensitive''',
+  '''db_password_sensitive''',
+  '''token_query_sensitive''',
+]

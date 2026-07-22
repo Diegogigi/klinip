@@ -179,3 +179,12 @@ Device Identity no fue iniciada.
 ## Próximo paso autorizado
 
 `v0.7.1 Railway Verification and Repository Protection`.
+
+## Seguimiento v0.7.1
+
+El resultado de la preparación local de CI y del intento de verificación
+Railway está documentado en
+[`klinip_one_v0.7.1_railway_ci.md`](klinip_one_v0.7.1_railway_ci.md).
+
+Railway quedó no verificable porque la CLI no estaba autenticada. No se
+consultaron ni modificaron servicios, variables, despliegues o logs.
