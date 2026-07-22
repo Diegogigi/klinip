@@ -240,3 +240,28 @@ crea el servicio worker en Railway.
 El deployment rojo visible permanece clasificado como historico no bloqueante.
 No se realizo redeploy. La creacion y validacion remota del worker sigue siendo
 una accion operativa pendiente de autorizacion explicita.
+
+## Activacion remota posterior
+
+El PR #1 fue convertido a listo y fusionado mediante merge commit
+`a9b7635228e6569f0434e8a52c026c5ce1324a1c`, con los cuatro checks requeridos
+en verde. `main` quedo protegida y la rama local se sincronizo sin push directo.
+
+El soporte de deteccion Python para Railpack se incorporo posteriormente por
+el PR #15. Su merge commit
+`e390a802029912254a67326b94ff44ed59dd7afd` activo el autodeploy web
+`a334ab4c-e211-43f4-8b0d-23f6c83e43df`, que termino en `SUCCESS`. El dominio
+publico respondio HTTP 200 en `/health` y el log de startup confirmo que el
+scheduler embebido del web estaba desactivado.
+
+Se creo `klinip-worker` con una replica, `ON_FAILURE` y sin dominio publico. El
+deployment llego a iniciar y completo cuatro ciclos, pero se detuvo mediante
+rollback preventivo al repetirse un `StatementError` interno en
+`refresh_profile_ai`. El detalle operativo y el mecanismo contra duplicacion
+estan registrados en
+[`klinip_one_v0.7.1c_worker_foundation.md`](./klinip_one_v0.7.1c_worker_foundation.md).
+
+No se modifico PostgreSQL, no se rotaron credenciales, no se ejecutaron jobs
+manualmente y no se inicio Device Identity. El worker no se considera activo
+ni v0.7.1c cerrada hasta resolver el error recurrente en una iteracion
+autorizada.
