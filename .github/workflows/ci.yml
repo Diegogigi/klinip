@@ -25,6 +25,7 @@ jobs:
       CI: "true"
       DATABASE_URL: "sqlite:///:memory:"
       ENABLE_EMBEDDED_SCHEDULER: "false"
+      SECRET_KEY: "ci-only-test-key-not-for-production"
     steps:
       - name: Checkout repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
