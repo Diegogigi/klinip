@@ -162,3 +162,49 @@ Klinip One.
 
 Device Identity y Pairing no fueron iniciados. v0.7.2 permanece fuera de esta
 iteracion hasta cerrar toda la validacion remota de v0.7.1d.
+
+## 17. Validacion remota final
+
+La correccion entro a `main` mediante el PR protegido #18:
+
+- commit de implementacion: `11c79274c53986b39e197b5b67ef3b601d1bcea5`;
+- merge commit de implementacion:
+  `e9df53bb225625f8910d7d96a016930a08240b3d`;
+- CI run: `29915078962`;
+- Backend tests, Frontend build, Migrations check y Secret scan: `success`.
+
+El autodeploy web `541acee8-40ed-4b39-95c1-291eba2e20a4` termino en
+`SUCCESS` sobre el merge. `https://www.klinip.cl/health` respondio HTTP 200 y
+los logs confirmaron `embedded scheduler disabled for web process`.
+
+Luego se recreo `klinip-worker`:
+
+- deployment: `ea9bcdc3-ca15-43a6-a833-8cd4a9354285`;
+- fuente: `Diegogigi/klinip`, rama `main`;
+- una replica y politica `ON_FAILURE`;
+- sin dominio publico, volumen ni cron;
+- scheduler embebido desactivado;
+- PostgreSQL referenciado sin modificarlo;
+- sin ejecuciones manuales de jobs.
+
+Se observaron ocho ciclos completos y 48 ejecuciones de job. En el primer
+ciclo `refresh_profile_ai` proceso el perfil pendiente con `queued=1`,
+`refreshed=1`, `errors=0` y `rollback_count=0`. Los siete ciclos siguientes
+registraron `queued=0`, confirmando que el perfil no entro nuevamente al loop.
+`refresh_family_ai` proceso su pendiente inicial y permanecio estable.
+
+Resultado agregado de la ventana:
+
+- cero `StatementError`, `job_failed` y rollbacks no nulos;
+- cero timeouts, skips por lock y presupuesto agotado;
+- cero correos y push enviados;
+- cero reinicios o duplicaciones observadas;
+- un solo arranque del contenedor y del worker;
+- web saludable durante y despues de la observacion;
+- no fue necesario ejecutar rollback operativo.
+
+## 18. Estado de cierre
+
+v0.7.1d queda tecnicamente cerrada. El job no fue desactivado, el worker queda
+activo y estable, PostgreSQL no fue modificado, Klinip One no fue modificado y
+Device Identity no fue iniciada.
