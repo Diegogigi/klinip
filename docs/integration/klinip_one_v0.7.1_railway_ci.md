@@ -229,3 +229,14 @@ autenticado. No se habilito auto-merge.
 - No se modifico Klinip One.
 
 La etapa v0.7.2 permanece pendiente de autorizacion explicita.
+
+## Extension v0.7.1c
+
+La base local del worker de produccion se documenta en
+[`klinip_one_v0.7.1c_worker_foundation.md`](./klinip_one_v0.7.1c_worker_foundation.md).
+Esa extension prepara locks, ciclo, senales, observabilidad y pruebas, pero no
+crea el servicio worker en Railway.
+
+El deployment rojo visible permanece clasificado como historico no bloqueante.
+No se realizo redeploy. La creacion y validacion remota del worker sigue siendo
+una accion operativa pendiente de autorizacion explicita.
