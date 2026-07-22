@@ -1,289 +1,231 @@
-# Klinip One v0.7.1 Railway and CI Foundation
+# Klinip Cloud Integration v0.7.1 - Railway and CI Foundation
 
-Fecha: 2026-07-22
+Fecha de cierre remoto: 2026-07-22
+
+Repositorio auditado: `Diegogigi/klinip`
 
 Rama: `chore/v0.7.1-railway-ci-foundation`
 
-Base: `e8a74b3eca8969898015a2768c95e1a1ab54e767`
+Base funcional: `e8a74b3eca8969898015a2768c95e1a1ab54e767`
 
 ## Objetivo
 
-Verificar Railway en modo lectura cuando el acceso lo permita y preparar una
-base local de CI, mantenimiento y protección del repositorio antes de iniciar
-Device Identity.
+Cerrar la verificacion remota de Railway y activar las salvaguardas de CI y
+proteccion de `main` antes de iniciar Device Identity.
 
-## Alcance
+La inspeccion de Railway fue exclusivamente de lectura. No se realizaron
+deploys, reinicios, cambios de variables, migraciones, escrituras en base de
+datos ni modificaciones de dominio.
 
-- Descubrimiento seguro del acceso Railway.
-- Health check público no destructivo.
-- Revisión local de Nixpacks, worker y scheduler.
-- GitHub Actions para backend, frontend, migraciones y secretos.
-- Dependabot semanal para npm, pip y GitHub Actions.
-- CODEOWNERS con el mantenedor confirmado.
-- Guía de protección de `main` y relación con autodeploy.
+## Railway
 
-No se modificaron Railway, producción, DNS, Cloudflare, base de datos, UI,
-modelos, endpoints, migraciones ni Klinip One. Device Identity no fue iniciada.
+### Cuenta y proyecto
 
-## Estado inicial
+- Railway CLI: `4.8.0`.
+- Workspace: `diegogigi's Projects`.
+- Proyecto: `klinip`.
+- Environment: `production`.
+- Servicios: `klinip` y `Postgres`.
+- No existe un servicio worker separado.
 
-- Rama inicial: `fix/v0.7.0-security-test-preflight`.
-- HEAD: `e8a74b3eca8969898015a2768c95e1a1ab54e767`.
-- Sin cambios versionados pendientes.
-- Siete elementos no rastreados preexistentes, excluidos de esta iteración.
+La vinculacion del CLI se creo fuera del repositorio, en un directorio
+temporal de auditoria. No se agrego configuracion Railway al worktree.
+
+### Servicio web
+
+- Servicio: `klinip`.
+- Repositorio fuente: `Diegogigi/klinip`.
+- Rama reportada por el ultimo deployment: `main`.
+- Ultimo commit reportado: `b8780efa8630931af16e4e7dcc601f9398920bae`.
+- Estado del ultimo deployment: `FAILED` y detenido.
+- Builder: Nixpacks, build environment V3, runtime V2.
+- Build command remoto: sin override.
+- Start command remoto: sin override.
+- Root directory: sin override.
+- Health check path remoto: sin configurar.
+- Region efectiva: `us-east4-eqdc4a`.
+- Replicas: 1.
+- Railway domain: `klinip-production.up.railway.app`, puerto 8080.
+- Custom domain: `www.klinip.cl`, puerto 8080.
+- Volumen: `klinip-volume`, montado en `/uploads/voice`.
+
+El ultimo deployment visible esta fallido, pero ambos endpoints publicos
+respondieron HTTP 200 en `/health`. Esto indica que Railway continua sirviendo
+un deployment anterior saludable. El CLI 4.8.0 no expuso el commit de ese
+deployment activo anterior, por lo que no se afirma que el proceso actualmente
+servido corresponda exactamente a `b8780efa`.
+
+### PostgreSQL
+
+- Servicio: `Postgres`.
+- Imagen: `ghcr.io/railwayapp-templates/postgres-ssl:17`.
+- Estado del ultimo deployment: `SUCCESS`.
+- Region efectiva: `us-east4-eqdc4a`.
+- Replicas: 1.
+- Volumen: `postgres-volume`, montado en `/var/lib/postgresql/data`.
+
+No se abrio una consola SQL, no se leyeron datos y no se ejecutaron
+migraciones en produccion.
+
+### Variables
+
+Se verificaron solamente nombres. Entre los nombres presentes estan:
+
+- aplicacion y red: `ALLOWED_ORIGINS`, `APP_DISPLAY_NAME`,
+  `FRONTEND_BASE_URL`, `VOICE_UPLOAD_DIR`;
+- base de datos y seguridad: `DATABASE_URL`, `SECRET_KEY`;
+- IA: `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MAX_OUTPUT_TOKENS`,
+  `OPENAI_TEMPERATURE`;
+- correo: `EMAIL_PROVIDER`, `EMAIL_API_TIMEOUT`, `EMAIL_FROM`,
+  `EMAIL_LOGO_URL`, `EMAIL_TO_PRIVACY`, `EMAIL_TO_SUPPORT`,
+  `MAIL_FROM_NOTIFICATIONS`, `MAIL_FROM_SECURITY`, `RESEND_API_KEY`;
+- push: `VAPID_EMAIL`, `VAPID_PRIVATE_KEY`, `VAPID_PUBLIC_KEY`,
+  `VITE_VAPID_PUBLIC_KEY`;
+- scheduler: `ENABLE_EMBEDDED_SCHEDULER`;
+- variables internas inyectadas por Railway.
+
+No se imprimio ni documento ningun valor.
+
+## Worker y scheduler
+
+Clasificacion: **D. Ninguno activo, con riesgo de ausencia de jobs**.
+
+Evidencia:
+
+- Railway solo contiene los servicios `klinip` y `Postgres`;
+- no existe worker separado;
+- `nixpacks.toml` fuerza `ENABLE_EMBEDDED_SCHEDULER=false` en migraciones y en
+  el proceso web;
+- no se ejecutaron jobs para comprobar efectos laterales.
+
+Mientras esta configuracion se mantenga, recordatorios, correos, push y otras
+tareas programadas pueden no ejecutarse. La solucion corresponde a una etapa
+posterior controlada; no se modifico Railway en este cierre.
+
+## Rama, commit y autodeploy
+
 - `origin/main`: `b8780efa8630931af16e4e7dcc601f9398920bae`.
-- El commit v0.7.0 continúa únicamente local; no fue desplegado.
+- Preflight v0.7.0: `e8a74b3eca8969898015a2768c95e1a1ab54e767`.
+- Commit inicial v0.7.1: `577e281c559b32086a1a35343c2f20c2adc49424`.
+- Railway reporta repositorio `Diegogigi/klinip` y rama `main`.
+- Los pushes a `chore/v0.7.1-railway-ci-foundation` no cambiaron el deployment
+  reportado por Railway.
 
-## Acceso Railway
+La evidencia confirma que la rama feature no despliega produccion. La fuente
+esta conectada a `main` y es compatible con el flujo esperado de autodeploy,
+pero el CLI no expone directamente el interruptor de autodeploy. No se cambio
+esa configuracion.
 
-Railway CLI `4.8.0` está instalada. `railway whoami` respondió `Unauthorized`.
-No se inició login, no se solicitó token y no se leyó configuración remota.
+## Health
 
-Clasificación: **Railway no verificable por falta de autenticación**.
+Comprobaciones de lectura:
 
-## Proyecto y environment
+- `GET https://klinip-production.up.railway.app/health`: HTTP 200.
+- `GET https://www.klinip.cl/health`: HTTP 200.
 
-No verificables. La documentación local usa el término `backend`, pero no es
-evidencia suficiente del nombre real del proyecto, workspace, environment o
-servicio en Railway.
+El servicio esta alcanzable pese al ultimo intento de deployment fallido. No
+se probaron endpoints privados ni se realizaron pruebas de carga.
 
-No se pudieron confirmar:
+## Logs historicos
 
-- workspace y proyecto;
-- environment de producción;
-- servicios y regiones;
-- réplicas;
-- PostgreSQL o storage adicional;
-- variables remotas por nombre;
-- repositorio y rama conectados;
-- política de autodeploy;
-- último deployment y su estado.
+Clasificacion: **D. No verificable por retencion o acceso historico del CLI**.
 
-## Rama y commit desplegados
+Se busco solamente la estructura del antiguo mensaje
+`DEBUG: DATABASE_URL configurada con SSL:` en el unico deployment identificable
+por Railway CLI. Ese deployment no conserva logs de ejecucion y devolvio cero
+lineas. No se copiaron logs ni se mostraron URL, usuario, password, host,
+parametros o tokens.
 
-No verificables. El health público no expone metadatos de commit y no se asumió
-que Railway despliega `main`.
+El commit de produccion identificado contiene la implementacion antigua que
+generaba ese mensaje. Aunque no fue posible demostrar su presencia en logs
+retenidos, se recomienda una rotacion manual precautoria de las credenciales
+PostgreSQL antes de ampliar el alcance de integraciones. No se realizo rotacion
+automatica.
 
-Comparación Git conocida:
+## GitHub CI
 
-- `origin/main` y `main`: `b8780efa...`;
-- preflight v0.7.0 local: `e8a74b3...`;
-- rama v0.7.1: derivada de `e8a74b3...`.
+Rama publicada:
 
-La producción puede coincidir con `origin/main`, estar atrasada o desplegar
-otra rama. Se requiere evidencia remota para clasificarla.
+`chore/v0.7.1-railway-ci-foundation`
 
-## Configuración local de despliegue
+Pull request:
 
-`nixpacks.toml` define:
+[PR #1 - chore: add CI safeguards and Railway deployment documentation](https://github.com/Diegogigi/klinip/pull/1)
 
-- Node 18 y Python 3.11;
-- instalación npm y pip;
-- build Vite dentro de `backend/static`;
-- `alembic upgrade head` antes de iniciar;
-- Uvicorn en `$PORT`;
-- `ENABLE_EMBEDDED_SCHEDULER=false` forzado en el proceso web.
+El PR permanece abierto como borrador y no fue fusionado.
 
-Esto describe el build esperado por el repositorio, no confirma los overrides
-configurados en Railway.
+### Ajustes exclusivos del runner
 
-## Worker y jobs
+La primera publicacion revelo tres diferencias del entorno limpio de GitHub:
 
-Estado remoto: **no verificable**.
+1. Los valores `sqlite:///:memory:` requerian comillas para ser YAML valido.
+2. `pytest` no forma parte de las dependencias runtime y debia instalarse en el
+   job backend.
+3. El backend exige `SECRET_KEY`; CI usa una clave estatica explicitamente
+   aislada para pruebas, sin reutilizar credenciales de Railway.
 
-El repositorio contiene `python -m app.worker` como proceso posible. La
-documentación local recomienda un worker separado, pero no prueba que exista.
-Como Nixpacks desactiva el scheduler embebido en web, hay dos riesgos:
+Commits de correccion:
 
-- sin servicio worker, los jobs programados no se ejecutarían;
-- si Railway sobrescribe el start command y habilita ambos, podrían duplicarse.
+- `21b39d7` - `fix: align CI environment with local validation`.
+- `5605457` - `fix: install pytest in CI backend job`.
+- `0c51d1b` - `fix: provide isolated test secret in CI`.
 
-La configuración real debe comprobarse sin disparar jobs. La ausencia de una
-cola durable sigue siendo un riesgo de disponibilidad y deduplicación.
+### Ejecucion verde
 
-## Health check
+Workflow run 4:
 
-Solicitud realizada: `GET https://www.klinip.cl/health`.
+https://github.com/Diegogigi/klinip/actions/runs/29897345165
 
-- HTTP: `200`;
-- latencia aproximada: `0,55 s`;
-- respuesta general: estado `ok`;
-- timestamp reportado: `2026-07-22T05:58:58.685568Z`.
+- `Backend tests`: success, 282 passed, 39 warnings, 33 s de job.
+- `Frontend build`: success, 158 modulos, 18 s de job.
+- `Migrations check`: success, un unico head, 17 s de job.
+- `Secret scan`: success, 12 s de job.
 
-`app.klinip.cl` no resolvió DNS desde el entorno de validación. No se realizaron
-login, endpoints privados, escrituras ni pruebas de carga.
+No se desactivaron pruebas, no se suavizo Gitleaks y no se agregaron secretos.
 
-## Revisión segura de logs
+## Proteccion de main
 
-No se pudo acceder a logs Railway porque la CLI no está autenticada. No se
-descargaron ni copiaron logs.
+La proteccion de `main` fue aplicada despues de crear los cuatro checks:
 
-Clasificación: **D. No verificable por acceso**.
+- pull request obligatorio;
+- cero aprobaciones obligatorias para el mantenedor individual;
+- conversaciones resueltas;
+- rama actualizada antes de merge (`strict: true`);
+- checks requeridos: `Backend tests`, `Frontend build`, `Migrations check` y
+  `Secret scan`;
+- force pushes bloqueados;
+- eliminaciones bloqueadas;
+- reglas no forzadas sobre administradores para conservar recuperacion.
 
-La revisión externa pendiente debe buscar solo la presencia estructural del
-antiguo mensaje de configuración de DB y registrar servicio, rango temporal y
-cantidad aproximada, sin copiar su contenido.
+El mecanismo de recuperacion es la cuenta administrativa `Diegogigi`, que
+puede corregir la regla desde Repository Settings o mediante GitHub CLI
+autenticado. No se habilito auto-merge.
 
-## Decisión sobre rotación
+## Validacion local
 
-No existe evidencia nueva para afirmar exposición ni para ordenar una rotación
-automática. La decisión queda pendiente de la revisión segura de logs:
-
-- si el mensaje no aparece: registrar resultado y conservar monitoreo;
-- si aparece sin material sensible visible: evaluar alcance y retención;
-- si hay indicios de material sensible: detener la revisión y rotar
-  manualmente credenciales de PostgreSQL, revisando sesiones y accesos.
-
-## CI preparado localmente
-
-`.github/workflows/ci.yml` se activa en pull requests y pushes a `main`, además
-de `workflow_dispatch`. Tiene permisos globales `contents: read`, concurrencia
-cancelable, timeouts y no contiene pasos de deploy.
-
-### Backend tests
-
-- Ubuntu, Python 3.11 y cache pip.
-- Dependencias desde `backend/requirements.txt`.
-- SQLite en memoria.
-- Scheduler desactivado.
-- Suite completa sin correos, push, OpenAI ni DB de producción.
-
-### Frontend build
-
-- Ubuntu, Node 18 y cache npm.
-- `npm ci` en `frontend`.
-- Vite escribe en `${{ runner.temp }}`.
-- No publica artefactos ni despliega.
-
-### Migrations check
-
-- Instala dependencias backend con Python 3.11.
-- Inspecciona `alembic heads` y exige exactamente un head.
-- Lista el historial de migraciones.
-- No ejecuta `upgrade` ni conecta a producción.
-
-### Secret scan
-
-- Checkout con historial completo.
-- Gitleaks Action v2.3.9 fijada por SHA.
-- Usa solo el token efímero de GitHub con permiso de lectura.
-- `.gitleaks.toml` extiende reglas por defecto.
-- La única allowlist exige simultáneamente la ruta de la prueba de logging y
-  uno de sus tres marcadores explícitamente ficticios.
-
-Las actions de checkout, setup-python y setup-node también están fijadas por
-SHA y documentan su versión legible.
-
-## Estado real del CI
-
-La configuración está preparada y validada localmente, pero **GitHub Actions
-no la ha ejecutado** porque esta rama no fue publicada. Los cuatro checks no
-existirán como status checks seleccionables hasta autorizar el push y completar
-al menos una ejecución en GitHub.
-
-## Dependabot
-
-`.github/dependabot.yml` programa actualizaciones semanales para:
-
-- npm en `/frontend`;
-- pip en `/backend`;
-- GitHub Actions en `/`.
-
-Los PR abiertos están limitados y no existe auto-merge.
-
-## CODEOWNERS
-
-El usuario público `Diegogigi` fue confirmado mediante la API pública de
-GitHub. `.github/CODEOWNERS` asigna el repositorio a `@Diegogigi` sin inventar
-equipos ni otros usuarios.
-
-CODEOWNERS tendrá efecto remoto únicamente después del push.
-
-## Protección recomendada para main
-
-No se aplicó protección remota.
-
-### Configuración ideal
-
-- exigir pull request;
-- al menos una aprobación;
-- descartar aprobaciones obsoletas;
-- resolver conversaciones;
-- exigir rama actualizada;
-- exigir `Backend tests`, `Frontend build`, `Migrations check` y `Secret scan`;
-- bloquear force pushes y eliminaciones;
-- restringir pushes directos;
-- incluir administradores.
-
-### Configuración práctica para un mantenedor
-
-- exigir pull request con cero aprobaciones obligatorias;
-- exigir resolución de conversaciones y los cuatro checks;
-- exigir rama actualizada;
-- bloquear force pushes y eliminaciones;
-- conservar un mecanismo administrativo documentado de recuperación.
-
-Exigir una aprobación con un único mantenedor impediría que el autor aprobara
-su propio PR. Debe habilitarse cuando exista un segundo revisor real.
-
-### Orden de aplicación remota
-
-1. Autorizar push de la rama.
-2. Abrir PR hacia `main`.
-3. Verificar una ejecución completa y verde del workflow.
-4. Confirmar los nombres exactos de los cuatro status checks.
-5. Crear la regla de protección/ruleset en GitHub.
-6. Probar el flujo con un PR pequeño antes de restringir administradores.
-
-## Interacción con Railway autodeploy
-
-Estado actual: no verificable.
-
-Flujo objetivo:
-
-```text
-feature branch -> pull request -> CI verde -> merge a main -> Railway despliega main
-```
-
-Railway debe observar solo `main` para producción. La protección de GitHub
-controla qué llega a `main`, pero no reemplaza la verificación de branch filter,
-autodeploy, root directory y start command dentro de Railway.
-
-## Validación local
-
-- Backend: 282/282 aprobadas; 38 warnings preexistentes; 12,93 s.
-- Frontend: build aprobado; 158 módulos; 3,40 s.
-- Alembic: un único head `20260704_000001`.
-- TOML de Gitleaks: parseable con Python 3.11.
-- Actions fijadas: SHAs comprobadas contra tags remotos.
-- `actionlint`: no disponible y no se instaló.
-- GitHub Actions: no ejecutado por ausencia de push.
-
-## Riesgos y limitaciones
-
-- Railway, logs, worker, branch y commit desplegados siguen sin verificar.
-- La rama v0.7.0 tampoco está en producción.
-- CI no tiene evidencia de ejecución en runners GitHub.
-- Los status checks todavía no pueden exigirse.
-- La protección de `main` sigue ausente hasta una acción remota autorizada.
-- Dependencias Python no están completamente fijadas.
-- No existe cola durable para jobs.
-
-## Acciones externas pendientes
-
-1. Autorizar login Railway en una sesión controlada y repetir la inspección.
-2. Verificar proyecto, environment, servicios, branch, commit y autodeploy.
-3. Confirmar worker separado y scheduler web desactivado.
-4. Revisar logs históricos con el procedimiento de minimización.
-5. Decidir rotación manual según evidencia.
-6. Autorizar push de esta rama.
-7. Ejecutar CI en GitHub y resolver cualquier diferencia del runner Linux.
-8. Aplicar protección de `main` mediante una autorización explícita posterior.
-
-## Siguiente etapa
-
-La preparación local de v0.7.1 puede cerrarse sin push. Las acciones Railway y
-GitHub remotas permanecen pendientes y no deben describirse como aplicadas.
-
-Siguiente etapa del plan: `v0.7.2 Device Identity and Pairing Foundation`, solo
-después de aceptar explícitamente los pendientes remotos o resolverlos.
+- `actionlint`: workflow valido.
+- Backend: 282/282 aprobadas, 38 warnings preexistentes.
+- Frontend: build aprobado, 158 modulos.
+- `git diff --check`: aprobado antes de los commits de CI.
+- Siete elementos no rastreados preexistentes permanecen fuera del alcance.
+
+## Limites y acciones pendientes
+
+- El commit exacto del deployment saludable actualmente servido no es visible
+  porque el ultimo intento esta fallido y detenido.
+- Los logs historicos inseguros no son recuperables mediante el CLI usado.
+- Se recomienda rotacion manual precautoria de PostgreSQL.
+- Falta definir y desplegar de forma controlada un worker separado si los jobs
+  programados deben estar activos.
+- El PR #1 debe revisarse; este cierre no autoriza su merge.
+
+## Confirmaciones de alcance
+
+- Railway no fue modificado.
+- No hubo deploy manual.
+- No hubo merge.
+- No se modifico `main` directamente.
+- No se inicio Device Identity ni pairing.
+- No se modifico Klinip One.
+
+La etapa v0.7.2 permanece pendiente de autorizacion explicita.
