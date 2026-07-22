@@ -18,7 +18,7 @@ pdf2image
 pdfplumber
 jinja2
 openai>=1.40.0
-pyotp>=2.9.0
+pyotp>=2.10.0
 qrcode[pil]>=7.4.2
 cryptography>=42.0.0
 imageio-ffmpeg>=0.5.1
