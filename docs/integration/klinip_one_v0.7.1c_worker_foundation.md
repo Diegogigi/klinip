@@ -257,3 +257,80 @@ Rollback futuro:
 
 Proximo paso: revisar este resultado y solicitar autorizacion separada para
 crear y validar el servicio worker en Railway.
+
+## 22. Activacion remota y rollback preventivo
+
+La activacion remota se ejecuto el 2026-07-22 despues de fusionar el PR #1
+mediante merge commit. El merge fue `a9b7635228e6569f0434e8a52c026c5ce1324a1c`.
+La preparacion adicional de Railpack se integro mediante el PR #15 y dejo
+`main` en `e390a802029912254a67326b94ff44ed59dd7afd`.
+
+El autodeploy web `a334ab4c-e211-43f4-8b0d-23f6c83e43df` termino en `SUCCESS`
+desde ese commit. `GET https://www.klinip.cl/health` respondio HTTP 200. Los
+logs del proceso web registraron explicitamente
+`embedded scheduler disabled for web process`.
+
+Se creo `klinip-worker` con estas restricciones:
+
+- fuente `Diegogigi/klinip`, rama `main`;
+- una replica;
+- politica de reinicio `ON_FAILURE`;
+- sin dominio publico, cron ni volumen;
+- PostgreSQL compartido solo mediante referencia de `DATABASE_URL`;
+- scheduler embebido desactivado.
+
+Railpack requirio detectar Python desde la raiz. El PR #15 agrego un
+`requirements.txt` raiz que referencia `backend/requirements.txt`. La
+configuracion operativa comprobada fue:
+
+- `RAILPACK_PYTHON_VERSION=3.11`;
+- `RAILPACK_INSTALL_CMD=python -m venv /app/.venv && /app/.venv/bin/pip install -r backend/requirements.txt`;
+- `RAILPACK_START_CMD=cd backend && ENABLE_EMBEDDED_SCHEDULER=false /app/.venv/bin/python -m app.worker`.
+
+El registro de jobs importa `app.main`; por ello el worker tambien necesito
+una referencia a `ALLOWED_ORIGINS`. No se copio su valor ni se modifico el
+servicio web.
+
+El deployment `391fd152-88ee-4de0-bc70-d7d2e65599a6` inicio correctamente y
+registro los seis jobs. Se observaron cuatro ciclos normales, 24 ejecuciones
+de job, cero `job_failed`, cero timeouts, cero skips por lock y cero envios de
+email o push. Los ciclos tardaron entre 1.5 y 2.5 segundos, sin reinicios ni
+solapamientos observados.
+
+La validacion no fue aprobada: `refresh_profile_ai` registro un
+`StatementError` interno y `rollback_count=1` en tres ciclos consecutivos para
+un perfil pendiente. El handler aislo el fallo y permitio terminar cada ciclo,
+pero la repeticion incumple el criterio de operacion sin errores recurrentes.
+No se inspecciono ni modifico el registro afectado.
+
+Se aplico el rollback autorizado con `railway down` exclusivamente sobre
+`klinip-worker`. El servicio permanece creado, con una replica configurada y
+sin dominio, pero no tiene un deployment activo. El web continuo saludable con
+HTTP 200. No se ejecutaron jobs manualmente, no se crearon datos de prueba y no
+se modifico PostgreSQL.
+
+## 23. Estado de duplicacion
+
+Los seis jobs eran capaces de duplicarse antes del hardening. El mecanismo
+implementado combina:
+
+- un advisory lock PostgreSQL no bloqueante y determinista por job;
+- una conexion dedicada mientras el lock esta retenido;
+- liberacion en `finally` e invalidacion ante fallo de unlock;
+- un guard local que impide ciclos superpuestos en una replica;
+- jobs de notificacion sin retry automatico tras fallo parcial;
+- una sola replica y scheduler web desactivado.
+
+No se observaron ejecuciones simultaneas ni efectos externos duplicados durante
+los cuatro ciclos. Esta observacion no equivale a una garantia exactly-once:
+permanece la ventana aceptada entre un envio externo y la persistencia del
+resultado. La solucion futura sigue siendo outbox transaccional o idempotencia
+del proveedor.
+
+## 24. Estado de cierre
+
+La base remota quedo preparada, pero v0.7.1c no se declara cerrada porque el
+worker fue detenido tras el error recurrente. Antes de reactivarlo se debe
+diagnosticar `refresh_profile_ai` con un cambio separado y autorizado, sin
+editar datos productivos como atajo. Device Identity y pairing permanecen sin
+iniciar.
