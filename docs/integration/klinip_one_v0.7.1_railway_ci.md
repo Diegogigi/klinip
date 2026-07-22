@@ -261,7 +261,12 @@ rollback preventivo al repetirse un `StatementError` interno en
 estan registrados en
 [`klinip_one_v0.7.1c_worker_foundation.md`](./klinip_one_v0.7.1c_worker_foundation.md).
 
+Un merge documental posterior intento disparar otro autodeploy porque el
+servicio detenido seguia conectado a `main`. Se elimino exclusivamente
+`klinip-worker` para impedir su reactivacion. Railway volvio al inventario
+`klinip` y `Postgres`.
+
 No se modifico PostgreSQL, no se rotaron credenciales, no se ejecutaron jobs
-manualmente y no se inicio Device Identity. El worker no se considera activo
+manualmente y no se inicio Device Identity. El worker no existe ni se considera activo
 ni v0.7.1c cerrada hasta resolver el error recurrente en una iteracion
 autorizada.
