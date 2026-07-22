@@ -344,6 +344,8 @@ La primera activacion remota encontro un `StatementError` repetido en
 se documentan en
 [`klinip_one_v0.7.1d_refresh_profile_ai.md`](klinip_one_v0.7.1d_refresh_profile_ai.md).
 
-El job no fue desactivado. El worker remoto permanece eliminado hasta que la
-correccion complete PR protegido, deploy web y una nueva observacion de cuatro
-a seis ciclos.
+El job no fue desactivado. El worker remoto permanecio eliminado hasta que la
+correccion completo el PR protegido #18 y el deploy web. Luego se recreo con
+una replica y supero ocho ciclos completos sin `StatementError`, rollbacks,
+timeouts, duplicaciones ni reinicios. La evidencia final esta en el documento
+v0.7.1d enlazado arriba.
