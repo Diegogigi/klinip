@@ -1,49 +1,55 @@
+import logging
 import os
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+from sqlalchemy.engine import URL, make_url
+from sqlalchemy.orm import declarative_base, sessionmaker
+
 from .env_loader import load_project_env
 
 load_project_env()
 
-DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///./mirutasalud.db"
+logger = logging.getLogger(__name__)
+_DEFAULT_DATABASE_URL = "sqlite:///./mirutasalud.db"
 
-# Railway usa postgres:// pero SQLAlchemy requiere postgresql://
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+def _prepare_database_url(raw_url: str | None) -> tuple[str, URL]:
+    value = (raw_url or "").strip() or _DEFAULT_DATABASE_URL
+    if value.startswith("postgres://"):
+        value = value.replace("postgres://", "postgresql://", 1)
+    try:
+        parsed = make_url(value)
+        backend = parsed.get_backend_name()
+    except Exception:
+        raise RuntimeError("Invalid DATABASE_URL configuration") from None
+    if backend not in {"postgresql", "sqlite"}:
+        raise RuntimeError("Unsupported DATABASE_URL configuration")
+    if backend == "postgresql" and "sslmode" not in parsed.query:
+        parsed = parsed.update_query_dict({"sslmode": "require"})
+    return parsed.render_as_string(hide_password=False), parsed
+
+
+def _database_log_summary(parsed: URL) -> str:
+    if parsed.get_backend_name() == "sqlite":
+        storage = "memory" if parsed.database in {None, "", ":memory:"} else "file"
+        return f"sqlite ({storage})"
+    return "postgresql on configured host"
+
+
+def _log_database_configuration(parsed: URL) -> None:
+    logger.info("Database configured: %s", _database_log_summary(parsed))
+
+
+DATABASE_URL, _PARSED_DATABASE_URL = _prepare_database_url(os.getenv("DATABASE_URL"))
+_log_database_configuration(_PARSED_DATABASE_URL)
 
 connect_args = {}
-if DATABASE_URL.startswith("sqlite"):
+if _PARSED_DATABASE_URL.get_backend_name() == "sqlite":
     connect_args = {"check_same_thread": False}
-elif DATABASE_URL.startswith("postgresql"):
-    # Railway requiere SSL para PostgreSQL
-    # Agregar sslmode=require si no está presente en la URL
-    parsed = urlparse(DATABASE_URL)
-    query_params = parse_qs(parsed.query)
-    
-    # Si sslmode no está configurado, agregarlo
-    if 'sslmode' not in query_params:
-        query_params['sslmode'] = ['require']
-        # Reconstruir la URL con sslmode
-        new_query = urlencode(query_params, doseq=True)
-        DATABASE_URL = urlunparse((
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            parsed.params,
-            new_query,
-            parsed.fragment
-        ))
-        print(f"DEBUG: DATABASE_URL configurada con SSL: {DATABASE_URL.split('@')[0]}@***")
 
 engine_kwargs = {"connect_args": connect_args}
-if DATABASE_URL.startswith("postgresql"):
-    # Configuración de pool robusta para producción:
-    # - pool_pre_ping: valida cada conexión antes de usarla (evita usar conexiones
-    #   muertas tras reinicios o blips de red — causa típica de timeouts 524).
-    # - pool_recycle: recicla conexiones cada 30 min (evita que Postgres las cierre
-    #   por inactividad y queden inservibles).
-    # - pool_size/max_overflow: más holgura para llamadas lentas (visión/embeddings).
+if _PARSED_DATABASE_URL.get_backend_name() == "postgresql":
+    # Keep stale connections from surviving Railway restarts or network blips.
     engine_kwargs.update(
         {
             "pool_pre_ping": True,

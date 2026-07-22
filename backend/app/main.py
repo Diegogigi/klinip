@@ -2454,7 +2454,7 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
         print(f"ERROR sending appointment confirmation email async: {exc}")
 
 
-def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         _send_templated_email(
             to_email=to_email,
@@ -2471,8 +2471,10 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
         print(f"ERROR sending appointment reminder email async: {exc}")
+        return False
 
 
 def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, payload: dict):
@@ -2496,7 +2498,7 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
         print(f"ERROR sending appointment confirmation email async: {exc}")
 
 
-def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         _send_templated_email(
             to_email=to_email,
@@ -2513,8 +2515,10 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
         print(f"ERROR sending appointment reminder email async: {exc}")
+        return False
 
 
 def _send_medical_order_uploaded_email_safe(to_email: str, user_name: str, payload: dict):
@@ -2615,7 +2619,7 @@ def _send_medications_detected_email_safe(to_email: str, user_name: str, medicat
         print(f"ERROR sending medications detected email async: {exc}")
 
 
-def _send_medication_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_medication_reminder_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         _send_templated_email(
             to_email=to_email,
@@ -2630,11 +2634,16 @@ def _send_medication_reminder_email_safe(to_email: str, user_name: str, payload:
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
-        print(f"ERROR sending medication reminder email async: {exc}")
+        print(
+            "WARNING medication reminder email: "
+            f"error_class={exc.__class__.__name__}"
+        )
+        return False
 
 
-def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         is_assignee = bool(payload.get("is_assignee"))
         subject = (
@@ -2658,8 +2667,13 @@ def _send_medication_refill_email_safe(to_email: str, user_name: str, payload: d
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
-        print(f"ERROR sending medication refill email async: {exc}")
+        print(
+            "WARNING medication refill email: "
+            f"error_class={exc.__class__.__name__}"
+        )
+        return False
 
 
 def _send_medication_programmed_email_safe(to_email: str, user_name: str, payload: dict):
@@ -3104,6 +3118,8 @@ def _appointment_notification_recipients(
                 continue
             role = _normalize_role(getattr(row, "role", "viewer"))
             if user_id != int(profile.owner_user_id):
+                if "receive_alerts" not in _get_profile_permissions(row):
+                    continue
                 if not include_viewers and role not in {"admin", "caregiver"}:
                     continue
                 recipient_specs.append((user_id, role, False))
@@ -3853,19 +3869,16 @@ def _build_medication_event_defaults(
             schedule_dt = snapped
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
-    if (
-        not explicit_schedule
-        and normalized_status in {"taken", "late"}
-        and schedule_dt
-        and actual_taken_at
-    ):
+    if normalized_status in {"taken", "late"} and schedule_dt and actual_taken_at:
         future_margin = timedelta(minutes=15)
         nearest_due_slot = _nearest_medication_due_slot(med, actual_taken_at)
         if nearest_due_slot is not None:
             distance_minutes = abs((schedule_dt - nearest_due_slot).total_seconds()) / 60
-            if schedule_dt > actual_taken_at + future_margin or distance_minutes > 15:
+            if schedule_dt > actual_taken_at + future_margin or (
+                not explicit_schedule and distance_minutes > 15
+            ):
                 schedule_dt = nearest_due_slot
-        elif schedule_dt > actual_taken_at + future_margin:
+        elif not explicit_schedule and schedule_dt > actual_taken_at + future_margin:
             schedule_dt = actual_taken_at
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
@@ -4424,7 +4437,7 @@ def _handle_medication_refill_notifications(
             and bool(getattr(contact_user, "email_reminders_enabled", False))
             and not _notification_already_sent(db, email_tag)
         ):
-            _send_medication_refill_email_safe(
+            email_sent = _send_medication_refill_email_safe(
                 contact_user.email,
                 contact.get("name") or "",
                 {
@@ -4437,15 +4450,16 @@ def _handle_medication_refill_notifications(
                     "is_assignee": is_assignee,
                 },
             )
-            _record_sent(
-                db,
-                int(contact["user_id"]),
-                email_tag,
-                "medication_refill_email",
-                datetime.now(),
-                datetime.now(),
-            )
-            sent_any = True
+            if email_sent:
+                _record_sent(
+                    db,
+                    int(contact["user_id"]),
+                    email_tag,
+                    "medication_refill_email",
+                    datetime.now(),
+                    datetime.now(),
+                )
+                sent_any = True
 
     # Notificar al paciente (owner) que el medicamento está por agotarse y quién es el responsable
     if owner:
@@ -4479,11 +4493,12 @@ def _handle_medication_refill_notifications(
                 )
                 sent_any = True
 
-    med.refill_last_notified_at = datetime.now()
-    med.refill_last_notified_remaining = int(remaining)
-    db.add(med)
-    db.commit()
-    db.refresh(med)
+    if sent_any:
+        med.refill_last_notified_at = datetime.now()
+        med.refill_last_notified_remaining = int(remaining)
+        db.add(med)
+        db.commit()
+        db.refresh(med)
     return sent_any
 
 
@@ -5286,7 +5301,7 @@ def _job_send_appointment_reminders(
                         email_tag = f"appointment-email-{appt.id}-{label}-user-{recipient_user_id}"
                         if _notification_already_sent(db, email_tag):
                             continue
-                        _send_appointment_reminder_email_safe(
+                        email_sent = _send_appointment_reminder_email_safe(
                             recipient["email"],
                             recipient.get("name") or "",
                             {
@@ -5298,6 +5313,9 @@ def _job_send_appointment_reminders(
                                 "notes": appt.notes or "",
                             },
                         )
+                        if not email_sent:
+                            metrics["errors"] += 1
+                            continue
                         _record_sent(
                             db,
                             recipient_user_id,
@@ -5446,7 +5464,7 @@ def _job_send_medication_reminders(
                             and not _notification_already_sent(db, email_tag)
                         ):
                             time_label = trigger_exact.strftime("%H:%M hrs")
-                            _send_medication_reminder_email_safe(
+                            email_sent = _send_medication_reminder_email_safe(
                                 user.email,
                                 user.name or "",
                                 {
@@ -5456,15 +5474,18 @@ def _job_send_medication_reminders(
                                     "notes": med.notes or "",
                                 },
                             )
-                            _record_sent(
-                                db,
-                                user_id,
-                                email_tag,
-                                "medication_email",
-                                trigger_at,
-                                now,
-                            )
-                            metrics["email_sent"] += 1
+                            if email_sent:
+                                _record_sent(
+                                    db,
+                                    user_id,
+                                    email_tag,
+                                    "medication_email",
+                                    trigger_at,
+                                    now,
+                                )
+                                metrics["email_sent"] += 1
+                            else:
+                                metrics["errors"] += 1
                     if metrics["timed_out"]:
                         break
                 if metrics["timed_out"]:
@@ -5521,15 +5542,18 @@ def _job_send_note_reminders(deadline_at: float | None = None) -> dict:
                         "tag": tag,
                     },
                 )
-                note.reminder_sent = True
-                db.add(note)
-                db.commit()
                 if sent:
+                    note.reminder_sent = True
+                    db.add(note)
+                    db.commit()
                     metrics["sent"] += 1
             except Exception as exc:
                 db.rollback()
                 metrics["errors"] += 1
-                print(f"WARNING note reminder note_id={note.id}: {exc}")
+                print(
+                    "WARNING note reminder: "
+                    f"error_class={exc.__class__.__name__}"
+                )
     finally:
         db.close()
     return metrics
@@ -5579,7 +5603,8 @@ def _job_send_refill_alerts(
                 metrics["errors"] += 1
                 metrics["rollback_count"] += 1
                 print(
-                    f"WARNING medication refill notifications {getattr(med, 'id', '?')}: {exc}"
+                    "WARNING medication refill notifications: "
+                    f"error_class={exc.__class__.__name__}"
                 )
         return metrics
     finally:
@@ -5811,7 +5836,10 @@ def _job_refresh_profile_ai(
                 db.rollback()
                 metrics["errors"] += 1
                 metrics["rollback_count"] += 1
-                print(f"WARNING ai_refresh profile {getattr(profile, 'id', 'unknown')}: {exc}")
+                print(
+                    "WARNING ai_refresh profile: "
+                    f"error_class={exc.__class__.__name__}"
+                )
         return metrics
     finally:
         db.close()
@@ -5871,7 +5899,10 @@ def _job_refresh_family_ai(
                 db.rollback()
                 metrics["errors"] += 1
                 metrics["rollback_count"] += 1
-                print(f"WARNING family_ai_refresh user {getattr(user, 'id', 'unknown')}: {exc}")
+                print(
+                    "WARNING family_ai_refresh: "
+                    f"error_class={exc.__class__.__name__}"
+                )
         return metrics
     finally:
         db.close()
