@@ -187,6 +187,84 @@ def test_coverage_document_info_can_be_corrected_manually(db_session):
     assert payload.coverage.metadata_json["manual_override"] is True
 
 
+def test_profile_ai_refresh_preserves_manual_coverage_with_serializable_auto_detection(
+    db_session,
+):
+    user, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="bono-corregido.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text=(
+            "Bono Fonasa fecha de atencion 12/06/2026 "
+            "total $12.000 copago $3.000 aprobado"
+        ),
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.flush()
+
+    info = main._upsert_document_coverage_info(db_session, doc)
+    assert info is not None
+    info.metadata_json = {
+        "manual_override": True,
+        "manual_updated_at": "2026-07-22T09:00:00",
+    }
+    main._mark_profile_ai_dirty(db_session, profile, include_family=False)
+    db_session.commit()
+
+    main._refresh_profile_ai_analytics(db_session, profile)
+    db_session.commit()
+
+    db_session.refresh(info)
+    auto_detection = info.metadata_json["latest_auto_detection"]
+    assert auto_detection["service_at"] == "2026-06-12T00:00:00"
+    assert info.metadata_json["manual_override"] is True
+
+
+def test_profile_ai_job_completes_manual_coverage_once_without_retry_loop(
+    db_session,
+    monkeypatch,
+):
+    user, profile = _seed_profile(db_session)
+    doc = models.Document(
+        user_id=user.id,
+        profile_id=profile.id,
+        doc_type=models.DocumentType.otro,
+        filename="bono-worker.pdf",
+        file_path="",
+        notes="[KLINIP_COVERAGE_INTENT] Cobertura / seguro",
+        ocr_text=(
+            "Bono Fonasa fecha de atencion 12/06/2026 "
+            "total $12.000 copago $3.000 aprobado"
+        ),
+        ocr_status="done",
+    )
+    db_session.add(doc)
+    db_session.flush()
+    info = main._upsert_document_coverage_info(db_session, doc)
+    info.metadata_json = {
+        "manual_override": True,
+        "manual_updated_at": "2026-07-22T09:00:00",
+    }
+    main._mark_profile_ai_dirty(db_session, profile, include_family=False)
+    db_session.commit()
+
+    monkeypatch.setattr(main, "SessionLocal", lambda: db_session)
+
+    first_cycle = main._job_refresh_profile_ai(batch_limit=1)
+    second_cycle = main._job_refresh_profile_ai(batch_limit=1)
+
+    assert first_cycle["refreshed"] == 1
+    assert first_cycle["errors"] == 0
+    assert first_cycle["rollback_count"] == 0
+    assert second_cycle["queued"] == 0
+    assert second_cycle["errors"] == 0
+
+
 def test_family_coverage_requires_module_permission(db_session):
     owner, profile = _seed_profile(db_session)
     doc = models.Document(

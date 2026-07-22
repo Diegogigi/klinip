@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import text, inspect, func, or_, and_
-from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError
+from sqlalchemy.exc import DBAPIError, IntegrityError, ProgrammingError, StatementError
 from typing import List
 import os
 import shutil
@@ -119,6 +119,7 @@ from .services.clinical_summary_service import refresh_episode_snapshot, seriali
 from .services.episode_link_service import refresh_episode_links_for_record, set_record_episode
 from .services.timeline_builder_service import build_episode_folder_items, build_episode_timeline, get_episode_related_items
 from .services.orchestrator import compute_shadow_metrics, run_intent_shadow_pipeline
+from .json_payload import JsonPayloadError, normalize_json_payload
 
 try:
     from pywebpush import webpush, WebPushException
@@ -5798,6 +5799,17 @@ def _refresh_profile_ai_analytics(db: Session, profile: models.HealthProfile):
     db.add(profile)
 
 
+def _ai_refresh_error_details(exc: Exception, phase: str) -> tuple[str, str]:
+    if isinstance(exc, JsonPayloadError):
+        return "serialization", "payload_validation"
+    if isinstance(exc, StatementError):
+        original = getattr(exc, "orig", None)
+        if isinstance(original, TypeError) and "JSON serializable" in str(original):
+            return "bind", "json_serialization"
+        return phase, "database_statement"
+    return phase, "unexpected"
+
+
 def _job_refresh_profile_ai(
     deadline_at: float | None = None,
     batch_limit: int | None = None,
@@ -5819,7 +5831,19 @@ def _job_refresh_profile_ai(
     }
     try:
         profiles_started_at = time.perf_counter()
-        profiles = _load_dirty_profiles_for_refresh(db, profile_batch)
+        try:
+            profiles = _load_dirty_profiles_for_refresh(db, profile_batch)
+        except Exception as exc:
+            db.rollback()
+            metrics["errors"] += 1
+            metrics["rollback_count"] += 1
+            error_phase, error_reason = _ai_refresh_error_details(exc, "query")
+            print(
+                "WARNING ai_refresh profile: "
+                f"error_class={exc.__class__.__name__} "
+                f"phase={error_phase} reason={error_reason}"
+            )
+            return metrics
         metrics["db_query_ms"] = round(metrics["db_query_ms"] + ((time.perf_counter() - profiles_started_at) * 1000), 1)
         metrics["queued"] = len(profiles)
         if len(profiles) >= profile_batch:
@@ -5828,17 +5852,21 @@ def _job_refresh_profile_ai(
             if _job_deadline_exceeded(deadline_at):
                 metrics["timed_out"] = True
                 break
+            phase = "refresh"
             try:
                 _refresh_profile_ai_analytics(db, profile)
+                phase = "commit"
                 db.commit()
                 metrics["refreshed"] += 1
             except Exception as exc:
                 db.rollback()
                 metrics["errors"] += 1
                 metrics["rollback_count"] += 1
+                error_phase, error_reason = _ai_refresh_error_details(exc, phase)
                 print(
                     "WARNING ai_refresh profile: "
-                    f"error_class={exc.__class__.__name__}"
+                    f"error_class={exc.__class__.__name__} "
+                    f"phase={error_phase} reason={error_reason}"
                 )
         return metrics
     finally:
@@ -5876,6 +5904,7 @@ def _job_refresh_family_ai(
             if _job_deadline_exceeded(deadline_at):
                 metrics["timed_out"] = True
                 break
+            phase = "refresh"
             try:
                 if _user_has_pending_profile_refresh(db, user.id):
                     metrics["skipped_pending_profile"] += 1
@@ -5893,15 +5922,18 @@ def _job_refresh_family_ai(
                 user.family_ai_refresh_requested_at = None
                 user.family_ai_last_refreshed_at = datetime.now()
                 db.add(user)
+                phase = "commit"
                 db.commit()
                 metrics["refreshed"] += 1
             except Exception as exc:
                 db.rollback()
                 metrics["errors"] += 1
                 metrics["rollback_count"] += 1
+                error_phase, error_reason = _ai_refresh_error_details(exc, phase)
                 print(
                     "WARNING family_ai_refresh: "
-                    f"error_class={exc.__class__.__name__}"
+                    f"error_class={exc.__class__.__name__} "
+                    f"phase={error_phase} reason={error_reason}"
                 )
         return metrics
     finally:
@@ -6378,7 +6410,7 @@ def _upsert_document_coverage_info(db: Session, doc: models.Document) -> models.
     else:
         existing_metadata = dict(info.metadata_json or {})
         if existing_metadata.get("manual_override"):
-            existing_metadata["latest_auto_detection"] = payload
+            existing_metadata["latest_auto_detection"] = normalize_json_payload(payload)
             existing_metadata["latest_auto_detected_at"] = datetime.now().isoformat(timespec="seconds")
             info.metadata_json = existing_metadata
             info.updated_at = datetime.now()
@@ -16207,7 +16239,7 @@ def _refresh_profile_ai_summary(
     if not row:
         row = models.ProfileAiSummary(profile_id=profile.id)
     row.summary = payload.get("summary") or ""
-    row.summary_json = payload
+    row.summary_json = normalize_json_payload(payload)
     row.updated_at = datetime.now()
     db.add(row)
     return row
@@ -16323,8 +16355,8 @@ def _refresh_family_ai_summary(
     row.pending_documents_total = pending_documents_total
     row.low_adherence_profiles = low_adherence_profiles
     row.summary = summary_text
-    row.profiles_json = profile_rows
-    row.summary_json = summary_json
+    row.profiles_json = normalize_json_payload(profile_rows)
+    row.summary_json = normalize_json_payload(summary_json)
     row.updated_at = datetime.now()
     db.add(row)
     return row

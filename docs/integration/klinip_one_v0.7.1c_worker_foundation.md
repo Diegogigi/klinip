@@ -336,3 +336,14 @@ worker fue eliminado tras el error recurrente. Antes de recrearlo se debe
 diagnosticar `refresh_profile_ai` con un cambio separado y autorizado, sin
 editar datos productivos como atajo. Device Identity y pairing permanecen sin
 iniciar.
+
+## 25. Correccion posterior v0.7.1d
+
+La primera activacion remota encontro un `StatementError` repetido en
+`refresh_profile_ai`. El diagnostico, la reproduccion y la correccion acotada
+se documentan en
+[`klinip_one_v0.7.1d_refresh_profile_ai.md`](klinip_one_v0.7.1d_refresh_profile_ai.md).
+
+El job no fue desactivado. El worker remoto permanece eliminado hasta que la
+correccion complete PR protegido, deploy web y una nueva observacion de cuatro
+a seis ciclos.
