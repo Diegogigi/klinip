@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 15
     env:
       CI: "true"
-      DATABASE_URL: sqlite:///:memory:
+      DATABASE_URL: "sqlite:///:memory:"
       ENABLE_EMBEDDED_SCHEDULER: "false"
     steps:
       - name: Checkout repository
@@ -76,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      DATABASE_URL: sqlite:///:memory:
+      DATABASE_URL: "sqlite:///:memory:"
       ENABLE_EMBEDDED_SCHEDULER: "false"
     steps:
       - name: Checkout repository
