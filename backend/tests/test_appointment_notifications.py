@@ -37,6 +37,36 @@ def _make_profile(
     )
 
 
+def _add_current_appointment(db_session, owner, profile, specialty="Neurologia"):
+    appointment = models.Appointment(
+        user_id=owner.id,
+        profile_id=profile.id,
+        type=models.AppointmentType.cita,
+        specialty=specialty,
+        center="Hospital Norte",
+        date_time=datetime.now(),
+        status=models.AppointmentStatus.agendada,
+        notes="Traer examenes",
+        checklist=[],
+    )
+    db_session.add(appointment)
+    db_session.commit()
+    return appointment
+
+
+def _configure_due_reminder_job(db_session, monkeypatch, send_email):
+    monkeypatch.setattr(main, "SessionLocal", lambda: db_session)
+    monkeypatch.setattr(main, "_push_configured", lambda: False)
+    monkeypatch.setattr(main, "_prune_old_push_logs", lambda db, now: None)
+    monkeypatch.setattr(main, "_is_due", lambda now, trigger_at: True)
+    monkeypatch.setattr(
+        main,
+        "_appointment_offsets_for_user",
+        lambda user: [{"label": "En este momento", "delta": timedelta(0), "priority": "high"}],
+    )
+    monkeypatch.setattr(main, "_send_appointment_reminder_email_safe", send_email)
+
+
 def test_workflow_appointment_keeps_profile_and_notifies_family(db_session, monkeypatch):
     owner = _make_user("lastenia@example.com", "Lastenia", email_reminders_enabled=True)
     caregiver = _make_user("caregiver@example.com", "Cuidadora", email_reminders_enabled=True)
@@ -61,12 +91,13 @@ def test_workflow_appointment_keeps_profile_and_notifies_family(db_session, monk
                 role="caregiver",
                 status="accepted",
             ),
-            models.ProfileRelationship(
-                profile_id=profile.id,
-                user_id=viewer.id,
-                role="viewer",
-                status="accepted",
-            ),
+                models.ProfileRelationship(
+                    profile_id=profile.id,
+                    user_id=viewer.id,
+                    role="viewer",
+                    status="accepted",
+                    permissions_json=json.dumps(["receive_alerts"]),
+                ),
         ]
     )
     db_session.commit()
@@ -167,19 +198,7 @@ def test_job_send_appointment_reminders_sends_email_to_family_contact_when_owner
     )
     db_session.commit()
 
-    appointment = models.Appointment(
-        user_id=owner.id,
-        profile_id=profile.id,
-        type=models.AppointmentType.cita,
-        specialty="Neurologia",
-        center="Hospital Norte",
-        date_time=datetime.now(),
-        status=models.AppointmentStatus.agendada,
-        notes="Traer examenes",
-        checklist=[],
-    )
-    db_session.add(appointment)
-    db_session.commit()
+    _add_current_appointment(db_session, owner, profile)
 
     sent_emails = []
 
@@ -187,19 +206,160 @@ def test_job_send_appointment_reminders_sends_email_to_family_contact_when_owner
         sent_emails.append(
             (to_email, user_name, payload.get("offset_label"), payload.get("patient_name"))
         )
+        return True
 
-    monkeypatch.setattr(main, "SessionLocal", lambda: db_session)
-    monkeypatch.setattr(main, "_push_configured", lambda: False)
-    monkeypatch.setattr(main, "_prune_old_push_logs", lambda db, now: None)
-    monkeypatch.setattr(
-        main,
-        "_appointment_offsets_for_user",
-        lambda user: [{"label": "En este momento", "delta": timedelta(0), "priority": "high"}],
-    )
-    monkeypatch.setattr(main, "_send_appointment_reminder_email_safe", fake_send_email)
+    _configure_due_reminder_job(db_session, monkeypatch, fake_send_email)
 
     metrics = main._job_send_appointment_reminders(user_limit=10)
 
     assert metrics["appointments"] == 1
     assert metrics["email_sent"] == 1
     assert sent_emails == [(caregiver_email, caregiver_name, "En este momento", "Hijo 3")]
+
+
+def test_appointment_recipients_require_active_relationship_and_alert_permission(db_session):
+    owner = _make_user("owner-permissions@example.com", "Owner")
+    allowed = _make_user("allowed-caregiver@example.com", "Allowed", email_reminders_enabled=True)
+    denied = _make_user("denied-caregiver@example.com", "Denied", email_reminders_enabled=True)
+    revoked = _make_user("revoked-caregiver@example.com", "Revoked", email_reminders_enabled=True)
+    viewer = _make_user("viewer-alert@example.com", "Viewer", email_reminders_enabled=True)
+    db_session.add_all([owner, allowed, denied, revoked, viewer])
+    db_session.commit()
+
+    profile = _make_profile(
+        owner.id,
+        "Perfil protegido",
+        owner.id,
+        automation_settings={"auto_email_caregivers": True},
+    )
+    db_session.add(profile)
+    db_session.commit()
+    db_session.add_all(
+        [
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=owner.id,
+                role="admin",
+                status="accepted",
+            ),
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=allowed.id,
+                role="caregiver",
+                status="accepted",
+            ),
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=denied.id,
+                role="caregiver",
+                status="accepted",
+                permissions_json=json.dumps(["view_appointments"]),
+            ),
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=revoked.id,
+                role="caregiver",
+                status="revoked",
+            ),
+            models.ProfileRelationship(
+                profile_id=profile.id,
+                user_id=viewer.id,
+                role="viewer",
+                status="accepted",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    recipients = main._appointment_notification_recipients(
+        db_session,
+        profile_id=profile.id,
+        fallback_user_id=owner.id,
+        for_email=True,
+    )
+
+    recipient_ids = [int(item["user_id"]) for item in recipients]
+    assert recipient_ids == [owner.id, allowed.id]
+    assert recipient_ids.count(allowed.id) == 1
+
+
+def test_job_sends_once_to_owner_and_authorized_caregiver_when_both_have_email(
+    db_session,
+    monkeypatch,
+):
+    owner = _make_user("owner-both@example.com", "Owner", email_reminders_enabled=True)
+    caregiver = _make_user("caregiver-both@example.com", "Caregiver", email_reminders_enabled=True)
+    db_session.add_all([owner, caregiver])
+    db_session.commit()
+    profile = _make_profile(owner.id, "Perfil ambos", owner.id)
+    db_session.add(profile)
+    db_session.commit()
+    db_session.add(
+        models.ProfileRelationship(
+            profile_id=profile.id,
+            user_id=caregiver.id,
+            role="caregiver",
+            status="accepted",
+        )
+    )
+    db_session.commit()
+    _add_current_appointment(db_session, owner, profile)
+    expected_emails = [owner.email, caregiver.email]
+    sent_emails = []
+
+    def fake_send_email(to_email, user_name, payload):
+        sent_emails.append(to_email)
+        return True
+
+    _configure_due_reminder_job(db_session, monkeypatch, fake_send_email)
+
+    metrics = main._job_send_appointment_reminders(user_limit=10)
+
+    assert metrics["email_sent"] == 2
+    assert sorted(sent_emails) == sorted(expected_emails)
+
+
+def test_job_skips_appointment_when_no_recipient_has_a_channel(db_session, monkeypatch):
+    owner = _make_user("owner-no-email@example.com", "Owner")
+    caregiver = _make_user("caregiver-no-email@example.com", "Caregiver")
+    db_session.add_all([owner, caregiver])
+    db_session.commit()
+    profile = _make_profile(owner.id, "Perfil sin canal", owner.id)
+    db_session.add(profile)
+    db_session.commit()
+    db_session.add(
+        models.ProfileRelationship(
+            profile_id=profile.id,
+            user_id=caregiver.id,
+            role="caregiver",
+            status="accepted",
+        )
+    )
+    db_session.commit()
+    _add_current_appointment(db_session, owner, profile)
+
+    _configure_due_reminder_job(db_session, monkeypatch, lambda *args: True)
+
+    metrics = main._job_send_appointment_reminders(user_limit=10)
+
+    assert metrics["users"] == 0
+    assert metrics["email_sent"] == 0
+
+
+def test_job_does_not_record_provider_failure_as_sent(db_session, monkeypatch):
+    owner = _make_user("owner-provider-error@example.com", "Owner", email_reminders_enabled=True)
+    db_session.add(owner)
+    db_session.commit()
+    profile = _make_profile(owner.id, "Perfil proveedor", owner.id)
+    db_session.add(profile)
+    db_session.commit()
+    appointment = _add_current_appointment(db_session, owner, profile)
+
+    _configure_due_reminder_job(db_session, monkeypatch, lambda *args: False)
+
+    metrics = main._job_send_appointment_reminders(user_limit=10)
+
+    tag = f"appointment-email-{appointment.id}-En este momento-user-{owner.id}"
+    assert metrics["email_sent"] == 0
+    assert metrics["errors"] == 1
+    assert main._notification_already_sent(db_session, tag) is False

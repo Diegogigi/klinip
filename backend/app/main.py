@@ -2454,7 +2454,7 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
         print(f"ERROR sending appointment confirmation email async: {exc}")
 
 
-def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         _send_templated_email(
             to_email=to_email,
@@ -2471,8 +2471,10 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
         print(f"ERROR sending appointment reminder email async: {exc}")
+        return False
 
 
 def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, payload: dict):
@@ -2496,7 +2498,7 @@ def _send_appointment_confirmation_email_safe(to_email: str, user_name: str, pay
         print(f"ERROR sending appointment confirmation email async: {exc}")
 
 
-def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict):
+def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload: dict) -> bool:
     try:
         _send_templated_email(
             to_email=to_email,
@@ -2513,8 +2515,10 @@ def _send_appointment_reminder_email_safe(to_email: str, user_name: str, payload
                 "year": datetime.utcnow().year,
             },
         )
+        return True
     except Exception as exc:
         print(f"ERROR sending appointment reminder email async: {exc}")
+        return False
 
 
 def _send_medical_order_uploaded_email_safe(to_email: str, user_name: str, payload: dict):
@@ -3104,6 +3108,8 @@ def _appointment_notification_recipients(
                 continue
             role = _normalize_role(getattr(row, "role", "viewer"))
             if user_id != int(profile.owner_user_id):
+                if "receive_alerts" not in _get_profile_permissions(row):
+                    continue
                 if not include_viewers and role not in {"admin", "caregiver"}:
                     continue
                 recipient_specs.append((user_id, role, False))
@@ -3853,19 +3859,16 @@ def _build_medication_event_defaults(
             schedule_dt = snapped
     if normalized_status in {"taken", "late"} and not actual_taken_at:
         actual_taken_at = now
-    if (
-        not explicit_schedule
-        and normalized_status in {"taken", "late"}
-        and schedule_dt
-        and actual_taken_at
-    ):
+    if normalized_status in {"taken", "late"} and schedule_dt and actual_taken_at:
         future_margin = timedelta(minutes=15)
         nearest_due_slot = _nearest_medication_due_slot(med, actual_taken_at)
         if nearest_due_slot is not None:
             distance_minutes = abs((schedule_dt - nearest_due_slot).total_seconds()) / 60
-            if schedule_dt > actual_taken_at + future_margin or distance_minutes > 15:
+            if schedule_dt > actual_taken_at + future_margin or (
+                not explicit_schedule and distance_minutes > 15
+            ):
                 schedule_dt = nearest_due_slot
-        elif schedule_dt > actual_taken_at + future_margin:
+        elif not explicit_schedule and schedule_dt > actual_taken_at + future_margin:
             schedule_dt = actual_taken_at
     if normalized_status == "taken" and schedule_dt and actual_taken_at:
         if actual_taken_at > schedule_dt + timedelta(minutes=90):
@@ -5286,7 +5289,7 @@ def _job_send_appointment_reminders(
                         email_tag = f"appointment-email-{appt.id}-{label}-user-{recipient_user_id}"
                         if _notification_already_sent(db, email_tag):
                             continue
-                        _send_appointment_reminder_email_safe(
+                        email_sent = _send_appointment_reminder_email_safe(
                             recipient["email"],
                             recipient.get("name") or "",
                             {
@@ -5298,6 +5301,9 @@ def _job_send_appointment_reminders(
                                 "notes": appt.notes or "",
                             },
                         )
+                        if not email_sent:
+                            metrics["errors"] += 1
+                            continue
                         _record_sent(
                             db,
                             recipient_user_id,

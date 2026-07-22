@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from app import models
 from app.main import (
     _attach_medication_adherence,
@@ -10,6 +12,7 @@ from app.main import (
     _medication_intake_to_response_payload,
     _medication_schedule_anchor_at,
     _normalize_medication_intake_payloads,
+    _safe_zoneinfo,
 )
 from app.schemas import MedicationIntakeOut
 
@@ -52,6 +55,100 @@ def test_taken_event_still_marks_late_after_correcting_future_schedule():
     assert scheduled_at == datetime(2026, 6, 5, 8, 0, 0)
     assert taken_at == datetime(2026, 6, 5, 10, 45, 0)
     assert normalized_status == "late"
+
+
+@pytest.mark.parametrize(
+    ("taken_at", "expected_status"),
+    [
+        (datetime(2026, 6, 5, 7, 50, 0), "taken"),
+        (datetime(2026, 6, 5, 8, 0, 0), "taken"),
+        (datetime(2026, 6, 5, 9, 30, 0), "taken"),
+        (datetime(2026, 6, 5, 9, 31, 0), "late"),
+        (datetime(2026, 6, 5, 12, 0, 0), "late"),
+    ],
+)
+def test_taken_event_uses_explicit_ninety_minute_late_boundary(taken_at, expected_status):
+    med = _make_medication()
+
+    scheduled_at, actual_taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        "taken",
+        datetime(2026, 6, 5, 8, 0, 0),
+        taken_at,
+    )
+
+    assert scheduled_at == datetime(2026, 6, 5, 8, 0, 0)
+    assert actual_taken_at == taken_at
+    assert normalized_status == expected_status
+
+
+def test_taken_event_keeps_explicit_slot_when_taken_within_early_margin():
+    med = _make_medication()
+
+    scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        "taken",
+        datetime(2026, 6, 5, 20, 0, 0),
+        datetime(2026, 6, 5, 19, 50, 0),
+    )
+
+    assert scheduled_at == datetime(2026, 6, 5, 20, 0, 0)
+    assert taken_at == datetime(2026, 6, 5, 19, 50, 0)
+    assert normalized_status == "taken"
+
+
+def test_taken_event_reassigns_future_slot_across_midnight_to_last_due_dose():
+    med = models.Medication(
+        user_id=1,
+        name="Paracetamol",
+        frequency="Cada 12 horas",
+        schedule_time="20:00",
+        start_at=datetime(2026, 6, 5, 20, 0, 0),
+    )
+
+    scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        "taken",
+        datetime(2026, 6, 6, 8, 0, 0),
+        datetime(2026, 6, 6, 0, 30, 0),
+    )
+
+    assert scheduled_at == datetime(2026, 6, 5, 20, 0, 0)
+    assert taken_at == datetime(2026, 6, 6, 0, 30, 0)
+    assert normalized_status == "late"
+
+
+def test_taken_event_normalizes_aware_timestamps_before_selecting_due_slot():
+    med = _make_medication()
+    local_tz = _safe_zoneinfo("America/Santiago")
+    scheduled_local = datetime(2026, 6, 5, 20, 0, 0, tzinfo=local_tz)
+    taken_local = datetime(2026, 6, 5, 8, 10, 0, tzinfo=local_tz)
+
+    scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        "taken",
+        scheduled_local.astimezone(timezone.utc),
+        taken_local.astimezone(timezone.utc),
+    )
+
+    assert scheduled_at == datetime(2026, 6, 5, 8, 0, 0)
+    assert taken_at == datetime(2026, 6, 5, 8, 10, 0)
+    assert normalized_status == "taken"
+
+
+def test_non_taken_event_does_not_consume_a_future_slot():
+    med = _make_medication()
+
+    scheduled_at, taken_at, normalized_status = _build_medication_event_defaults(
+        med,
+        "skipped",
+        datetime(2026, 6, 5, 20, 0, 0),
+        None,
+    )
+
+    assert scheduled_at == datetime(2026, 6, 5, 20, 0, 0)
+    assert taken_at is None
+    assert normalized_status == "skipped"
 
 
 def test_taken_event_snaps_misaligned_schedule_to_real_8_hour_slot():
