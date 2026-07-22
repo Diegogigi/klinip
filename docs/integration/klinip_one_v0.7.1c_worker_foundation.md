@@ -303,9 +303,11 @@ un perfil pendiente. El handler aislo el fallo y permitio terminar cada ciclo,
 pero la repeticion incumple el criterio de operacion sin errores recurrentes.
 No se inspecciono ni modifico el registro afectado.
 
-Se aplico el rollback autorizado con `railway down` exclusivamente sobre
-`klinip-worker`. El servicio permanece creado, con una replica configurada y
-sin dominio, pero no tiene un deployment activo. El web continuo saludable con
+Se aplico primero el rollback autorizado con `railway down` exclusivamente
+sobre `klinip-worker`. Al fusionar el PR documental posterior, la conexion del
+servicio a `main` intento iniciar un nuevo autodeploy. Para impedir cualquier
+reactivacion involuntaria, se elimino exclusivamente `klinip-worker`. Railway
+volvio a contener solo `klinip` y `Postgres`. El web continuo saludable con
 HTTP 200. No se ejecutaron jobs manualmente, no se crearon datos de prueba y no
 se modifico PostgreSQL.
 
@@ -329,8 +331,8 @@ del proveedor.
 
 ## 24. Estado de cierre
 
-La base remota quedo preparada, pero v0.7.1c no se declara cerrada porque el
-worker fue detenido tras el error recurrente. Antes de reactivarlo se debe
+La base remota fue comprobada, pero v0.7.1c no se declara cerrada porque el
+worker fue eliminado tras el error recurrente. Antes de recrearlo se debe
 diagnosticar `refresh_profile_ai` con un cambio separado y autorizado, sin
 editar datos productivos como atajo. Device Identity y pairing permanecen sin
 iniciar.
