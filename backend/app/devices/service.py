@@ -546,6 +546,21 @@ def revoke_device(
         models.DeviceCredential.device_id == device.id,
         models.DeviceCredential.revoked_at.is_(None),
     ).update({models.DeviceCredential.revoked_at: now}, synchronize_session=False)
+    db.query(models.DeviceMessageRecipient).filter(
+        models.DeviceMessageRecipient.device_id == device.id,
+        models.DeviceMessageRecipient.current_state.notin_(
+            ["acknowledged", "expired", "revoked"]
+        ),
+    ).update(
+        {
+            models.DeviceMessageRecipient.current_state: "revoked",
+            models.DeviceMessageRecipient.current_state_at: now,
+            models.DeviceMessageRecipient.revoked_at: now,
+            models.DeviceMessageRecipient.version:
+                models.DeviceMessageRecipient.version + 1,
+        },
+        synchronize_session=False,
+    )
     db.add(device)
     add_device_audit(
         db,

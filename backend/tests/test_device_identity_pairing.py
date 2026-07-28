@@ -306,7 +306,7 @@ def test_outsider_and_unknown_scope_are_rejected(client, db_session):
         client,
         owner,
         profile,
-        requested_scopes=["messages:read"],
+        requested_scopes=["messages:send"],
     )
     assert invalid_scope.status_code == 422
     assert invalid_scope.json()["detail"] == "invalid_scope"

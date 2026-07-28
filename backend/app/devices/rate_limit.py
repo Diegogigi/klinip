@@ -12,6 +12,9 @@ DEVICE_RATE_LIMITS = {
     "claim": {"max": 12, "window": 60},
     "refresh": {"max": 20, "window": 60},
     "heartbeat": {"max": 120, "window": 60},
+    "create_message": {"max": 30, "window": 60},
+    "message_inbox": {"max": 120, "window": 60},
+    "message_event": {"max": 180, "window": 60},
 }
 _store: dict[str, list[float]] = collections.defaultdict(list)
 _lock = threading.Lock()

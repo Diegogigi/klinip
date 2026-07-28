@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 class DevicePairingCreate(BaseModel):
     health_profile_id: int = Field(gt=0)
     label: str | None = Field(default=None, max_length=120)
-    requested_scopes: list[str] = Field(min_length=1, max_length=4)
+    requested_scopes: list[str] = Field(min_length=1, max_length=6)
     protocol_version: int = Field(default=1, ge=1, le=999)
     expires_in_seconds: int = Field(default=300, ge=60, le=900)
 

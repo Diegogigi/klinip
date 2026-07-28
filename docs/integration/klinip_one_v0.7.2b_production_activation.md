@@ -215,4 +215,6 @@ Device Identity v0.7.2b queda activado y validado en produccion con principals
 separados, revocacion inmediata y limpieza total de credenciales de prueba.
 
 La siguiente etapa propuesta es v0.7.3 Non-Clinical Family Message Cloud MVP,
-pero no se inicia desde este cierre y requiere autorizacion explicita.
+iniciada posteriormente en una rama aislada y documentada en
+`klinip_one_v0.7.3_non_clinical_family_messages.md`. Este cierre v0.7.2b no fue
+modificado operacionalmente y su validacion productiva permanece intacta.

@@ -8,6 +8,8 @@ DEVICE_SCOPES = (
     "profile:read_basic",
     "device:refresh",
     "device:heartbeat",
+    "messages:read",
+    "messages:ack",
 )
 DEVICE_SCOPE_SET = frozenset(DEVICE_SCOPES)
 
