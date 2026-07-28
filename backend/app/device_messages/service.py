@@ -631,6 +631,8 @@ def serialize_detail(db: Session, message: models.DeviceMessage) -> dict:
                 "device_label": device.label,
                 "current_state": recipient.current_state,
                 "current_state_at": recipient.current_state_at,
+                "version": recipient.version,
+                "delivery_attempts": recipient.delivery_attempts,
             }
             for recipient, device in recipients
         ],
