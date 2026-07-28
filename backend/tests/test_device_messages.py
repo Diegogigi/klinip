@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
 from app import auth, main, models
@@ -332,6 +333,34 @@ def test_human_detail_proves_repeated_inbox_downloads_are_read_only(client, db_s
     after_recipient = after.json()["recipients"][0]
     assert after_recipient == before_recipient
     assert after.json()["events"] == []
+
+
+def test_human_list_count_deduplicates_ids_without_json_columns(client, db_session):
+    owner, profile, _claim, _device_headers = _setup(client, db_session)
+    assert _create_message(client, owner, profile, key="first").status_code == 201
+    assert _create_message(client, owner, profile, key="second").status_code == 201
+    statements = []
+
+    def capture_sql(_conn, _cursor, statement, _parameters, _context, _executemany):
+        statements.append(statement)
+
+    event.listen(db_session.bind, "before_cursor_execute", capture_sql)
+    try:
+        response = client.get(
+            f"/api/v1/health-profiles/{profile.id}/device-messages",
+            headers=_human_headers(owner),
+        )
+    finally:
+        event.remove(db_session.bind, "before_cursor_execute", capture_sql)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["total"] == 2
+    count_sql = next(
+        statement
+        for statement in statements
+        if "count(*)" in statement.lower() and "device_messages" in statement
+    )
+    assert "metadata_json" not in count_sql
 
 
 def test_delivery_announcement_heard_and_ack_are_distinct_events(client, db_session):
