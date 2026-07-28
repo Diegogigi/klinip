@@ -308,6 +308,32 @@ def test_inbox_download_has_no_state_or_event_side_effects(client, db_session):
     assert db_session.query(models.DeviceMessageEvent).count() == 0
 
 
+def test_human_detail_proves_repeated_inbox_downloads_are_read_only(client, db_session):
+    owner, profile, _claim, device_headers = _setup(client, db_session)
+    message_id = _create_message(client, owner, profile).json()["message_id"]
+    detail_url = f"/api/v1/health-profiles/{profile.id}/device-messages/{message_id}"
+    human_headers = _human_headers(owner)
+
+    before = client.get(detail_url, headers=human_headers)
+    assert before.status_code == 200, before.text
+    before_recipient = before.json()["recipients"][0]
+    assert before_recipient["current_state"] == "queued"
+    assert before_recipient["version"] == 1
+    assert before_recipient["delivery_attempts"] == 0
+    assert before.json()["events"] == []
+
+    for _ in range(3):
+        inbox = client.get("/api/v1/device/messages", headers=device_headers)
+        assert inbox.status_code == 200, inbox.text
+        assert inbox.json()["items"][0]["current_state"] == "queued"
+
+    after = client.get(detail_url, headers=human_headers)
+    assert after.status_code == 200, after.text
+    after_recipient = after.json()["recipients"][0]
+    assert after_recipient == before_recipient
+    assert after.json()["events"] == []
+
+
 def test_delivery_announcement_heard_and_ack_are_distinct_events(client, db_session):
     owner, profile, _claim, device_headers = _setup(client, db_session)
     created = _create_message(client, owner, profile)
