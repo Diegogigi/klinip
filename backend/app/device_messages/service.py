@@ -708,14 +708,29 @@ def list_messages(
             query = query.filter(models.DeviceMessageRecipient.current_state == state)
         if device_id:
             query = query.filter(models.Device.public_id == device_id)
-    total = query.distinct().count()
-    messages = (
-        query.distinct()
-        .order_by(models.DeviceMessage.created_at.desc())
+    total = query.with_entities(models.DeviceMessage.id).distinct().count()
+    page_rows = (
+        query.with_entities(
+            models.DeviceMessage.id,
+            models.DeviceMessage.created_at,
+        )
+        .distinct()
+        .order_by(
+            models.DeviceMessage.created_at.desc(),
+            models.DeviceMessage.id.desc(),
+        )
         .offset(offset)
         .limit(limit)
         .all()
     )
+    page_ids = [row.id for row in page_rows]
+    messages_by_id = {
+        message.id: message
+        for message in db.query(models.DeviceMessage)
+        .filter(models.DeviceMessage.id.in_(page_ids))
+        .all()
+    }
+    messages = [messages_by_id[message_id] for message_id in page_ids]
     return {
         "items": [serialize_detail(db, message) for message in messages],
         "total": total,
