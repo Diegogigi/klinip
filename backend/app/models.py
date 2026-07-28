@@ -1353,3 +1353,161 @@ class DeviceGrant(Base):
     health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
     granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
     revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
+
+
+class DeviceMessage(Base):
+    __tablename__ = "device_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "message_type IN ('family_non_clinical')",
+            name="ck_device_messages_type",
+        ),
+        CheckConstraint("priority IN ('normal')", name="ck_device_messages_priority"),
+        CheckConstraint("protocol_version > 0", name="ck_device_messages_protocol_version"),
+        UniqueConstraint(
+            "sender_user_id",
+            "health_profile_id",
+            "idempotency_key_hash",
+            name="uq_device_messages_idempotency",
+        ),
+        Index("ix_device_messages_profile_created", "health_profile_id", "created_at"),
+        Index("ix_device_messages_expires_at", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    sender_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    message_type = Column(String(40), nullable=False, default="family_non_clinical")
+    body = Column(Text, nullable=False)
+    priority = Column(String(20), nullable=False, default="normal")
+    requires_acknowledgement = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    available_at = Column(DateTime, nullable=False, default=datetime.now)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    revocation_reason_code = Column(String(80), nullable=True)
+    idempotency_key_hash = Column(String(64), nullable=False)
+    request_fingerprint = Column(String(64), nullable=False)
+    protocol_version = Column(Integer, nullable=False, default=1)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    sender = relationship("User", foreign_keys=[sender_user_id])
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
+
+
+class DeviceMessageRecipient(Base):
+    __tablename__ = "device_message_recipients"
+    __table_args__ = (
+        CheckConstraint(
+            "current_state IN ('queued', 'delivered', 'announced', 'heard', "
+            "'acknowledged', 'failed', 'expired', 'revoked')",
+            name="ck_device_message_recipients_state",
+        ),
+        UniqueConstraint(
+            "message_id",
+            "device_id",
+            name="uq_device_message_recipients_message_device",
+        ),
+        Index(
+            "ix_device_message_recipients_device_state_created",
+            "device_id",
+            "current_state",
+            "created_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    message_id = Column(
+        Integer,
+        ForeignKey("device_messages.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    revoked_at = Column(DateTime, nullable=True)
+    current_state = Column(String(20), nullable=False, default="queued", index=True)
+    current_state_at = Column(DateTime, nullable=False, default=datetime.now)
+    delivery_attempts = Column(Integer, nullable=False, default=0)
+    last_event_public_id = Column(String(64), nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+
+    message = relationship("DeviceMessage", foreign_keys=[message_id])
+    device = relationship("Device", foreign_keys=[device_id])
+
+
+class DeviceMessageEvent(Base):
+    __tablename__ = "device_message_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('delivered', 'announced', 'heard', 'acknowledged', 'failed')",
+            name="ck_device_message_events_type",
+        ),
+        CheckConstraint("protocol_version > 0", name="ck_device_message_events_protocol_version"),
+        UniqueConstraint(
+            "recipient_id",
+            "client_event_id",
+            name="uq_device_message_events_recipient_client",
+        ),
+        Index("ix_device_message_events_message_server", "message_id", "server_timestamp"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    message_id = Column(
+        Integer,
+        ForeignKey("device_messages.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    recipient_id = Column(
+        Integer,
+        ForeignKey("device_message_recipients.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    event_type = Column(String(20), nullable=False)
+    client_event_id = Column(String(64), nullable=False)
+    request_fingerprint = Column(String(64), nullable=False)
+    resulting_state = Column(String(20), nullable=False)
+    server_timestamp = Column(DateTime, nullable=False, default=datetime.now)
+    client_timestamp = Column(DateTime, nullable=True)
+    protocol_version = Column(Integer, nullable=False, default=1)
+    error_code = Column(String(80), nullable=True)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    message = relationship("DeviceMessage", foreign_keys=[message_id])
+    recipient = relationship("DeviceMessageRecipient", foreign_keys=[recipient_id])
+    device = relationship("Device", foreign_keys=[device_id])
