@@ -208,3 +208,10 @@ Resultado agregado de la ventana:
 v0.7.1d queda tecnicamente cerrada. El job no fue desactivado, el worker queda
 activo y estable, PostgreSQL no fue modificado, Klinip One no fue modificado y
 Device Identity no fue iniciada.
+
+## 19. Continuidad
+
+Despues de este cierre se inicio v0.7.2 en una rama independiente. Su alcance y
+evidencia se documentan en
+`docs/integration/klinip_one_v0.7.2_device_identity_pairing.md`. Esta referencia
+no altera el cierre productivo de v0.7.1d.

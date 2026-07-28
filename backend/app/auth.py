@@ -83,7 +83,13 @@ def hash_token(raw: str) -> str:
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({"exp": int(expire.timestamp()), "type": "access"})
+    to_encode.update(
+        {
+            "exp": int(expire.timestamp()),
+            "type": "access",
+            "token_type": "human_access",
+        }
+    )
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -362,6 +368,10 @@ def get_current_user_from_token(token: str, db: Session) -> models.User:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         # Rechazar tokens que no sean access tokens (p.ej. mfa_pending)
         if payload.get("type") not in ("access", None):
+            raise credentials_exception
+        # Compatibilidad temporal: los access tokens humanos previos no incluian
+        # token_type. Ningun token de dispositivo puede cruzar esta frontera.
+        if payload.get("token_type") not in ("human_access", None):
             raise credentials_exception
         user_id = payload.get("sub")
         token_version = payload.get("tv")

@@ -5956,6 +5956,10 @@ def _start_scheduler():
 
 app = FastAPI(title="MiRutaSalud API")
 
+from .devices.routes import router as devices_router
+
+app.include_router(devices_router)
+
 @app.on_event("startup")
 def _startup_event():
     from app.jobs.registry import embedded_scheduler_enabled
@@ -19752,6 +19756,7 @@ VALID_PERMISSIONS = {
     "use_ai",
     "receive_alerts",
     "manage_refills",
+    "manage_devices",
 }
 
 # Permisos por defecto según rol
@@ -19795,6 +19800,7 @@ def _permission_catalog() -> list[dict]:
         {"key": "view_coverage", "module": "cobertura", "label": "Ver cobertura"},
         {"key": "edit_coverage", "module": "cobertura", "label": "Editar cobertura"},
         {"key": "use_ai", "module": "ia", "label": "Usar Klinip IA"},
+        {"key": "manage_devices", "module": "dispositivos", "label": "Administrar dispositivos"},
     ]
 
 

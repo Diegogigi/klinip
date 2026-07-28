@@ -12,6 +12,9 @@ from sqlalchemy import (
     LargeBinary,
     Boolean,
     UniqueConstraint,
+    Index,
+    CheckConstraint,
+    text,
 )
 from sqlalchemy.orm import relationship
 
@@ -1174,3 +1177,179 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
 
     user = relationship("User")
+
+
+class Device(Base):
+    __tablename__ = "devices"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'revoked', 'disabled')",
+            name="ck_devices_status",
+        ),
+        CheckConstraint("protocol_version > 0", name="ck_devices_protocol_version"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    label = Column(String(120), nullable=False)
+    platform = Column(String(40), nullable=False)
+    device_type = Column(String(40), nullable=False)
+    protocol_version = Column(Integer, nullable=False, default=1)
+    app_version = Column(String(40), nullable=True)
+    status = Column(String(20), nullable=False, default="active", index=True)
+    token_version = Column(Integer, nullable=False, default=1)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    last_seen_at = Column(DateTime, nullable=True, index=True)
+    revoked_at = Column(DateTime, nullable=True)
+    revoked_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
+
+
+class DevicePairing(Base):
+    __tablename__ = "device_pairings"
+    __table_args__ = (
+        CheckConstraint(
+            "pairing_status IN ('pending', 'claimed', 'expired', 'cancelled', 'locked')",
+            name="ck_device_pairings_status",
+        ),
+        CheckConstraint("max_attempts > 0", name="ck_device_pairings_max_attempts"),
+        CheckConstraint("attempts >= 0", name="ck_device_pairings_attempts"),
+        CheckConstraint("protocol_version > 0", name="ck_device_pairings_protocol_version"),
+        Index("ix_device_pairings_status_expires", "pairing_status", "expires_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    code_hash = Column(String(64), nullable=False, unique=True, index=True)
+    requested_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    claimed_device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    requested_label = Column(String(120), nullable=True)
+    requested_scopes = Column(JSON, nullable=False, default=list)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    max_attempts = Column(Integer, nullable=False, default=5)
+    attempts = Column(Integer, nullable=False, default=0)
+    claimed_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    pairing_status = Column(String(20), nullable=False, default="pending", index=True)
+    protocol_version = Column(Integer, nullable=False, default=1)
+
+    requested_by_user = relationship("User", foreign_keys=[requested_by_user_id])
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    claimed_device = relationship("Device", foreign_keys=[claimed_device_id])
+
+
+class DeviceCredential(Base):
+    __tablename__ = "device_credentials"
+    __table_args__ = (
+        Index("ix_device_credentials_expires_revoked", "expires_at", "revoked_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    refresh_token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    token_family_id = Column(String(64), nullable=False, index=True)
+    issued_at = Column(DateTime, nullable=False, default=datetime.now)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    rotated_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True, index=True)
+    replaced_by_id = Column(
+        Integer,
+        ForeignKey("device_credentials.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    reuse_detected_at = Column(DateTime, nullable=True)
+    created_from_pairing_id = Column(
+        Integer,
+        ForeignKey("device_pairings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    last_used_at = Column(DateTime, nullable=True)
+
+    device = relationship("Device", foreign_keys=[device_id])
+    replaced_by = relationship("DeviceCredential", remote_side=[id], foreign_keys=[replaced_by_id])
+    created_from_pairing = relationship("DevicePairing", foreign_keys=[created_from_pairing_id])
+
+
+class DeviceGrant(Base):
+    __tablename__ = "device_grants"
+    __table_args__ = (
+        CheckConstraint("protocol_version > 0", name="ck_device_grants_protocol_version"),
+        Index("ix_device_grants_device_profile", "device_id", "health_profile_id"),
+        Index(
+            "uq_device_grants_active",
+            "device_id",
+            "health_profile_id",
+            unique=True,
+            postgresql_where=text("revoked_at IS NULL"),
+            sqlite_where=text("revoked_at IS NULL"),
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    granted_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    scopes_json = Column(JSON, nullable=False, default=list)
+    protocol_version = Column(Integer, nullable=False, default=1)
+    granted_at = Column(DateTime, nullable=False, default=datetime.now)
+    expires_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True, index=True)
+    revoked_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    reason = Column(String(120), nullable=True)
+
+    device = relationship("Device", foreign_keys=[device_id])
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    granted_by_user = relationship("User", foreign_keys=[granted_by_user_id])
+    revoked_by_user = relationship("User", foreign_keys=[revoked_by_user_id])
