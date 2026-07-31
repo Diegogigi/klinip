@@ -442,6 +442,63 @@ export async function setActiveHealthProfile(id) {
   return res.data;
 }
 
+export async function createDevicePairing(payload) {
+  const res = await api.post("/api/v1/device-pairings", payload);
+  return res.data;
+}
+
+export async function getDevicePairing(pairingId) {
+  const res = await api.get(`/api/v1/device-pairings/${pairingId}`);
+  return res.data;
+}
+
+export async function cancelDevicePairing(pairingId) {
+  await api.delete(`/api/v1/device-pairings/${pairingId}`);
+}
+
+export async function getLinkedDevices() {
+  const res = await api.get("/api/v1/devices");
+  return res.data;
+}
+
+export async function updateLinkedDevice(deviceId, payload) {
+  const res = await api.patch(`/api/v1/devices/${deviceId}`, payload);
+  return res.data;
+}
+
+export async function revokeLinkedDevice(deviceId) {
+  const res = await api.delete(`/api/v1/devices/${deviceId}`);
+  return res.data;
+}
+
+export async function getDeviceMessages(profileId, params = {}) {
+  const res = await api.get(
+    `/api/v1/health-profiles/${profileId}/device-messages`,
+    { params },
+  );
+  return res.data;
+}
+
+export async function createDeviceMessage(
+  profileId,
+  payload,
+  idempotencyKey,
+) {
+  const res = await api.post(
+    `/api/v1/health-profiles/${profileId}/device-messages`,
+    payload,
+    { headers: { "Idempotency-Key": idempotencyKey } },
+  );
+  return res.data;
+}
+
+export async function revokeDeviceMessage(profileId, messageId) {
+  const res = await api.delete(
+    `/api/v1/health-profiles/${profileId}/device-messages/${messageId}`,
+  );
+  return res.data;
+}
+
 export async function getFamilyPanel() {
   const res = await api.get("/family/panel");
   return res.data;

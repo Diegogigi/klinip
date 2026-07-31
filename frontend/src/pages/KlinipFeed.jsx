@@ -1939,9 +1939,14 @@ export default function KlinipFeed({ user }) {
             </div>
           </div>
           <div className="kfeed-hero-meta-row">
-            <Link className="kfeed-manage-link" to="/settings/familia">
-              Gestionar grupo
-            </Link>
+            <div className="kfeed-hero-links">
+              <Link className="kfeed-manage-link" to="/settings/familia">
+                Gestionar grupo
+              </Link>
+              <Link className="kfeed-manage-link" to="/klinip-one">
+                Klinip One
+              </Link>
+            </div>
             <div className="kfeed-hero-chip-row" aria-label="Resumen del círculo familiar">
               <span className="kfeed-hero-chip">{formatUnitLabel(collaborativeProfiles, "perfil activo", "perfiles activos")}</span>
               <span className="kfeed-hero-chip">{formatUnitLabel(careTeamTotal, "persona en el círculo", "personas en el círculo")}</span>

@@ -4716,6 +4716,12 @@ body.theme-dark .primary-btn {
   text-decoration: none;
 }
 
+.kfeed-hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .kfeed-manage-link:hover,
 .kfeed-manage-link:focus-visible {
   border-color: #2563eb;

@@ -97,6 +97,7 @@ const ClinicalReports = lazyWithRecovery(() => import("./pages/ClinicalReports")
 const Landing = lazyWithRecovery(() => import("./pages/Landing"), "landing");
 const Plans = lazyWithRecovery(() => import("./pages/Plans"), "plans");
 const KlinipFeed = lazyWithRecovery(() => import("./pages/KlinipFeed"), "feed");
+const KlinipOne = lazyWithRecovery(() => import("./pages/KlinipOne"), "klinip-one");
 const KlinipVoicePage = lazyWithRecovery(() => import("./pages/KlinipVoicePage"), "voice");
 const SharedVoicePage = lazyWithRecovery(() => import("./pages/SharedVoicePage"), "shared-voice");
 const LegalPrivacy = lazyWithRecovery(() => import("./pages/LegalPrivacy"), "legal-privacy");
@@ -165,6 +166,12 @@ const icons = {
       <path d="M11.5 19a4.5 4.5 0 0 1 9 0" />
     </svg>
   ),
+  device: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="3.5" width="14" height="17" rx="3" />
+      <path d="M9 7.5h6M10 16.5h4" />
+    </svg>
+  ),
   feed: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -219,6 +226,7 @@ const ROUTE_TRANSITION_ORDER = [
   "/ai",
   "/voice",
   "/family",
+  "/klinip-one",
   "/mi-salud",
   "/mi-salud/biometricos",
   "/appointments",
@@ -360,6 +368,7 @@ function Sidebar({
     { to: "/ai", label: "Asistente", icon: icons.ai, section: "main" },
     { to: "/voice", label: "Voz", icon: icons.voice, section: "main" },
     { to: "/family", label: "Familia", icon: icons.family, activePaths: ["/family", "/feed"], section: "care" },
+    { to: "/klinip-one", label: "Klinip One", icon: icons.device, section: "care" },
     {
       to: "/mi-salud",
       label: "Mi salud",
@@ -660,6 +669,7 @@ function Topbar({
     "/timeline": "Historia clínica",
     "/family": "Familia",
     "/feed": "Familia",
+    "/klinip-one": "Klinip One",
     "/voice": "Voz",
     "/mi-salud": "Mi salud",
     "/mi-salud/ficha": "Ficha de Salud",
@@ -3366,6 +3376,19 @@ export default function App() {
                 element={
                   <ProtectedRoute user={user}>
                     <KlinipFeed user={user} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/klinip-one"
+                element={
+                  <ProtectedRoute user={user}>
+                    <KlinipOne
+                      key={`klinip-one-${activeHealthProfileId || "none"}`}
+                      user={user}
+                      healthProfiles={healthProfiles}
+                      activeProfileId={activeHealthProfileId}
+                    />
                   </ProtectedRoute>
                 }
               />
