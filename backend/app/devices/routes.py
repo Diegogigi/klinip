@@ -21,6 +21,7 @@ from .schemas import (
     DeviceRefreshOut,
     DeviceRevokeOut,
     DeviceTokenOut,
+    DeviceUpdateIn,
 )
 from .security import DevicePrincipal, hash_pairing_code, require_device_scopes
 from .service import (
@@ -35,6 +36,7 @@ from .service import (
     revoke_device,
     rotate_device_refresh_token,
     serialize_device,
+    update_device,
 )
 
 
@@ -206,6 +208,25 @@ def get_device(
 ):
     try:
         device, grant, profile = get_device_for_user(db, current_user, device_id)
+    except DeviceError as exc:
+        raise _device_error(exc) from None
+    return serialize_device(device, grant, profile)
+
+
+@router.patch("/devices/{device_id}", response_model=DeviceOut, tags=["Devices"])
+def patch_device(
+    device_id: str,
+    payload: DeviceUpdateIn,
+    db: Session = Depends(auth.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    try:
+        device, grant, profile = update_device(
+            db,
+            current_user,
+            device_id,
+            payload,
+        )
     except DeviceError as exc:
         raise _device_error(exc) from None
     return serialize_device(device, grant, profile)

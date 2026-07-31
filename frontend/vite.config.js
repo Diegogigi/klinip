@@ -10,5 +10,11 @@ export default defineConfig({
   build: {
     outDir: process.env.VITE_BUILD_OUT_DIR || 'dist',
     assetsDir: 'assets'
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+    restoreMocks: true,
+    clearMocks: true
   }
 })

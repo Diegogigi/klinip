@@ -141,6 +141,23 @@ def _setup(client, db_session, *, scopes=None):
     return owner, profile, claim, device_headers
 
 
+def test_message_create_cors_preflight_allows_idempotency_key(client):
+    response = client.options(
+        "/api/v1/health-profiles/1/device-messages",
+        headers={
+            "Origin": "http://127.0.0.1:5181",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": (
+                "authorization,content-type,idempotency-key"
+            ),
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    allowed_headers = response.headers["access-control-allow-headers"].lower()
+    assert "idempotency-key" in allowed_headers
+
+
 def test_owner_create_is_idempotent_and_does_not_expose_secrets(client, db_session):
     owner, profile, _claim, _headers = _setup(client, db_session)
     first = _create_message(client, owner, profile, key="private-raw-key")

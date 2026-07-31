@@ -12,7 +12,12 @@ from ..json_payload import normalize_json_payload
 from .audit import add_device_audit
 from .errors import DeviceError
 from .permissions import can_manage_profile_devices, require_managed_profile
-from .schemas import DeviceClaimIn, DeviceHeartbeatIn, DevicePairingCreate
+from .schemas import (
+    DeviceClaimIn,
+    DeviceHeartbeatIn,
+    DevicePairingCreate,
+    DeviceUpdateIn,
+)
 from .scopes import normalize_scopes
 from .security import (
     DEVICE_PROTOCOL_VERSION,
@@ -514,6 +519,31 @@ def get_device_for_user(
     )
     if not profile:
         raise DeviceError("profile_not_authorized", 403)
+    return device, grant, profile
+
+
+def update_device(
+    db: Session,
+    user: models.User,
+    public_id: str,
+    payload: DeviceUpdateIn,
+) -> tuple[models.Device, models.DeviceGrant, models.HealthProfile]:
+    device, grant, profile = get_device_for_user(db, user, public_id)
+    if device.status == "revoked":
+        raise DeviceError("device_revoked", 409)
+    if device.label != payload.label:
+        device.label = payload.label
+        device.updated_at = _now()
+        db.add(device)
+        add_device_audit(
+            db,
+            "device_label_updated",
+            user_id=user.id,
+            device=device,
+            profile_id=profile.id,
+        )
+        db.commit()
+        db.refresh(device)
     return device, grant, profile
 
 
