@@ -181,7 +181,7 @@
 }
 
 .ko-btn {
-  min-height: 40px;
+  min-height: 48px;
   padding: 9px 14px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -256,7 +256,7 @@
 .ko-field select,
 .ko-field textarea {
   width: 100%;
-  min-height: 42px;
+  min-height: 48px;
   padding: 9px 11px;
   border: 1px solid #cbd5e1;
   border-radius: 7px;
@@ -583,6 +583,411 @@
   justify-content: flex-end;
 }
 
+.ko-home-button {
+  flex: 0 0 auto;
+}
+
+.ko-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.ko-action-card {
+  display: grid;
+  min-height: 220px;
+  align-content: center;
+  justify-items: start;
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid var(--ko-border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--ko-surface);
+  color: var(--ko-text);
+  font: inherit;
+  text-align: left;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.ko-action-card:hover {
+  border-color: #8baee5;
+  background: var(--ko-surface-muted);
+}
+
+.ko-action-card:focus-visible {
+  border-color: var(--brand-primary);
+  outline: 3px solid rgba(13, 71, 247, 0.2);
+  outline-offset: 2px;
+}
+
+.ko-action-card-primary {
+  border-color: #aac4f2;
+}
+
+.ko-action-number {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf2ff;
+  color: var(--brand-primary);
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.ko-action-card strong {
+  max-width: 15ch;
+  font-size: 1.3rem;
+  line-height: 1.25;
+}
+
+.ko-action-card > span:last-child {
+  color: var(--ko-muted);
+  font-size: 0.92rem;
+}
+
+.ko-wizard {
+  width: min(760px, 100%);
+  margin: 24px auto 0;
+}
+
+.ko-steps {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.ko-steps li {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  color: var(--ko-muted);
+  text-align: center;
+}
+
+.ko-steps li::before {
+  position: absolute;
+  top: 17px;
+  right: 50%;
+  left: -50%;
+  height: 2px;
+  background: var(--ko-border);
+  content: "";
+}
+
+.ko-steps li:first-child::before {
+  display: none;
+}
+
+.ko-steps li > span {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 2px solid var(--ko-border);
+  border-radius: 50%;
+  background: var(--ko-surface);
+  font-weight: 850;
+}
+
+.ko-steps li.is-current {
+  color: var(--brand-primary);
+}
+
+.ko-steps li.is-current > span {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+  color: #ffffff;
+}
+
+.ko-steps small {
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.ko-wizard-panel,
+.ko-send-success {
+  padding: 28px;
+  border: 1px solid var(--ko-border);
+  border-radius: 8px;
+  background: var(--ko-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.ko-step-content {
+  display: grid;
+  gap: 22px;
+}
+
+.ko-step-content h2,
+.ko-send-success h2 {
+  margin: 0;
+  color: var(--ko-text);
+  font-size: 1.35rem;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.ko-step-label {
+  margin: 0 0 5px;
+  color: var(--brand-primary);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.ko-choice-group {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ko-choice-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  min-height: 76px;
+  padding: 16px 18px;
+  border: 2px solid var(--ko-border);
+  border-radius: 8px;
+  background: var(--ko-surface);
+  cursor: pointer;
+}
+
+.ko-choice-card:has(input:checked) {
+  border-color: var(--brand-primary);
+  background: #f3f7ff;
+}
+
+.ko-choice-card:has(input:focus-visible) {
+  outline: 3px solid rgba(13, 71, 247, 0.2);
+  outline-offset: 2px;
+}
+
+.ko-choice-card input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.ko-choice-indicator {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 2px solid #9aa8ba;
+  border-radius: 50%;
+}
+
+.ko-choice-card input:checked + .ko-choice-indicator {
+  border: 6px solid var(--brand-primary);
+}
+
+.ko-choice-card > span:last-child {
+  display: grid;
+  gap: 4px;
+}
+
+.ko-choice-card strong {
+  color: var(--ko-text);
+  font-size: 1rem;
+}
+
+.ko-choice-card small {
+  color: var(--ko-muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.ko-delivery-target {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border: 1px solid var(--ko-border);
+  border-radius: 8px;
+  background: var(--ko-surface-muted);
+}
+
+.ko-delivery-target > strong {
+  color: var(--ko-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.ko-delivery-target > span {
+  color: var(--ko-text);
+  font-weight: 750;
+}
+
+.ko-delivery-target .ko-field {
+  margin-top: 10px;
+}
+
+.ko-message-field textarea {
+  min-height: 190px;
+  font-size: 1rem;
+}
+
+.ko-wizard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.ko-wizard-actions .ko-btn {
+  min-width: 142px;
+}
+
+.ko-review {
+  display: grid;
+  margin: 0;
+  border-top: 1px solid var(--ko-border);
+}
+
+.ko-review > div {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 20px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--ko-border);
+}
+
+.ko-review dt {
+  color: var(--ko-muted);
+  font-size: 0.83rem;
+  font-weight: 750;
+}
+
+.ko-review dd {
+  margin: 0;
+  color: var(--ko-text);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.ko-review-message {
+  white-space: pre-wrap;
+}
+
+.ko-expiry-field {
+  max-width: 180px;
+}
+
+.ko-send-success {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  min-height: 360px;
+  align-content: center;
+  text-align: center;
+}
+
+.ko-send-success p {
+  margin: 0;
+  color: var(--ko-muted);
+}
+
+.ko-success-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f7ee;
+  color: #167044;
+  font-size: 1.65rem;
+  font-weight: 900;
+}
+
+.ko-messages-view {
+  margin-top: 18px;
+}
+
+.ko-message-profile-filter {
+  max-width: 360px;
+  margin-bottom: 14px;
+}
+
+.ko-message-fragment {
+  display: -webkit-box;
+  margin: 12px 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.ko-detail-button {
+  min-width: 118px;
+}
+
+.ko-message-detail {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--ko-border);
+  border-radius: 8px;
+  background: var(--ko-surface-muted);
+}
+
+.ko-message-detail > p {
+  margin: 0;
+  color: var(--ko-text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.ko-message-activity {
+  display: grid;
+  gap: 8px;
+}
+
+.ko-message-activity ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ko-message-activity li {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  color: var(--ko-muted);
+  font-size: 0.84rem;
+}
+
+.ko-message-activity li strong {
+  color: var(--ko-text);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body.theme-dark .ko-page {
   --ko-border: #29364a;
   --ko-surface: #101827;
@@ -647,10 +1052,64 @@ body.theme-dark .ko-field textarea {
   border-color: #3a475b;
 }
 
+body.theme-dark .ko-action-card,
+body.theme-dark .ko-choice-card,
+body.theme-dark .ko-wizard-panel,
+body.theme-dark .ko-send-success {
+  border-color: #29364a;
+  background: #101827;
+}
+
+body.theme-dark .ko-action-card:hover,
+body.theme-dark .ko-message-detail,
+body.theme-dark .ko-delivery-target {
+  background: #151f31;
+}
+
+body.theme-dark .ko-action-number {
+  background: rgba(77, 163, 255, 0.14);
+  color: #79b7ff;
+}
+
+body.theme-dark .ko-choice-card:has(input:checked) {
+  border-color: #79b7ff;
+  background: #111e33;
+}
+
+body.theme-dark .ko-choice-indicator {
+  border-color: #718096;
+}
+
+body.theme-dark .ko-choice-card input:checked + .ko-choice-indicator {
+  border-color: #79b7ff;
+}
+
+body.theme-dark .ko-steps li.is-current {
+  color: #79b7ff;
+}
+
+body.theme-dark .ko-steps li.is-current > span {
+  border-color: #79b7ff;
+  background: #0d47b8;
+}
+
+body.theme-dark .ko-success-mark {
+  background: rgba(34, 197, 94, 0.13);
+  color: #82dfa5;
+}
+
 @media (max-width: 980px) {
   .ko-content-grid,
   .ko-content-messages {
     grid-template-columns: 1fr;
+  }
+
+  .ko-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ko-action-card {
+    min-height: 142px;
   }
 
   .ko-pairing {
@@ -681,7 +1140,7 @@ body.theme-dark .ko-field textarea {
 
   .ko-tabs button,
   .ko-btn {
-    min-height: 44px;
+    min-height: 48px;
   }
 
   .ko-content-grid {
@@ -763,6 +1222,106 @@ body.theme-dark .ko-field textarea {
   .ko-dialog {
     max-height: calc(100vh - 24px);
     padding: 18px;
+  }
+
+  .ko-action-grid {
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .ko-action-card {
+    min-height: 116px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-content: center;
+    column-gap: 12px;
+    padding: 16px;
+  }
+
+  .ko-action-number {
+    grid-row: 1 / span 2;
+    width: 42px;
+    height: 42px;
+  }
+
+  .ko-action-card strong {
+    max-width: none;
+    font-size: 1.08rem;
+  }
+
+  .ko-wizard {
+    margin-top: 14px;
+  }
+
+  .ko-steps {
+    margin-bottom: 10px;
+  }
+
+  .ko-steps small {
+    display: none;
+  }
+
+  .ko-wizard-panel,
+  .ko-send-success {
+    padding: 16px;
+  }
+
+  .ko-step-content {
+    gap: 16px;
+  }
+
+  .ko-step-content h2,
+  .ko-send-success h2 {
+    font-size: 1.16rem;
+  }
+
+  .ko-choice-card {
+    min-height: 68px;
+    padding: 13px 14px;
+  }
+
+  .ko-message-field textarea {
+    min-height: 150px;
+  }
+
+  .ko-review > div {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 12px 0;
+  }
+
+  .ko-expiry-field {
+    max-width: none;
+  }
+
+  .ko-sticky-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin: 18px -16px -16px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--ko-border);
+    background: var(--ko-surface);
+  }
+
+  .ko-sticky-actions .ko-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ko-send-success .ko-wizard-actions {
+    display: grid;
+    width: 100%;
+  }
+
+  .ko-message-activity li {
+    display: grid;
+    gap: 3px;
+  }
+
+  body.theme-dark .ko-sticky-actions {
+    background: #101827;
   }
 }
 

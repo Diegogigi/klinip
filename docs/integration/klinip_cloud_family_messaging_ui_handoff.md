@@ -289,3 +289,44 @@ Después de las pruebas:
 3. borrar la base SQLite temporal;
 4. no conservar tokens ni códigos en documentos o logs;
 5. no realizar merge ni despliegue sin autorización explícita.
+
+## 15. Corrección posterior a revisión visual
+
+La revisión local del PR #26 detectó que el envío desde el navegador no llegaba
+al endpoint. El diagnóstico fue:
+
+- endpoint previsto: `POST /api/v1/health-profiles/{profile_id}/device-messages`;
+- respuesta observada: `OPTIONS` con HTTP `400`;
+- código de aplicación: no aplicaba, porque el navegador detenía la solicitud
+  antes del `POST`;
+- causa raíz: el frontend envía el encabezado obligatorio `Idempotency-Key`,
+  pero la configuración CORS solo autorizaba `Authorization`, `Content-Type` y
+  `Accept`;
+- corrección: se agregó `Idempotency-Key` a la lista explícita de encabezados
+  CORS y una prueba de regresión del preflight.
+
+La opción `Todos los dispositivos vinculados` sí corresponde al contrato:
+`target_device_ids: null` crea un solo mensaje idempotente y el backend determina
+todos los dispositivos elegibles dentro de la misma transacción. No se realizan
+llamadas individuales desde el frontend.
+
+La interfaz quedó organizada en una portada con tres acciones:
+
+1. `Enviar mensaje`;
+2. `Ver mensajes enviados`;
+3. `Dispositivos vinculados`.
+
+El envío usa cuatro pasos: persona, mensaje, confirmación y revisión. La lista de
+mensajes muestra un estado principal y mantiene actividad y revocación dentro
+del detalle. Los controles principales tienen al menos 48 px y existen reglas
+específicas para una columna móvil, acciones de paso persistentes y paridad entre
+tema claro y oscuro.
+
+Prueba real local posterior a la corrección:
+
+- preflight: HTTP `200`;
+- encabezado CORS: incluye `Idempotency-Key`;
+- creación: HTTP `201`;
+- destinatarios: `1`;
+- estado inicial: `queued`;
+- resultado idempotente reutilizado: `false`.

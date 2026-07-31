@@ -39,15 +39,32 @@ function errorMessage(error, fallback) {
   if (detail === "profile_not_authorized") {
     return "No tienes permiso para realizar esta acción en este perfil.";
   }
-  if (detail === "device_revoked") return "Este dispositivo ya fue revocado.";
+  if (["device_revoked", "target_device_not_eligible"].includes(detail)) {
+    return "El dispositivo ya no está vinculado.";
+  }
   if (detail === "message_not_authorized") {
     return "No tienes permiso para gestionar este mensaje.";
   }
   if (detail === "no_eligible_devices") {
-    return "No hay un Klinip One autorizado para recibir este mensaje.";
+    return "No hay dispositivos vinculados disponibles.";
+  }
+  if (detail === "invalid_message_body") {
+    return "El mensaje está vacío o es demasiado largo.";
+  }
+  if (detail === "idempotency_conflict") {
+    return "El mensaje cambió antes de enviarse. Revísalo e inténtalo nuevamente.";
+  }
+  if (detail === "message_creation_failed" || error?.response?.status === 503) {
+    return "No se pudo conectar con Klinip. Inténtalo nuevamente.";
   }
   if (error?.response?.status === 401) {
     return "Tu sesión terminó. Inicia sesión nuevamente.";
+  }
+  if (!error?.response) {
+    return "No se pudo conectar con Klinip. Inténtalo nuevamente.";
+  }
+  if (error?.response?.status === 422) {
+    return "Revisa el mensaje y los datos seleccionados.";
   }
   return fallback;
 }
@@ -147,7 +164,7 @@ export default function KlinipOne({
       (profile) => Number(profile.id) === Number(activeProfileId),
     ) || messageProfiles[0];
 
-  const [view, setView] = useState("devices");
+  const [view, setView] = useState("home");
   const [manageProfileId, setManageProfileId] = useState(
     preferredManageProfile?.id || "",
   );
@@ -169,13 +186,16 @@ export default function KlinipOne({
   const [revokingDevice, setRevokingDevice] = useState(null);
   const [busyDeviceAction, setBusyDeviceAction] = useState(false);
   const [messageBody, setMessageBody] = useState("");
-  const [requiresAcknowledgement, setRequiresAcknowledgement] = useState(true);
+  const [requiresAcknowledgement, setRequiresAcknowledgement] = useState(null);
   const [targetDeviceId, setTargetDeviceId] = useState("all");
   const [expiresInSeconds, setExpiresInSeconds] = useState(7 * 24 * 60 * 60);
-  const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
+  const [sendStep, setSendStep] = useState(1);
+  const [sendFieldError, setSendFieldError] = useState("");
+  const [sendComplete, setSendComplete] = useState(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [pendingIdempotencyKey, setPendingIdempotencyKey] = useState("");
   const [revokingMessage, setRevokingMessage] = useState(null);
+  const [expandedMessageId, setExpandedMessageId] = useState("");
 
   useEffect(() => {
     if (!manageProfileId && preferredManageProfile?.id) {
@@ -286,6 +306,53 @@ export default function KlinipOne({
   );
   const hasMessageTarget =
     profileDevices.length > 0 || !canSelectSpecificDevice;
+  const activeDeviceCount = devices.filter(
+    (device) => device.status !== "revoked",
+  ).length;
+  const selectedTargetLabel =
+    targetDeviceId === "all"
+      ? canSelectSpecificDevice
+        ? `Todos los dispositivos vinculados (${profileDevices.length})`
+        : "Todos los dispositivos autorizados"
+      : profileDevices.find((device) => device.device_id === targetDeviceId)
+          ?.label || "Dispositivo seleccionado";
+
+  function openView(nextView) {
+    setView(nextView);
+    setError("");
+    setNotice("");
+    if (nextView === "send") {
+      setSendStep(1);
+      setSendFieldError("");
+      setSendComplete(null);
+    }
+  }
+
+  function continueSendFlow() {
+    setSendFieldError("");
+    if (sendStep === 1 && (!messageProfileId || !hasMessageTarget)) {
+      setSendFieldError("Selecciona una persona con un dispositivo vinculado.");
+      return;
+    }
+    if (sendStep === 2 && !messageBody.trim()) {
+      setSendFieldError("Escribe un mensaje antes de continuar.");
+      return;
+    }
+    if (sendStep === 3 && requiresAcknowledgement === null) {
+      setSendFieldError("Selecciona una opción para continuar.");
+      return;
+    }
+    if (sendStep === 3) {
+      setPendingIdempotencyKey(createIdempotencyKey());
+    }
+    setSendStep((current) => Math.min(4, current + 1));
+  }
+
+  function previousSendStep() {
+    setSendFieldError("");
+    setError("");
+    setSendStep((current) => Math.max(1, current - 1));
+  }
 
   async function handleCreatePairing() {
     if (!manageProfileId) return;
@@ -379,25 +446,10 @@ export default function KlinipOne({
     }
   }
 
-  function openSendPreview(event) {
-    event.preventDefault();
-    setError("");
-    const normalized = messageBody.trim();
-    if (!normalized) {
-      setError("Escribe un mensaje antes de enviarlo.");
-      return;
-    }
-    if (!messageProfileId || !hasMessageTarget) {
-      setError("Este perfil no tiene un Klinip One autorizado.");
-      return;
-    }
-    setPendingIdempotencyKey(createIdempotencyKey());
-    setSendPreviewOpen(true);
-  }
-
   async function handleSendMessage() {
     if (sendingMessage) return;
     setSendingMessage(true);
+    setError("");
     try {
       const targetIds =
         targetDeviceId === "all" ? null : [targetDeviceId];
@@ -405,17 +457,20 @@ export default function KlinipOne({
         Number(messageProfileId),
         {
           body: messageBody.trim(),
-          requires_acknowledgement: requiresAcknowledgement,
+          requires_acknowledgement: Boolean(requiresAcknowledgement),
           expires_in_seconds: Number(expiresInSeconds),
           target_device_ids: targetIds,
           protocol_version: 1,
         },
-        pendingIdempotencyKey,
+        pendingIdempotencyKey || createIdempotencyKey(),
       );
-      setSendPreviewOpen(false);
+      setSendComplete({
+        recipientName: selectedMessageProfile?.full_name || "la persona",
+        requiresAcknowledgement: Boolean(requiresAcknowledgement),
+      });
       setPendingIdempotencyKey("");
       setMessageBody("");
-      setNotice("Mensaje enviado.");
+      setSendStep(1);
       await loadMessages(messageProfileId);
     } catch (requestError) {
       setError(
@@ -451,29 +506,28 @@ export default function KlinipOne({
       <header className="ko-page-header">
         <div>
           <p className="ko-eyebrow">Klinip One</p>
-          <h1>Conexión familiar</h1>
-          <p>Gestiona los dispositivos y mensajes de tu familia.</p>
+          <h1>
+            {view === "home" && "Conexión familiar"}
+            {view === "send" && "Enviar mensaje"}
+            {view === "messages" && "Mensajes enviados"}
+            {view === "devices" && "Dispositivos vinculados"}
+          </h1>
+          <p>
+            {view === "home" && "Elige qué necesitas hacer."}
+            {view === "send" && "Completa un paso a la vez."}
+            {view === "messages" && "Revisa el estado de cada mensaje."}
+            {view === "devices" && "Administra el acceso de Klinip One."}
+          </p>
         </div>
-        <div className="ko-tabs" role="tablist" aria-label="Secciones de Klinip One">
+        {view !== "home" && (
           <button
+            className="ko-btn ko-btn-secondary ko-home-button"
             type="button"
-            role="tab"
-            aria-selected={view === "devices"}
-            className={view === "devices" ? "is-active" : ""}
-            onClick={() => setView("devices")}
+            onClick={() => openView("home")}
           >
-            Dispositivos
+            Volver al inicio
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === "messages"}
-            className={view === "messages" ? "is-active" : ""}
-            onClick={() => setView("messages")}
-          >
-            Mensajes
-          </button>
-        </div>
+        )}
       </header>
 
       {(notice || error) && (
@@ -495,8 +549,479 @@ export default function KlinipOne({
         </div>
       )}
 
-      {view === "devices" ? (
-        <div className="ko-content-grid">
+      {view === "home" && (
+        <section className="ko-action-grid" aria-label="Acciones de Klinip One">
+          <button
+            className="ko-action-card ko-action-card-primary"
+            type="button"
+            onClick={() => openView("send")}
+          >
+            <span className="ko-action-number" aria-hidden="true">
+              1
+            </span>
+            <strong>Enviar mensaje</strong>
+            <span>Nuevo mensaje familiar</span>
+          </button>
+          <button
+            className="ko-action-card"
+            type="button"
+            onClick={() => openView("messages")}
+          >
+            <span className="ko-action-number" aria-hidden="true">
+              2
+            </span>
+            <strong>Ver mensajes enviados</strong>
+            <span>
+              {messages.length === 1
+                ? "1 mensaje"
+                : `${messages.length} mensajes`}
+            </span>
+          </button>
+          <button
+            className="ko-action-card"
+            type="button"
+            onClick={() => openView("devices")}
+          >
+            <span className="ko-action-number" aria-hidden="true">
+              3
+            </span>
+            <strong>Dispositivos vinculados</strong>
+            <span>
+              {activeDeviceCount === 1
+                ? "1 dispositivo"
+                : `${activeDeviceCount} dispositivos`}
+            </span>
+          </button>
+        </section>
+      )}
+
+      {view === "send" && (
+        <section className="ko-wizard" aria-labelledby="ko-send-title">
+          {sendComplete ? (
+            <div className="ko-send-success" role="status">
+              <span className="ko-success-mark" aria-hidden="true">
+                ✓
+              </span>
+              <h2>Mensaje enviado a {sendComplete.recipientName}.</h2>
+              {sendComplete.requiresAcknowledgement && (
+                <p>
+                  Te avisaremos cuando {sendComplete.recipientName} lo confirme.
+                </p>
+              )}
+              <div className="ko-wizard-actions">
+                <button
+                  className="ko-btn ko-btn-primary"
+                  type="button"
+                  onClick={() => openView("messages")}
+                >
+                  Ver mensajes enviados
+                </button>
+                <button
+                  className="ko-btn ko-btn-secondary"
+                  type="button"
+                  onClick={() => openView("home")}
+                >
+                  Volver al inicio
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <ol className="ko-steps" aria-label="Progreso del envío">
+                {[1, 2, 3, 4].map((step) => (
+                  <li
+                    key={step}
+                    className={step === sendStep ? "is-current" : ""}
+                    aria-current={step === sendStep ? "step" : undefined}
+                  >
+                    <span>{step}</span>
+                    <small>
+                      {step === 1 && "Persona"}
+                      {step === 2 && "Mensaje"}
+                      {step === 3 && "Confirmación"}
+                      {step === 4 && "Revisar"}
+                    </small>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="ko-wizard-panel">
+                {sendStep === 1 && (
+                  <div className="ko-step-content">
+                    <div>
+                      <p className="ko-step-label">Paso 1 de 4</p>
+                      <h2 id="ko-send-title">
+                        ¿A quién quieres enviar el mensaje?
+                      </h2>
+                    </div>
+                    {!messageProfiles.length ? (
+                      <EmptyState
+                        title="Sin perfiles disponibles"
+                        text="No tienes permiso para enviar mensajes."
+                      />
+                    ) : (
+                      <fieldset className="ko-choice-group">
+                        <legend className="sr-only">Selecciona una persona</legend>
+                        {messageProfiles.map((profile) => (
+                          <label className="ko-choice-card" key={profile.id}>
+                            <input
+                              type="radio"
+                              name="message-profile"
+                              value={profile.id}
+                              checked={
+                                Number(messageProfileId) === Number(profile.id)
+                              }
+                              onChange={(event) => {
+                                setMessageProfileId(event.target.value);
+                                setTargetDeviceId("all");
+                                setSendFieldError("");
+                              }}
+                            />
+                            <span className="ko-choice-indicator" />
+                            <span>
+                              <strong>{profile.full_name}</strong>
+                              <small>Perfil familiar</small>
+                            </span>
+                          </label>
+                        ))}
+                      </fieldset>
+                    )}
+
+                    {messageProfileId && (
+                      <div className="ko-delivery-target">
+                        <strong>Se enviará a</strong>
+                        <span>{selectedTargetLabel}</span>
+                        {canSelectSpecificDevice && profileDevices.length > 1 && (
+                          <label className="ko-field">
+                            <span>Elegir dispositivo</span>
+                            <select
+                              value={targetDeviceId}
+                              onChange={(event) =>
+                                setTargetDeviceId(event.target.value)
+                              }
+                            >
+                              <option value="all">
+                                Todos los dispositivos vinculados
+                              </option>
+                              {profileDevices.map((device) => (
+                                <option
+                                  key={device.device_id}
+                                  value={device.device_id}
+                                >
+                                  {device.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                      </div>
+                    )}
+                    {!hasMessageTarget && messageProfileId && (
+                      <p className="ko-field-error" role="alert">
+                        No hay dispositivos vinculados disponibles.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {sendStep === 2 && (
+                  <div className="ko-step-content">
+                    <div>
+                      <p className="ko-step-label">Paso 2 de 4</p>
+                      <h2 id="ko-send-title">Escribe tu mensaje</h2>
+                    </div>
+                    <label className="ko-field ko-message-field">
+                      <span>Mensaje para {selectedMessageProfile?.full_name}</span>
+                      <textarea
+                        autoFocus
+                        value={messageBody}
+                        rows={7}
+                        maxLength={MESSAGE_MAX_LENGTH}
+                        placeholder="Escribe aquí tu mensaje"
+                        onChange={(event) => {
+                          setMessageBody(event.target.value);
+                          setSendFieldError("");
+                        }}
+                        aria-describedby="ko-message-count"
+                      />
+                      <small id="ko-message-count">
+                        {messageBody.length} de {MESSAGE_MAX_LENGTH} caracteres
+                      </small>
+                    </label>
+                  </div>
+                )}
+
+                {sendStep === 3 && (
+                  <div className="ko-step-content">
+                    <div>
+                      <p className="ko-step-label">Paso 3 de 4</p>
+                      <h2 id="ko-send-title">
+                        ¿Necesitas que la persona confirme que lo recibió?
+                      </h2>
+                    </div>
+                    <fieldset className="ko-choice-group">
+                      <legend className="sr-only">Elige una opción</legend>
+                      <label className="ko-choice-card">
+                        <input
+                          type="radio"
+                          name="requires-confirmation"
+                          checked={requiresAcknowledgement === false}
+                          onChange={() => {
+                            setRequiresAcknowledgement(false);
+                            setSendFieldError("");
+                          }}
+                        />
+                        <span className="ko-choice-indicator" />
+                        <span>
+                          <strong>No, solo enviarlo</strong>
+                          <small>No se pedirá una respuesta.</small>
+                        </span>
+                      </label>
+                      <label className="ko-choice-card">
+                        <input
+                          type="radio"
+                          name="requires-confirmation"
+                          checked={requiresAcknowledgement === true}
+                          onChange={() => {
+                            setRequiresAcknowledgement(true);
+                            setSendFieldError("");
+                          }}
+                        />
+                        <span className="ko-choice-indicator" />
+                        <span>
+                          <strong>Sí, pedir confirmación</strong>
+                          <small>Te avisaremos cuando lo confirme.</small>
+                        </span>
+                      </label>
+                    </fieldset>
+                  </div>
+                )}
+
+                {sendStep === 4 && (
+                  <div className="ko-step-content">
+                    <div>
+                      <p className="ko-step-label">Paso 4 de 4</p>
+                      <h2 id="ko-send-title">Revisar y enviar</h2>
+                    </div>
+                    <dl className="ko-review">
+                      <div>
+                        <dt>Destinatario</dt>
+                        <dd>{selectedMessageProfile?.full_name}</dd>
+                      </div>
+                      <div>
+                        <dt>Mensaje</dt>
+                        <dd className="ko-review-message">{messageBody.trim()}</dd>
+                      </div>
+                      <div>
+                        <dt>Confirmación</dt>
+                        <dd>
+                          {requiresAcknowledgement
+                            ? "Sí, pedir confirmación"
+                            : "No, solo enviarlo"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Vigencia</dt>
+                        <dd>
+                          <label className="ko-field ko-expiry-field">
+                            <span className="sr-only">Vigencia del mensaje</span>
+                            <select
+                              value={expiresInSeconds}
+                              onChange={(event) =>
+                                setExpiresInSeconds(Number(event.target.value))
+                              }
+                            >
+                              <option value={24 * 60 * 60}>1 día</option>
+                              <option value={7 * 24 * 60 * 60}>7 días</option>
+                              <option value={30 * 24 * 60 * 60}>30 días</option>
+                            </select>
+                          </label>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
+
+                {sendFieldError && (
+                  <p className="ko-field-error" role="alert">
+                    {sendFieldError}
+                  </p>
+                )}
+                <div className="ko-wizard-actions ko-sticky-actions">
+                  <button
+                    className="ko-btn ko-btn-secondary"
+                    type="button"
+                    onClick={
+                      sendStep === 1
+                        ? () => openView("home")
+                        : previousSendStep
+                    }
+                    disabled={sendingMessage}
+                  >
+                    Volver
+                  </button>
+                  {sendStep < 4 ? (
+                    <button
+                      className="ko-btn ko-btn-primary"
+                      type="button"
+                      onClick={continueSendFlow}
+                    >
+                      Continuar
+                    </button>
+                  ) : (
+                    <button
+                      className="ko-btn ko-btn-primary"
+                      type="button"
+                      onClick={handleSendMessage}
+                      disabled={sendingMessage}
+                    >
+                      {sendingMessage ? "Enviando..." : "Enviar mensaje"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {view === "messages" && (
+        <section className="ko-section ko-messages-view" aria-labelledby="ko-messages-title">
+          <div className="ko-section-heading">
+            <div>
+              <h2 id="ko-messages-title">Mensajes enviados</h2>
+              <p>
+                Escuchado: Klinip leyó el mensaje. Confirmado: la persona indicó
+                que lo recibió.
+              </p>
+            </div>
+            <button
+              className="ko-btn ko-btn-secondary"
+              type="button"
+              onClick={() => loadMessages(messageProfileId)}
+              disabled={loadingMessages || !messageProfileId}
+            >
+              Actualizar
+            </button>
+          </div>
+          {messageProfiles.length > 1 && (
+            <label className="ko-field ko-message-profile-filter">
+              <span>Persona</span>
+              <select
+                value={messageProfileId}
+                onChange={(event) => {
+                  setMessageProfileId(event.target.value);
+                  setTargetDeviceId("all");
+                  setExpandedMessageId("");
+                }}
+              >
+                {messageProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {loadingMessages ? (
+            <div className="ko-loading" role="status">
+              Cargando mensajes...
+            </div>
+          ) : !messages.length ? (
+            <EmptyState
+              title="Aún no hay mensajes"
+              text="Los mensajes enviados aparecerán aquí."
+            />
+          ) : (
+            <div className="ko-message-list">
+              {messages.map((message) => {
+                const displayState = getMessageDisplayState(message);
+                const isExpanded = expandedMessageId === message.message_id;
+                const isTerminal =
+                  Boolean(message.revoked_at) ||
+                  message.recipients?.every((recipient) =>
+                    ["revoked", "expired"].includes(recipient.current_state),
+                  );
+                return (
+                  <article className="ko-message-row" key={message.message_id}>
+                    <div className="ko-message-topline">
+                      <div>
+                        <strong>
+                          {selectedMessageProfile?.full_name || "Familiar"}
+                        </strong>
+                        <span>{formatDate(message.created_at)}</span>
+                      </div>
+                      <StatusPill
+                        tone={
+                          displayState === "Confirmado"
+                            ? "success"
+                            : displayState === "Esperando confirmación"
+                              ? "warning"
+                              : displayState === "No disponible"
+                                ? "danger"
+                                : "info"
+                        }
+                      >
+                        {displayState}
+                      </StatusPill>
+                    </div>
+                    <p className="ko-message-fragment">{message.body}</p>
+                    <button
+                      className="ko-btn ko-btn-secondary ko-detail-button"
+                      type="button"
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedMessageId(isExpanded ? "" : message.message_id)
+                      }
+                    >
+                      {isExpanded ? "Cerrar detalle" : "Ver detalle"}
+                    </button>
+                    {isExpanded && (
+                      <div className="ko-message-detail">
+                        <p>{message.body}</p>
+                        <p>
+                          {message.requires_acknowledgement
+                            ? "Este mensaje pide confirmación."
+                            : "Este mensaje no pide confirmación."}
+                        </p>
+                        {!!message.recipients?.length && (
+                          <div className="ko-message-activity">
+                            <strong>Actividad</strong>
+                            <ul>
+                              {message.recipients.map((recipient) => (
+                                <li key={recipient.recipient_id}>
+                                  <span>{recipient.device_label}</span>
+                                  <strong>
+                                    {MESSAGE_STATE_LABELS[
+                                      recipient.current_state
+                                    ] || "Enviado"}
+                                  </strong>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {!isTerminal && (
+                          <button
+                            className="ko-link-danger"
+                            type="button"
+                            onClick={() => setRevokingMessage(message)}
+                          >
+                            Revocar mensaje
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {view === "devices" && (
+        <div className="ko-content-grid ko-devices-grid">
           <section className="ko-section" aria-labelledby="ko-linked-title">
             <div className="ko-section-heading">
               <div>
@@ -696,229 +1221,6 @@ export default function KlinipOne({
             )}
           </section>
         </div>
-      ) : (
-        <div className="ko-content-grid ko-content-messages">
-          <section className="ko-section" aria-labelledby="ko-send-title">
-            <div className="ko-section-heading">
-              <div>
-                <h2 id="ko-send-title">Enviar nuevo mensaje</h2>
-                <p>Mensaje familiar no clínico.</p>
-              </div>
-            </div>
-            <form className="ko-message-form" onSubmit={openSendPreview}>
-              <div className="ko-form-grid">
-                <label className="ko-field">
-                  <span>Perfil destinatario</span>
-                  <select
-                    value={messageProfileId}
-                    onChange={(event) => {
-                      setMessageProfileId(event.target.value);
-                      setTargetDeviceId("all");
-                    }}
-                    disabled={!messageProfiles.length}
-                  >
-                    {messageProfiles.map((profile) => (
-                      <option key={profile.id} value={profile.id}>
-                        {profile.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="ko-field">
-                  <span>Dispositivo</span>
-                  <select
-                    value={targetDeviceId}
-                    onChange={(event) => setTargetDeviceId(event.target.value)}
-                    disabled={!canSelectSpecificDevice || !profileDevices.length}
-                  >
-                    <option value="all">
-                      {canSelectSpecificDevice
-                        ? "Todos los dispositivos vinculados"
-                        : "Todos los dispositivos autorizados"}
-                    </option>
-                    {profileDevices.map((device) => (
-                      <option key={device.device_id} value={device.device_id}>
-                        {device.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="ko-field">
-                <span>Mensaje</span>
-                <textarea
-                  value={messageBody}
-                  rows={4}
-                  maxLength={MESSAGE_MAX_LENGTH}
-                  placeholder="Escribe un mensaje breve y familiar"
-                  onChange={(event) => setMessageBody(event.target.value)}
-                />
-                <small>
-                  {messageBody.length} de {MESSAGE_MAX_LENGTH} caracteres
-                </small>
-              </label>
-              <div className="ko-form-grid">
-                <label className="ko-toggle-row">
-                  <input
-                    type="checkbox"
-                    checked={requiresAcknowledgement}
-                    onChange={(event) =>
-                      setRequiresAcknowledgement(event.target.checked)
-                    }
-                  />
-                  <span>
-                    <strong>Pedir confirmación</strong>
-                    <small>
-                      La persona podrá avisarte que recibió el mensaje.
-                    </small>
-                  </span>
-                </label>
-                <label className="ko-field">
-                  <span>El mensaje vence en</span>
-                  <select
-                    value={expiresInSeconds}
-                    onChange={(event) =>
-                      setExpiresInSeconds(Number(event.target.value))
-                    }
-                  >
-                    <option value={24 * 60 * 60}>1 día</option>
-                    <option value={7 * 24 * 60 * 60}>7 días</option>
-                    <option value={30 * 24 * 60 * 60}>30 días</option>
-                  </select>
-                </label>
-              </div>
-              {!hasMessageTarget && messageProfileId && (
-                <p className="ko-field-error" role="status">
-                  Vincula un Klinip One a este perfil antes de enviar mensajes.
-                </p>
-              )}
-              <button
-                className="ko-btn ko-btn-primary ko-send-button"
-                type="submit"
-                disabled={
-                  !messageBody.trim() ||
-                  !messageProfileId ||
-                  !hasMessageTarget ||
-                  sendingMessage
-                }
-              >
-                Revisar y enviar
-              </button>
-            </form>
-          </section>
-
-          <section className="ko-section" aria-labelledby="ko-messages-title">
-            <div className="ko-section-heading">
-              <div>
-                <h2 id="ko-messages-title">Mensajes familiares</h2>
-                <p>
-                  Escuchado significa que Klinip One terminó de leer. Confirmado
-                  significa que la persona aceptó avisarte que lo recibió.
-                </p>
-              </div>
-              <button
-                className="ko-btn ko-btn-secondary"
-                type="button"
-                onClick={() => loadMessages(messageProfileId)}
-                disabled={loadingMessages || !messageProfileId}
-              >
-                Actualizar
-              </button>
-            </div>
-
-            {loadingMessages ? (
-              <div className="ko-loading" role="status">
-                Cargando mensajes...
-              </div>
-            ) : !messages.length ? (
-              <EmptyState
-                title="Aún no hay mensajes"
-                text="Los mensajes enviados aparecerán aquí."
-              />
-            ) : (
-              <div className="ko-message-list">
-                {messages.map((message) => {
-                  const displayState = getMessageDisplayState(message);
-                  const isTerminal =
-                    Boolean(message.revoked_at) ||
-                    message.recipients?.every((recipient) =>
-                      ["revoked", "expired"].includes(recipient.current_state),
-                    );
-                  return (
-                    <article className="ko-message-row" key={message.message_id}>
-                      <div className="ko-message-topline">
-                        <div>
-                          <strong>{message.sender?.display_name || "Familiar"}</strong>
-                          <span>
-                            Para {selectedMessageProfile?.full_name || "el perfil"}
-                          </span>
-                        </div>
-                        <StatusPill
-                          tone={
-                            displayState === "Confirmado"
-                              ? "success"
-                              : displayState.includes("Pendiente")
-                                ? "warning"
-                                : "info"
-                          }
-                        >
-                          {displayState}
-                        </StatusPill>
-                      </div>
-                      <p>{message.body}</p>
-                      <div className="ko-message-meta">
-                        <span>{formatDate(message.created_at)}</span>
-                        <span>
-                          {message.requires_acknowledgement
-                            ? "Requiere confirmación"
-                            : "No requiere confirmación"}
-                        </span>
-                      </div>
-                      {!!message.recipients?.length && (
-                        <details className="ko-message-history">
-                          <summary>Ver actividad</summary>
-                          <ul>
-                            {message.recipients.map((recipient) => (
-                              <li key={recipient.recipient_id}>
-                                <span>{recipient.device_label}</span>
-                                <strong>
-                                  {MESSAGE_STATE_LABELS[
-                                    recipient.current_state
-                                  ] || "Pendiente"}
-                                </strong>
-                              </li>
-                            ))}
-                            {(message.events || [])
-                              .slice(-5)
-                              .reverse()
-                              .map((event) => (
-                                <li key={event.event_id}>
-                                  <span>{formatDate(event.server_timestamp)}</span>
-                                  <strong>
-                                    {MESSAGE_STATE_LABELS[event.event_type] ||
-                                      "Actividad registrada"}
-                                  </strong>
-                                </li>
-                              ))}
-                          </ul>
-                        </details>
-                      )}
-                      {!isTerminal && (
-                        <button
-                          className="ko-link-danger"
-                          type="button"
-                          onClick={() => setRevokingMessage(message)}
-                        >
-                          Revocar mensaje
-                        </button>
-                      )}
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
       )}
 
       <ConfirmDialog
@@ -951,29 +1253,6 @@ export default function KlinipOne({
         <p>
           Este Klinip One dejará de acceder a los mensajes de este perfil.
           ¿Deseas continuar?
-        </p>
-      </ConfirmDialog>
-
-      <ConfirmDialog
-        open={sendPreviewOpen}
-        title="Confirmar envío"
-        confirmLabel="Enviar mensaje"
-        busy={sendingMessage}
-        onClose={() => {
-          setSendPreviewOpen(false);
-          setPendingIdempotencyKey("");
-        }}
-        onConfirm={handleSendMessage}
-      >
-        <p>
-          Vas a enviar este mensaje a{" "}
-          <strong>{selectedMessageProfile?.full_name}</strong>.
-        </p>
-        <blockquote>{messageBody.trim()}</blockquote>
-        <p>
-          {requiresAcknowledgement
-            ? "Se solicitará confirmación."
-            : "No se solicitará confirmación."}
         </p>
       </ConfirmDialog>
 

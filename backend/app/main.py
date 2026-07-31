@@ -9366,7 +9366,7 @@ app.add_middleware(
     allow_origin_regex=allow_origin_regex,
     allow_credentials=allow_credentials,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Idempotency-Key"],
     expose_headers=["Retry-After"],
 )
 # ───────────────────────────────────────────────────────────────────────────

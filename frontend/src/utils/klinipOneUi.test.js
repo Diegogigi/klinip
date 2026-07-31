@@ -28,9 +28,7 @@ describe("Klinip One presentation rules", () => {
       recipients: [{ current_state: "heard" }],
     };
 
-    expect(getMessageDisplayState(base)).toBe(
-      "Escuchado · Pendiente de confirmar",
-    );
+    expect(getMessageDisplayState(base)).toBe("Esperando confirmación");
     expect(
       getMessageDisplayState({
         ...base,
@@ -40,11 +38,11 @@ describe("Klinip One presentation rules", () => {
   });
 
   it.each([
-    ["queued", "Pendiente de entrega"],
-    ["delivered", "Entregado al dispositivo"],
-    ["announced", "Anunciado"],
-    ["revoked", "Revocado"],
-    ["expired", "Vencido"],
+    ["queued", "Enviado"],
+    ["delivered", "Entregado"],
+    ["announced", "Entregado"],
+    ["revoked", "No disponible"],
+    ["expired", "No disponible"],
   ])("maps %s without exposing the internal state", (state, label) => {
     expect(
       getMessageDisplayState({

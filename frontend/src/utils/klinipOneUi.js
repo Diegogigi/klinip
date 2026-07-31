@@ -8,14 +8,14 @@ export const DEVICE_SCOPES = [
 ];
 
 export const MESSAGE_STATE_LABELS = {
-  queued: "Pendiente de entrega",
-  delivered: "Entregado al dispositivo",
-  announced: "Anunciado",
+  queued: "Enviado",
+  delivered: "Entregado",
+  announced: "Entregado",
   heard: "Escuchado",
   acknowledged: "Confirmado",
-  revoked: "Revocado",
-  expired: "Vencido",
-  failed: "No entregado",
+  revoked: "No disponible",
+  expired: "No disponible",
+  failed: "No disponible",
 };
 
 export const PAIRING_STATE_LABELS = {
@@ -72,7 +72,7 @@ export function getMessageDisplayState(message) {
     message?.requires_acknowledgement &&
     recipients.some((item) => item.current_state === "heard")
   ) {
-    return "Escuchado · Pendiente de confirmar";
+    return "Esperando confirmación";
   }
   const states = recipients.map((item) => item.current_state);
   const priority = [
