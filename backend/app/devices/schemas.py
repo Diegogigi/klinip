@@ -107,6 +107,18 @@ class DeviceOut(BaseModel):
     revoked_at: datetime | None
 
 
+class DeviceUpdateIn(BaseModel):
+    label: str = Field(min_length=1, max_length=120)
+
+    @field_validator("label")
+    @classmethod
+    def clean_label(cls, value: str) -> str:
+        cleaned = " ".join(value.split()).strip()
+        if not cleaned:
+            raise ValueError("device label is required")
+        return cleaned
+
+
 class DeviceRevokeOut(BaseModel):
     device_id: str
     status: str

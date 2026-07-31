@@ -232,6 +232,19 @@ def test_authentication_boundaries_apply_across_human_and_device_routes(
         response = client.request(method, path, headers=device_headers)
         assert response.status_code == 401, (method, path, response.text)
 
+    rename_path = f"/api/v1/devices/{claim['device_id']}"
+    unauthenticated_rename = client.patch(
+        rename_path,
+        json={"label": "Nombre no autorizado"},
+    )
+    assert unauthenticated_rename.status_code == 401
+    device_token_rename = client.patch(
+        rename_path,
+        json={"label": "Nombre no autorizado"},
+        headers=device_headers,
+    )
+    assert device_token_rename.status_code == 401
+
     device_config = client.get("/api/v1/device/config", headers=human_headers)
     assert device_config.status_code == 401
     assert device_config.json()["detail"] == "invalid_device_token"
@@ -564,6 +577,60 @@ def test_device_listing_detail_and_revocation_follow_human_permissions(
     expected_status = 200 if can_manage else 403
     assert detail.status_code == expected_status
     assert revoked.status_code == expected_status
+
+
+def test_device_label_update_is_authorized_validated_and_audited(
+    client,
+    db_session,
+):
+    owner, _profile, _pairing, claim = _create_and_claim(client, db_session)
+    url = f"/api/v1/devices/{claim['device_id']}"
+    headers = _human_headers(owner)
+
+    updated = client.patch(
+        url,
+        json={"label": "  Klinip   One dormitorio  "},
+        headers=headers,
+    )
+
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["label"] == "Klinip One dormitorio"
+    assert db_session.query(models.Device).one().label == "Klinip One dormitorio"
+    audit = (
+        db_session.query(models.AuditLog)
+        .filter(models.AuditLog.action == "device_label_updated")
+        .one()
+    )
+    assert audit.user_id == owner.id
+
+    invalid = client.patch(url, json={"label": "   "}, headers=headers)
+    assert invalid.status_code == 422
+
+    outsider = _seed_user(db_session, "device-label-outsider@example.com")
+    db_session.commit()
+    forbidden = client.patch(
+        url,
+        json={"label": "Nombre ajeno"},
+        headers=_human_headers(outsider),
+    )
+    assert forbidden.status_code == 403
+    assert forbidden.json()["detail"] == "profile_not_authorized"
+
+
+def test_revoked_device_cannot_be_renamed(client, db_session):
+    owner, _profile, _pairing, claim = _create_and_claim(client, db_session)
+    url = f"/api/v1/devices/{claim['device_id']}"
+    headers = _human_headers(owner)
+    assert client.delete(url, headers=headers).status_code == 200
+
+    response = client.patch(
+        url,
+        json={"label": "Nombre posterior"},
+        headers=headers,
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "device_revoked"
 
 
 def test_device_config_scopes_and_heartbeat_are_enforced(client, db_session):
