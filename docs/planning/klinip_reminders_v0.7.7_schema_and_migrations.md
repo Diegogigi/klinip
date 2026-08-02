@@ -205,7 +205,7 @@ Responsabilidad: entrega versionada de una ocurrencia a un único dispositivo.
 |---|---|---:|---|
 | `id` | integer | No | PK |
 | `public_id` | string(64) | No | Unique |
-| `occurrence_id` | FK integer | Sí | Requerido para occurrence y delivery events |
+| `occurrence_id` | FK integer | No | Ocurrencia entregada, RESTRICT |
 | `health_profile_id` | FK integer | No | Aislamiento defensivo |
 | `device_id` | FK integer | No | Target exacto |
 | `delivery_revision` | integer | No | Revisión del delivery |
@@ -254,7 +254,7 @@ scope y actor.
 | `id` | integer | No | PK |
 | `public_id` | string(64) | No | Unique |
 | `reminder_id` | FK integer | No | RESTRICT |
-| `occurrence_id` | FK integer | No | RESTRICT |
+| `occurrence_id` | FK integer | Sí | Requerido para occurrence y delivery events |
 | `delivery_id` | FK integer | Sí | Requerido para delivery events |
 | `health_profile_id` | FK integer | No | Aislamiento |
 | `actor_kind` | string(16) | No | `user`, `device`, `worker` |
