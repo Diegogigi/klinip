@@ -97,10 +97,10 @@ def upgrade() -> None:
         sa.Column("request_fingerprint", sa.String(length=64), nullable=False),
         sa.Column("origin", sa.String(length=32), nullable=False),
         sa.Column("reminder_type", sa.String(length=32), nullable=False),
-        sa.Column("title_ciphertext", sa.Text(), nullable=False),
-        sa.Column("body_ciphertext", sa.Text(), nullable=True),
+        sa.Column("content_ciphertext", sa.Text(), nullable=False),
         sa.Column("content_nonce", sa.String(length=64), nullable=False),
         sa.Column("content_key_version", sa.Integer(), nullable=False),
+        sa.Column("content_algorithm_version", sa.Integer(), nullable=False),
         sa.Column("schedule_mode", sa.String(length=24), nullable=False),
         sa.Column("original_local_date", sa.Date(), nullable=True),
         sa.Column("original_local_time", sa.Time(), nullable=False),
@@ -127,6 +127,18 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "content_key_version > 0",
             name="ck_reminders_content_key_version",
+        ),
+        sa.CheckConstraint(
+            "content_algorithm_version > 0",
+            name="ck_reminders_content_algorithm_version",
+        ),
+        sa.CheckConstraint(
+            "length(content_ciphertext) > 0",
+            name="ck_reminders_content_ciphertext_not_empty",
+        ),
+        sa.CheckConstraint(
+            "length(content_nonce) > 0 AND length(content_nonce) <= 64",
+            name="ck_reminders_content_nonce_length",
         ),
         sa.CheckConstraint(
             "dst_fold_policy IN ('earlier')",
@@ -491,7 +503,7 @@ def upgrade() -> None:
             "(actor_kind = 'device' AND actor_user_id IS NULL AND "
             "actor_device_id IS NOT NULL AND client_event_id IS NOT NULL) OR "
             "(actor_kind = 'worker' AND actor_user_id IS NULL AND "
-            "actor_device_id IS NULL))",
+            "actor_device_id IS NULL AND client_event_id IS NULL))",
             name="ck_reminder_events_actor",
         ),
         sa.CheckConstraint(
@@ -511,12 +523,24 @@ def upgrade() -> None:
             name="ck_reminder_events_scope",
         ),
         sa.CheckConstraint(
+            "((event_scope = 'reminder' AND actor_kind = 'user') OR "
+            "(event_scope = 'delivery' AND actor_kind = 'device') OR "
+            "(event_scope = 'occurrence' AND actor_kind IN ('user', 'device')) OR "
+            "(event_scope = 'system' AND actor_kind = 'worker'))",
+            name="ck_reminder_events_scope_actor",
+        ),
+        sa.CheckConstraint(
             "((event_scope = 'reminder' AND occurrence_id IS NULL AND "
             "delivery_id IS NULL) OR "
             "(event_scope = 'occurrence' AND occurrence_id IS NOT NULL AND "
             "delivery_id IS NULL) OR "
             "(event_scope = 'delivery' AND occurrence_id IS NOT NULL AND "
-            "delivery_id IS NOT NULL) OR event_scope = 'system')",
+            "delivery_id IS NOT NULL) OR "
+            "(event_scope = 'system' AND event_type IN "
+            "('materialized', 'due', 'expired', 'cancelled') AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NULL) OR "
+            "(event_scope = 'system' AND event_type = 'superseded' AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NOT NULL))",
             name="ck_reminder_events_scope_target",
         ),
         sa.CheckConstraint(
@@ -636,6 +660,22 @@ def upgrade() -> None:
             "event_scope = 'occurrence' AND actor_device_id IS NOT NULL "
             "AND client_event_id IS NOT NULL"
         ),
+    )
+    op.create_index(
+        "uq_reminder_events_system_occurrence_version",
+        "reminder_events",
+        ["occurrence_id", "event_type", "resulting_version"],
+        unique=True,
+        postgresql_where=sa.text("event_scope = 'system' AND delivery_id IS NULL"),
+        sqlite_where=sa.text("event_scope = 'system' AND delivery_id IS NULL"),
+    )
+    op.create_index(
+        "uq_reminder_events_system_delivery_version",
+        "reminder_events",
+        ["delivery_id", "event_type", "resulting_version"],
+        unique=True,
+        postgresql_where=sa.text("event_scope = 'system' AND delivery_id IS NOT NULL"),
+        sqlite_where=sa.text("event_scope = 'system' AND delivery_id IS NOT NULL"),
     )
     op.create_index(
         "ix_reminder_events_occurrence_server",

@@ -1725,6 +1725,18 @@ class Reminder(Base):
             name="ck_reminders_content_key_version",
         ),
         CheckConstraint(
+            "content_algorithm_version > 0",
+            name="ck_reminders_content_algorithm_version",
+        ),
+        CheckConstraint(
+            "length(content_ciphertext) > 0",
+            name="ck_reminders_content_ciphertext_not_empty",
+        ),
+        CheckConstraint(
+            "length(content_nonce) > 0 AND length(content_nonce) <= 64",
+            name="ck_reminders_content_nonce_length",
+        ),
+        CheckConstraint(
             "length(idempotency_key_hash) = 64",
             name="ck_reminders_idempotency_hash_length",
         ),
@@ -1797,10 +1809,12 @@ class Reminder(Base):
         nullable=False,
         default="personal_non_clinical",
     )
-    title_ciphertext = Column(Text, nullable=False)
-    body_ciphertext = Column(Text, nullable=True)
+    # One encrypted JSON object containing title/body. Cloud never exposes this
+    # envelope to devices; authenticated APIs decrypt it before transport.
+    content_ciphertext = Column(Text, nullable=False)
     content_nonce = Column(String(64), nullable=False)
     content_key_version = Column(Integer, nullable=False, default=1)
+    content_algorithm_version = Column(Integer, nullable=False, default=1)
     schedule_mode = Column(String(24), nullable=False, default="wall_clock")
     original_local_date = Column(Date, nullable=True)
     original_local_time = Column(Time, nullable=False)
@@ -2080,7 +2094,7 @@ class ReminderEvent(Base):
             "(actor_kind = 'device' AND actor_user_id IS NULL AND "
             "actor_device_id IS NOT NULL AND client_event_id IS NOT NULL) OR "
             "(actor_kind = 'worker' AND actor_user_id IS NULL AND "
-            "actor_device_id IS NULL))",
+            "actor_device_id IS NULL AND client_event_id IS NULL))",
             name="ck_reminder_events_actor",
         ),
         CheckConstraint(
@@ -2088,12 +2102,24 @@ class ReminderEvent(Base):
             name="ck_reminder_events_scope",
         ),
         CheckConstraint(
+            "((event_scope = 'reminder' AND actor_kind = 'user') OR "
+            "(event_scope = 'delivery' AND actor_kind = 'device') OR "
+            "(event_scope = 'occurrence' AND actor_kind IN ('user', 'device')) OR "
+            "(event_scope = 'system' AND actor_kind = 'worker'))",
+            name="ck_reminder_events_scope_actor",
+        ),
+        CheckConstraint(
             "((event_scope = 'reminder' AND occurrence_id IS NULL AND "
             "delivery_id IS NULL) OR "
             "(event_scope = 'occurrence' AND occurrence_id IS NOT NULL AND "
             "delivery_id IS NULL) OR "
             "(event_scope = 'delivery' AND occurrence_id IS NOT NULL AND "
-            "delivery_id IS NOT NULL) OR event_scope = 'system')",
+            "delivery_id IS NOT NULL) OR "
+            "(event_scope = 'system' AND event_type IN "
+            "('materialized', 'due', 'expired', 'cancelled') AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NULL) OR "
+            "(event_scope = 'system' AND event_type = 'superseded' AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NOT NULL))",
             name="ck_reminder_events_scope_target",
         ),
         CheckConstraint(
@@ -2173,6 +2199,24 @@ class ReminderEvent(Base):
                 "event_scope = 'occurrence' AND actor_device_id IS NOT NULL "
                 "AND client_event_id IS NOT NULL"
             ),
+        ),
+        Index(
+            "uq_reminder_events_system_occurrence_version",
+            "occurrence_id",
+            "event_type",
+            "resulting_version",
+            unique=True,
+            postgresql_where=text("event_scope = 'system' AND delivery_id IS NULL"),
+            sqlite_where=text("event_scope = 'system' AND delivery_id IS NULL"),
+        ),
+        Index(
+            "uq_reminder_events_system_delivery_version",
+            "delivery_id",
+            "event_type",
+            "resulting_version",
+            unique=True,
+            postgresql_where=text("event_scope = 'system' AND delivery_id IS NOT NULL"),
+            sqlite_where=text("event_scope = 'system' AND delivery_id IS NOT NULL"),
         ),
         Index(
             "ix_reminder_events_occurrence_server",
