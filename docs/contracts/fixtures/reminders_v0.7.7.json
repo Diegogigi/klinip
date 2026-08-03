@@ -1,0 +1,316 @@
+{
+  "schema_version": 1,
+  "protocol_version": 1,
+  "description": "Fictitious Cloud and device reminder contract fixtures.",
+  "fixtures": [
+    {
+      "fixture_id": "reminder_once_v1",
+      "kind": "reminder",
+      "payload": {
+        "reminder_id": "fixture-reminder-once",
+        "profile_id": "fixture-profile-1",
+        "origin": "web",
+        "reminder_type": "personal_non_clinical",
+        "title": "Cerrar la ventana",
+        "body": null,
+        "schedule": {
+          "mode": "wall_clock",
+          "local_date": "2030-03-15",
+          "local_time": "19:00",
+          "timezone_iana": "America/Santiago",
+          "recurrence": {
+            "version": 1,
+            "frequency": "once",
+            "interval": 1,
+            "weekdays": []
+          },
+          "dst_gap_policy": "shift_forward_by_gap",
+          "dst_fold_policy": "earlier"
+        },
+        "target": {
+          "mode": "selected_device",
+          "device_id": "fixture-device-1"
+        },
+        "next_occurrence_at_utc": "2030-03-15T22:00:00Z",
+        "state": "active",
+        "version": 1,
+        "created_at": "2030-03-01T12:00:00Z",
+        "updated_at": "2030-03-01T12:00:00Z"
+      }
+    },
+    {
+      "fixture_id": "reminder_daily_v1",
+      "kind": "reminder",
+      "payload": {
+        "reminder_id": "fixture-reminder-daily",
+        "profile_id": "fixture-profile-1",
+        "origin": "voice",
+        "reminder_type": "personal_non_clinical",
+        "title": "Abrir las cortinas",
+        "body": "Recordatorio diario de prueba",
+        "schedule": {
+          "mode": "wall_clock",
+          "local_date": null,
+          "local_time": "08:30",
+          "timezone_iana": "America/Santiago",
+          "recurrence": {
+            "version": 1,
+            "frequency": "daily",
+            "interval": 1,
+            "weekdays": []
+          },
+          "dst_gap_policy": "shift_forward_by_gap",
+          "dst_fold_policy": "earlier"
+        },
+        "target": {
+          "mode": "selected_device",
+          "device_id": "fixture-device-1"
+        },
+        "next_occurrence_at_utc": "2030-03-16T11:30:00Z",
+        "state": "active",
+        "version": 3,
+        "created_at": "2030-03-01T12:00:00Z",
+        "updated_at": "2030-03-10T14:00:00Z"
+      }
+    },
+    {
+      "fixture_id": "occurrence_pending_v1",
+      "kind": "occurrence",
+      "payload": {
+        "occurrence_id": "fixture-occurrence-pending",
+        "reminder_id": "fixture-reminder-once",
+        "profile_id": "fixture-profile-1",
+        "schedule_version": 1,
+        "logical_occurrence_key": "2030-03-15T19:00:00[fold=0]",
+        "original_scheduled_for_utc": "2030-03-15T22:00:00Z",
+        "scheduled_for_utc": "2030-03-15T22:00:00Z",
+        "original_local_date": "2030-03-15",
+        "original_local_time": "19:00",
+        "timezone_iana": "America/Santiago",
+        "tzdb_version": "fixture-tzdb-v1",
+        "revision": 1,
+        "snooze_count": 0,
+        "state": "scheduled",
+        "due_at": null,
+        "terminal_at": null
+      }
+    },
+    {
+      "fixture_id": "occurrence_snoozed_v1",
+      "kind": "occurrence",
+      "payload": {
+        "occurrence_id": "fixture-occurrence-snoozed",
+        "reminder_id": "fixture-reminder-daily",
+        "profile_id": "fixture-profile-1",
+        "schedule_version": 3,
+        "logical_occurrence_key": "2030-03-16T08:30:00[fold=0]",
+        "original_scheduled_for_utc": "2030-03-16T11:30:00Z",
+        "scheduled_for_utc": "2030-03-16T11:40:00Z",
+        "original_local_date": "2030-03-16",
+        "original_local_time": "08:30",
+        "timezone_iana": "America/Santiago",
+        "tzdb_version": "fixture-tzdb-v1",
+        "revision": 2,
+        "snooze_count": 1,
+        "state": "snoozed",
+        "due_at": "2030-03-16T11:30:00Z",
+        "terminal_at": null
+      }
+    },
+    {
+      "fixture_id": "delivery_pending_v1",
+      "kind": "delivery",
+      "payload": {
+        "delivery_id": "fixture-delivery-pending",
+        "occurrence_id": "fixture-occurrence-pending",
+        "reminder_id": "fixture-reminder-once",
+        "profile_id": "fixture-profile-1",
+        "device_id": "fixture-device-1",
+        "title": "Cerrar la ventana",
+        "body": null,
+        "scheduled_for_utc": "2030-03-15T22:00:00Z",
+        "original_local_date": "2030-03-15",
+        "original_local_time": "19:00",
+        "timezone_iana": "America/Santiago",
+        "occurrence_version": 1,
+        "delivery_revision": 1,
+        "state": "queued",
+        "available_at": "2030-03-15T21:00:00Z",
+        "expires_at": "2030-03-16T22:00:00Z"
+      }
+    },
+    {
+      "fixture_id": "delivery_announced_v1",
+      "kind": "delivery",
+      "payload": {
+        "delivery_id": "fixture-delivery-announced",
+        "occurrence_id": "fixture-occurrence-snoozed",
+        "reminder_id": "fixture-reminder-daily",
+        "profile_id": "fixture-profile-1",
+        "device_id": "fixture-device-1",
+        "title": "Abrir las cortinas",
+        "body": "Recordatorio diario de prueba",
+        "scheduled_for_utc": "2030-03-16T11:40:00Z",
+        "original_local_date": "2030-03-16",
+        "original_local_time": "08:30",
+        "timezone_iana": "America/Santiago",
+        "occurrence_version": 2,
+        "delivery_revision": 2,
+        "state": "announced",
+        "available_at": "2030-03-16T11:30:00Z",
+        "expires_at": "2030-03-17T11:30:00Z"
+      }
+    },
+    {
+      "fixture_id": "event_reminder_scope_v1",
+      "kind": "event",
+      "payload": {
+        "event_id": "fixture-event-reminder-updated",
+        "reminder_id": "fixture-reminder-daily",
+        "occurrence_id": null,
+        "delivery_id": null,
+        "profile_id": "fixture-profile-1",
+        "actor": {"kind": "user", "id": "fixture-user-1"},
+        "scope": "reminder",
+        "event_type": "updated",
+        "client_event_id": "fixture-client-event-reminder-updated",
+        "expected_version": 2,
+        "resulting_state": "active",
+        "resulting_version": 3,
+        "client_timestamp": "2030-03-10T14:00:00Z",
+        "server_timestamp": "2030-03-10T14:00:01Z"
+      }
+    },
+    {
+      "fixture_id": "event_occurrence_scope_v1",
+      "kind": "event",
+      "payload": {
+        "event_id": "fixture-event-occurrence-snoozed",
+        "reminder_id": "fixture-reminder-daily",
+        "occurrence_id": "fixture-occurrence-snoozed",
+        "delivery_id": null,
+        "profile_id": "fixture-profile-1",
+        "actor": {"kind": "device", "id": "fixture-device-1"},
+        "scope": "occurrence",
+        "event_type": "snoozed",
+        "client_event_id": "fixture-client-event-occurrence-snoozed",
+        "expected_version": 1,
+        "resulting_state": "snoozed",
+        "resulting_version": 2,
+        "client_timestamp": "2030-03-16T11:31:00Z",
+        "server_timestamp": "2030-03-16T11:31:01Z"
+      }
+    },
+    {
+      "fixture_id": "event_delivery_scope_v1",
+      "kind": "event",
+      "payload": {
+        "event_id": "fixture-event-delivery-announced",
+        "reminder_id": "fixture-reminder-daily",
+        "occurrence_id": "fixture-occurrence-snoozed",
+        "delivery_id": "fixture-delivery-announced",
+        "profile_id": "fixture-profile-1",
+        "actor": {"kind": "device", "id": "fixture-device-1"},
+        "scope": "delivery",
+        "event_type": "announced",
+        "client_event_id": "fixture-client-event-delivery-announced",
+        "expected_version": 2,
+        "resulting_state": "announced",
+        "resulting_version": 2,
+        "client_timestamp": "2030-03-16T11:41:00Z",
+        "server_timestamp": "2030-03-16T11:41:01Z"
+      }
+    },
+    {
+      "fixture_id": "multiple_devices_v1",
+      "kind": "delivery_set",
+      "payload": {
+        "occurrence_id": "fixture-occurrence-pending",
+        "preferred_device_id": "fixture-device-1",
+        "deliveries": [
+          {
+            "delivery_id": "fixture-delivery-device-1",
+            "device_id": "fixture-device-1",
+            "delivery_revision": 1,
+            "state": "queued"
+          },
+          {
+            "delivery_id": "fixture-delivery-device-2",
+            "device_id": "fixture-device-2",
+            "delivery_revision": 1,
+            "state": "superseded"
+          }
+        ]
+      }
+    },
+    {
+      "fixture_id": "america_santiago_profile_v1",
+      "kind": "profile_settings",
+      "payload": {
+        "profile_id": "fixture-profile-1",
+        "timezone_iana": "America/Santiago",
+        "preferred_device_id": "fixture-device-1",
+        "active_hours": {
+          "enabled": true,
+          "start_local": "08:00",
+          "end_local": "21:00",
+          "weekdays": [1, 2, 3, 4, 5, 6, 7]
+        },
+        "settings_version": 1
+      }
+    },
+    {
+      "fixture_id": "dst_gap_santiago_v1",
+      "kind": "dst_resolution",
+      "payload": {
+        "timezone_iana": "America/Santiago",
+        "requested_local_date": "2030-09-08",
+        "requested_local_time": "00:30",
+        "policy": "shift_forward_by_gap",
+        "resolved_at_utc": "2030-09-08T04:30:00Z",
+        "resolution": "shifted_forward"
+      }
+    },
+    {
+      "fixture_id": "dst_fold_santiago_v1",
+      "kind": "dst_resolution",
+      "payload": {
+        "timezone_iana": "America/Santiago",
+        "requested_local_date": "2030-04-06",
+        "requested_local_time": "23:30",
+        "policy": "earlier",
+        "fold": 0,
+        "resolved_at_utc": "2030-04-07T02:30:00Z",
+        "resolution": "earlier_occurrence"
+      }
+    },
+    {
+      "fixture_id": "optimistic_version_conflict_v1",
+      "kind": "conflict",
+      "payload": {
+        "entity": "occurrence",
+        "occurrence_id": "fixture-occurrence-snoozed",
+        "client_event_id": "fixture-client-event-stale",
+        "expected_version": 1,
+        "current_version": 2,
+        "detail": "version_conflict",
+        "retryable": false
+      }
+    },
+    {
+      "fixture_id": "duplicate_client_event_id_v1",
+      "kind": "idempotency_result",
+      "payload": {
+        "scope": "delivery",
+        "delivery_id": "fixture-delivery-announced",
+        "device_id": "fixture-device-1",
+        "client_event_id": "fixture-client-event-delivery-announced",
+        "request_fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "accepted": true,
+        "duplicate": true,
+        "resulting_state": "announced",
+        "resulting_version": 2
+      }
+    }
+  ]
+}

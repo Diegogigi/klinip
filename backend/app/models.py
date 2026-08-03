@@ -1,5 +1,8 @@
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from sqlalchemy import (
+    Date,
     Column,
     Integer,
     Float,
@@ -14,9 +17,10 @@ from sqlalchemy import (
     UniqueConstraint,
     Index,
     CheckConstraint,
+    Time,
     text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 
 from .database import Base
 import enum
@@ -47,6 +51,109 @@ class ClinicalEpisodeStatus(str, enum.Enum):
     monitoring = "monitoring"
     resolved = "resolved"
     archived = "archived"
+
+
+class ReminderState(str, enum.Enum):
+    active = "active"
+    awaiting_device = "awaiting_device"
+    completed = "completed"
+    cancelled = "cancelled"
+    expired = "expired"
+    failed = "failed"
+
+
+class ReminderOccurrenceState(str, enum.Enum):
+    scheduled = "scheduled"
+    due = "due"
+    snoozed = "snoozed"
+    completed = "completed"
+    dismissed = "dismissed"
+    cancelled = "cancelled"
+    expired = "expired"
+    failed = "failed"
+
+
+class ReminderDeliveryState(str, enum.Enum):
+    queued = "queued"
+    delivered = "delivered"
+    announced = "announced"
+    superseded = "superseded"
+    failed = "failed"
+    expired = "expired"
+    cancelled = "cancelled"
+
+
+class ReminderActorKind(str, enum.Enum):
+    user = "user"
+    device = "device"
+    worker = "worker"
+
+
+class ReminderEventScope(str, enum.Enum):
+    reminder = "reminder"
+    delivery = "delivery"
+    occurrence = "occurrence"
+    system = "system"
+
+
+def _validated_enum_value(value, enum_type, field_name: str) -> str:
+    raw_value = value.value if isinstance(value, enum_type) else value
+    allowed = {item.value for item in enum_type}
+    if raw_value not in allowed:
+        raise ValueError(f"Invalid {field_name}")
+    return raw_value
+
+
+def _validated_timezone_iana(value: str) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ValueError("Invalid timezone_iana")
+    try:
+        ZoneInfo(value)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise ValueError("Invalid timezone_iana") from None
+    return value
+
+
+def _validated_weekdays(value, *, allow_empty: bool) -> list[int]:
+    if not isinstance(value, list) or any(
+        isinstance(day, bool) or not isinstance(day, int) for day in value
+    ):
+        raise ValueError("Invalid weekdays")
+    if (not allow_empty and not value) or len(value) != len(set(value)):
+        raise ValueError("Invalid weekdays")
+    if any(day < 1 or day > 7 for day in value):
+        raise ValueError("Invalid weekdays")
+    return value
+
+
+def _validated_recurrence(value) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("Invalid recurrence")
+    if set(value) != {"version", "frequency", "interval", "weekdays"}:
+        raise ValueError("Invalid recurrence")
+    if value.get("version") != 1:
+        raise ValueError("Invalid recurrence")
+    frequency = value.get("frequency")
+    if frequency not in {"once", "daily", "weekly"}:
+        raise ValueError("Invalid recurrence")
+    interval = value.get("interval")
+    if isinstance(interval, bool) or not isinstance(interval, int) or interval <= 0:
+        raise ValueError("Invalid recurrence")
+    try:
+        weekdays = _validated_weekdays(
+            value.get("weekdays"),
+            allow_empty=frequency != "weekly",
+        )
+    except ValueError:
+        raise ValueError("Invalid recurrence") from None
+    if frequency != "weekly" and weekdays:
+        raise ValueError("Invalid recurrence")
+    return {
+        "version": 1,
+        "frequency": frequency,
+        "interval": interval,
+        "weekdays": weekdays,
+    }
 
 
 class User(Base):
@@ -1511,3 +1618,694 @@ class DeviceMessageEvent(Base):
     message = relationship("DeviceMessage", foreign_keys=[message_id])
     recipient = relationship("DeviceMessageRecipient", foreign_keys=[recipient_id])
     device = relationship("Device", foreign_keys=[device_id])
+
+
+class ReminderProfileSettings(Base):
+    __tablename__ = "reminder_profile_settings"
+    __table_args__ = (
+        UniqueConstraint(
+            "health_profile_id",
+            name="uq_reminder_profile_settings_profile",
+        ),
+        CheckConstraint(
+            "settings_version > 0",
+            name="ck_reminder_profile_settings_version",
+        ),
+        CheckConstraint(
+            "NOT active_hours_enabled OR "
+            "(active_hours_start_local IS NOT NULL AND "
+            "active_hours_end_local IS NOT NULL)",
+            name="ck_reminder_profile_settings_active_hours",
+        ),
+        Index(
+            "ix_reminder_profile_settings_preferred_device",
+            "preferred_device_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    timezone_iana = Column(String(80), nullable=False)
+    preferred_device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    active_hours_enabled = Column(Boolean, nullable=False, default=True)
+    active_hours_start_local = Column(Time, nullable=True)
+    active_hours_end_local = Column(Time, nullable=True)
+    active_weekdays_json = Column(JSON, nullable=False, default=list)
+    settings_version = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    __mapper_args__ = {"version_id_col": settings_version}
+
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    preferred_device = relationship("Device", foreign_keys=[preferred_device_id])
+
+    @validates("timezone_iana")
+    def validate_timezone_iana(self, _key, value):
+        return _validated_timezone_iana(value)
+
+    @validates("active_weekdays_json")
+    def validate_active_weekdays(self, _key, value):
+        return _validated_weekdays(value, allow_empty=True)
+
+
+class Reminder(Base):
+    __tablename__ = "reminders"
+    __table_args__ = (
+        CheckConstraint(
+            "((created_by_user_id IS NOT NULL AND created_by_device_id IS NULL) OR "
+            "(created_by_user_id IS NULL AND created_by_device_id IS NOT NULL))",
+            name="ck_reminders_single_creator",
+        ),
+        CheckConstraint(
+            "origin IN ('web', 'voice', 'authorized_caregiver')",
+            name="ck_reminders_origin",
+        ),
+        CheckConstraint(
+            "reminder_type IN ('personal_non_clinical')",
+            name="ck_reminders_type",
+        ),
+        CheckConstraint(
+            "schedule_mode IN ('wall_clock')",
+            name="ck_reminders_schedule_mode",
+        ),
+        CheckConstraint(
+            "dst_gap_policy IN ('shift_forward_by_gap')",
+            name="ck_reminders_dst_gap_policy",
+        ),
+        CheckConstraint(
+            "dst_fold_policy IN ('earlier')",
+            name="ck_reminders_dst_fold_policy",
+        ),
+        CheckConstraint(
+            "target_mode IN ('selected_device')",
+            name="ck_reminders_target_mode",
+        ),
+        CheckConstraint(
+            "state IN ('active', 'awaiting_device', 'completed', 'cancelled', "
+            "'expired', 'failed')",
+            name="ck_reminders_state",
+        ),
+        CheckConstraint("version > 0", name="ck_reminders_version"),
+        CheckConstraint(
+            "content_key_version > 0",
+            name="ck_reminders_content_key_version",
+        ),
+        CheckConstraint(
+            "content_algorithm_version > 0",
+            name="ck_reminders_content_algorithm_version",
+        ),
+        CheckConstraint(
+            "length(content_ciphertext) > 0",
+            name="ck_reminders_content_ciphertext_not_empty",
+        ),
+        CheckConstraint(
+            "length(content_nonce) > 0 AND length(content_nonce) <= 64",
+            name="ck_reminders_content_nonce_length",
+        ),
+        CheckConstraint(
+            "length(idempotency_key_hash) = 64",
+            name="ck_reminders_idempotency_hash_length",
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64",
+            name="ck_reminders_fingerprint_length",
+        ),
+        Index(
+            "uq_reminders_user_idempotency",
+            "created_by_user_id",
+            "health_profile_id",
+            "idempotency_key_hash",
+            unique=True,
+            postgresql_where=text("created_by_user_id IS NOT NULL"),
+            sqlite_where=text("created_by_user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_reminders_device_idempotency",
+            "created_by_device_id",
+            "health_profile_id",
+            "idempotency_key_hash",
+            unique=True,
+            postgresql_where=text("created_by_device_id IS NOT NULL"),
+            sqlite_where=text("created_by_device_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_reminders_profile_state_next",
+            "health_profile_id",
+            "state",
+            "next_occurrence_at_utc",
+        ),
+        Index(
+            "ix_reminders_target_state",
+            "target_device_id",
+            "state",
+        ),
+        Index(
+            "ix_reminders_profile_created_public",
+            "health_profile_id",
+            "created_at",
+            "public_id",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    created_by_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    created_by_device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    idempotency_key_hash = Column(String(64), nullable=False)
+    request_fingerprint = Column(String(64), nullable=False)
+    origin = Column(String(32), nullable=False)
+    reminder_type = Column(
+        String(32),
+        nullable=False,
+        default="personal_non_clinical",
+    )
+    # One encrypted JSON object containing title/body. Cloud never exposes this
+    # envelope to devices; authenticated APIs decrypt it before transport.
+    content_ciphertext = Column(Text, nullable=False)
+    content_nonce = Column(String(64), nullable=False)
+    content_key_version = Column(Integer, nullable=False, default=1)
+    content_algorithm_version = Column(Integer, nullable=False, default=1)
+    schedule_mode = Column(String(24), nullable=False, default="wall_clock")
+    original_local_date = Column(Date, nullable=True)
+    original_local_time = Column(Time, nullable=False)
+    timezone_iana = Column(String(80), nullable=False)
+    recurrence_json = Column(JSON, nullable=False)
+    dst_gap_policy = Column(
+        String(32),
+        nullable=False,
+        default="shift_forward_by_gap",
+    )
+    dst_fold_policy = Column(String(16), nullable=False, default="earlier")
+    target_mode = Column(String(24), nullable=False, default="selected_device")
+    target_device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    next_occurrence_at_utc = Column(DateTime, nullable=True, index=True)
+    next_logical_key = Column(String(120), nullable=True)
+    state = Column(String(20), nullable=False, default=ReminderState.active.value)
+    version = Column(Integer, nullable=False, default=1)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+    completed_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+
+    __mapper_args__ = {"version_id_col": version}
+
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    created_by_device = relationship("Device", foreign_keys=[created_by_device_id])
+    target_device = relationship("Device", foreign_keys=[target_device_id])
+
+    @validates("timezone_iana")
+    def validate_timezone_iana(self, _key, value):
+        return _validated_timezone_iana(value)
+
+    @validates("recurrence_json")
+    def validate_recurrence_json(self, _key, value):
+        return _validated_recurrence(value)
+
+    @validates("state")
+    def validate_state(self, _key, value):
+        return _validated_enum_value(value, ReminderState, "reminder state")
+
+
+class ReminderOccurrence(Base):
+    __tablename__ = "reminder_occurrences"
+    __table_args__ = (
+        UniqueConstraint(
+            "reminder_id",
+            "schedule_version",
+            "logical_occurrence_key",
+            name="uq_reminder_occurrences_logical",
+        ),
+        CheckConstraint(
+            "state IN ('scheduled', 'due', 'snoozed', 'completed', 'dismissed', "
+            "'cancelled', 'expired', 'failed')",
+            name="ck_reminder_occurrences_state",
+        ),
+        CheckConstraint(
+            "schedule_version > 0",
+            name="ck_reminder_occurrences_schedule_version",
+        ),
+        CheckConstraint(
+            "revision > 0",
+            name="ck_reminder_occurrences_revision",
+        ),
+        CheckConstraint(
+            "snooze_count >= 0",
+            name="ck_reminder_occurrences_snooze_count",
+        ),
+        Index(
+            "ix_reminder_occurrences_state_scheduled",
+            "state",
+            "scheduled_for_utc",
+            "id",
+        ),
+        Index(
+            "ix_reminder_occurrences_profile_scheduled",
+            "health_profile_id",
+            "scheduled_for_utc",
+            "public_id",
+        ),
+        Index(
+            "ix_reminder_occurrences_reminder_created",
+            "reminder_id",
+            "created_at",
+        ),
+        Index(
+            "ix_reminder_occurrences_state_updated",
+            "state",
+            "updated_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    reminder_id = Column(
+        Integer,
+        ForeignKey("reminders.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    schedule_version = Column(Integer, nullable=False)
+    logical_occurrence_key = Column(String(120), nullable=False)
+    original_scheduled_for_utc = Column(DateTime, nullable=False)
+    scheduled_for_utc = Column(DateTime, nullable=False, index=True)
+    original_local_date = Column(Date, nullable=False)
+    original_local_time = Column(Time, nullable=False)
+    timezone_iana = Column(String(80), nullable=False)
+    tzdb_version = Column(String(40), nullable=True)
+    revision = Column(Integer, nullable=False, default=1)
+    snooze_count = Column(Integer, nullable=False, default=0)
+    state = Column(
+        String(20),
+        nullable=False,
+        default=ReminderOccurrenceState.scheduled.value,
+    )
+    due_at = Column(DateTime, nullable=True, index=True)
+    terminal_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+
+    reminder = relationship("Reminder", foreign_keys=[reminder_id])
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+
+    @validates("timezone_iana")
+    def validate_timezone_iana(self, _key, value):
+        return _validated_timezone_iana(value)
+
+    @validates("state")
+    def validate_state(self, _key, value):
+        return _validated_enum_value(
+            value,
+            ReminderOccurrenceState,
+            "reminder occurrence state",
+        )
+
+
+class ReminderDelivery(Base):
+    __tablename__ = "reminder_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "occurrence_id",
+            "device_id",
+            "delivery_revision",
+            name="uq_reminder_deliveries_occurrence_device_revision",
+        ),
+        CheckConstraint(
+            "state IN ('queued', 'delivered', 'announced', 'superseded', "
+            "'failed', 'expired', 'cancelled')",
+            name="ck_reminder_deliveries_state",
+        ),
+        CheckConstraint(
+            "delivery_revision > 0",
+            name="ck_reminder_deliveries_revision",
+        ),
+        CheckConstraint(
+            "occurrence_version > 0",
+            name="ck_reminder_deliveries_occurrence_version",
+        ),
+        CheckConstraint(
+            "delivery_attempts >= 0",
+            name="ck_reminder_deliveries_attempts",
+        ),
+        CheckConstraint(
+            "expires_at > available_at",
+            name="ck_reminder_deliveries_expiry",
+        ),
+        Index(
+            "ix_reminder_deliveries_device_state_available",
+            "device_id",
+            "state",
+            "available_at",
+            "public_id",
+        ),
+        Index(
+            "ix_reminder_deliveries_occurrence_revision",
+            "occurrence_id",
+            "delivery_revision",
+        ),
+        Index(
+            "ix_reminder_deliveries_device_expires",
+            "device_id",
+            "expires_at",
+        ),
+        Index(
+            "ix_reminder_deliveries_profile_state_at",
+            "health_profile_id",
+            "state_at",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    occurrence_id = Column(
+        Integer,
+        ForeignKey("reminder_occurrences.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    delivery_revision = Column(Integer, nullable=False, default=1)
+    occurrence_version = Column(Integer, nullable=False)
+    state = Column(
+        String(20),
+        nullable=False,
+        default=ReminderDeliveryState.queued.value,
+    )
+    available_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    delivery_attempts = Column(Integer, nullable=False, default=0)
+    last_event_public_id = Column(String(64), nullable=True)
+    state_at = Column(DateTime, nullable=False, default=datetime.now)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.now,
+        onupdate=datetime.now,
+    )
+    revoked_at = Column(DateTime, nullable=True)
+
+    occurrence = relationship("ReminderOccurrence", foreign_keys=[occurrence_id])
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    device = relationship("Device", foreign_keys=[device_id])
+
+    @validates("state")
+    def validate_state(self, _key, value):
+        return _validated_enum_value(
+            value,
+            ReminderDeliveryState,
+            "reminder delivery state",
+        )
+
+
+class ReminderEvent(Base):
+    __tablename__ = "reminder_events"
+    __table_args__ = (
+        CheckConstraint(
+            "actor_kind IN ('user', 'device', 'worker')",
+            name="ck_reminder_events_actor_kind",
+        ),
+        CheckConstraint(
+            "((actor_kind = 'user' AND actor_user_id IS NOT NULL AND "
+            "actor_device_id IS NULL AND client_event_id IS NOT NULL) OR "
+            "(actor_kind = 'device' AND actor_user_id IS NULL AND "
+            "actor_device_id IS NOT NULL AND client_event_id IS NOT NULL) OR "
+            "(actor_kind = 'worker' AND actor_user_id IS NULL AND "
+            "actor_device_id IS NULL AND client_event_id IS NULL))",
+            name="ck_reminder_events_actor",
+        ),
+        CheckConstraint(
+            "event_scope IN ('reminder', 'delivery', 'occurrence', 'system')",
+            name="ck_reminder_events_scope",
+        ),
+        CheckConstraint(
+            "((event_scope = 'reminder' AND actor_kind = 'user') OR "
+            "(event_scope = 'delivery' AND actor_kind = 'device') OR "
+            "(event_scope = 'occurrence' AND actor_kind IN ('user', 'device')) OR "
+            "(event_scope = 'system' AND actor_kind = 'worker'))",
+            name="ck_reminder_events_scope_actor",
+        ),
+        CheckConstraint(
+            "((event_scope = 'reminder' AND occurrence_id IS NULL AND "
+            "delivery_id IS NULL) OR "
+            "(event_scope = 'occurrence' AND occurrence_id IS NOT NULL AND "
+            "delivery_id IS NULL) OR "
+            "(event_scope = 'delivery' AND occurrence_id IS NOT NULL AND "
+            "delivery_id IS NOT NULL) OR "
+            "(event_scope = 'system' AND event_type IN "
+            "('materialized', 'due', 'expired', 'cancelled') AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NULL) OR "
+            "(event_scope = 'system' AND event_type = 'superseded' AND "
+            "occurrence_id IS NOT NULL AND delivery_id IS NOT NULL))",
+            name="ck_reminder_events_scope_target",
+        ),
+        CheckConstraint(
+            "((event_scope = 'reminder' AND event_type IN ('updated', 'cancelled')) OR "
+            "(event_scope = 'delivery' AND event_type IN "
+            "('delivered', 'announced', 'failed')) OR "
+            "(event_scope = 'occurrence' AND event_type IN "
+            "('completed', 'snoozed', 'dismissed')) OR "
+            "(event_scope = 'system' AND event_type IN "
+            "('materialized', 'due', 'expired', 'cancelled', 'superseded')))",
+            name="ck_reminder_events_scope_type",
+        ),
+        CheckConstraint(
+            "resulting_version > 0",
+            name="ck_reminder_events_resulting_version",
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64",
+            name="ck_reminder_events_fingerprint_length",
+        ),
+        Index(
+            "uq_reminder_events_reminder_user_client",
+            "reminder_id",
+            "actor_user_id",
+            "client_event_id",
+            unique=True,
+            postgresql_where=text(
+                "event_scope = 'reminder' AND actor_user_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "event_scope = 'reminder' AND actor_user_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_reminder_events_delivery_device_client",
+            "delivery_id",
+            "actor_device_id",
+            "client_event_id",
+            unique=True,
+            postgresql_where=text(
+                "event_scope = 'delivery' AND actor_device_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "event_scope = 'delivery' AND actor_device_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_reminder_events_occurrence_user_client",
+            "occurrence_id",
+            "actor_user_id",
+            "client_event_id",
+            unique=True,
+            postgresql_where=text(
+                "event_scope = 'occurrence' AND actor_user_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "event_scope = 'occurrence' AND actor_user_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_reminder_events_occurrence_device_client",
+            "occurrence_id",
+            "actor_device_id",
+            "client_event_id",
+            unique=True,
+            postgresql_where=text(
+                "event_scope = 'occurrence' AND actor_device_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "event_scope = 'occurrence' AND actor_device_id IS NOT NULL "
+                "AND client_event_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_reminder_events_system_occurrence_version",
+            "occurrence_id",
+            "event_type",
+            "resulting_version",
+            unique=True,
+            postgresql_where=text("event_scope = 'system' AND delivery_id IS NULL"),
+            sqlite_where=text("event_scope = 'system' AND delivery_id IS NULL"),
+        ),
+        Index(
+            "uq_reminder_events_system_delivery_version",
+            "delivery_id",
+            "event_type",
+            "resulting_version",
+            unique=True,
+            postgresql_where=text("event_scope = 'system' AND delivery_id IS NOT NULL"),
+            sqlite_where=text("event_scope = 'system' AND delivery_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_reminder_events_occurrence_server",
+            "occurrence_id",
+            "server_timestamp",
+            "id",
+        ),
+        Index(
+            "ix_reminder_events_delivery_server",
+            "delivery_id",
+            "server_timestamp",
+            "id",
+        ),
+        Index(
+            "ix_reminder_events_profile_server",
+            "health_profile_id",
+            "server_timestamp",
+            "id",
+        ),
+        Index(
+            "ix_reminder_events_actor_device_server",
+            "actor_device_id",
+            "server_timestamp",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    public_id = Column(String(64), nullable=False, unique=True, index=True)
+    reminder_id = Column(
+        Integer,
+        ForeignKey("reminders.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    occurrence_id = Column(
+        Integer,
+        ForeignKey("reminder_occurrences.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    delivery_id = Column(
+        Integer,
+        ForeignKey("reminder_deliveries.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    health_profile_id = Column(
+        Integer,
+        ForeignKey("health_profiles.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    actor_kind = Column(String(16), nullable=False)
+    actor_user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    actor_device_id = Column(
+        Integer,
+        ForeignKey("devices.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    event_scope = Column(String(16), nullable=False)
+    event_type = Column(String(24), nullable=False)
+    client_event_id = Column(String(64), nullable=True)
+    request_fingerprint = Column(String(64), nullable=False)
+    expected_version = Column(Integer, nullable=True)
+    resulting_state = Column(String(20), nullable=False)
+    resulting_version = Column(Integer, nullable=False)
+    client_timestamp = Column(DateTime, nullable=True)
+    server_timestamp = Column(DateTime, nullable=False, default=datetime.now)
+    error_code = Column(String(80), nullable=True)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+
+    reminder = relationship("Reminder", foreign_keys=[reminder_id])
+    occurrence = relationship("ReminderOccurrence", foreign_keys=[occurrence_id])
+    delivery = relationship("ReminderDelivery", foreign_keys=[delivery_id])
+    health_profile = relationship("HealthProfile", foreign_keys=[health_profile_id])
+    actor_user = relationship("User", foreign_keys=[actor_user_id])
+    actor_device = relationship("Device", foreign_keys=[actor_device_id])
+
+    @validates("actor_kind")
+    def validate_actor_kind(self, _key, value):
+        return _validated_enum_value(value, ReminderActorKind, "reminder actor kind")
+
+    @validates("event_scope")
+    def validate_event_scope(self, _key, value):
+        return _validated_enum_value(value, ReminderEventScope, "reminder event scope")

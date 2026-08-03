@@ -32,6 +32,18 @@ ejemplos son ficticios y no contienen datos reales.
 - cursores firmados, ligados a dispositivo, perfil, dominio y versión;
 - timestamps de intercambio en UTC ISO-8601; intención civil con zona IANA.
 
+### Frontera de contenido y cifrado
+
+`title` y `body` viajan como strings JSON sobre TLS solo despues de autenticar y
+autorizar al actor. El envelope `content_ciphertext` de PostgreSQL es interno de
+Cloud, protege un unico objeto JSON `{title, body}` en reposo y nunca forma parte
+del contrato Device. Klinip One cifra nuevamente el contenido para su reposo
+local con claves propias; ambos dominios criptograficos son independientes.
+
+No existe fallback de persistencia plaintext. PR A solo congela la forma del
+envelope; gestion de claves, cifrado/descifrado y activacion de escrituras siguen
+sin implementar.
+
 Family Messaging es una referencia de infraestructura, no una tabla, endpoint ni
 máquina de estados que deba reutilizarse para recordatorios.
 
@@ -268,6 +280,10 @@ Item mínimo propuesto:
 }
 ```
 
+`occurrence_id` es obligatorio: no existe delivery directa a una definicion. Los
+campos `title` y `body` son plaintext de transporte protegido por TLS, no las
+columnas cifradas internas de Cloud.
+
 Response: `items`, cursor firmado, `has_more`, `server_time` y
 `polling_hint_seconds`. Errores: `401 device_*`, `403 insufficient_device_scope`,
 `400 invalid_cursor`, `422 protocol_not_supported`, `429` y `503`.
@@ -300,6 +316,16 @@ Si falla la persistencia, no se avanza el cursor local ni se crea `delivered`.
 
 `delivered` solo sigue al commit local. `announced` solo sigue a TTS completo.
 TTS interrumpido no crea `announced`. `failed` no completa ni descarta.
+
+La nullability de eventos depende del scope: reminder exige `occurrence_id` y
+`delivery_id` nulos; occurrence exige occurrence y delivery nulo; delivery exige
+ambos IDs. Los valores de enums en JSON son siempre `snake_case` y no dependen de
+los nombres internos del lenguaje cliente.
+
+Eventos `system` son exclusivamente de worker y no llevan `client_event_id`.
+`materialized`, `due`, `expired` y `cancelled` apuntan a una occurrence sin
+delivery; `superseded` apunta a occurrence y delivery. Su idempotencia se congela
+por target, tipo y `resulting_version`.
 
 ### Enviar acciones sobre la ocurrencia
 
@@ -413,6 +439,11 @@ Los mensajes no incorporan contenido, nombres, tokens, SQL ni trazas.
 - el servidor anuncia mínimo/máximo soportado en config y errores;
 - un cliente desconocido recibe `protocol_not_supported`, no fallback ambiguo;
 - capability no equivale a autorización y scope no equivale a capability.
+
+Los fixtures canónicos ficticios están en
+[`fixtures/reminders_v0.7.7.json`](fixtures/reminders_v0.7.7.json). Congelan
+formas, nullability, timestamps UTC, recurrence v1 y enums `snake_case`; no
+activan endpoints y nunca incluyen el envelope cifrado interno de Cloud.
 
 ## Criterios de aceptación futuros
 
