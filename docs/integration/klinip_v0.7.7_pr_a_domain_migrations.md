@@ -37,9 +37,14 @@ Migración:
 
 ## Privacidad y cifrado
 
-La definición persiste únicamente `title_ciphertext`, `body_ciphertext`, nonce y
-versión de clave. PR A no incorpora contenido real, claves, logs de contenido ni
-una estrategia criptográfica nueva.
+La definición persiste un único `content_ciphertext` que representa el JSON
+`{title, body}`, junto con nonce único, versión de clave y versión de algoritmo.
+Constraints impiden envelopes vacíos o versiones no positivas. PR A no incorpora
+contenido real, claves, logs de contenido ni una implementación criptográfica.
+
+El envelope protege exclusivamente el reposo Cloud y nunca viaja al dispositivo.
+El contrato Device usa `title`/`body` en JSON sobre TLS y Klinip One aplica su
+propio cifrado local independiente.
 
 La escritura permanece deshabilitada porque todavía no existen endpoints. La
 gestión de claves Cloud y la activación del cifrado aplicativo deben aprobarse

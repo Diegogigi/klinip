@@ -87,10 +87,10 @@ clínica.
 | `request_fingerprint` | string(64) | No | Hash canónico del comando |
 | `origin` | string(32) | No | `web`, `voice`, `authorized_caregiver` |
 | `reminder_type` | string(32) | No | Solo `personal_non_clinical` inicialmente |
-| `title_ciphertext` | binary/text | No | Título cifrado por campo |
-| `body_ciphertext` | binary/text | Sí | Detalle cifrado por campo |
-| `content_nonce` | binary/string | No | Nonce único de la escritura |
+| `content_ciphertext` | binary/text | No | JSON `{title, body}` cifrado como un solo payload |
+| `content_nonce` | binary/string | No | Nonce único del payload completo |
 | `content_key_version` | integer | No | Versión de clave, sin material secreto |
+| `content_algorithm_version` | integer | No | Versión del formato/algoritmo del envelope |
 | `schedule_mode` | string(24) | No | Solo `wall_clock` inicialmente |
 | `original_local_date` | date | Sí | Requerido para one-time |
 | `original_local_time` | time | No | Hora civil |
@@ -116,7 +116,8 @@ Restricciones:
 - target y profile deben coincidir mediante validación transaccional del grant;
 - estado permitido: `active`, `awaiting_device`, `completed`, `cancelled`,
   `expired`, `failed`;
-- `version > 0`, `content_key_version > 0`;
+- `version > 0`, `content_key_version > 0`, `content_algorithm_version > 0`;
+- ciphertext y nonce obligatorios y no vacíos;
 - recurrencia incluye `once`, `daily` o `weekly`; no RRULE libre;
 - no hay índice de búsqueda sobre ciphertext.
 
@@ -136,9 +137,13 @@ Idempotencia de creación se preserva con dos índices únicos parciales:
 La misma key solo reutiliza resultado si `request_fingerprint` coincide. Ningún
 valor de idempotencia entregado por el cliente se usa sin HMAC/fingerprint.
 
-Cifrado por campo propuesto: AES-GCM de título y body con AAD que incluya profile,
-public ID, nombre de campo y schema version. La gestión de claves Cloud debe
-aprobarse antes de implementar; no se guardan claves junto al ciphertext.
+Cifrado Cloud-only propuesto: un unico JSON `{title, body}` se cifra como un
+payload AES-GCM con nonce unico, AAD que incluya profile, public ID y schema
+version, y tag anexado al ciphertext o definido por el codec futuro. El envelope
+nunca viaja a Klinip One: la API autorizada descifra y transmite `title`/`body`
+sobre TLS, y el dispositivo aplica su propio cifrado local. La gestion de claves
+Cloud debe aprobarse antes de implementar; no se guardan claves junto al
+ciphertext ni existe fallback plaintext.
 
 Retención propuesta: contenido terminal 30 días; después se redacta mediante
 crypto-shredding y se conserva tombstone técnico hasta 180 días. Los valores no
@@ -286,7 +291,12 @@ Restricciones contra doble evento:
 - mismo ID y fingerprint devuelve el evento existente;
 - mismo ID con fingerprint distinto produce conflicto;
 - exactamente un actor humano/device para eventos de cliente; worker usa ambos
-  null y un event ID generado por servidor.
+  null, no lleva `client_event_id` y usa un event ID generado por servidor;
+- reminder scope acepta solo actor user y targets occurrence/delivery nulos;
+- delivery scope acepta solo actor device y exige occurrence/delivery;
+- occurrence scope acepta user/device, exige occurrence y prohíbe delivery;
+- system scope acepta solo worker; exige occurrence y solo `superseded` exige
+  tambien delivery.
 
 Tipos permitidos:
 
@@ -301,6 +311,10 @@ Tipos permitidos:
 - `(delivery_id, server_timestamp, id)`;
 - `(health_profile_id, server_timestamp, id)`;
 - `(actor_device_id, server_timestamp)` para revocación/auditoría;
+- unique parcial system `(occurrence_id, event_type, resulting_version)` cuando
+  no hay delivery;
+- unique parcial system `(delivery_id, event_type, resulting_version)` cuando hay
+  delivery;
 - `client_event_id` nunca se usa solo para buscar entre perfiles.
 
 Cifrado: metadata no admite texto humano. No se guarda contenido, transcript ni
