@@ -64,10 +64,10 @@ def _create_reminder(
         request_fingerprint=request_fingerprint,
         origin="web",
         reminder_type="personal_non_clinical",
-        title_ciphertext="enc:test-title-ciphertext",
-        body_ciphertext=None,
+        content_ciphertext="enc:test-content-envelope",
         content_nonce="n" * 32,
         content_key_version=1,
+        content_algorithm_version=1,
         schedule_mode="wall_clock",
         original_local_date=date(2030, 3, 15),
         original_local_time=time(19, 0),
@@ -174,9 +174,38 @@ def test_complete_reminder_domain_can_be_persisted(db_session):
     assert db_session.query(models.ReminderOccurrence).count() == 1
     assert db_session.query(models.ReminderDelivery).count() == 1
     assert db_session.query(models.ReminderEvent).count() == 1
-    assert "title" not in models.Reminder.__table__.columns
-    assert "body" not in models.Reminder.__table__.columns
-    assert reminder.title_ciphertext.startswith("enc:")
+    reminder_columns = models.Reminder.__table__.columns
+    assert "title" not in reminder_columns
+    assert "body" not in reminder_columns
+    assert "title_ciphertext" not in reminder_columns
+    assert "body_ciphertext" not in reminder_columns
+    assert reminder.content_ciphertext.startswith("enc:")
+
+
+@pytest.mark.parametrize(
+    ("field_name", "invalid_value"),
+    (
+        ("content_ciphertext", ""),
+        ("content_nonce", ""),
+        ("content_key_version", 0),
+        ("content_algorithm_version", 0),
+    ),
+)
+def test_encrypted_content_envelope_rejects_inconsistent_values(
+    db_session,
+    field_name,
+    invalid_value,
+):
+    user, profile, device = _create_identity(
+        db_session,
+        suffix=f"invalid-envelope-{field_name}",
+    )
+    reminder = _create_reminder(db_session, user, profile, device)
+
+    setattr(reminder, field_name, invalid_value)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
 
 
 def test_canonical_states_are_separate_from_family_message_states():
@@ -266,9 +295,10 @@ def test_creation_idempotency_is_scoped_by_actor_and_profile(db_session):
         request_fingerprint="d" * 64,
         origin="web",
         reminder_type="personal_non_clinical",
-        title_ciphertext="enc:other",
+        content_ciphertext="enc:other-envelope",
         content_nonce="m" * 32,
         content_key_version=1,
+        content_algorithm_version=1,
         schedule_mode="wall_clock",
         original_local_date=date(2030, 3, 16),
         original_local_time=time(10, 0),
@@ -496,6 +526,119 @@ def test_foreign_keys_reject_wrong_profile_device_and_orphan_event(db_session):
         metadata_json={},
     )
     db_session.add(orphan_event)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_delivery_requires_a_concrete_occurrence(db_session):
+    _, profile, device = _create_identity(db_session, suffix="delivery-parent")
+    delivery = models.ReminderDelivery(
+        public_id=_public_id(),
+        occurrence_id=None,
+        health_profile_id=profile.id,
+        device_id=device.id,
+        delivery_revision=1,
+        occurrence_version=1,
+        state="queued",
+        available_at=datetime(2030, 3, 15, 21, 0),
+        expires_at=datetime(2030, 3, 16, 21, 0),
+        delivery_attempts=0,
+    )
+    db_session.add(delivery)
+
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_reminder_scoped_event_allows_null_occurrence_and_delivery(db_session):
+    user, profile, device = _create_identity(db_session, suffix="reminder-event")
+    reminder = _create_reminder(db_session, user, profile, device)
+    event = models.ReminderEvent(
+        public_id=_public_id(),
+        reminder_id=reminder.id,
+        occurrence_id=None,
+        delivery_id=None,
+        health_profile_id=profile.id,
+        actor_kind="user",
+        actor_user_id=user.id,
+        event_scope="reminder",
+        event_type="updated",
+        client_event_id=_public_id(),
+        request_fingerprint="r" * 64,
+        expected_version=reminder.version,
+        resulting_state="active",
+        resulting_version=reminder.version + 1,
+        metadata_json={},
+    )
+    db_session.add(event)
+    db_session.commit()
+
+    assert event.occurrence_id is None
+    assert event.delivery_id is None
+
+
+def test_event_scope_actor_target_and_worker_idempotency_are_frozen(db_session):
+    user, profile, device = _create_identity(db_session, suffix="event-contract")
+    reminder = _create_reminder(db_session, user, profile, device)
+    occurrence = _create_occurrence(db_session, reminder, profile)
+
+    invalid_actor = models.ReminderEvent(
+        public_id=_public_id(),
+        reminder_id=reminder.id,
+        occurrence_id=None,
+        delivery_id=None,
+        health_profile_id=profile.id,
+        actor_kind="device",
+        actor_device_id=device.id,
+        event_scope="reminder",
+        event_type="updated",
+        client_event_id=_public_id(),
+        request_fingerprint="a" * 64,
+        resulting_state="active",
+        resulting_version=2,
+        metadata_json={},
+    )
+    db_session.add(invalid_actor)
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+    system_event = models.ReminderEvent(
+        public_id=_public_id(),
+        reminder_id=reminder.id,
+        occurrence_id=occurrence.id,
+        delivery_id=None,
+        health_profile_id=profile.id,
+        actor_kind="worker",
+        event_scope="system",
+        event_type="materialized",
+        client_event_id=None,
+        request_fingerprint="b" * 64,
+        resulting_state="scheduled",
+        resulting_version=1,
+        metadata_json={},
+    )
+    db_session.add(system_event)
+    db_session.commit()
+
+    duplicate_system_event = models.ReminderEvent(
+        public_id=_public_id(),
+        reminder_id=reminder.id,
+        occurrence_id=occurrence.id,
+        delivery_id=None,
+        health_profile_id=profile.id,
+        actor_kind="worker",
+        event_scope="system",
+        event_type="materialized",
+        client_event_id=None,
+        request_fingerprint="b" * 64,
+        resulting_state="scheduled",
+        resulting_version=1,
+        metadata_json={},
+    )
+    db_session.add(duplicate_system_event)
     with pytest.raises(IntegrityError):
         db_session.commit()
     db_session.rollback()

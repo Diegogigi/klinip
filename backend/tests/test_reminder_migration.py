@@ -61,11 +61,65 @@ def test_upgrade_downgrade_and_reupgrade_reminder_schema(tmp_path):
         "uq_reminders_device_idempotency",
         "ix_reminders_profile_state_next",
     } <= {item["name"] for item in inspector.get_indexes("reminders")}
+    reminder_columns = {
+        item["name"]: item for item in inspector.get_columns("reminders")
+    }
     assert {
+        "content_ciphertext",
+        "content_nonce",
+        "content_key_version",
+        "content_algorithm_version",
+    } <= set(reminder_columns)
+    assert {
+        "title",
+        "body",
+        "title_ciphertext",
+        "body_ciphertext",
+    }.isdisjoint(reminder_columns)
+    assert all(
+        reminder_columns[field]["nullable"] is False
+        for field in (
+            "content_ciphertext",
+            "content_nonce",
+            "content_key_version",
+            "content_algorithm_version",
+        )
+    )
+    reminder_checks = {
+        item["name"] for item in inspector.get_check_constraints("reminders")
+    }
+    assert {
+        "ck_reminders_content_algorithm_version",
+        "ck_reminders_content_ciphertext_not_empty",
+        "ck_reminders_content_key_version",
+        "ck_reminders_content_nonce_length",
+    } <= reminder_checks
+    delivery_columns = {
+        item["name"]: item for item in inspector.get_columns("reminder_deliveries")
+    }
+    assert delivery_columns["occurrence_id"]["nullable"] is False
+    event_columns = {
+        item["name"]: item for item in inspector.get_columns("reminder_events")
+    }
+    assert event_columns["occurrence_id"]["nullable"] is True
+    assert {
+        "uq_reminder_events_reminder_user_client",
         "uq_reminder_events_delivery_device_client",
+        "uq_reminder_events_occurrence_user_client",
         "uq_reminder_events_occurrence_device_client",
+        "uq_reminder_events_system_occurrence_version",
+        "uq_reminder_events_system_delivery_version",
         "ix_reminder_events_profile_server",
     } <= {item["name"] for item in inspector.get_indexes("reminder_events")}
+    event_checks = {
+        item["name"] for item in inspector.get_check_constraints("reminder_events")
+    }
+    assert {
+        "ck_reminder_events_actor",
+        "ck_reminder_events_scope_actor",
+        "ck_reminder_events_scope_target",
+        "ck_reminder_events_scope_type",
+    } <= event_checks
 
     _alembic(tmp_path, "downgrade", "20260727_000001")
     assert not (
