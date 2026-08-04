@@ -91,7 +91,10 @@ function getProfileLabel(selectedProfileId, profiles, activeProfile, user) {
 
 function getEpisodeLead(episode, detail) {
   const pendingTask = ensureArray(detail?.tasks).find((task) => task.status !== "completed");
-  if (pendingTask?.title) return cleanUiText(pendingTask.title, "Tienes una acción pendiente en esta carpeta.");
+  if (pendingTask) {
+    const label = cleanUiText(pendingTask.title, "tienes una acción pendiente en esta carpeta");
+    return `Próximo paso: ${label}`;
+  }
   const summary = cleanUiText(episode.care_summary || episode.summary, "");
   if (summary) return summary;
   return "Esta carpeta reúne la atención, sus documentos y los pasos siguientes.";

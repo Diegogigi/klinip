@@ -866,7 +866,7 @@ export default function MiSalud() {
             <div className="clp-appt-stats">
               <div className="clp-appt-stat">
                 <strong>{biometricDashboard?.active_metrics_count || 0}</strong>
-                <span>parámetros activos</span>
+                <span>controles activos</span>
               </div>
               <div className="clp-appt-stat">
                 <strong>{biometricRecentCount}</strong>
@@ -876,7 +876,7 @@ export default function MiSalud() {
           </div>
         ) : (
           <div className="clp-empty">
-            Empieza a registrar biométricos para ver tus tendencias y compartirlas en consulta.
+            Empieza a registrar tus mediciones, como glucosa o presión, para ver cómo cambian y mostrarlas en tu próxima consulta.
           </div>
         )}
       </section>

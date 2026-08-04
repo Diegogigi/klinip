@@ -1194,7 +1194,7 @@ export default function DocumentUploadWizard({
                   <span className="documents-wizard-summary-chip is-muted">
                     {totalEntities > 0
                       ? `${totalEntities} dato${totalEntities === 1 ? "" : "s"} detectado${totalEntities === 1 ? "" : "s"}`
-                      : "Sin datos estructurados"}
+                      : "Sin datos detectados"}
                   </span>
                   {requiresReview ? (
                     <span className="documents-wizard-summary-chip is-warning">Conviene revisarlo</span>

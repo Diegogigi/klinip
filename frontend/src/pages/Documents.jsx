@@ -50,9 +50,9 @@ function getNewestDocumentRank(item) {
 }
 
 const ocrLabels = {
-  pending: "Por leer",
-  processing: "Leyendo",
-  done: "Leido por IA",
+  pending: "Pendiente",
+  processing: "Procesando",
+  done: "Analizado con IA",
   skipped_size: "No se pudo leer",
 };
 
@@ -918,7 +918,7 @@ export default function Documents() {
           <div className="documents-ocr-assist-head">
             <div>
               <span className="documents-ocr-kicker">Klinip IA</span>
-              <h3 className="card-title">Carga inteligente en {activeProfileLabel}</h3>
+              <h3 className="card-title">Foto Klinip ordena los documentos de {activeProfileLabel}</h3>
             </div>
             {hasPendingOcr ? (
               <span className="detail-chip detail-chip-muted">
@@ -1053,7 +1053,7 @@ export default function Documents() {
                     ))}
                   </select>
                   <span className="tiny-note">
-                    Usa autodetección cuando no quieras clasificarlo manualmente. Klinip puede corregir el tipo después de leer el documento.
+                    Si no sabes qué tipo de documento es, deja "Autodetectar con IA" y Klinip identifica el tipo por ti.
                   </span>
                   {form.doc_type === COVERAGE_FORM_VALUE ? (
                     <span className="tiny-note">
@@ -1434,7 +1434,7 @@ export default function Documents() {
               ) : (
                 <div className="document-viewer-empty">
                   <strong>No hay vista previa disponible</strong>
-                  <span>Este tipo de archivo se puede descargar, pero no visualizar dentro de Klinip todavía.</span>
+                  <span>Este tipo de archivo se puede descargar, pero todavía no se puede ver dentro de Klinip.</span>
                 </div>
               )}
             </div>

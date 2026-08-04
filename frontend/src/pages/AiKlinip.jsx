@@ -1871,7 +1871,7 @@ export default function AiKlinip({ user }) {
                     className="ai-input-field"
                     value={input}
                     onChange={(event) => setInput(event.target.value)}
-                    placeholder="Escribe o graba una pregunta, o adjunta un documento para consultar..."
+                    placeholder="Escribe, habla o adjunta un documento..."
                     rows={1}
                     onInput={(event) => {
                       const target = event.currentTarget;
