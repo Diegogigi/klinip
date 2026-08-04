@@ -918,7 +918,7 @@ export default function Documents() {
           <div className="documents-ocr-assist-head">
             <div>
               <span className="documents-ocr-kicker">Klinip IA</span>
-              <h3 className="card-title">Foto Klinip ordena los documentos de {activeProfileLabel}</h3>
+              <h3 className="card-title">Foto Klinip ordena tus documentos</h3>
             </div>
             {hasPendingOcr ? (
               <span className="detail-chip detail-chip-muted">
