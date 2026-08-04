@@ -2256,21 +2256,21 @@ export default function AiKlinip({ user }) {
                             className="ai-conversation-menu-item"
                             onClick={(event) => handleRenameConversation(event, item.conversation_id, item.title)}
                           >
-                            Renombrar
+                            Cambiar nombre
                           </button>
                           <button
                             type="button"
                             className="ai-conversation-menu-item"
                             onClick={(event) => handlePinConversation(event, item.conversation_id)}
                           >
-                            {pinnedConversationIds.includes(item.conversation_id) ? "Quitar fijado" : "Fijar arriba"}
+                            {pinnedConversationIds.includes(item.conversation_id) ? "Quitar de importantes" : "Marcar como importante"}
                           </button>
                           <button
                             type="button"
                             className="ai-conversation-menu-item"
                             onClick={(event) => handleExportConversation(event, item.conversation_id, item.title)}
                           >
-                            Exportar
+                            Guardar como archivo
                           </button>
                           <button
                             type="button"

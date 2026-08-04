@@ -712,6 +712,7 @@ export default function Timeline({ user }) {
           <div className="history-explorer-main-copy">
             <span className="history-explorer-folder-type">{getEpisodeTypeLabel(selectedEpisode.episode_type)}</span>
             <h2>{cleanUiText(selectedEpisode.title, "Carpeta clínica")}</h2>
+            <span className="history-explorer-continuity-label">Resumen de continuidad</span>
             <p>{getEpisodeLead(selectedEpisode, selectedDetail)}</p>
           </div>
 

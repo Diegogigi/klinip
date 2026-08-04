@@ -210,11 +210,11 @@ export default function ClinicalReports({ user }) {
             <span>{profileAccessLabel || "Perfil activo actual"}</span>
           </div>
           <div className="clinical-summary-chip">
-            <span>Adherencia</span>
+            <span>Adherencia al tratamiento</span>
             <strong>{adherenceValue !== null ? `${adherenceValue}%` : "Sin datos"}</strong>
           </div>
           <div className="clinical-summary-chip">
-            <span>Alertas activas</span>
+            <span>Cosas que revisar</span>
             <strong>{activeAlerts.length}</strong>
           </div>
         </div>
