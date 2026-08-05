@@ -53,7 +53,7 @@ export default function HealthSheet() {
         <HealthSheetPanel profileId={profile.id} />
       ) : (
         <div className="clp-empty">
-          No pudimos identificar tu perfil activo. Vuelve a Mi Salud e inténtalo de nuevo.
+          No encontramos tu información todavía. Vuelve a Mi Salud e inténtalo de nuevo.
         </div>
       )}
     </div>
