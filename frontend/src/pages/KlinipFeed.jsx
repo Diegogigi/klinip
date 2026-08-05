@@ -223,6 +223,17 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString("es-CL", { day: "numeric", month: "short" });
 }
 
+function formatSharedDate(dateStr) {
+  if (!dateStr) return "";
+  const parsed = new Date(dateStr);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("es-CL", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 function truncateText(value = "", max = 120) {
   const normalized = String(value || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= max) return normalized;
@@ -245,72 +256,22 @@ function conciseReason(value = "", fallback = "Revisar hoy") {
   return truncateText(normalized.replace(/[.:;,\s]+$/, ""), 68);
 }
 
-function buildClinicalFeedEvents({ alerts, aiContext, posts }) {
-  const events = [];
-
-  (alerts || []).slice(0, 4).forEach((alert) => {
-    const tone = alert.severity === "high" ? "red" : "amber";
-    events.push({
-      key: `alert-${alert.id || `${alert.profile_name}-${alert.title}`}`,
-      tone,
-      badge: tone === "red" ? "Urgente" : "Revisar",
-      title: alert.profile_name || "Perfil",
-      body: conciseReason(alert.title || alert.message, "Hay una novedad clínica para revisar"),
-      meta: alert.suggested_action || "Revisa el radar familiar y define el siguiente paso.",
-      route: "/settings/familia",
-    });
+function buildSharedContinuityItems(posts) {
+  return (posts || []).slice(0, 4).map((post) => {
+    const sharedDate = formatSharedDate(post.created_at);
+    return {
+      key: `post-${post.id}`,
+      tone: "blue",
+      badge: "Familia",
+      title: post.profile_name || "Perfil compartido",
+      body: `Según lo compartido en Familia: ${conciseReason(
+        post.content,
+        "Hay una publicación familiar disponible para revisar"
+      )}`,
+      meta: `Publicado por ${post.user_name || "la familia"}${sharedDate ? ` · ${sharedDate}` : ""}`,
+      route: "/family#family-updates",
+    };
   });
-
-  (aiContext?.profiles || []).forEach((item) => {
-    if (item.low_adherence) {
-      events.push({
-        key: `adherence-${item.profile_id}`,
-        tone: "amber",
-        badge: "Adherencia",
-        title: item.profile_name || "Perfil",
-        body: "Adherencia baja detectada",
-        meta: item.upcoming_appointments
-          ? `${formatUnitLabel(item.upcoming_appointments, "cita próxima", "citas próximas")}.`
-          : "Conviene revisar tomas pendientes y próximos controles.",
-        route: "/medications",
-      });
-    } else if (Number(item.upcoming_appointments || 0) > 0) {
-      events.push({
-        key: `appointment-${item.profile_id}`,
-        tone: "blue",
-        badge: "Cita",
-        title: item.profile_name || "Perfil",
-        body: formatUnitLabel(Number(item.upcoming_appointments || 0), "cita próxima", "citas próximas"),
-        meta: Number(item.active_alerts || 0) > 0
-          ? `${formatUnitLabel(Number(item.active_alerts || 0), "alerta activa", "alertas activas")}.`
-          : "Revisa la preparación previa y la confirmación de la cita.",
-        route: "/appointments",
-      });
-    }
-  });
-
-  (posts || [])
-    .filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type))
-    .slice(0, 4)
-    .forEach((post) => {
-      const postTypeInfo = getPostTypeInfo(post.type);
-      events.push({
-        key: `post-${post.id}`,
-        tone:
-          post.type === "medication"
-            ? "green"
-            : post.type === "doctor_visit"
-            ? "blue"
-            : "violet",
-        badge: postTypeInfo.label,
-        title: post.profile_name || "Perfil",
-        body: conciseReason(post.content || `Nueva actualización de tipo ${postTypeInfo.label}.`, `Nueva ${postTypeInfo.label.toLowerCase()}`),
-        meta: `${post.user_name || "Familiar"} · ${timeAgo(post.created_at)}`,
-        route: "/family",
-      });
-    });
-
-  return events.slice(0, 6);
 }
 
 function getPostTypeInfo(type) {
@@ -872,12 +833,12 @@ function PostMediaCard({ post }) {
           <span>{typeInfo.label} · familia</span>
         </div>
         <p className="kfeed-media-card-title">
-          {post.post_type === "exam_result" ? "Resultados de examen compartidos" :
-           post.post_type === "doctor_visit" ? "Nota de consulta médica" :
-           post.post_type === "medication" ? "Actualización de medicamento" :
-           "Actualización de salud"}
+          {post.post_type === "exam_result" ? "Publicación sobre un examen" :
+           post.post_type === "doctor_visit" ? "Publicación sobre una consulta" :
+           post.post_type === "medication" ? "Publicación sobre medicamentos" :
+           "Publicación familiar"}
         </p>
-        <p className="kfeed-media-card-sub">Compartido de forma privada con tu familia</p>
+        <p className="kfeed-media-card-sub">Visible para la red vinculada al perfil</p>
       </div>
 
       {/* Otros documentos (no PDF) */}
@@ -949,7 +910,7 @@ function PostCard({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="12" height="12" style={{ verticalAlign: "middle" }}>
               <circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 0 20M12 2a15.3 15.3 0 0 0 0 20"/>
             </svg>
-            {" "}Familia
+            {" "}Red vinculada
           </span>
         </div>
         {post.user_id === currentUserId && (
@@ -1179,7 +1140,7 @@ function CreatePostModal({
                   <circle cx="8" cy="9" r="2.5"/><circle cx="16" cy="9" r="2.5"/>
                   <path d="M3.5 19a4.5 4.5 0 0 1 9 0"/><path d="M11.5 19a4.5 4.5 0 0 1 9 0"/>
                 </svg>
-                Solo familia
+                Red vinculada al perfil
               </div>
             </div>
           </div>
@@ -1545,6 +1506,7 @@ function ClinicalEventCard({ item }) {
       <span className={`kfeed-clinical-badge tone-${item.tone || "blue"}`}>{item.badge}</span>
       <strong>{item.title}</strong>
       <p>{item.body}</p>
+      {item.meta ? <p>{item.meta}</p> : null}
     </Link>
   );
 }
@@ -1602,10 +1564,10 @@ export default function KlinipFeed({ user }) {
   const [error, setError] = useState("");
   const [profiles, setProfiles] = useState([]);
   const [groupCaregivers, setGroupCaregivers] = useState({});
-  const [familyAlerts, setFamilyAlerts] = useState([]);
-  const [familyReport, setFamilyReport] = useState(null);
-  const [familyAiContext, setFamilyAiContext] = useState(null);
-  const [primaryAutomation, setPrimaryAutomation] = useState(null);
+  const [, setFamilyAlerts] = useState([]);
+  const [, setFamilyReport] = useState(null);
+  const [, setFamilyAiContext] = useState(null);
+  const [, setPrimaryAutomation] = useState(null);
   const [pendingInvitations, setPendingInvitations] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
   const [editingPost, setEditingPost] = useState(null);
@@ -1849,60 +1811,30 @@ export default function KlinipFeed({ user }) {
     : [];
   const viewerCaregivers = ownCaregivers.filter((item) => item.role === "viewer");
   const editingCaregivers = ownCaregivers.filter((item) => item.role === "caregiver" || item.role === "admin");
-  const alertsEnabled = Boolean(
-    primaryAutomation?.smart_alerts_enabled ||
-    primaryAutomation?.medication_overdue_alerts ||
-    primaryAutomation?.upcoming_appointment_alerts ||
-    primaryAutomation?.inactivity_alerts
-  );
-  const alertRecipients = primaryProfile
-    ? [
-        primaryProfile.full_name || user?.name || "Titular",
-        ...(
-          primaryAutomation?.auto_email_caregivers
-            ? ownCaregivers
-            : editingCaregivers
-        ).map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
-      ]
-    : [];
-  const permissionViewNames = primaryProfile
+  const networkMemberNames = primaryProfile
     ? [
         primaryProfile.full_name || user?.name || "Titular",
         ...ownCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
       ]
     : [];
-  const permissionEditNames = primaryProfile
+  const collaboratorNames = primaryProfile
     ? [
         primaryProfile.full_name || user?.name || "Titular",
         ...editingCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
       ]
     : [];
-  const upcomingAppointments = (familyAiContext?.profiles || []).reduce(
-    (acc, item) => acc + Number(item.upcoming_appointments || 0),
-    0
+  const readOnlyNames = viewerCaregivers.map(
+    (item) => item.user_name || item.user_email || `Usuario ${item.user_id}`
   );
-  const activeAlertsTotal = Number(familyAiContext?.active_alerts_total || familyAlerts.length || 0);
-  const lowAdherenceProfiles = Number(familyAiContext?.low_adherence_profiles || 0);
-  const collaborativeProfiles = Number(familyReport?.totals?.profiles || profiles.length || 0);
+  const collaborativeProfiles = profiles.length;
   const careTeamTotal = ownCaregivers.length + (primaryProfile ? 1 : 0);
-  const importantEvents = buildClinicalFeedEvents({
-    alerts: familyAlerts,
-    aiContext: familyAiContext,
-    posts,
-  });
-  const attentionPreview = importantEvents.slice(0, 2);
-  const remainingAttentionCount = Math.max(importantEvents.length - attentionPreview.length, 0);
-  const familySummary =
-    activeAlertsTotal > 0
-      ? `${formatUnitLabel(activeAlertsTotal, "alerta hoy", "alertas hoy")}.`
-      : lowAdherenceProfiles > 0
-      ? `${formatUnitLabel(lowAdherenceProfiles, "caso de adherencia", "casos de adherencia")}.`
-      : upcomingAppointments > 0
-      ? `${formatUnitLabel(upcomingAppointments, "cita próxima", "citas próximas")}.`
-      : collaborativeProfiles > 0
-      ? "Sin alertas críticas."
-      : "Activa tu equipo para coordinar el cuidado.";
-  const feedClinicalPosts = posts.filter((post) => ["medication", "doctor_visit", "exam_result"].includes(post.type));
+  const sharedContinuityItems = buildSharedContinuityItems(posts);
+  const continuityPreview = sharedContinuityItems.slice(0, 2);
+  const remainingSharedCount = Math.max(sharedContinuityItems.length - continuityPreview.length, 0);
+  const latestSharedDate = formatSharedDate(posts[0]?.created_at);
+  const familySummary = collaborativeProfiles > 0
+    ? "Información visible para tu red autorizada."
+    : "Agrega una red de apoyo para compartir información con permisos claros.";
   const headerProfileName = primaryProfile?.full_name || user?.name || "Perfil activo";
   const headerProfileMeta = primaryProfile?.relation_with_owner || "Grupo activo";
 
@@ -1934,7 +1866,7 @@ export default function KlinipFeed({ user }) {
             <div className="kfeed-brand-copy">
               <p className="kfeed-section-kicker">Familia</p>
               <h1 className="kfeed-page-title">Familia</h1>
-              <p className="kfeed-page-subtitle">Cuidado compartido, con privacidad y control.</p>
+              <p className="kfeed-page-subtitle">Continuidad, apoyo y permisos en un solo lugar.</p>
               <p className="kfeed-hero-summary">{familySummary}</p>
             </div>
           </div>
@@ -1956,10 +1888,10 @@ export default function KlinipFeed({ user }) {
             <div className="kfeed-hero-activity">
               <div>
                 <p className="kfeed-section-kicker">Bitácora compartida</p>
-                <h2 className="kfeed-section-title">Actividad reciente del cuidado</h2>
+                <h2 className="kfeed-section-title">Información compartida recientemente</h2>
               </div>
               <p className="kfeed-hero-activity-note">
-                {formatUnitLabel(feedClinicalPosts.length, "evento clínico", "eventos clínicos")} registrados recientemente.
+                {formatUnitLabel(posts.length, "publicación familiar", "publicaciones familiares")} recientes.
               </p>
             </div>
           </div>
@@ -1973,6 +1905,79 @@ export default function KlinipFeed({ user }) {
         >
           Crear publicación para tu familia o círculo
         </button>
+
+        {!loading && !error && (
+          <section className="kfeed-care-layout" aria-label="Continuidad compartida y red de apoyo">
+            <section className="kfeed-care-panel">
+              <div className="kfeed-care-panel-head">
+                <div>
+                  <p className="kfeed-section-kicker">Continuidad compartida</p>
+                  <h2 className="kfeed-section-title">Próximos pasos visibles</h2>
+                </div>
+                <p className="kfeed-feed-head-note">
+                  {latestSharedDate ? `Actualizado ${latestSharedDate}` : "Sin publicaciones todavía"}
+                </p>
+              </div>
+              <div className="kfeed-permission-note">
+                <p>Según lo compartido en Familia, estas publicaciones pueden ayudar a coordinar el apoyo.</p>
+              </div>
+              {continuityPreview.length ? (
+                <div className="kfeed-care-panel-body">
+                  <div className="kfeed-clinical-event-list">
+                    {continuityPreview.map((item) => (
+                      <ClinicalEventCard key={item.key} item={item} />
+                    ))}
+                  </div>
+                  {remainingSharedCount > 0 ? (
+                    <Link className="kfeed-care-more-link" to="/family#family-updates">
+                      Ver {formatUnitLabel(remainingSharedCount, "publicación más", "publicaciones más")}
+                    </Link>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="kfeed-care-empty">
+                  <strong>Aún no hay información compartida</strong>
+                  <span>Cuando tu red publique una actualización, aparecerá aquí con su perfil y fecha.</span>
+                </div>
+              )}
+            </section>
+
+            <section className="kfeed-care-panel">
+              <div className="kfeed-care-panel-head">
+                <div>
+                  <p className="kfeed-section-kicker">Red de apoyo</p>
+                  <h2 className="kfeed-section-title">Personas y permisos</h2>
+                </div>
+                <Link className="kfeed-inline-link" to="/settings/familia">
+                  Gestionar permisos
+                </Link>
+              </div>
+              <div className="kfeed-permission-note">
+                <p>El acceso a citas, medicamentos, documentos y Klinip IA depende de los permisos de cada perfil.</p>
+              </div>
+              <div className="kfeed-permission-grid">
+                <PermissionSummaryCard
+                  title="Acceso a Familia"
+                  tone="blue"
+                  names={networkMemberNames}
+                  emptyText="Solo tú"
+                />
+                <PermissionSummaryCard
+                  title="Administrador o editor"
+                  tone="teal"
+                  names={collaboratorNames}
+                  emptyText="Solo titular"
+                />
+                <PermissionSummaryCard
+                  title="Rol lector"
+                  tone="slate"
+                  names={readOnlyNames}
+                  emptyText="Sin personas"
+                />
+              </div>
+            </section>
+          </section>
+        )}
 
       {loading && (
         <div className="kfeed-state-center">
@@ -2004,7 +2009,7 @@ export default function KlinipFeed({ user }) {
         </div>
       )}
 
-      <div className="kfeed-list">
+      <div className="kfeed-list" id="family-updates">
         {posts.map((post) => (
           <PostCard
             key={post.id}
