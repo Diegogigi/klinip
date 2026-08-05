@@ -1238,6 +1238,22 @@ export default function Dashboard({
         : "sin alertas",
       onClick: () => navigate("/family"),
     },
+    {
+      key: "health-sheet",
+      icon: "biometric",
+      tone: Boolean(activeProfile?.base_medical_data?.trim?.()) || !canEditActiveProfile ? "ok" : "warn",
+      label: "Salud",
+      value: Boolean(activeProfile?.base_medical_data?.trim?.()) || !canEditActiveProfile ? "Ver ficha" : "Completar datos",
+      onClick: () => navigate("/mi-salud"),
+    },
+    {
+      key: "klinip-ai",
+      icon: "ai",
+      tone: "ok",
+      label: "Klinip IA",
+      value: "Haz una pregunta",
+      onClick: () => navigate("/ai"),
+    },
   ];
 
   const upcomingEvents = [
