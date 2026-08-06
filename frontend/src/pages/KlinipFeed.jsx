@@ -2016,23 +2016,27 @@ export default function KlinipFeed({ user }) {
               <div className="kfeed-permission-note">
                 <p>Cada persona ve solamente los módulos autorizados para este perfil.</p>
               </div>
-              <div className="kfeed-modal-mentions" role="group" aria-label="Filtrar integrantes por rol">
-                {FAMILY_ROLE_FILTERS.map((filter) => (
-                  <button
-                    key={filter.value}
-                    type="button"
-                    className={`kfeed-type-chip ${permissionRoleFilter === filter.value ? "active" : ""}`}
-                    style={{ "--type-color": "var(--slate)" }}
-                    aria-pressed={permissionRoleFilter === filter.value}
-                    onClick={() => setPermissionRoleFilter(filter.value)}
-                  >
-                    {filter.label}
-                  </button>
-                ))}
-              </div>
-              <div className="kfeed-permission-note">
-                <p>Este filtro solo ordena lo que ya puedes ver; no cambia permisos.</p>
-              </div>
+              {permissionMembers.length > 0 ? (
+                <>
+                  <div className="kfeed-modal-mentions" role="group" aria-label="Filtrar integrantes por rol">
+                    {FAMILY_ROLE_FILTERS.map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        className={`kfeed-type-chip ${permissionRoleFilter === filter.value ? "active" : ""}`}
+                        style={{ "--type-color": "var(--slate)" }}
+                        aria-pressed={permissionRoleFilter === filter.value}
+                        onClick={() => setPermissionRoleFilter(filter.value)}
+                      >
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="kfeed-permission-note">
+                    <p>Este filtro solo ordena lo que ya puedes ver; no cambia permisos.</p>
+                  </div>
+                </>
+              ) : null}
               {permissionMembersPreview.length > 0 ? (
                 <div className="kfeed-permission-grid" aria-live="polite">
                   {permissionMembersPreview.map((member) => (
@@ -2041,12 +2045,21 @@ export default function KlinipFeed({ user }) {
                 </div>
               ) : (
                 <div className="kfeed-care-empty" aria-live="polite">
-                  <strong>{permissionMembers.length > 0 ? "Sin integrantes en este rol" : "Revisar permisos"}</strong>
+                  <strong>
+                    {permissionMembers.length > 0
+                      ? "Sin integrantes en este rol"
+                      : "Aún no hay personas en tu red de apoyo"}
+                  </strong>
                   <span>
                     {permissionMembers.length > 0
                       ? "Prueba con otro filtro para ver integrantes."
-                      : "Consulta quién puede ver o colaborar en este perfil."}
+                      : "Puedes invitar a una persona de confianza y definir qué información podrá ver o ayudar a gestionar."}
                   </span>
+                  {permissionMembers.length === 0 ? (
+                    <Link className="kfeed-manage-link" to="/settings/familia">
+                      Invitar o gestionar red de apoyo
+                    </Link>
+                  ) : null}
                 </div>
               )}
               {remainingPermissionMembers > 0 ? (
