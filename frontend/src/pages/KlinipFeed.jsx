@@ -190,6 +190,14 @@ const POST_TYPES = [
   { value: "medication", label: "Medicamento", emoji: "💊", color: "#16a34a" },
 ];
 
+const FAMILY_PERMISSION_MODULES = [
+  { label: "Citas", view: "view_appointments", edit: "edit_appointments" },
+  { label: "Medicamentos", view: "view_medications", edit: "edit_medications" },
+  { label: "Documentos", view: "view_documents", edit: "edit_documents" },
+  { label: "Cobertura", view: "view_coverage", edit: "edit_coverage" },
+  { label: "Klinip IA", view: "use_ai" },
+];
+
 const REACTIONS = [
   { type: "apoyo", emoji: "💙", label: "Apoyar" },
   { type: "animo", emoji: "💪", label: "Ánimo" },
@@ -242,12 +250,6 @@ function truncateText(value = "", max = 120) {
 
 function formatUnitLabel(count, singular, plural) {
   return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function summarizeNames(names = [], emptyText = "") {
-  if (!names.length) return emptyText;
-  if (names.length === 1) return names[0];
-  return `${names[0]} y ${names.length - 1} más`;
 }
 
 function conciseReason(value = "", fallback = "Revisar hoy") {
@@ -1489,13 +1491,52 @@ function CaregiverRow({ caregiver }) {
   );
 }
 
-function PermissionSummaryCard({ title, tone = "blue", names = [], emptyText }) {
-  const summary = summarizeNames(names, emptyText);
+function formatPermissionModules(modules) {
+  if (modules.length < 2) return modules[0] || "";
+  return `${modules.slice(0, -1).join(", ")} y ${modules[modules.length - 1]}`;
+}
+
+function getExplicitModulePermissions(permissions) {
+  if (!Array.isArray(permissions) || permissions.length === 0) {
+    return { available: false, visible: [], editable: [] };
+  }
+
+  const permissionSet = new Set(permissions);
+  return {
+    available: true,
+    visible: FAMILY_PERMISSION_MODULES
+      .filter((module) => permissionSet.has(module.view))
+      .map((module) => module.label),
+    editable: FAMILY_PERMISSION_MODULES
+      .filter((module) => module.edit && permissionSet.has(module.edit))
+      .map((module) => module.label),
+  };
+}
+
+function PermissionMemberCard({ member }) {
+  const modulePermissions = getExplicitModulePermissions(member.permissions);
 
   return (
-    <article className={`kfeed-permission-card tone-${tone}`} title={names.length ? names.join(", ") : emptyText}>
-      <span className="kfeed-permission-card-label">{title}</span>
-      <strong>{summary}</strong>
+    <article className={`kfeed-permission-card tone-${member.tone}`}>
+      <span className="kfeed-permission-card-label">{member.roleLabel}</span>
+      <strong>{member.name}</strong>
+      <div className="kfeed-permission-note">
+        <p>Perfil asociado: {member.profileName}</p>
+        {!modulePermissions.available ? (
+          <p>Revisar permisos</p>
+        ) : (
+          <>
+            <p>
+              {modulePermissions.visible.length > 0
+                ? `Puede ver: ${formatPermissionModules(modulePermissions.visible)}`
+                : "Sin módulos visibles autorizados"}
+            </p>
+            {modulePermissions.editable.length > 0 ? (
+              <p>Puede editar: {formatPermissionModules(modulePermissions.editable)}</p>
+            ) : null}
+          </>
+        )}
+      </div>
     </article>
   );
 }
@@ -1809,23 +1850,28 @@ export default function KlinipFeed({ user }) {
           String(item.relationship_type || "").toLowerCase() !== "self"
       )
     : [];
-  const viewerCaregivers = ownCaregivers.filter((item) => item.role === "viewer");
-  const editingCaregivers = ownCaregivers.filter((item) => item.role === "caregiver" || item.role === "admin");
-  const networkMemberNames = primaryProfile
-    ? [
-        primaryProfile.full_name || user?.name || "Titular",
-        ...ownCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
-      ]
+  const permissionMembers = primaryProfile
+    ? (groupCaregivers[primaryProfile.id] || [])
+        .filter((item) => item.status === "accepted")
+        .map((item) => {
+          const relationshipType = String(item.relationship_type || "").toLowerCase();
+          const role = String(item.role || "").toLowerCase();
+          return {
+            id: item.id || item.user_id,
+            name: item.user_name || item.user_email || `Usuario ${item.user_id}`,
+            roleLabel: relationshipType === "self"
+              ? "Titular"
+              : ["viewer", "caregiver", "admin"].includes(role)
+                ? familyRoleLabel(role)
+                : "Rol sin especificar",
+            profileName: primaryProfile.full_name || "Perfil activo",
+            permissions: item.permissions,
+            tone: role === "viewer" ? "slate" : role === "caregiver" ? "teal" : "blue",
+          };
+        })
     : [];
-  const collaboratorNames = primaryProfile
-    ? [
-        primaryProfile.full_name || user?.name || "Titular",
-        ...editingCaregivers.map((item) => item.user_name || item.user_email || `Usuario ${item.user_id}`),
-      ]
-    : [];
-  const readOnlyNames = viewerCaregivers.map(
-    (item) => item.user_name || item.user_email || `Usuario ${item.user_id}`
-  );
+  const permissionMembersPreview = permissionMembers.slice(0, 3);
+  const remainingPermissionMembers = Math.max(permissionMembers.length - permissionMembersPreview.length, 0);
   const collaborativeProfiles = profiles.length;
   const careTeamTotal = ownCaregivers.length + (primaryProfile ? 1 : 0);
   const sharedContinuityItems = buildSharedContinuityItems(posts);
@@ -1946,35 +1992,32 @@ export default function KlinipFeed({ user }) {
               <div className="kfeed-care-panel-head">
                 <div>
                   <p className="kfeed-section-kicker">Red de apoyo</p>
-                  <h2 className="kfeed-section-title">Personas y permisos</h2>
+                  <h2 className="kfeed-section-title">Permisos para el perfil de {headerProfileName}</h2>
                 </div>
                 <Link className="kfeed-inline-link" to="/settings/familia">
-                  Gestionar permisos
+                  Ver y gestionar permisos
                 </Link>
               </div>
               <div className="kfeed-permission-note">
-                <p>El acceso a citas, medicamentos, documentos y Klinip IA depende de los permisos de cada perfil.</p>
+                <p>Cada persona ve solamente los módulos autorizados para este perfil.</p>
               </div>
-              <div className="kfeed-permission-grid">
-                <PermissionSummaryCard
-                  title="Acceso a Familia"
-                  tone="blue"
-                  names={networkMemberNames}
-                  emptyText="Solo tú"
-                />
-                <PermissionSummaryCard
-                  title="Administrador o editor"
-                  tone="teal"
-                  names={collaboratorNames}
-                  emptyText="Solo titular"
-                />
-                <PermissionSummaryCard
-                  title="Rol lector"
-                  tone="slate"
-                  names={readOnlyNames}
-                  emptyText="Sin personas"
-                />
-              </div>
+              {permissionMembersPreview.length > 0 ? (
+                <div className="kfeed-permission-grid">
+                  {permissionMembersPreview.map((member) => (
+                    <PermissionMemberCard key={member.id} member={member} />
+                  ))}
+                </div>
+              ) : (
+                <div className="kfeed-care-empty">
+                  <strong>Revisar permisos</strong>
+                  <span>Consulta quién puede ver o colaborar en este perfil.</span>
+                </div>
+              )}
+              {remainingPermissionMembers > 0 ? (
+                <Link className="kfeed-care-more-link" to="/settings/familia">
+                  Ver {formatUnitLabel(remainingPermissionMembers, "persona más", "personas más")}
+                </Link>
+              ) : null}
             </section>
           </section>
         )}
