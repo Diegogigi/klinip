@@ -206,6 +206,18 @@ function TabParaTiClean({ result }) {
   const meta = result?.metadata_clinica || {};
   const professionalLabel = getResultProfessionalLabel(result);
   const nonDiagnosticRole = meta.puede_diagnosticar_medicamente === false;
+  const sessionId = result?.id ?? null;
+  const [indicationStatuses, setIndicationStatuses] = useState(() => loadVoiceIndicationStatuses(sessionId));
+
+  useEffect(() => {
+    setIndicationStatuses(loadVoiceIndicationStatuses(sessionId));
+  }, [sessionId]);
+
+  const toggleIndicationStatus = (index) => {
+    const isUnderstood = indicationStatuses[index] === "entendida";
+    const next = saveVoiceIndicationStatus(sessionId, index, isUnderstood ? "pendiente" : "entendida");
+    if (next) setIndicationStatuses(next);
+  };
 
   return (
     <div className="iv-tab-content">
@@ -252,11 +264,19 @@ function TabParaTiClean({ result }) {
           {indicaciones.map((ind, index) => {
             const color = TIPO_COLORS[ind?.tipo] || TIPO_COLORS.otro;
             const label = TIPO_LABELS[ind?.tipo] || ind?.tipo || "Otro";
+            const isUnderstood = indicationStatuses[index] === "entendida";
             return (
               <div key={`${ind?.tipo || "otro"}-${index}`} className="iv-indicacion-item">
                 <span className="iv-indicacion-dot" style={{ background: color }} />
                 <div className="iv-indicacion-body">
                   <p className="iv-indicacion-text">{ind?.texto}</p>
+                  <p className="iv-context-helper">
+                    {isUnderstood ? "Entendida" : "Pendiente"}
+                    {" · "}
+                    <button type="button" className="iv-indicacion-action" onClick={() => toggleIndicationStatus(index)}>
+                      {isUnderstood ? "Marcar como pendiente" : "Marcar como entendida"}
+                    </button>
+                  </p>
                 </div>
                 <span className="iv-indicacion-badge" style={{ color: ind?.prioridad === "alta" ? "#c2410c" : color }}>
                   {ind?.prioridad === "alta" ? `${label} · Alta` : label}
@@ -266,6 +286,7 @@ function TabParaTiClean({ result }) {
             );
           })}
           <p className="iv-context-helper">Klinip no cambia ni reemplaza esta indicación médica; solo te ayuda a recordarla.</p>
+          <p className="iv-context-helper">Esto no cambia la indicación médica; solo te ayuda a organizarla.</p>
         </div>
         </React.Fragment>
       )}
@@ -1371,6 +1392,32 @@ const TIPO_LABELS = {
   otro: "Otro",
 };
 
+function getVoiceIndicationStatusKey(sessionId) {
+  return `klinip:voice-indication-status:${sessionId}`;
+}
+
+function loadVoiceIndicationStatuses(sessionId) {
+  if (!sessionId) return {};
+  try {
+    const raw = window.localStorage.getItem(getVoiceIndicationStatusKey(sessionId));
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveVoiceIndicationStatus(sessionId, index, status) {
+  if (!sessionId) return null;
+  try {
+    const next = { ...loadVoiceIndicationStatuses(sessionId), [index]: status };
+    window.localStorage.setItem(getVoiceIndicationStatusKey(sessionId), JSON.stringify(next));
+    return next;
+  } catch (error) {
+    return null;
+  }
+}
+
 const PROFESSIONAL_ROLE_OPTIONS = [
   { value: "medico", label: "Médico/a", helper: "Puede emitir diagnóstico médico." },
   { value: "kinesiologo", label: "Kinesiólogo/a", helper: "Evaluación y rehabilitación." },
@@ -1498,6 +1545,19 @@ function TabParaTi({ result }) {
   const meta = result.metadata_clinica || {};
   const professionalLabel = getResultProfessionalLabel(result);
   const nonDiagnosticRole = meta.puede_diagnosticar_medicamente === false;
+  const sessionId = result?.id ?? null;
+  const [indicationStatuses, setIndicationStatuses] = useState(() => loadVoiceIndicationStatuses(sessionId));
+
+  useEffect(() => {
+    setIndicationStatuses(loadVoiceIndicationStatuses(sessionId));
+  }, [sessionId]);
+
+  const toggleIndicationStatus = (index) => {
+    const isUnderstood = indicationStatuses[index] === "entendida";
+    const next = saveVoiceIndicationStatus(sessionId, index, isUnderstood ? "pendiente" : "entendida");
+    if (next) setIndicationStatuses(next);
+  };
+
   return (
     <div className="iv-tab-content">
       {result.access_scope === "shared" && (
@@ -1540,11 +1600,19 @@ function TabParaTi({ result }) {
           {indicaciones.map((ind, i) => {
             const color = TIPO_COLORS[ind.tipo] || TIPO_COLORS.otro;
             const label = TIPO_LABELS[ind.tipo] || ind.tipo;
+            const isUnderstood = indicationStatuses[i] === "entendida";
             return (
               <div key={i} className="iv-indicacion-item">
                 <span className="iv-indicacion-dot" style={{ background: color }} />
                 <div className="iv-indicacion-body">
                   <p className="iv-indicacion-text">{ind.texto}</p>
+                  <p className="iv-context-helper">
+                    {isUnderstood ? "Entendida" : "Pendiente"}
+                    {" · "}
+                    <button type="button" className="iv-indicacion-action" onClick={() => toggleIndicationStatus(i)}>
+                      {isUnderstood ? "Marcar como pendiente" : "Marcar como entendida"}
+                    </button>
+                  </p>
                 </div>
                 <span className="iv-indicacion-badge" style={{ color: ind.prioridad === "alta" ? "#c2410c" : color }}>
                   {ind.prioridad === "alta" ? `${label} · Alta` : label}
@@ -1554,6 +1622,7 @@ function TabParaTi({ result }) {
             );
           })}
           <p className="iv-context-helper">Klinip no cambia ni reemplaza esta indicación médica; solo te ayuda a recordarla.</p>
+          <p className="iv-context-helper">Esto no cambia la indicación médica; solo te ayuda a organizarla.</p>
         </div>
         </React.Fragment>
       )}
