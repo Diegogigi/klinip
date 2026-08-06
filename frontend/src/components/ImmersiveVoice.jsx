@@ -241,23 +241,33 @@ function TabParaTiClean({ result }) {
       </div>
 
       {indicaciones.length > 0 && (
+        <React.Fragment>
+        <div className="iv-context-card">
+          <span className="iv-context-label">Indicaciones detectadas</span>
+          {result?.created_at ? (
+            <p className="iv-context-helper">De tu atención grabada del {formatDateTime(result.created_at)}</p>
+          ) : null}
+        </div>
         <div className="iv-indicaciones-list">
           {indicaciones.map((ind, index) => {
             const color = TIPO_COLORS[ind?.tipo] || TIPO_COLORS.otro;
             const label = TIPO_LABELS[ind?.tipo] || ind?.tipo || "Otro";
-            const actionLabel = ind?.tipo === "control" || ind?.tipo === "examen" ? "+ Agenda" : "+ Recordatorio";
             return (
               <div key={`${ind?.tipo || "otro"}-${index}`} className="iv-indicacion-item">
                 <span className="iv-indicacion-dot" style={{ background: color }} />
                 <div className="iv-indicacion-body">
                   <p className="iv-indicacion-text">{ind?.texto}</p>
                 </div>
-                <span className="iv-indicacion-badge" style={{ color }}>{label}</span>
-                <button type="button" className="iv-indicacion-action" disabled>{actionLabel}</button>
+                <span className="iv-indicacion-badge" style={{ color: ind?.prioridad === "alta" ? "#c2410c" : color }}>
+                  {ind?.prioridad === "alta" ? `${label} · Alta` : label}
+                </span>
+                <button type="button" className="iv-indicacion-action" disabled>Próximamente</button>
               </div>
             );
           })}
+          <p className="iv-context-helper">Klinip no cambia ni reemplaza esta indicación médica; solo te ayuda a recordarla.</p>
         </div>
+        </React.Fragment>
       )}
     </div>
   );
@@ -1519,23 +1529,33 @@ function TabParaTi({ result }) {
         <p className="iv-summary-text">{result.version_simple || "Sin resumen disponible."}</p>
       </div>
       {indicaciones.length > 0 && (
+        <React.Fragment>
+        <div className="iv-context-card">
+          <span className="iv-context-label">Indicaciones detectadas</span>
+          {result.created_at ? (
+            <p className="iv-context-helper">De tu atención grabada del {formatDateTime(result.created_at)}</p>
+          ) : null}
+        </div>
         <div className="iv-indicaciones-list">
           {indicaciones.map((ind, i) => {
             const color = TIPO_COLORS[ind.tipo] || TIPO_COLORS.otro;
             const label = TIPO_LABELS[ind.tipo] || ind.tipo;
-            const actionLabel = ind.tipo === "control" || ind.tipo === "examen" ? "+ Agenda" : "+ Recordatorio";
             return (
               <div key={i} className="iv-indicacion-item">
                 <span className="iv-indicacion-dot" style={{ background: color }} />
                 <div className="iv-indicacion-body">
                   <p className="iv-indicacion-text">{ind.texto}</p>
                 </div>
-                <span className="iv-indicacion-badge" style={{ color }}>{label}</span>
-                <button type="button" className="iv-indicacion-action" disabled>{actionLabel}</button>
+                <span className="iv-indicacion-badge" style={{ color: ind.prioridad === "alta" ? "#c2410c" : color }}>
+                  {ind.prioridad === "alta" ? `${label} · Alta` : label}
+                </span>
+                <button type="button" className="iv-indicacion-action" disabled>Próximamente</button>
               </div>
             );
           })}
+          <p className="iv-context-helper">Klinip no cambia ni reemplaza esta indicación médica; solo te ayuda a recordarla.</p>
         </div>
+        </React.Fragment>
       )}
     </div>
   );
