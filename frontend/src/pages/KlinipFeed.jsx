@@ -198,6 +198,13 @@ const FAMILY_PERMISSION_MODULES = [
   { label: "Klinip IA", view: "use_ai" },
 ];
 
+const FAMILY_ROLE_FILTERS = [
+  { value: "all", label: "Todos" },
+  { value: "admin", label: "Administradores" },
+  { value: "caregiver", label: "Editores" },
+  { value: "viewer", label: "Lectores" },
+];
+
 const REACTIONS = [
   { type: "apoyo", emoji: "💙", label: "Apoyar" },
   { type: "animo", emoji: "💪", label: "Ánimo" },
@@ -1615,6 +1622,7 @@ export default function KlinipFeed({ user }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [familySidebarOpen, setFamilySidebarOpen] = useState(false);
+  const [permissionRoleFilter, setPermissionRoleFilter] = useState("all");
   const skipRef = useRef(0);
   const LIMIT = 20;
 
@@ -1866,12 +1874,19 @@ export default function KlinipFeed({ user }) {
                 : "Rol sin especificar",
             profileName: primaryProfile.full_name || "Perfil activo",
             permissions: item.permissions,
+            role,
             tone: role === "viewer" ? "slate" : role === "caregiver" ? "teal" : "blue",
           };
         })
     : [];
-  const permissionMembersPreview = permissionMembers.slice(0, 3);
-  const remainingPermissionMembers = Math.max(permissionMembers.length - permissionMembersPreview.length, 0);
+  const filteredPermissionMembers = permissionRoleFilter === "all"
+    ? permissionMembers
+    : permissionMembers.filter((member) => member.role === permissionRoleFilter);
+  const permissionMembersPreview = filteredPermissionMembers.slice(0, 3);
+  const remainingPermissionMembers = Math.max(
+    filteredPermissionMembers.length - permissionMembersPreview.length,
+    0
+  );
   const collaborativeProfiles = profiles.length;
   const careTeamTotal = ownCaregivers.length + (primaryProfile ? 1 : 0);
   const sharedContinuityItems = buildSharedContinuityItems(posts);
@@ -2001,16 +2016,37 @@ export default function KlinipFeed({ user }) {
               <div className="kfeed-permission-note">
                 <p>Cada persona ve solamente los módulos autorizados para este perfil.</p>
               </div>
+              <div className="kfeed-modal-mentions" role="group" aria-label="Filtrar integrantes por rol">
+                {FAMILY_ROLE_FILTERS.map((filter) => (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    className={`kfeed-type-chip ${permissionRoleFilter === filter.value ? "active" : ""}`}
+                    style={{ "--type-color": "var(--slate)" }}
+                    aria-pressed={permissionRoleFilter === filter.value}
+                    onClick={() => setPermissionRoleFilter(filter.value)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+              <div className="kfeed-permission-note">
+                <p>Este filtro solo ordena lo que ya puedes ver; no cambia permisos.</p>
+              </div>
               {permissionMembersPreview.length > 0 ? (
-                <div className="kfeed-permission-grid">
+                <div className="kfeed-permission-grid" aria-live="polite">
                   {permissionMembersPreview.map((member) => (
                     <PermissionMemberCard key={member.id} member={member} />
                   ))}
                 </div>
               ) : (
-                <div className="kfeed-care-empty">
-                  <strong>Revisar permisos</strong>
-                  <span>Consulta quién puede ver o colaborar en este perfil.</span>
+                <div className="kfeed-care-empty" aria-live="polite">
+                  <strong>{permissionMembers.length > 0 ? "Sin integrantes en este rol" : "Revisar permisos"}</strong>
+                  <span>
+                    {permissionMembers.length > 0
+                      ? "Prueba con otro filtro para ver integrantes."
+                      : "Consulta quién puede ver o colaborar en este perfil."}
+                  </span>
                 </div>
               )}
               {remainingPermissionMembers > 0 ? (
