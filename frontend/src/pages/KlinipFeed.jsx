@@ -1548,6 +1548,27 @@ function PermissionMemberCard({ member }) {
   );
 }
 
+function getSupportAction(permissions) {
+  const modulePermissions = getExplicitModulePermissions(permissions);
+  if (modulePermissions.editable.length > 0) return "Puede ayudar a gestionar";
+  if (modulePermissions.available && modulePermissions.visible.length > 0) {
+    return "Solo puede ver información autorizada";
+  }
+  return "Puede acompañar";
+}
+
+function SupportNetworkMemberCard({ member }) {
+  return (
+    <article className={`kfeed-permission-card tone-${member.tone}`}>
+      <span className="kfeed-permission-card-label">{member.roleLabel}</span>
+      <strong>{member.name}</strong>
+      <div className="kfeed-permission-note">
+        <p>{getSupportAction(member.permissions)}</p>
+      </div>
+    </article>
+  );
+}
+
 function ClinicalEventCard({ item }) {
   return (
     <Link to={item.route || "/settings/familia"} className={`kfeed-clinical-event tone-${item.tone || "blue"}`}>
@@ -1879,6 +1900,26 @@ export default function KlinipFeed({ user }) {
           };
         })
     : [];
+  const supportNetworkMembers = ownCaregivers.map((item) => {
+    const role = String(item.role || "").toLowerCase();
+    return {
+      id: item.id || item.user_id,
+      name: item.user_name || item.user_email || `Usuario ${item.user_id}`,
+      role,
+      roleLabel: ["viewer", "caregiver", "admin"].includes(role)
+        ? familyRoleLabel(role)
+        : "Rol sin especificar",
+      permissions: item.permissions,
+      tone: role === "viewer" ? "slate" : role === "caregiver" ? "teal" : "blue",
+    };
+  });
+  const supportNetworkPreview = supportNetworkMembers.slice(0, 3);
+  const remainingSupportMembers = Math.max(supportNetworkMembers.length - supportNetworkPreview.length, 0);
+  const supportRoleCounts = {
+    admin: supportNetworkMembers.filter((member) => member.role === "admin").length,
+    caregiver: supportNetworkMembers.filter((member) => member.role === "caregiver").length,
+    viewer: supportNetworkMembers.filter((member) => member.role === "viewer").length,
+  };
   const filteredPermissionMembers = permissionRoleFilter === "all"
     ? permissionMembers
     : permissionMembers.filter((member) => member.role === permissionRoleFilter);
@@ -1966,6 +2007,72 @@ export default function KlinipFeed({ user }) {
         >
           Crear publicación para tu familia o círculo
         </button>
+
+        {!loading && !error && (
+          <section className="kfeed-care-panel" aria-labelledby="support-network-title">
+            <div className="kfeed-care-panel-head">
+              <div>
+                <p className="kfeed-section-kicker">Acompañamiento</p>
+                <h2 className="kfeed-section-title" id="support-network-title">Tu red de apoyo</h2>
+              </div>
+            </div>
+            <div className="kfeed-permission-note">
+              <p>Estas personas pueden ayudarte a seguir tus cuidados, según los permisos que tú definas.</p>
+            </div>
+            {supportNetworkMembers.length > 0 ? (
+              <div className="kfeed-care-panel-body">
+                <div
+                  className="kfeed-care-grid"
+                  style={{ gridTemplateColumns: "repeat(auto-fit, minmax(7rem, 1fr))" }}
+                  aria-label="Resumen de integrantes por rol"
+                >
+                  <div className="kfeed-care-kpi tone-blue">
+                    <span>Personas</span>
+                    <strong>{supportNetworkMembers.length}</strong>
+                  </div>
+                  <div className="kfeed-care-kpi tone-blue">
+                    <span>Administradores</span>
+                    <strong>{supportRoleCounts.admin}</strong>
+                  </div>
+                  <div className="kfeed-care-kpi tone-teal">
+                    <span>Editores</span>
+                    <strong>{supportRoleCounts.caregiver}</strong>
+                  </div>
+                  <div className="kfeed-care-kpi">
+                    <span>Lectores</span>
+                    <strong>{supportRoleCounts.viewer}</strong>
+                  </div>
+                </div>
+                <div className="kfeed-hero-links">
+                  <Link className="kfeed-manage-link" to="/settings/familia">
+                    Ver y gestionar permisos
+                  </Link>
+                  <Link className="kfeed-manage-link" to="/settings/familia">
+                    Invitar persona de confianza
+                  </Link>
+                </div>
+                <div className="kfeed-permission-grid">
+                  {supportNetworkPreview.map((member) => (
+                    <SupportNetworkMemberCard key={member.id} member={member} />
+                  ))}
+                </div>
+                {remainingSupportMembers > 0 ? (
+                  <Link className="kfeed-care-more-link" to="/settings/familia">
+                    Ver {formatUnitLabel(remainingSupportMembers, "persona más", "personas más")}
+                  </Link>
+                ) : null}
+              </div>
+            ) : (
+              <div className="kfeed-care-empty">
+                <strong>Aún no tienes red de apoyo</strong>
+                <span>Invita a una persona de confianza para que pueda ayudarte cuando lo necesites.</span>
+                <Link className="kfeed-manage-link" to="/settings/familia">
+                  Invitar o gestionar red
+                </Link>
+              </div>
+            )}
+          </section>
+        )}
 
         {!loading && !error && (
           <section className="kfeed-care-layout" aria-label="Continuidad compartida y red de apoyo">
