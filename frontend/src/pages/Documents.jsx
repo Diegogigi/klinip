@@ -890,11 +890,27 @@ export default function Documents() {
 
   return (
     <>
-      <div className="card documents-surface-free documents-intro">
-        <h2 className="card-title">Documentos de salud</h2>
+      <div className="card documents-surface-free documents-intro documents-ocr-assist">
+        <span className="documents-ocr-kicker">Documentos como contexto</span>
+        <h2 className="card-title">Tus documentos ayudan a Klinip a entender tu salud</h2>
         <p className="muted">
-          Guarda fotos o PDF de recetas, órdenes, resultados e informes. Klinip IA puede leerlos, entender qué tipo de documento es y dejarlo listo para tu seguimiento.
+          Sube exámenes, recetas o informes. Klinip los ordena y los usa como contexto para ayudarte a recordar y consultar información.
         </p>
+        <div className="documents-ocr-pills" aria-label="Estados de análisis de documentos">
+          <span className="documents-ocr-pill">Pendiente</span>
+          <span className="documents-ocr-pill">Procesando</span>
+          <span className="documents-ocr-pill">Analizado con IA</span>
+        </div>
+        <div className="hero-actions">
+          {canEditActiveProfile ? (
+            <button className="primary-btn" type="button" onClick={() => setWizardOpen(true)}>
+              Subir documento
+            </button>
+          ) : null}
+          <button className="secondary-btn" type="button" onClick={() => navigate("/ai")}>
+            Preguntar a Klinip sobre mis documentos
+          </button>
+        </div>
       </div>
 
       {isReadOnlyProfile ? (
