@@ -58,6 +58,12 @@ const ocrLabels = {
 
 const ocrActiveStatuses = new Set(["pending", "processing"]);
 const OCR_STALLED_MS = 2 * 60 * 1000;
+const suggestedDocumentQuestions = [
+  "¿Qué dice este documento?",
+  "¿Qué indicaciones aparecen?",
+  "¿Qué debo recordar?",
+  "¿Qué puedo preguntar en mi próxima consulta?",
+];
 
 const uploadTypeOptions = [
   { value: "auto", label: "Autodetectar con IA" },
@@ -910,6 +916,21 @@ export default function Documents() {
           <button className="secondary-btn" type="button" onClick={() => navigate("/ai")}>
             Preguntar a Klinip sobre mis documentos
           </button>
+        </div>
+        <div className="documents-ocr-banner" aria-labelledby="documents-suggested-questions-title">
+          <strong id="documents-suggested-questions-title">Preguntas que puedes hacerle a Klinip</strong>
+          <div className="documents-ocr-banner-actions">
+            {suggestedDocumentQuestions.map((question) => (
+              <button
+                className="secondary-btn documents-ocr-banner-btn"
+                type="button"
+                key={question}
+                onClick={() => navigate("/ai")}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
