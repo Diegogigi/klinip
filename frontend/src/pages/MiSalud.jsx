@@ -498,44 +498,68 @@ export default function MiSalud() {
         onClose={() => setIntakeSuccess(null)}
         {...(intakeSuccess || {})}
       />
-      <div className="clp-page">
+      <div className="clp-page clp-page-polished">
 
       {/* ═══ PATIENT HEADER ═══ */}
-      <section className="clp-page-intro" aria-label="Resumen principal">
+      <section className="clp-page-intro clp-health-hero" aria-labelledby="clp-health-title">
         <div className="clp-page-intro-copy">
-          <p className="clp-page-intro-kicker">{profile?.full_name || "Perfil activo"}</p>
-          <h1 className="clp-page-intro-title">Mi ficha de salud</h1>
+          <div className="clp-health-hero-heading">
+            <span className="clp-health-hero-mark" aria-hidden="true"><IcoHeart /></span>
+            <div>
+              <p className="clp-page-intro-kicker">{profile?.full_name || "Perfil activo"}</p>
+              <h1 className="clp-page-intro-title" id="clp-health-title">Mi ficha de salud</h1>
+            </div>
+          </div>
           <p className="clp-page-intro-subtitle">
             Guarda aquí la información básica que Klinip usa para ayudarte a ordenar tu cuidado.
           </p>
-          <div className="hero-actions">
-            <Link className="primary-btn" to="/mi-salud/ficha">Completar mi ficha</Link>
-            <Link className="secondary-btn" to="/ai">Preguntar a Klinip sobre mi salud</Link>
-          </div>
         </div>
+        <aside className="clp-health-action-panel" aria-labelledby="clp-health-actions-title">
+          <span className="clp-health-action-kicker">Acciones</span>
+          <h2 id="clp-health-actions-title">Cuida tu información</h2>
+          <p>Completa tus datos o consulta lo que ya está registrado.</p>
+          <div className="clp-health-hero-actions">
+            <Link className="clp-health-hero-action is-primary" to="/mi-salud/ficha">
+              <span>Completar mi ficha</span><IcoChevron />
+            </Link>
+            <Link className="clp-health-hero-action is-secondary" to="/ai">
+              <span>Preguntar a Klinip sobre mi salud</span><IcoChevron />
+            </Link>
+          </div>
+        </aside>
       </section>
 
-      <section className="hsheet-live-grid" aria-label="Resumen de mi ficha de salud">
-        <article className={`hsheet-live-card ${hasImportantHealthData ? "is-ok" : "is-warn"}`}>
-          <span>Datos importantes</span>
-          <strong>{hasImportantHealthData ? "Guardados" : "Por completar"}</strong>
-          <small>Información básica de tu ficha</small>
-        </article>
-        <article className={`hsheet-live-card ${biometricRecentCount > 0 ? "is-info" : "is-muted"}`}>
-          <span>Mediciones</span>
-          <strong>{biometricRecentCount}</strong>
-          <small>{biometricRecentCount === 1 ? "medición reciente" : "mediciones recientes"}</small>
-        </article>
-        <article className={`hsheet-live-card ${activeMeds.length > 0 || pendingCount > 0 ? "is-teal" : "is-muted"}`}>
-          <span>Medicamentos y controles</span>
-          <strong>{activeMeds.length > 0 || pendingCount > 0 ? "En seguimiento" : "Sin registros"}</strong>
-          <small>{activeMeds.length} medicamento{activeMeds.length !== 1 ? "s" : ""} · {pendingCount} control{pendingCount !== 1 ? "es" : ""}</small>
-        </article>
-        <article className={`hsheet-live-card ${completionOverview.tone}`}>
-          <span>Qué falta completar</span>
-          <strong>{completionOverview.value}</strong>
-          <small>{completionOverview.helper}</small>
-        </article>
+      <section className="clp-health-overview" aria-labelledby="clp-health-overview-title">
+        <header className="clp-health-overview-head">
+          <span>Resumen de tu ficha</span>
+          <h2 id="clp-health-overview-title">Lo importante, de un vistazo</h2>
+        </header>
+        <div className="clp-health-overview-grid">
+          <article className={`clp-health-overview-item is-important ${hasImportantHealthData ? "is-ok" : "is-warn"}`}>
+            <span className="clp-health-overview-icon" aria-hidden="true"><IcoReport /></span>
+            <div className="clp-health-overview-copy">
+              <span>Datos importantes</span>
+              <strong>{hasImportantHealthData ? "Guardados" : "Por completar"}</strong>
+              <small>Información básica de tu ficha</small>
+            </div>
+          </article>
+          <article className={`clp-health-overview-item is-measurement ${biometricRecentCount > 0 ? "is-info" : "is-muted"}`}>
+            <span className="clp-health-overview-icon" aria-hidden="true"><IcoBiometric /></span>
+            <div className="clp-health-overview-copy">
+              <span>Mediciones</span>
+              <strong>{biometricRecentCount}</strong>
+              <small>{biometricRecentCount === 1 ? "medición reciente" : "mediciones recientes"}</small>
+            </div>
+          </article>
+          <article className={`clp-health-overview-item is-completion ${completionOverview.tone}`}>
+            <span className="clp-health-overview-icon" aria-hidden="true"><IcoCheck /></span>
+            <div className="clp-health-overview-copy">
+              <span>Qué falta completar</span>
+              <strong>{completionOverview.value}</strong>
+              <small>{completionOverview.helper}</small>
+            </div>
+          </article>
+        </div>
       </section>
 
       {/* ═══ STATUS STRIP ═══ */}
