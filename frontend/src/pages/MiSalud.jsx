@@ -80,7 +80,7 @@ function describeMedicationStatus(medication, nextDose, now = new Date()) {
         ? `Pendiente desde ${fmtMedicationMoment(nextDose)}`
         : "Te corresponde ahora";
     }
-    return `Proxima: ${fmtMedicationMoment(nextDose)}`;
+    return `Próxima: ${fmtMedicationMoment(nextDose)}`;
   }
   if (medication.schedule_time) {
     return `Horario habitual: ${fmtTime12(medication.schedule_time)}`;
@@ -386,8 +386,7 @@ export default function MiSalud() {
     .slice(0, 5);
 
   /* status */
-  const totalItems = appointments.length + medications.length + documents.length;
-  const hasData = totalItems > 0;
+  const hasImportantHealthData = Boolean(profile?.base_medical_data?.trim?.());
   const pendingApptNoDate = appointments.filter((a) => a.status !== "realizada" && !a.date_time).length;
 
   const warnings = [];
@@ -414,6 +413,18 @@ export default function MiSalud() {
   const continuityPrep = continuity?.upcoming_preparation || null;
   const continuityIsClear =
     !continuityNextStep && continuityPendingTotal === 0 && !continuityPrep;
+  const completionOverview =
+    continuityState === "loading"
+      ? { value: "Revisando", helper: "Preparando tu resumen", tone: "is-muted" }
+      : continuityState === "error"
+        ? { value: "No disponible", helper: "Revisa los pendientes más abajo", tone: "is-muted" }
+        : continuityPendingTotal > 0
+          ? {
+              value: continuityPendingTotal,
+              helper: continuityPendingTotal === 1 ? "pendiente visible" : "pendientes visibles",
+              tone: "is-warn",
+            }
+          : { value: "Al día", helper: "Sin pendientes visibles", tone: "is-ok" };
   const renderContinuityTaskActions = (item, variant = "row") => {
     const taskId = continuityTaskId(item);
     if (!taskId) return null;
@@ -493,13 +504,38 @@ export default function MiSalud() {
       <section className="clp-page-intro" aria-label="Resumen principal">
         <div className="clp-page-intro-copy">
           <p className="clp-page-intro-kicker">{profile?.full_name || "Perfil activo"}</p>
-          <h1 className="clp-page-intro-title">Mi Salud</h1>
+          <h1 className="clp-page-intro-title">Mi ficha de salud</h1>
           <p className="clp-page-intro-subtitle">
-            {hasData
-              ? "Tu agenda, tratamientos y documentos en un solo lugar"
-              : "Todavía no tienes información guardada"}
+            Guarda aquí la información básica que Klinip usa para ayudarte a ordenar tu cuidado.
           </p>
+          <div className="hero-actions">
+            <Link className="primary-btn" to="/mi-salud/ficha">Completar mi ficha</Link>
+            <Link className="secondary-btn" to="/ai">Preguntar a Klinip sobre mi salud</Link>
+          </div>
         </div>
+      </section>
+
+      <section className="hsheet-live-grid" aria-label="Resumen de mi ficha de salud">
+        <article className={`hsheet-live-card ${hasImportantHealthData ? "is-ok" : "is-warn"}`}>
+          <span>Datos importantes</span>
+          <strong>{hasImportantHealthData ? "Guardados" : "Por completar"}</strong>
+          <small>Información básica de tu ficha</small>
+        </article>
+        <article className={`hsheet-live-card ${biometricRecentCount > 0 ? "is-info" : "is-muted"}`}>
+          <span>Mediciones</span>
+          <strong>{biometricRecentCount}</strong>
+          <small>{biometricRecentCount === 1 ? "medición reciente" : "mediciones recientes"}</small>
+        </article>
+        <article className={`hsheet-live-card ${activeMeds.length > 0 || pendingCount > 0 ? "is-teal" : "is-muted"}`}>
+          <span>Medicamentos y controles</span>
+          <strong>{activeMeds.length > 0 || pendingCount > 0 ? "En seguimiento" : "Sin registros"}</strong>
+          <small>{activeMeds.length} medicamento{activeMeds.length !== 1 ? "s" : ""} · {pendingCount} control{pendingCount !== 1 ? "es" : ""}</small>
+        </article>
+        <article className={`hsheet-live-card ${completionOverview.tone}`}>
+          <span>Qué falta completar</span>
+          <strong>{completionOverview.value}</strong>
+          <small>{completionOverview.helper}</small>
+        </article>
       </section>
 
       {/* ═══ STATUS STRIP ═══ */}
@@ -517,7 +553,7 @@ export default function MiSalud() {
             <span className="clp-card-icon tone-amber"><IcoActivity /></span>
             <div className="clp-card-head-main">
               <div className="clp-card-titles">
-                <h2 className="clp-card-title" id="clp-cont-h">Lo que falta hacer</h2>
+                <h2 className="clp-card-title" id="clp-cont-h">Qué falta completar</h2>
                 <p className="clp-card-sub">Te recordamos, paso a paso, lo que quedó pendiente de tu atención</p>
               </div>
               <div className="clp-card-head-meta">
@@ -728,7 +764,7 @@ export default function MiSalud() {
           <div className="clp-card-head-main">
             <div className="clp-card-titles">
               <h2 className="clp-card-title" id="clp-med-h">Tus medicamentos</h2>
-              <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, dejala pendiente.</p>
+              <p className="clp-card-sub">Registra solo la dosis que ya tomaste. Si no la tomaste, déjala pendiente.</p>
             </div>
             <div className="clp-card-head-meta">
               <span className="clp-card-metric">{activeMeds.length} {activeMeds.length === 1 ? "activo" : "activos"}</span>
