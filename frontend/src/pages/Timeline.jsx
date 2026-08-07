@@ -577,6 +577,23 @@ export default function Timeline({ user }) {
 
   const legacyEvents = useMemo(() => ensureArray(legacyTimeline.events).slice(0, 4), [legacyTimeline.events]);
 
+  // Línea de continuidad: reutiliza episodios, resumen de vida y conteos ya
+  // calculados; no agrega llamadas ni datos nuevos.
+  const nextContinuityEpisode = useMemo(
+    () => filteredEpisodes.find((item) => Number(item.pending_tasks || 0) > 0) || null,
+    [filteredEpisodes]
+  );
+  const continuityPastText = legacyTimeline.summary
+    ? cleanUiText(legacyTimeline.summary)
+    : summaryCounts.total
+    ? `${summaryCounts.total} proceso${summaryCounts.total === 1 ? "" : "s"} clínico${
+        summaryCounts.total === 1 ? "" : "s"
+      } registrado${summaryCounts.total === 1 ? "" : "s"} en tu historial.`
+    : "Aún no hay procesos clínicos registrados.";
+  const continuityNextText = nextContinuityEpisode
+    ? getEpisodeLead(nextContinuityEpisode, episodeDetails[nextContinuityEpisode.id])
+    : "Sin próximos pasos pendientes por ahora.";
+
   const selectedEpisode = useMemo(
     () => filteredEpisodes.find((item) => item.id === selectedEpisodeId) || null,
     [filteredEpisodes, selectedEpisodeId]
@@ -984,6 +1001,60 @@ export default function Timeline({ user }) {
 
   return (
     <>
+      <section className="history-explorer-header timeline-overview-card">
+        <div className="history-explorer-header-copy">
+          <span className="history-explorer-kicker">Continuidad asistencial</span>
+          <h1 className="card-title">Línea de continuidad</h1>
+          <p className="muted">
+            Klinip ordena tus citas, documentos, indicaciones y próximos pasos para que entiendas qué pasó y qué sigue.
+          </p>
+        </div>
+
+        {episodes.length ? (
+          <div className="history-explorer-header-stats" aria-label="Resumen de continuidad">
+            <div className="history-explorer-stat">
+              <strong>{summaryCounts.total}</strong>
+              <span>Pasó</span>
+            </div>
+            <div className="history-explorer-stat">
+              <strong>{summaryCounts.pending}</strong>
+              <span>Pendiente</span>
+            </div>
+            <div className="history-explorer-stat">
+              <strong>{nextContinuityEpisode ? 1 : 0}</strong>
+              <span>Sigue</span>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      {episodes.length ? (
+        <div className="history-explorer-toolbar timeline-filters-card">
+          <div className="card">
+            <strong>Pasó</strong>
+            <p className="muted">{continuityPastText}</p>
+          </div>
+          <div className="card">
+            <strong>Sigue</strong>
+            <p className="muted">{continuityNextText}</p>
+          </div>
+          <button type="button" className="secondary-btn" onClick={() => navigate("/ai", {
+            state: { autoPrompt: "Ayúdame a entender mi continuidad de salud: qué pasó, qué tengo pendiente y qué sigue." },
+          })}>
+            Preguntar a Klinip sobre mi continuidad
+          </button>
+        </div>
+      ) : (
+        <div className="history-explorer-empty-stack">
+          <div className="history-explorer-empty timeline-card">
+            Aún no hay suficiente información para armar tu línea de continuidad.
+          </div>
+          <p className="muted">
+            Sube documentos, registra citas o usa Voz Klinip para que Klinip pueda ayudarte a ordenar tu historia.
+          </p>
+        </div>
+      )}
+
       <section className="history-explorer-header timeline-overview-card">
         <div className="history-explorer-header-copy">
           <span className="history-explorer-kicker">Historial clínico</span>
