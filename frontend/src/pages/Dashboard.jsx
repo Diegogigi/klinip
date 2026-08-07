@@ -2501,16 +2501,16 @@ export default function Dashboard({
               </div>
             ) : null}
 
-            <div className="mobile-section native-section native-section-delay-1">
+            <div className="mobile-section native-section native-section-delay-1 home-today-card">
               <div className="mobile-section-header">
-                <h2 className="mobile-section-title">Hoy en tu salud</h2>
+                <h2 className="mobile-section-title home-today-title">Hoy en tu salud</h2>
               </div>
-              <p className="home-panel-subtitle">
+              <p className="home-today-subtitle">
                 Klinip ordena tus documentos, indicaciones, citas y apoyo familiar para ayudarte a continuar tu cuidado.
               </p>
-              <div className="card">
-                <strong>Tu próximo paso</strong>
-                <p className="home-panel-subtitle">
+              <div className="home-today-next">
+                <span className="home-today-next-label">Tu próximo paso</span>
+                <p className="home-today-next-text">
                   {todayNextStep
                     ? cleanDashboardText(todayNextStep.title)
                     : "No tienes pendientes importantes por ahora"}
@@ -2521,20 +2521,24 @@ export default function Dashboard({
                   </button>
                 ) : null}
               </div>
-              <div className="card">
+              <div className="home-today-actions">
                 {todaySuggestedActions.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className="home-panel-link"
-                    style={{ display: "block", margin: "0.35rem 0" }}
+                    className="home-panel-link home-today-action-item"
                     onClick={item.onClick}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    <span className="home-today-action-chevron" aria-hidden="true">›</span>
                   </button>
                 ))}
               </div>
-              <button type="button" className="home-note-primary" onClick={() => openAlertAssistant(null)}>
+              <button
+                type="button"
+                className="home-note-primary home-today-cta"
+                onClick={() => openAlertAssistant(null)}
+              >
                 Preguntar a Klinip
               </button>
             </div>
@@ -2754,18 +2758,18 @@ export default function Dashboard({
               </div>
             ) : null}
 
-            <article className="home-panel-card">
+            <article className="home-panel-card home-today-card">
               <div className="home-panel-head">
                 <div>
-                  <h2 className="home-panel-title">Hoy en tu salud</h2>
-                  <p className="home-panel-subtitle">
+                  <h2 className="home-panel-title home-today-title">Hoy en tu salud</h2>
+                  <p className="home-today-subtitle">
                     Klinip ordena tus documentos, indicaciones, citas y apoyo familiar para ayudarte a continuar tu cuidado.
                   </p>
                 </div>
               </div>
-              <div className="card">
-                <strong>Tu próximo paso</strong>
-                <p className="home-panel-subtitle">
+              <div className="home-today-next">
+                <span className="home-today-next-label">Tu próximo paso</span>
+                <p className="home-today-next-text">
                   {todayNextStep
                     ? cleanDashboardText(todayNextStep.title)
                     : "No tienes pendientes importantes por ahora"}
@@ -2776,20 +2780,24 @@ export default function Dashboard({
                   </button>
                 ) : null}
               </div>
-              <div className="card">
+              <div className="home-today-actions">
                 {todaySuggestedActions.map((item) => (
                   <button
                     key={item.id}
                     type="button"
-                    className="home-panel-link"
-                    style={{ display: "block", margin: "0.35rem 0" }}
+                    className="home-panel-link home-today-action-item"
                     onClick={item.onClick}
                   >
-                    {item.label}
+                    <span>{item.label}</span>
+                    <span className="home-today-action-chevron" aria-hidden="true">›</span>
                   </button>
                 ))}
               </div>
-              <button type="button" className="home-note-primary" onClick={() => openAlertAssistant(null)}>
+              <button
+                type="button"
+                className="home-note-primary home-today-cta"
+                onClick={() => openAlertAssistant(null)}
+              >
                 Preguntar a Klinip
               </button>
             </article>
