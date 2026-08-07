@@ -1001,10 +1001,10 @@ export default function Timeline({ user }) {
 
   return (
     <>
-      <section className="history-explorer-header timeline-overview-card">
+      <section className="history-explorer-header timeline-overview-card timeline-continuity-header">
         <div className="history-explorer-header-copy">
           <span className="history-explorer-kicker">Continuidad asistencial</span>
-          <h1 className="card-title">Línea de continuidad</h1>
+          <h1 className="card-title timeline-continuity-title">Línea de continuidad</h1>
           <p className="muted">
             Klinip ordena tus citas, documentos, indicaciones y próximos pasos para que entiendas qué pasó y qué sigue.
           </p>
@@ -1029,7 +1029,7 @@ export default function Timeline({ user }) {
       </section>
 
       {episodes.length ? (
-        <div className="history-explorer-toolbar timeline-filters-card">
+        <div className="history-explorer-toolbar timeline-filters-card timeline-continuity-summary">
           <div className="card">
             <strong>Pasó</strong>
             <p className="muted">{continuityPastText}</p>
@@ -1038,7 +1038,7 @@ export default function Timeline({ user }) {
             <strong>Sigue</strong>
             <p className="muted">{continuityNextText}</p>
           </div>
-          <button type="button" className="secondary-btn" onClick={() => navigate("/ai", {
+          <button type="button" className="timeline-continuity-cta" onClick={() => navigate("/ai", {
             state: { autoPrompt: "Ayúdame a entender mi continuidad de salud: qué pasó, qué tengo pendiente y qué sigue." },
           })}>
             Preguntar a Klinip sobre mi continuidad
