@@ -218,6 +218,7 @@ function TabParaTiClean({ result }) {
     const next = saveVoiceIndicationStatus(sessionId, index, isUnderstood ? "pendiente" : "entendida");
     if (next) setIndicationStatuses(next);
   };
+  const understoodCount = indicaciones.filter((_, index) => indicationStatuses[index] === "entendida").length;
 
   return (
     <div className="iv-tab-content">
@@ -252,6 +253,13 @@ function TabParaTiClean({ result }) {
         <p className="iv-summary-text">{result?.version_simple || "Sin resumen disponible."}</p>
       </div>
 
+      {indicaciones.length === 0 && (
+        <div className="iv-context-card">
+          <span className="iv-context-label">Indicaciones detectadas</span>
+          <p className="iv-context-helper">No se detectaron indicaciones claras en esta grabación.</p>
+        </div>
+      )}
+
       {indicaciones.length > 0 && (
         <React.Fragment>
         <div className="iv-context-card">
@@ -259,6 +267,10 @@ function TabParaTiClean({ result }) {
           {result?.created_at ? (
             <p className="iv-context-helper">De tu atención grabada del {formatDateTime(result.created_at)}</p>
           ) : null}
+          <p className="iv-context-helper">
+            Tienes {indicaciones.length} indicaci{indicaciones.length === 1 ? "ón" : "ones"} detectada{indicaciones.length === 1 ? "" : "s"}
+          </p>
+          <p className="iv-context-helper">{understoodCount} de {indicaciones.length} entendidas</p>
         </div>
         <div className="iv-indicaciones-list">
           {indicaciones.map((ind, index) => {
@@ -1557,6 +1569,7 @@ function TabParaTi({ result }) {
     const next = saveVoiceIndicationStatus(sessionId, index, isUnderstood ? "pendiente" : "entendida");
     if (next) setIndicationStatuses(next);
   };
+  const understoodCount = indicaciones.filter((_, index) => indicationStatuses[index] === "entendida").length;
 
   return (
     <div className="iv-tab-content">
@@ -1588,6 +1601,13 @@ function TabParaTi({ result }) {
         <span className="iv-summary-label">RESUMEN SIMPLE</span>
         <p className="iv-summary-text">{result.version_simple || "Sin resumen disponible."}</p>
       </div>
+      {indicaciones.length === 0 && (
+        <div className="iv-context-card">
+          <span className="iv-context-label">Indicaciones detectadas</span>
+          <p className="iv-context-helper">No se detectaron indicaciones claras en esta grabación.</p>
+        </div>
+      )}
+
       {indicaciones.length > 0 && (
         <React.Fragment>
         <div className="iv-context-card">
@@ -1595,6 +1615,10 @@ function TabParaTi({ result }) {
           {result.created_at ? (
             <p className="iv-context-helper">De tu atención grabada del {formatDateTime(result.created_at)}</p>
           ) : null}
+          <p className="iv-context-helper">
+            Tienes {indicaciones.length} indicaci{indicaciones.length === 1 ? "ón" : "ones"} detectada{indicaciones.length === 1 ? "" : "s"}
+          </p>
+          <p className="iv-context-helper">{understoodCount} de {indicaciones.length} entendidas</p>
         </div>
         <div className="iv-indicaciones-list">
           {indicaciones.map((ind, i) => {
