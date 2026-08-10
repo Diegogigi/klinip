@@ -58214,6 +58214,59 @@ body.theme-dark .history-process-shell {
   gap: 0.72rem;
 }
 
+/* ── Línea de continuidad (Fase 6C.1: pulido visual) ─────────────────── */
+.timeline-continuity-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.timeline-continuity-header .history-explorer-stat {
+  background: var(--brand-soft);
+  border-color: var(--brand-border);
+}
+
+.timeline-continuity-header .history-explorer-stat strong {
+  color: var(--brand-primary);
+}
+
+.timeline-continuity-summary {
+  gap: 0.9rem;
+}
+
+.timeline-continuity-summary .card {
+  border-top: 3px solid var(--brand-primary);
+  padding: 1rem 1.1rem;
+}
+
+.timeline-continuity-summary .card strong {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--brand-primary);
+  margin-bottom: 0.35rem;
+}
+
+.timeline-continuity-cta {
+  width: 100%;
+  min-height: 48px;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  color: #ffffff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-brand);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.timeline-continuity-cta:hover {
+  background: #0b3ad1;
+  transform: translateY(-1px);
+}
+
 .history-explorer-toolbar-row,
 .history-explorer-section-head,
 .history-explorer-support-row,
@@ -58795,6 +58848,31 @@ body.theme-dark .history-explorer-detail-summary {
   background: rgba(15, 23, 38, 0.94);
   border-color: rgba(63, 82, 116, 0.86);
   color: rgba(226, 232, 240, 0.9);
+}
+
+body.theme-dark .timeline-continuity-header .history-explorer-stat {
+  background: rgba(37, 99, 235, 0.16) !important;
+  border-color: rgba(37, 99, 235, 0.32) !important;
+}
+
+body.theme-dark .timeline-continuity-header .history-explorer-stat strong {
+  color: #93c5fd;
+}
+
+body.theme-dark .timeline-continuity-summary .card {
+  border-top-color: #3b82f6;
+}
+
+body.theme-dark .timeline-continuity-summary .card strong {
+  color: #93c5fd;
+}
+
+body.theme-dark .timeline-continuity-cta {
+  background: linear-gradient(135deg, #2563eb, #0ea5e9);
+}
+
+body.theme-dark .timeline-continuity-cta:hover {
+  background: linear-gradient(135deg, #1d4ed8, #0284c7);
 }
 
 body.theme-dark .history-explorer-module-count {
