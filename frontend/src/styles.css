@@ -36715,12 +36715,6 @@ body.theme-dark .ob-quick-btn {
     linear-gradient(180deg, var(--card-bg, #ffffff) 0%, #f4fcfb 100%);
 }
 
-.kfeed-care-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.18fr) minmax(0, 0.92fr);
-  gap: 0.75rem;
-}
-
 .kfeed-care-panel {
   display: flex;
   flex-direction: column;
@@ -38238,10 +38232,6 @@ body.theme-dark .kfeed-video-name { color: #f1f5f9; }
 
 /* ── Móvil: sidebar como drawer deslizante ── */
 @media (max-width: 960px) {
-  .kfeed-care-layout {
-    grid-template-columns: 1fr;
-  }
-
   .kfeed-feed-head {
     align-items: flex-start;
     flex-direction: column;
@@ -60521,11 +60511,6 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
     padding-top: 0.95rem;
   }
 
-  .kfeed-care-layout {
-    grid-template-columns: minmax(0, 1.16fr) minmax(0, 0.92fr);
-    gap: 0.85rem;
-  }
-
   .kfeed-sidebar {
     width: min(100%, 348px);
     padding-top: 0.95rem;
@@ -60537,10 +60522,6 @@ body.theme-dark .brand-logo-mark.is-solid .brand-logo-img {
     grid-template-columns: minmax(0, 1.65fr) 340px;
     gap: 1.15rem;
     max-width: 1560px;
-  }
-
-  .kfeed-care-layout {
-    grid-template-columns: minmax(0, 1.24fr) minmax(0, 0.94fr);
   }
 
   .vp2-page {
