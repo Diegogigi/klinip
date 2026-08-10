@@ -1656,47 +1656,6 @@ export default function Dashboard({
 
   const mobileQuickActions = quickActions;
 
-  // "Hoy en tu salud": reutiliza attentionItems (ya calculado como el pendiente
-  // mas importante) y senales reales existentes para armar hasta 3 sugerencias,
-  // sin inventar datos nuevos.
-  const todayNextStep = attentionItems[0] || null;
-  const todayActionCandidates = [
-    {
-      id: "today-documents",
-      label: "Revisar documentos pendientes",
-      priority: pendingDocuments > 0,
-      onClick: openDocumentsFocus,
-    },
-    {
-      id: "today-medications",
-      label: "Ver tus medicamentos",
-      priority: activeMedications.length > 0,
-      onClick: openMedicationFocus,
-    },
-    {
-      id: "today-family",
-      label: "Ver tu red de apoyo",
-      priority: linkedProfiles > 0,
-      onClick: () => navigate("/family"),
-    },
-    {
-      id: "today-ai",
-      label: "Preguntar a Klinip sobre tus indicaciones",
-      priority: false,
-      onClick: () => openAlertAssistant(null),
-    },
-    {
-      id: "today-health-sheet",
-      label: "Revisar tu ficha de salud",
-      priority: false,
-      onClick: () => navigate("/mi-salud"),
-    },
-  ];
-  const todaySuggestedActions = [
-    ...todayActionCandidates.filter((item) => item.priority),
-    ...todayActionCandidates.filter((item) => !item.priority),
-  ].slice(0, 3);
-
   const suggestionItems = [];
   if (!futureAppointments.length) {
     suggestionItems.push({
@@ -2501,48 +2460,6 @@ export default function Dashboard({
               </div>
             ) : null}
 
-            <div className="mobile-section native-section native-section-delay-1 home-today-card">
-              <div className="mobile-section-header">
-                <h2 className="mobile-section-title home-today-title">Hoy en tu salud</h2>
-              </div>
-              <p className="home-today-subtitle">
-                Klinip ordena tus documentos, indicaciones, citas y apoyo familiar para ayudarte a continuar tu cuidado.
-              </p>
-              <div className="home-today-next">
-                <span className="home-today-next-label">Tu próximo paso</span>
-                <p className="home-today-next-text">
-                  {todayNextStep
-                    ? cleanDashboardText(todayNextStep.title)
-                    : "No tienes pendientes importantes por ahora"}
-                </p>
-                {todayNextStep ? (
-                  <button type="button" className="home-panel-link" onClick={todayNextStep.onClick}>
-                    {cleanDashboardText(todayNextStep.actionLabel)}
-                  </button>
-                ) : null}
-              </div>
-              <div className="home-today-actions">
-                {todaySuggestedActions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="home-panel-link home-today-action-item"
-                    onClick={item.onClick}
-                  >
-                    <span>{item.label}</span>
-                    <span className="home-today-action-chevron" aria-hidden="true">›</span>
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="home-note-primary home-today-cta"
-                onClick={() => openAlertAssistant(null)}
-              >
-                Preguntar a Klinip
-              </button>
-            </div>
-
             <div className="mobile-section native-section native-section-delay-1">
               <div className="mobile-section-header">
                 <h2 className="mobile-section-title">Atención de hoy</h2>
@@ -2757,50 +2674,6 @@ export default function Dashboard({
                 </div>
               </div>
             ) : null}
-
-            <article className="home-panel-card home-today-card">
-              <div className="home-panel-head">
-                <div>
-                  <h2 className="home-panel-title home-today-title">Hoy en tu salud</h2>
-                  <p className="home-today-subtitle">
-                    Klinip ordena tus documentos, indicaciones, citas y apoyo familiar para ayudarte a continuar tu cuidado.
-                  </p>
-                </div>
-              </div>
-              <div className="home-today-next">
-                <span className="home-today-next-label">Tu próximo paso</span>
-                <p className="home-today-next-text">
-                  {todayNextStep
-                    ? cleanDashboardText(todayNextStep.title)
-                    : "No tienes pendientes importantes por ahora"}
-                </p>
-                {todayNextStep ? (
-                  <button type="button" className="home-panel-link" onClick={todayNextStep.onClick}>
-                    {cleanDashboardText(todayNextStep.actionLabel)}
-                  </button>
-                ) : null}
-              </div>
-              <div className="home-today-actions">
-                {todaySuggestedActions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="home-panel-link home-today-action-item"
-                    onClick={item.onClick}
-                  >
-                    <span>{item.label}</span>
-                    <span className="home-today-action-chevron" aria-hidden="true">›</span>
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="home-note-primary home-today-cta"
-                onClick={() => openAlertAssistant(null)}
-              >
-                Preguntar a Klinip
-              </button>
-            </article>
 
             <article className="home-panel-card home-attention-card">
               <div className="home-panel-head">
