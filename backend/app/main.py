@@ -11657,6 +11657,11 @@ def _voice_indication_type_key(value) -> str:
     return raw if raw in {"medicamento", "control", "examen", "dieta", "ejercicio", "otro"} else "otro"
 
 
+def _voice_indication_priority_key(value) -> str:
+    raw = str(value or "").strip().lower()
+    return raw if raw in {"alta", "media", "baja"} else "media"
+
+
 def _voice_indications_to_ai_list(
     items: list | None,
     *,
@@ -11684,6 +11689,7 @@ def _voice_indications_to_ai_list(
                 {
                     "texto": text,
                     "tipo": _voice_indication_type_key(raw.get("tipo")),
+                    "prioridad": _voice_indication_priority_key(raw.get("prioridad")),
                     "recordatorio_sugerido": bool(raw.get("recordatorio_sugerido")),
                 }
             )
@@ -11695,6 +11701,7 @@ def _voice_indications_to_ai_list(
             {
                 "texto": text,
                 "tipo": "otro",
+                "prioridad": "media",
                 "recordatorio_sugerido": False,
             }
         )
@@ -17742,6 +17749,7 @@ def _ai_system_prompt(context: dict, prompt_profile: dict | None = None) -> str:
         "36. Si existe 'health_sheet', úsalo como fuente principal para preguntas sobre Ficha de Salud, diagnósticos/problemas activos, vacunas, exámenes, indicaciones y resumen de salud. Cita el nombre del registro y su source.label cuando esté disponible.\n"
         "37. Si existe 'continuity_context', úsalo como fuente principal para preguntas sobre pendientes, próximo paso, atrasos, preparación antes de consulta, qué llevar o seguimiento posterior. Prioriza next_step, overdue, requires_action y upcoming_preparation.\n"
         "38. Si health_sheet o continuity_context contradicen datos antiguos de documentos, prioriza los datos estructurados porque son la ficha viva editable del usuario.\n"
+        "39. Si existe 'voice_sessions' o 'voice_session_insights', esos datos provienen de atenciones grabadas por Voz Klinip. Cita siempre la fecha de la sesion (created_at) y responde con el formato 'Segun lo registrado en la atencion grabada del [fecha]...' o 'En la atencion grabada consta que...'. Nunca presentes una indicacion registrada como un consejo medico nuevo tuyo: informa solo lo que quedo registrado, sin agregar recomendaciones clinicas adicionales ni activar recordatorios o agenda por tu cuenta. Si la pregunta no tiene respaldo en 'voice_sessions', dilo claramente en vez de inventar contenido.\n"
         f"Perfil activo: {context['profile']['name']} (rol {context['profile']['access_role']}).\n"
         f"Plan actual: {context['plan'].get('plan_type')}.\n"
         f"Acceso familiar efectivo: {'si' if family_access.get('available') else 'no'}.\n"
