@@ -198,13 +198,6 @@ const FAMILY_PERMISSION_MODULES = [
   { label: "Klinip IA", view: "use_ai" },
 ];
 
-const FAMILY_ROLE_FILTERS = [
-  { value: "all", label: "Todos" },
-  { value: "admin", label: "Administradores" },
-  { value: "caregiver", label: "Editores" },
-  { value: "viewer", label: "Lectores" },
-];
-
 const REACTIONS = [
   { type: "apoyo", emoji: "💙", label: "Apoyar" },
   { type: "animo", emoji: "💪", label: "Ánimo" },
@@ -1520,34 +1513,6 @@ function getExplicitModulePermissions(permissions) {
   };
 }
 
-function PermissionMemberCard({ member }) {
-  const modulePermissions = getExplicitModulePermissions(member.permissions);
-
-  return (
-    <article className={`kfeed-permission-card tone-${member.tone}`}>
-      <span className="kfeed-permission-card-label">{member.roleLabel}</span>
-      <strong>{member.name}</strong>
-      <div className="kfeed-permission-note">
-        <p>Perfil asociado: {member.profileName}</p>
-        {!modulePermissions.available ? (
-          <p>Revisar permisos</p>
-        ) : (
-          <>
-            <p>
-              {modulePermissions.visible.length > 0
-                ? `Puede ver: ${formatPermissionModules(modulePermissions.visible)}`
-                : "Sin módulos visibles autorizados"}
-            </p>
-            {modulePermissions.editable.length > 0 ? (
-              <p>Puede editar: {formatPermissionModules(modulePermissions.editable)}</p>
-            ) : null}
-          </>
-        )}
-      </div>
-    </article>
-  );
-}
-
 function getSupportAction(permissions) {
   const modulePermissions = getExplicitModulePermissions(permissions);
   if (modulePermissions.editable.length > 0) return "Puede ayudar a gestionar";
@@ -1643,7 +1608,6 @@ export default function KlinipFeed({ user }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [familySidebarOpen, setFamilySidebarOpen] = useState(false);
-  const [permissionRoleFilter, setPermissionRoleFilter] = useState("all");
   const skipRef = useRef(0);
   const LIMIT = 20;
 
@@ -1879,27 +1843,6 @@ export default function KlinipFeed({ user }) {
           String(item.relationship_type || "").toLowerCase() !== "self"
       )
     : [];
-  const permissionMembers = primaryProfile
-    ? (groupCaregivers[primaryProfile.id] || [])
-        .filter((item) => item.status === "accepted")
-        .map((item) => {
-          const relationshipType = String(item.relationship_type || "").toLowerCase();
-          const role = String(item.role || "").toLowerCase();
-          return {
-            id: item.id || item.user_id,
-            name: item.user_name || item.user_email || `Usuario ${item.user_id}`,
-            roleLabel: relationshipType === "self"
-              ? "Titular"
-              : ["viewer", "caregiver", "admin"].includes(role)
-                ? familyRoleLabel(role)
-                : "Rol sin especificar",
-            profileName: primaryProfile.full_name || "Perfil activo",
-            permissions: item.permissions,
-            role,
-            tone: role === "viewer" ? "slate" : role === "caregiver" ? "teal" : "blue",
-          };
-        })
-    : [];
   const supportNetworkMembers = ownCaregivers.map((item) => {
     const role = String(item.role || "").toLowerCase();
     return {
@@ -1920,14 +1863,6 @@ export default function KlinipFeed({ user }) {
     caregiver: supportNetworkMembers.filter((member) => member.role === "caregiver").length,
     viewer: supportNetworkMembers.filter((member) => member.role === "viewer").length,
   };
-  const filteredPermissionMembers = permissionRoleFilter === "all"
-    ? permissionMembers
-    : permissionMembers.filter((member) => member.role === permissionRoleFilter);
-  const permissionMembersPreview = filteredPermissionMembers.slice(0, 3);
-  const remainingPermissionMembers = Math.max(
-    filteredPermissionMembers.length - permissionMembersPreview.length,
-    0
-  );
   const collaborativeProfiles = profiles.length;
   const careTeamTotal = ownCaregivers.length + (primaryProfile ? 1 : 0);
   const sharedContinuityItems = buildSharedContinuityItems(posts);
@@ -2075,106 +2010,38 @@ export default function KlinipFeed({ user }) {
         )}
 
         {!loading && !error && (
-          <section className="kfeed-care-layout" aria-label="Continuidad compartida y red de apoyo">
-            <section className="kfeed-care-panel">
-              <div className="kfeed-care-panel-head">
-                <div>
-                  <p className="kfeed-section-kicker">Continuidad compartida</p>
-                  <h2 className="kfeed-section-title">Próximos pasos visibles</h2>
-                </div>
-                <p className="kfeed-feed-head-note">
-                  {latestSharedDate ? `Actualizado ${latestSharedDate}` : "Sin publicaciones todavía"}
-                </p>
+          <section className="kfeed-care-panel" aria-label="Continuidad compartida">
+            <div className="kfeed-care-panel-head">
+              <div>
+                <p className="kfeed-section-kicker">Continuidad compartida</p>
+                <h2 className="kfeed-section-title">Próximos pasos visibles</h2>
               </div>
-              <div className="kfeed-permission-note">
-                <p>Según lo compartido en Familia, estas publicaciones pueden ayudar a coordinar el apoyo.</p>
-              </div>
-              {continuityPreview.length ? (
-                <div className="kfeed-care-panel-body">
-                  <div className="kfeed-clinical-event-list">
-                    {continuityPreview.map((item) => (
-                      <ClinicalEventCard key={item.key} item={item} />
-                    ))}
-                  </div>
-                  {remainingSharedCount > 0 ? (
-                    <Link className="kfeed-care-more-link" to="/family#family-updates">
-                      Ver {formatUnitLabel(remainingSharedCount, "publicación más", "publicaciones más")}
-                    </Link>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="kfeed-care-empty">
-                  <strong>Aún no hay información compartida</strong>
-                  <span>Cuando tu red publique una actualización, aparecerá aquí con su perfil y fecha.</span>
-                </div>
-              )}
-            </section>
-
-            <section className="kfeed-care-panel">
-              <div className="kfeed-care-panel-head">
-                <div>
-                  <p className="kfeed-section-kicker">Red de apoyo</p>
-                  <h2 className="kfeed-section-title">Permisos para el perfil de {headerProfileName}</h2>
-                </div>
-                <Link className="kfeed-inline-link" to="/settings/familia">
-                  Ver y gestionar permisos
-                </Link>
-              </div>
-              <div className="kfeed-permission-note">
-                <p>Cada persona ve solamente los módulos autorizados para este perfil.</p>
-              </div>
-              {permissionMembers.length > 0 ? (
-                <>
-                  <div className="kfeed-modal-mentions" role="group" aria-label="Filtrar integrantes por rol">
-                    {FAMILY_ROLE_FILTERS.map((filter) => (
-                      <button
-                        key={filter.value}
-                        type="button"
-                        className={`kfeed-type-chip ${permissionRoleFilter === filter.value ? "active" : ""}`}
-                        style={{ "--type-color": "var(--slate)" }}
-                        aria-pressed={permissionRoleFilter === filter.value}
-                        onClick={() => setPermissionRoleFilter(filter.value)}
-                      >
-                        {filter.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="kfeed-permission-note">
-                    <p>Este filtro solo ordena lo que ya puedes ver; no cambia permisos.</p>
-                  </div>
-                </>
-              ) : null}
-              {permissionMembersPreview.length > 0 ? (
-                <div className="kfeed-permission-grid" aria-live="polite">
-                  {permissionMembersPreview.map((member) => (
-                    <PermissionMemberCard key={member.id} member={member} />
+              <p className="kfeed-feed-head-note">
+                {latestSharedDate ? `Actualizado ${latestSharedDate}` : "Sin publicaciones todavía"}
+              </p>
+            </div>
+            <div className="kfeed-permission-note">
+              <p>Según lo compartido en Familia, estas publicaciones pueden ayudar a coordinar el apoyo.</p>
+            </div>
+            {continuityPreview.length ? (
+              <div className="kfeed-care-panel-body">
+                <div className="kfeed-clinical-event-list">
+                  {continuityPreview.map((item) => (
+                    <ClinicalEventCard key={item.key} item={item} />
                   ))}
                 </div>
-              ) : (
-                <div className="kfeed-care-empty" aria-live="polite">
-                  <strong>
-                    {permissionMembers.length > 0
-                      ? "Sin integrantes en este rol"
-                      : "Aún no hay personas en tu red de apoyo"}
-                  </strong>
-                  <span>
-                    {permissionMembers.length > 0
-                      ? "Prueba con otro filtro para ver integrantes."
-                      : "Puedes invitar a una persona de confianza y definir qué información podrá ver o ayudar a gestionar."}
-                  </span>
-                  {permissionMembers.length === 0 ? (
-                    <Link className="kfeed-manage-link" to="/settings/familia">
-                      Invitar o gestionar red de apoyo
-                    </Link>
-                  ) : null}
-                </div>
-              )}
-              {remainingPermissionMembers > 0 ? (
-                <Link className="kfeed-care-more-link" to="/settings/familia">
-                  Ver {formatUnitLabel(remainingPermissionMembers, "persona más", "personas más")}
-                </Link>
-              ) : null}
-            </section>
+                {remainingSharedCount > 0 ? (
+                  <Link className="kfeed-care-more-link" to="/family#family-updates">
+                    Ver {formatUnitLabel(remainingSharedCount, "publicación más", "publicaciones más")}
+                  </Link>
+                ) : null}
+              </div>
+            ) : (
+              <div className="kfeed-care-empty">
+                <strong>Aún no hay información compartida</strong>
+                <span>Cuando tu red publique una actualización, aparecerá aquí con su perfil y fecha.</span>
+              </div>
+            )}
           </section>
         )}
 
